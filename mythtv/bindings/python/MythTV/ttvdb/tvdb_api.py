@@ -29,6 +29,7 @@ u'Cabin Fever'
 __author__ = "dbr/Ben"
 __version__ = "2.0-dev"
 
+from decimal import *
 
 IS_PY2 = sys.version_info[0] == 2
 
@@ -549,7 +550,8 @@ class Tvdb:
                  username=None,
                  userkey=None,
                  forceConnect=False,
-                 dvdorder=False):
+                 dvdorder=False,
+                 dvd_order_sides=None):
 
         """interactive (True/False):
             When True, uses built-in console UI is used to select the correct show.
@@ -632,6 +634,9 @@ class Tvdb:
             recently timed out. By default it will wait one minute before
             trying again, and any requests within that one minute window will
             return an exception immediately.
+
+        dvd_order_sids (Set):
+            SIDs for which DVD order should be used for season and episode numbers
         """
 
         global lastTimeout
@@ -762,6 +767,11 @@ class Tvdb:
                         'Accept-Language': self.config['language'],
                         'User-Agent': 'tvdb/2.0'
                         }
+        if dvd_order_sids == None:
+            self.dvdOrderSIDs = set()
+        else:
+            # allow caller to pass in any enumerable
+            self.dvdOrderSIDs = set(dvd_order_sids)
 
     def _getTempDir(self):
         """Returns the [system temp dir]/tvdb_api-u501 (or
@@ -1083,7 +1093,7 @@ class Tvdb:
                 self._parseEpisodeInfo(sid, cur_ep)
 
     def _parseEpisodeInfo(self, sid, cur_ep):
-        if self.config['dvdorder']:
+        if self.config['dvdorder'] or sid in self.dvdOrderSIDs:
             log().debug('Using DVD ordering.')
             use_dvd = cur_ep.get('dvdSeason') is not None and cur_ep.get('dvdEpisodeNumber') is not None
         else:

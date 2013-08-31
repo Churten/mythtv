@@ -1251,6 +1251,8 @@ name_parse=[
 
 # Episode meta data that is massaged
 massage={'writer':'|','director':'|', 'overview':'&', 'gueststars':'|' }
+# Series IDs for which dvd order is used (default none)
+dvdseries=set()
 # Keys and titles used for episode data (option '-D')
 data_keys =['airedSeason','airedEpisodeNumber','episodeName','firstAired','directors','overview','rating','writers','filename','language' ]
 data_titles=['Season:','Episode:','Subtitle:','ReleaseDate:','Director:','Plot:','UserRating:','Writers:','Screenshot:','Language:' ]
@@ -1865,6 +1867,7 @@ def initialize_override_dictionary(useroptions, language):
         if section =='series_name_override':
             for option in cfg.options(section):
                 overrides[option] = cfg.get(section, option)
+            # this one doesn't care about the dvd order
             tvdb = Tvdb(banners=False,
                         debug = False,
                         interactive = False,
@@ -1895,6 +1898,19 @@ def initialize_override_dictionary(useroptions, language):
                     sys.stdout.write("! Invalid Series (no matches found in thetvdb,com) (%s) sid (%s) in config file\n" % (key, sid))
                     sys.exit(1)
                 overrides[key]=unicode(series_name_sid.data[u'seriesName'])   #.encode('utf-8')
+            continue
+        if section == 'dvd_order_series':
+            for sid in cfg.options(section):
+                v = cfg.get(section, sid)
+                try: # Check tthat the SID (Series id) is numeric
+                    dummy = int(sid)
+                except:
+                    sys.stdout.write("! Invalid SID (not numeric) [%s] in config file (dvd orders)\n" % sid);
+                    sys.exit(1)
+                if v != None and len(v) != 0:
+                    sys.stdout.write("! Invalid SID (junk after delimiter) [%s:%s] in config file (dvd orders)\n" % (sid, v))
+                    sys.exit(1)
+                dvdseries.add(sid)
             continue
 
     for key in overrides.keys():
@@ -2251,7 +2267,8 @@ def main():
                  language = opts.language,
                  apikey=tvdb_account.apikey,    # thetvdb.com API key requested by MythTV
                  username=tvdb_account.username,
-                 userkey=tvdb_account.account_identifier)
+                 userkey=tvdb_account.account_identifier,
+                 dvd_order_sids=dvdseries)
         if opts.xml:
             t.xml = True
     elif opts.interactive == True:
@@ -2264,7 +2281,8 @@ def main():
                  language = opts.language,
                  apikey=tvdb_account.apikey,    # thetvdb.com API key requested by MythTV
                  username=tvdb_account.username,
-                 userkey=tvdb_account.account_identifier)
+                 userkey=tvdb_account.account_identifier,
+                 dvd_order_sids=dvdseries)
         if opts.xml:
             t.xml = True
     else:
@@ -2275,7 +2293,8 @@ def main():
                  language = opts.language,
                  apikey=tvdb_account.apikey,    # thetvdb.com API key requested by MythTV
                  username=tvdb_account.username,
-                 userkey=tvdb_account.account_identifier)
+                 userkey=tvdb_account.account_identifier,
+                 dvd_order_sids=dvdseries)
         if opts.xml:
             t.xml = True
 
@@ -2322,6 +2341,10 @@ def main():
 
     if len(override) == 0:
         opts.configure = False # Turn off the override option as there is nothing to override
+    
+    #FIXME: reaching into internals this way is not so good
+    if len(dvdseries) != 0:
+        t.dvdOrderSIDs.update(dvdseries)
 
     # Check if a video name was passed and if so parse it for series name, season and episode numbers
     if not opts.collection and len(series_season_ep) == 1:
