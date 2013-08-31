@@ -24,6 +24,7 @@ import urllib
 import urllib2
 import tempfile
 import logging
+from decimal import *
 
 try:
     import xml.etree.cElementTree as ElementTree
@@ -277,7 +278,8 @@ class Tvdb:
                 custom_ui = None,
                 language = None,
                 search_all_languages = False,
-                apikey = None):
+                apikey = None,
+                dvd_order_sids = None):
         """interactive (True/False):
             When True, uses built-in console UI is used to select the correct show.
             When False, the first search result is used.
@@ -331,6 +333,9 @@ class Tvdb:
             own key if desired - this is recommended if you are embedding
             tvdb_api in a larger application)
             See http://thetvdb.com/?tab=apiregister to get your own key
+        
+        dvd_order_sids (Set):
+            SIDs for which DVD order should be used for season and episode numbers
         """
         self.shows = ShowContainer() # Holds all Show classes
         self.corrections = {} # Holds show-name to show_id mapping
@@ -415,6 +420,11 @@ class Tvdb:
         self.actorsInfoTree = None
         self.imagesInfoTree = None
         self.baseXsltDir = u'%s/XSLT/' % os.path.dirname( os.path.realpath( __file__ ))
+        if dvd_order_sids == None:
+            self.dvdOrderSIDs = set()
+        else:
+            # allow caller to pass in any enumerable
+            self.dvdOrderSIDs = set(dvd_order_sids)
     #end __init__
 
     def _initLogger(self):
@@ -782,8 +792,34 @@ class Tvdb:
         if self.xml:
             self.epInfoTree = self.tmpTree
         for cur_ep in epsEt.findall("Episode"):
-            seas_no = int(cur_ep.find('SeasonNumber').text)
-            ep_no = int(cur_ep.find('EpisodeNumber').text)
+            if sid in self.dvdOrderSIDs:
+                # not all episodes have DVD information
+                seas_no = cur_ep.find('DVD_season').text
+                ep_no = cur_ep.find('DVD_episodenumber').text
+                if seas_no == None or ep_no == None or seas_no == "" or ep_no == "":
+                    continue
+                seas_no = int(seas_no)
+                # DVD episode numbers are decimal, e.g. 1.0, 2.1, 2.2
+                ep_no = Decimal(ep_no)
+                # Episode numbering elsewhere is always an int, which is problematic
+                # skip any episodes that are not X.0 for now
+                if int(ep_no) != ep_no:
+                    continue
+                ep_no = int(ep_no)
+                # Mangle the data because so much other code can't handle switching
+                # what tags are used to match season and episode numbers
+                cur_ep.find('SeasonNumber').text = str(seas_no)
+                cur_ep.find('EpisodeNumber').text = str(ep_no)
+                # Then mangle the other copy of the tree too (why are there 2?)
+                if self.xml:
+                    # this is truly horrible
+                    epid = cur_ep.find('id').text
+                    eitep = [ep for ep in self.epInfoTree.findall('Episode') if ep.find('id').text == epid][0]
+                    eitep.find('SeasonNumber').text = str(seas_no)
+                    eitep.find('EpisodeNumber').text = str(ep_no)
+            else:
+                seas_no = int(cur_ep.find('SeasonNumber').text)
+                ep_no = int(cur_ep.find('EpisodeNumber').text)
             for cur_item in cur_ep.getchildren():
                 tag = cur_item.tag.lower()
                 value = cur_item.text
