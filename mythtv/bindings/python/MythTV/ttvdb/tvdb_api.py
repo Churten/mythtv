@@ -29,8 +29,6 @@ u'Cabin Fever'
 __author__ = "dbr/Ben"
 __version__ = "2.0-dev"
 
-from decimal import *
-
 IS_PY2 = sys.version_info[0] == 2
 
 if IS_PY2:
