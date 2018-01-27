@@ -549,7 +549,7 @@ class Tvdb:
                  userkey=None,
                  forceConnect=False,
                  dvdorder=False,
-                 dvd_order_sides=None):
+                 dvd_order_sids=None):
 
         """interactive (True/False):
             When True, uses built-in console UI is used to select the correct show.
