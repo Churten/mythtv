@@ -19,7 +19,7 @@ class ExternalChannel;
 
 class ExternIO
 {
-    enum constants { kMaxErrorCnt = 5 };
+    enum constants { kMaxErrorCnt = 20 };
 
   public:
     ExternIO(const QString & app, const QStringList & args);
@@ -30,13 +30,13 @@ class ExternIO
     QString GetStatus(int timeout = 2500);
     int Write(const QByteArray & buffer);
     bool Run(void);
-    void Term(bool force = false);
     bool Error(void) const { return !m_error.isEmpty(); }
     QString ErrorString(void) const { return m_error; }
     void ClearError(void) { m_error.clear(); }
 
-  private:
     bool KillIfRunning(const QString & cmd);
+
+  private:
     void Fork(void);
 
     QFileInfo   m_app;
@@ -59,7 +59,9 @@ class ExternIO
 
 class ExternalStreamHandler : public StreamHandler
 {
-    enum constants {PACKET_SIZE = 188 * 32768, TOO_FAST_SIZE = 188 * 4196 };
+    enum constants { MAX_API_VERSION = 2,
+                     PACKET_SIZE = 188 * 32768,
+                     TOO_FAST_SIZE = 188 * 4196 };
 
   public:
     static ExternalStreamHandler *Get(const QString &devicename,
@@ -80,18 +82,27 @@ class ExternalStreamHandler : public StreamHandler
 
     bool RestartStream(void);
 
-    bool StartStreaming(bool flush_buffer);
+    void LockReplay(void) { m_replay_lock.lock(); }
+    void UnlockReplay(bool enable_replay = false)
+        { m_replay = enable_replay; m_replay_lock.unlock(); }
+    void ReplayStream(void);
+    bool StartStreaming(void);
     bool StopStreaming(void);
 
     bool CheckForError(void);
 
     void PurgeBuffer(void);
 
-    bool ProcessCommand(const QString & cmd, uint timeout,
-                        QString & result);
+    bool ProcessCommand(const QString & cmd, QString & result,
+                        int timeout = 2000 /* ms */,uint retry_cnt = 3);
+    bool ProcessVer1(const QString & cmd, QString & result,
+                     int timeout /* ms */, uint retry_cnt);
+    bool ProcessVer2(const QString & cmd, QString & result,
+                     int timeout /* ms */, uint retry_cnt);
 
   private:
-    int StreamingCount(void) const;
+    int  StreamingCount(void) const;
+    bool SetAPIVersion(void);
     bool OpenApp(void);
     void CloseApp(void);
 
@@ -104,6 +115,8 @@ class ExternalStreamHandler : public StreamHandler
     bool           m_poll_mode;
     bool           m_notify;
 
+    int            m_apiVersion;
+    uint           m_serialNo;
     bool           m_hasTuner;
     bool           m_hasPictureAttributes;
 
@@ -117,6 +130,8 @@ class ExternalStreamHandler : public StreamHandler
 
     QAtomicInt    m_streaming_cnt;
     QMutex        m_stream_lock;
+    QMutex        m_replay_lock;
+    QMutex        m_process_lock;
 };
 
 #endif // _ExternalSTREAMHANDLER_H_

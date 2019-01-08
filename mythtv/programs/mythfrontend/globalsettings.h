@@ -52,7 +52,9 @@ class VideoModeSettings : public HostCheckBoxSetting
 
   public:
     VideoModeSettings(const char *c);
+#if defined(USING_XRANDR) || CONFIG_DARWIN
     virtual void updateButton(MythUIButtonListItem *item);
+#endif
 };
 
 class LcdSettings
@@ -150,7 +152,9 @@ class HostRefreshRateComboBoxSetting : public HostComboBoxSetting
     virtual ~HostRefreshRateComboBoxSetting() { }
 
   public slots:
+#if defined(USING_XRANDR) || CONFIG_DARWIN
     virtual void ChangeResolution(StandardSetting *);
+#endif
 
   private:
     static const vector<double> GetRefreshRates(const QString &resolution);
@@ -262,7 +266,7 @@ class ChannelGroupSetting : public GroupSetting
   public:
     ChannelGroupSetting(const QString &groupName, int groupId);
     virtual void Load();
-    virtual void Close();
+    virtual void Save();
     virtual bool canDelete(void);
     virtual void deleteEntry(void);
 
