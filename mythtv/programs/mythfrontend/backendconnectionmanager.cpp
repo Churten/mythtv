@@ -29,7 +29,7 @@ class Reconnect : public QRunnable
         setAutoDelete(false);
     }
 
-    virtual void run(void)
+    void run(void) override // QRunnable
     {
         if (!gCoreContext->SafeConnectToMasterServer(gCoreContext->IsBlockingClient()))
             gCoreContext->dispatch(MythEvent(QString("RECONNECT_FAILURE")));
@@ -38,9 +38,7 @@ class Reconnect : public QRunnable
     }
 };
 
-BackendConnectionManager::BackendConnectionManager() :
-    QObject(), m_reconnecting(NULL), m_reconnect_timer(NULL),
-    m_reconnect_again(false)
+BackendConnectionManager::BackendConnectionManager()
 {
     setObjectName("BackendConnectionManager");
     gCoreContext->addListener(this);
@@ -65,10 +63,13 @@ void BackendConnectionManager::customEvent(QEvent *event)
     bool reconnect = false;
     uint reconnect_timeout = 5000;
 
-    if ((MythEvent::Type)(event->type()) == MythEvent::MythEventMessage)
+    if (event->type() == MythEvent::MythEventMessage)
     {
-        MythEvent *me = (MythEvent *)event;
-        QString message = me->Message();
+        auto *me = dynamic_cast<MythEvent *>(event);
+        if (me == nullptr)
+            return;
+
+        const QString& message = me->Message();
 
         if (message == "BACKEND_SOCKETS_CLOSED")
         {
@@ -93,7 +94,7 @@ void BackendConnectionManager::customEvent(QEvent *event)
                 .arg(message));
 
             delete m_reconnecting;
-            m_reconnecting = NULL;
+            m_reconnecting = nullptr;
 
             if (!m_reconnect_again)
             {

@@ -1,6 +1,9 @@
 #ifndef PLAYLIST_H_
 #define PLAYLIST_H_
 
+// c++
+#include <utility>
+
 // qt
 #include <QList>
 #include <QMap>
@@ -37,7 +40,7 @@ struct PlaylistOptions
     PlayPLOption playPLOption;
 };
 
-typedef QList<MusicMetadata::IdType> SongList;
+using SongList = QList<MusicMetadata::IdType>;
 
 class Playlist : public QObject
 {
@@ -45,25 +48,25 @@ class Playlist : public QObject
 
   public:
     Playlist(void);
-    ~Playlist();
+    ~Playlist() override;
 
     void setParent(PlaylistContainer *myparent) { m_parent = myparent; }
 
-    void loadPlaylist(QString a_name, QString a_host);
-    void loadPlaylistByID(int id, QString a_host);
+    void loadPlaylist(const QString& a_name, const QString& a_host);
+    void loadPlaylistByID(int id, const QString& a_host);
 
-    void savePlaylist(QString a_name, QString a_host);
+    void savePlaylist(const QString& a_name, const QString& a_host);
 
     void shuffleTracks(MusicPlayer::ShuffleMode mode);
 
     void describeYourself(void) const; //  debugging
 
-    void fillSongsFromSonglist(QString songList);
-    void fillSonglistFromQuery(QString whereClause, 
+    void fillSongsFromSonglist(const QString& songList);
+    void fillSonglistFromQuery(const QString& whereClause, 
                                bool removeDuplicates = false,
                                InsertPLOption insertOption = PL_REPLACE,
                                int currentTrackID = 0);
-    void fillSonglistFromSmartPlaylist(QString category, QString name,
+    void fillSonglistFromSmartPlaylist(const QString& category, const QString& name,
                                        bool removeDuplicates = false,
                                        InsertPLOption insertOption = PL_REPLACE,
                                        int currentTrackID = 0);
@@ -101,17 +104,18 @@ class Playlist : public QObject
     bool doSaves(void) { return m_doSave; }
 
     QString getName(void) { return m_name; } 
-    void    setName(QString a_name) { m_name = a_name; }
+    void    setName(QString a_name) { m_name = std::move(a_name); }
 
     bool isActivePlaylist(void) { return m_name == DEFAULT_PLAYLIST_NAME; }
 
     int  getID(void) { return m_playlistid; }
     void setID(int x) { m_playlistid = x; }
 
-    void getStats(uint *trackCount, uint *totalLength, uint currentTrack = 0, uint *playedLength = NULL) const;
+    void getStats(uint *trackCount, uint *totalLength, uint currentTrack = 0, uint *playedLength = nullptr) const;
 
     void resync(void);
 
+#ifdef CD_WRTITING_FIXED
     void computeSize(double &size_in_MB, double &size_in_sec);
     int CreateCDMP3(void);
     int CreateCDAudio(void);
@@ -120,23 +124,26 @@ class Playlist : public QObject
     void mkisofsData(int fd);
     void cdrecordData(int fd);
     void processExit(uint retval = 0);
+#endif
 
   private:
     MusicMetadata* getRawSongAt(int pos) const;
-    QString removeDuplicateTracks(const QString &orig_songlist, const QString &new_songlist);
+    static QString removeDuplicateTracks(const QString &orig_songlist, const QString &new_songlist);
 
-    int                   m_playlistid;
+    int                   m_playlistid  {0};
     QString               m_name;
 
     SongList              m_songs;
     SongList              m_shuffledSongs;
 
-    PlaylistContainer    *m_parent;
-    bool                  m_changed;
-    bool                  m_doSave;
-    MythProgressDialog   *m_progress;
-    MythSystemLegacy     *m_proc;
-    uint                  m_procExitVal;
+    PlaylistContainer    *m_parent      {nullptr};
+    bool                  m_changed     {false};
+    bool                  m_doSave      {true};
+#ifdef CD_WRTITING_FIXED
+    MythProgressDialog   *m_progress    {nullptr};
+    MythSystemLegacy     *m_proc        {nullptr};
+    uint                  m_procExitVal {0};
+#endif
 };
 
 #endif

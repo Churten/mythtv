@@ -5,6 +5,7 @@
 #include <sys/ioctl.h>
 
 // ANSI C headers
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -51,7 +52,7 @@ error(const char *str, ...)
 static void
 out_of_sync(struct vbi *vbi)
 {
-    int i;
+    int i = 0;
 
     // discard all in progress pages
     for (i = 0; i < 8; ++i)
@@ -65,7 +66,8 @@ static void
 vbi_send(struct vbi *vbi, int type, int i1, int i2, int i3, void *p1)
 {
     struct vt_event ev[1];
-    struct vbi_client *cl, *cln;
+    struct vbi_client *cl = NULL;
+    struct vbi_client *cln = NULL;
 
     ev->resource = vbi;
     ev->type = type;
@@ -82,14 +84,13 @@ vbi_send(struct vbi *vbi, int type, int i1, int i2, int i3, void *p1)
 static void
 vbi_send_page(struct vbi *vbi, struct raw_page *rvtp, int page)
 {
-    struct vt_page *cvtp = 0;
-
     if (rvtp->page->flags & PG_ACTIVE)
     {
        if (rvtp->page->pgno % 256 != page)
        {
+           struct vt_page *cvtp = 0;
            rvtp->page->flags &= ~PG_ACTIVE;
-           enhance(rvtp->enh, rvtp->page);
+           do_enhancements(rvtp->enh, rvtp->page);
 //         if (vbi->cache)
 //             cvtp = vbi->cache->op->put(vbi->cache, rvtp->page);
            vbi_send(vbi, EV_PAGE, 0, 0, 0, cvtp ?: rvtp->page);
@@ -167,18 +168,17 @@ vbi_pll_reset(struct vbi *vbi, int fine_tune)
 static int
 vt_line(struct vbi *vbi, unsigned char *p)
 {
-    struct vt_page *cvtp;
-    struct raw_page *rvtp;
-    int hdr, mag, mag8, pkt, i;
+    struct vt_page *cvtp = NULL;
+    struct raw_page *rvtp = NULL;
     int err = 0;
 
-    hdr = hamm16(p, &err);
+    int hdr = hamm16(p, &err);
     if (err & 0xf000)
        return -4;
 
-    mag = hdr & 7;
-    mag8 = mag?: 8;
-    pkt = (hdr >> 3) & 0x1f;
+    int mag = hdr & 7;
+    int mag8 = mag?: 8;
+    int pkt = (hdr >> 3) & 0x1f;
     p += 2;
 
     rvtp = vbi->rpage + mag;
@@ -188,12 +188,10 @@ vt_line(struct vbi *vbi, unsigned char *p)
     {
        case 0:
        {
-           int b1, b2, b3, b4;
-
-           b1 = hamm16(p, &err);       // page number
-           b2 = hamm16(p+2, &err);     // subpage number + flags
-           b3 = hamm16(p+4, &err);     // subpage number + flags
-           b4 = hamm16(p+6, &err);     // language code + more flags
+           int b1 = hamm16(p, &err);       // page number
+           int b2 = hamm16(p+2, &err);     // subpage number + flags
+           int b3 = hamm16(p+4, &err);     // subpage number + flags
+           int b4 = hamm16(p+6, &err);     // language code + more flags
 
            if (vbi->ppage->page->flags & PG_MAGSERIAL)
                vbi_send_page(vbi, vbi->ppage, b1);
@@ -243,17 +241,15 @@ vt_line(struct vbi *vbi, unsigned char *p)
        }
        case 26:
        {
-           int d, t[13];
-
            if (~cvtp->flags & PG_ACTIVE)
                return 0;
 
-
-           d = hamm8(p, &err);
+           int d = hamm8(p, &err);
            if (err & 0xf000)
                return 4;
 
-           for (i = 0; i < 13; ++i)
+           int t[13];
+           for (int i = 0; i < 13; ++i)
                t[i] = hamm24(p + 1 + 3*i, &err);
            if (err & 0xf000)
                return 4;
@@ -265,27 +261,25 @@ vt_line(struct vbi *vbi, unsigned char *p)
        case 27:
        {
            // FLOF data (FastText)
-           int b1,b2,b3,x;
-
            if (~cvtp->flags & PG_ACTIVE)
                return 0; // -1 flushes all pages.  we may never resync again :(
 
-           b1 = hamm8(p, &err);
-           b2 = hamm8(p + 37, &err);
+           int b1 = hamm8(p, &err);
+           int b2 = hamm8(p + 37, &err);
            if (err & 0xf000)
                return 4;
            if (b1 != 0 || !(b2 & 8))
                return 0;
 
-           for (i = 0; i < 6; ++i)
+           for (int i = 0; i < 6; ++i)
            {
                err = 0;
                b1 = hamm16(p+1+6*i, &err);
                b2 = hamm16(p+3+6*i, &err);
-               b3 = hamm16(p+5+6*i, &err);
+               int b3 = hamm16(p+5+6*i, &err);
                if (err & 0xf000)
                    return 1;
-               x = (b2 >> 7) | ((b3 >> 5) & 0x06);
+               int x = (b2 >> 7) | ((b3 >> 5) & 0x06);
                cvtp->link[i].pgno = ((mag ^ x) ?: 8) * 256 + b1;
                cvtp->link[i].subno = (b2 + b3 * 256) & 0x3f7f;
            }
@@ -323,11 +317,14 @@ vt_line(struct vbi *vbi, unsigned char *p)
 // process one raw vbi line
 
 static int
-vbi_line(struct vbi *vbi, unsigned char *p)
+vbi_line(struct vbi *vbi, const unsigned char *p)
 {
-    unsigned char data[43], min, max;
-    int dt[256], hi[6], lo[6];
-    int i, n, sync, thr;
+    unsigned char data[43];
+    int dt[256];
+    int hi[6];
+    int lo[6];
+    int i = 0;
+    int n = 0;
     int bpb = vbi->bpb;
 
     /* remove DC. edge-detector */
@@ -356,19 +353,22 @@ vbi_line(struct vbi *vbi, unsigned char *p)
        return -1;      // bad frequency
 
     /* AGC and sync-reference */
-    min = 255, max = 0, sync = 0;
+    unsigned char min = 255;
+    unsigned char max = 0;
+    int sync = 0;
     for (i = hi[4]; i < hi[5]; ++i)
        if (p[i] > max)
            max = p[i], sync = i;
     for (i = lo[4]; i < lo[5]; ++i)
        if (p[i] < min)
            min = p[i];
-    thr = (min + max) / 2;
+    int thr = (min + max) / 2;
 
     p += sync;
 
     /* search start-byte 11100100 */
     for (i = 4*bpb + vbi->pll_adj*bpb/10; i < 16*bpb; i += bpb)
+    {
        if (p[i/FAC] > thr && p[(i+bpb)/FAC] > thr) // two ones is enough...
        {
            /* got it... */
@@ -390,6 +390,7 @@ vbi_line(struct vbi *vbi, unsigned char *p)
            }
            return 0;
        }
+    }
     return -1;
 }
 
@@ -400,8 +401,8 @@ vbi_line(struct vbi *vbi, unsigned char *p)
 void
 vbi_handler(struct vbi *vbi, int fd)
 {
-    int n, i;
-    unsigned int seq;
+    int n = 0;
+    unsigned int seq = 0;
 
     (void)fd;
 
@@ -425,14 +426,14 @@ vbi_handler(struct vbi *vbi, int fd)
     if (seq > 1)       // the first may contain data from prev channel
     {
 #if 1
-       for (i = 0; i+vbi->bpl <= n; i += vbi->bpl)
+       for (int i = 0; i+vbi->bpl <= n; i += vbi->bpl)
            vbi_line(vbi, rawbuf + i);
 #else
         /* work-around for old saa7134 driver versions (prior 0.2.6) */
-       for (i = 16 * vbi->bpl; i + vbi->bpl <= n; i += vbi->bpl)
+       for (int i = 16 * vbi->bpl; i + vbi->bpl <= n; i += vbi->bpl)
            vbi_line(vbi, rawbuf + i);
 
-       for (i = 0; i + vbi->bpl <= 16 * vbi->bpl; i += vbi->bpl)
+       for (int i = 0; i + vbi->bpl <= 16 * vbi->bpl; i += vbi->bpl)
            vbi_line(vbi, rawbuf + i);
 #endif
     }
@@ -443,7 +444,7 @@ vbi_handler(struct vbi *vbi, int fd)
 int
 vbi_add_handler(struct vbi *vbi, void *handler, void *data)
 {
-    struct vbi_client *cl;
+    struct vbi_client *cl = NULL;
 
     if (!(cl = malloc(sizeof(*cl))))
        return -1;
@@ -452,6 +453,7 @@ vbi_add_handler(struct vbi *vbi, void *handler, void *data)
     // cl is not leaking, the first struct element has the same address
     // as the struct
     dl_insert_last(vbi->clients, cl->node);
+    // cppcheck-suppress memleak
     return 0;
 }
 
@@ -460,26 +462,22 @@ vbi_add_handler(struct vbi *vbi, void *handler, void *data)
 void
 vbi_del_handler(struct vbi *vbi, void *handler, void *data)
 {
-    struct vbi_client *cl;
+    struct vbi_client *cl = NULL;
 
     for (cl = (void*) vbi->clients->first; cl->node->next; cl = (void*) cl->node->next)
+    {
        if (cl->handler == handler && cl->data == data)
        {
            dl_remove(cl->node);
            break;
        }
-    return;
+    }
 }
 
 #ifdef USING_V4L2
 static int
 set_decode_parms(struct vbi *vbi, struct v4l2_vbi_format *p)
 {
-    double fs;         // sampling rate
-    double bpb;                // bytes per bit
-    int soc, eoc;      // start/end of clock run-in
-    int bpl;           // bytes per line
-
     if (p->sample_format != V4L2_PIX_FMT_GREY)
     {
        fprintf(stderr, "got pix fmt %x\n", p->sample_format);
@@ -498,11 +496,11 @@ set_decode_parms(struct vbi *vbi, struct v4l2_vbi_format *p)
     //   latest last bit                       tl = 12us+0.4us+3.5/ft = 12.9us
     //   total number of used bits             n = (2+1+2+40)*8 = 360
 
-    bpl = p->samples_per_line;
-    fs = p->sampling_rate;
-    bpb = fs/6937500.0;
-    soc = (int)(9.2e-6*fs) - (int)p->offset;
-    eoc = (int)(12.9e-6*fs) - (int)p->offset;
+    int    bpl = p->samples_per_line; // bytes per line
+    double fs = p->sampling_rate; // sampling rate
+    double bpb = fs/6937500.0; // bytes per bit
+    int    soc = (int)(9.2e-6*fs) - (int)p->offset;  // start of clock run-in
+    int    eoc = (int)(12.9e-6*fs) - (int)p->offset; // end of clock run-in
     if (soc < 0)
        soc = 0;
     if (eoc > bpl - (int)(43*8*bpb))
@@ -520,7 +518,7 @@ set_decode_parms(struct vbi *vbi, struct v4l2_vbi_format *p)
        return -1;
     }
 
-    vbi->bpb = bpb * FAC + 0.5;
+    vbi->bpb = lround(bpb * FAC);
     vbi->soc = soc;
     vbi->eoc = eoc;
     vbi->bp8bl = 0.97 * 8*bpb; // -3% tolerance
@@ -596,6 +594,7 @@ setup_dev(struct vbi *vbi)
 
     return 0;
 #else
+     (void)vbi;
     return -1;
 #endif // USING_V4L2
 }
@@ -603,16 +602,16 @@ setup_dev(struct vbi *vbi)
 
 
 struct vbi *
-vbi_open(const char *vbi_name, struct cache *ca, int fine_tune, int big_buf)
+vbi_open(const char *vbi_dev_name, struct cache *ca, int fine_tune, int big_buf)
 {
-    static int inited = 0;
+    static int s_inited = 0;
     struct vbi *vbi = 0;
 
     (void)ca;
 
-    if (! inited)
+    if (! s_inited)
        lang_init();
-    inited = 1;
+    s_inited = 1;
 
     if (!(vbi = malloc(sizeof(*vbi))))
     {
@@ -620,7 +619,7 @@ vbi_open(const char *vbi_name, struct cache *ca, int fine_tune, int big_buf)
        goto fail1;
     }
 
-    if ((vbi->fd = open(vbi_name, O_RDONLY)) == -1)
+    if ((vbi->fd = open(vbi_dev_name, O_RDONLY)) == -1)
     {
        error("cannot open vbi device");
        goto fail2;
@@ -667,13 +666,14 @@ vbi_close(struct vbi *vbi)
 struct vt_page *
 vbi_query_page(struct vbi *vbi, int pgno, int subno)
 {
+#ifdef IMPLEMENTED
     struct vt_page *vtp = 0;
 
     (void)pgno;
     (void)subno;
 
-//    if (vbi->cache)
-//     vtp = vbi->cache->op->get(vbi->cache, pgno, subno);
+    if (vbi->cache)
+        vtp = vbi->cache->op->get(vbi->cache, pgno, subno);
     if (vtp == 0)
     {
        // EV_PAGE will come later...
@@ -682,6 +682,12 @@ vbi_query_page(struct vbi *vbi, int pgno, int subno)
 
     vbi_send(vbi, EV_PAGE, 1, 0, 0, vtp);
     return vtp;
+#else
+    (void)vbi;
+    (void)pgno;
+    (void)subno;
+    return NULL;
+#endif
 }
 
 void

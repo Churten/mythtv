@@ -1,16 +1,15 @@
-#include <iostream>
-
 // Own header
 #include "mythimage.h"
 
 // C++ headers
-#include <stdint.h>
+#include <cstdint>
+#include <iostream>
 
 // QT headers
 #include <QImageReader>
-#include <QPainter>
 #include <QMatrix>
 #include <QNetworkReply>
+#include <QPainter>
 #include <QRgb>
 
 // Mythdb headers
@@ -24,7 +23,7 @@
 #include "mythuihelper.h"
 #include "mythmainwindow.h"
 
-MythUIHelper *MythImage::s_ui = NULL;
+MythUIHelper *MythImage::s_ui = nullptr;
 
 MythImage::MythImage(MythPainter *parent, const char *name) :
     ReferenceCounter(name)
@@ -33,24 +32,8 @@ MythImage::MythImage(MythPainter *parent, const char *name) :
         LOG(VB_GENERAL, LOG_ERR, "Image created without parent!");
 
     m_Parent = parent;
-
-    m_Changed = false;
-
-    m_isGradient = false;
-    m_gradBegin = QColor("#000000");
-    m_gradEnd = QColor("#FFFFFF");
-    m_gradAlpha = 255;
-    m_gradDirection = FillTopToBottom;
-
-    m_isOriented = false;
-    m_isReflected = false;
-    m_isYUV = false;
-
-    m_imageId = 0;
-
     m_FileName = "";
 
-    m_cached = false;
     if (!s_ui)
         s_ui = GetMythUI();
 }
@@ -168,7 +151,8 @@ void MythImage::Resize(const QSize &newSize, bool preserveAspect)
     if (m_isGradient)
     {
         *(static_cast<QImage *> (this)) = QImage(newSize, QImage::Format_ARGB32);
-        MakeGradient(*this, m_gradBegin, m_gradEnd, m_gradAlpha, m_gradDirection);
+        MakeGradient(*this, m_gradBegin, m_gradEnd, m_gradAlpha,
+                     BoundaryWanted::Yes, m_gradDirection);
         SetChanged();
     }
     else
@@ -188,8 +172,8 @@ void MythImage::Reflect(ReflectAxis axis, int shear, int scale, int length,
         return;
 
     QImage mirrorImage;
-    FillDirection fillDirection = FillTopToBottom;
-    if (axis == ReflectVertical)
+    FillDirection fillDirection = FillDirection::TopToBottom;
+    if (axis == ReflectAxis::Vertical)
     {
         mirrorImage = mirrored(false,true);
         if (length < 100)
@@ -197,9 +181,9 @@ void MythImage::Reflect(ReflectAxis axis, int shear, int scale, int length,
             int height = (int)((float)mirrorImage.height() * (float)length/100);
             mirrorImage = mirrorImage.copy(0,0,mirrorImage.width(),height);
         }
-        fillDirection = FillTopToBottom;
+        fillDirection = FillDirection::TopToBottom;
     }
-    else if (axis == ReflectHorizontal)
+    else if (axis == ReflectAxis::Horizontal)
     {
         mirrorImage = mirrored(true,false);
         if (length < 100)
@@ -207,21 +191,21 @@ void MythImage::Reflect(ReflectAxis axis, int shear, int scale, int length,
             int width = (int)((float)mirrorImage.width() * (float)length/100);
             mirrorImage = mirrorImage.copy(0,0,width,mirrorImage.height());
         }
-        fillDirection = FillLeftToRight;
+        fillDirection = FillDirection::LeftToRight;
     }
 
     QImage alphaChannel(mirrorImage.size(), QImage::Format_ARGB32);
     MakeGradient(alphaChannel, QColor("#AAAAAA"), QColor("#000000"), 255,
-                 false, fillDirection);
+                 BoundaryWanted::No, fillDirection);
     mirrorImage.setAlphaChannel(alphaChannel);
 
     QMatrix shearMatrix;
-    if (axis == ReflectVertical)
+    if (axis == ReflectAxis::Vertical)
     {
         shearMatrix.scale(1,(float)scale/100);
         shearMatrix.shear((float)shear/100,0);
     }
-    else if (axis == ReflectHorizontal)
+    else if (axis == ReflectAxis::Horizontal)
     {
         shearMatrix.scale((float)scale/100,1);
         shearMatrix.shear(0,(float)shear/100);
@@ -230,9 +214,9 @@ void MythImage::Reflect(ReflectAxis axis, int shear, int scale, int length,
     mirrorImage = mirrorImage.transformed(shearMatrix, Qt::SmoothTransformation);
 
     QSize newsize;
-    if (axis == ReflectVertical)
+    if (axis == ReflectAxis::Vertical)
         newsize = QSize(mirrorImage.width(), height()+spacing+mirrorImage.height());
-    else if (axis == ReflectHorizontal)
+    else if (axis == ReflectAxis::Horizontal)
         newsize = QSize(width()+spacing+mirrorImage.width(), mirrorImage.height());
 
     QImage temp(newsize, QImage::Format_ARGB32);
@@ -240,23 +224,31 @@ void MythImage::Reflect(ReflectAxis axis, int shear, int scale, int length,
 
     QPainter newpainter(&temp);
     newpainter.setCompositionMode(QPainter::CompositionMode_SourceOver);
-    if (axis == ReflectVertical)
+    if (axis == ReflectAxis::Vertical)
     {
         if (shear < 0)
+        {
             newpainter.drawImage(mirrorImage.width()-width(), 0,
-                                 copy(0,0,width(),height()));
+                                 *(static_cast<QImage*>(this)));
+        }
         else
-            newpainter.drawImage(0, 0, copy(0,0,width(),height()));
+        {
+            newpainter.drawImage(0, 0, *(static_cast<QImage*>(this)));
+        }
 
         newpainter.drawImage(0, height()+spacing, mirrorImage);
     }
-    else if (axis == ReflectHorizontal)
+    else if (axis == ReflectAxis::Horizontal)
     {
         if (shear < 0)
+        {
             newpainter.drawImage(0, mirrorImage.height()-height(),
-                                 copy(0,0,width(),height()));
+                                 *(static_cast<QImage*>(this)));
+        }
         else
-            newpainter.drawImage(0, 0, copy(0,0,width(),height()));
+        {
+            newpainter.drawImage(0, 0, *(static_cast<QImage*>(this)));
+        }
 
         newpainter.drawImage(width()+spacing, 0, mirrorImage);
     }
@@ -289,7 +281,7 @@ bool MythImage::Load(MythImageReader *reader)
     if (!reader || !reader->canRead())
         return false;
 
-    QImage *im = new QImage;
+    auto *im = new QImage;
 
     if (im && reader->read(im))
     {
@@ -298,9 +290,7 @@ bool MythImage::Load(MythImageReader *reader)
         return true;
     }
 
-    if (im)
-        delete im;
-
+    delete im;
     return false;
 }
 
@@ -309,7 +299,7 @@ bool MythImage::Load(const QString &filename)
     if (filename.isEmpty())
         return false;
 
-    QImage *im = NULL;
+    QImage *im = nullptr;
     if (filename.startsWith("myth://"))
     {
         // Attempting a file transfer on a file that doesn't exist throws
@@ -324,7 +314,7 @@ bool MythImage::Load(const QString &filename)
         QString mythUrl = RemoteFile::FindFile(fname, url.host(), url.userName());
         if (!mythUrl.isEmpty())
         {
-            RemoteFile *rf = new RemoteFile(mythUrl, false, false, 0);
+            auto *rf = new RemoteFile(mythUrl, false, false, 0);
 
             QByteArray data;
             bool ret = rf->SaveAs(data);
@@ -367,7 +357,7 @@ bool MythImage::Load(const QString &filename)
     if (im && im->isNull())
     {
         delete im;
-        im = NULL;
+        im = nullptr;
     }
 
     SetFileName(filename);
@@ -377,14 +367,14 @@ bool MythImage::Load(const QString &filename)
         delete im;
         return true;
     }
-    else
-        LOG(VB_GUI, LOG_WARNING, QString("MythImage::Load(%1) failed").arg(filename));
+    LOG(VB_GUI, LOG_WARNING, QString("MythImage::Load(%1) failed").arg(filename));
 
     return false;
 }
 
 void MythImage::MakeGradient(QImage &image, const QColor &begin,
-                             const QColor &end, int alpha, bool drawBoundary,
+                             const QColor &end, int alpha,
+                             BoundaryWanted drawBoundary,
                              FillDirection direction)
 {
     // Gradient fill colours
@@ -396,11 +386,11 @@ void MythImage::MakeGradient(QImage &image, const QColor &begin,
     // Define Gradient
     QPoint pointA(0,0);
     QPoint pointB;
-    if (direction == FillTopToBottom)
+    if (direction == FillDirection::TopToBottom)
     {
         pointB = QPoint(0,image.height());
     }
-    else if (direction == FillLeftToRight)
+    else if (direction == FillDirection::LeftToRight)
     {
         pointB = QPoint(image.width(),0);
     }
@@ -414,7 +404,7 @@ void MythImage::MakeGradient(QImage &image, const QColor &begin,
     painter.setCompositionMode(QPainter::CompositionMode_Source);
     painter.fillRect(0, 0, image.width(), image.height(), gradient);
 
-    if (drawBoundary)
+    if (drawBoundary == BoundaryWanted::Yes)
     {
         // Draw boundary rect
         QColor black(0, 0, 0, alpha);
@@ -433,7 +423,7 @@ MythImage *MythImage::Gradient(MythPainter *painter,
 {
     QImage img(size.width(), size.height(), QImage::Format_ARGB32);
 
-    MakeGradient(img, begin, end, alpha, true, direction);
+    MakeGradient(img, begin, end, alpha, BoundaryWanted::Yes, direction);
 
     MythImage *ret = painter->GetFormatImage();
     ret->Assign(img);
@@ -456,32 +446,30 @@ void MythImage::ConvertToYUV(void)
 
     m_isYUV = true;
 
-    int r, r1, g, g1, b, b1, a;
     for (int i = 0; i < height(); i ++)
     {
         QRgb *data = (QRgb*)scanLine(i);
         for (int j = 0; j < width(); j++)
         {
-            r = qRed(data[j]);
-            g = qGreen(data[j]);
-            b = qBlue(data[j]);
-            a = qAlpha(data[j]);
+            int r = qRed(data[j]);
+            int g = qGreen(data[j]);
+            int b = qBlue(data[j]);
+            int a = qAlpha(data[j]);
 
-            r1 = (FIX(0.299) * r + FIX(0.587) * g +
-                  FIX(0.114) * b + ONE_HALF) >> SCALEBITS;
-            g1 = ((- FIX(0.169) * r - FIX(0.331) * g +
-                  FIX(0.499) * b + ONE_HALF) >> SCALEBITS) + 128;
-            b1 = ((FIX(0.499) * r - FIX(0.418) * g -
-                  FIX(0.0813) * b + ONE_HALF) >> SCALEBITS) + 128;
+            int r1 = (FIX(0.299) * r + FIX(0.587) * g +
+                      FIX(0.114) * b + ONE_HALF) >> SCALEBITS;
+            int g1 = ((- FIX(0.169) * r - FIX(0.331) * g +
+                       FIX(0.499) * b + ONE_HALF) >> SCALEBITS) + 128;
+            int b1 = ((FIX(0.499) * r - FIX(0.418) * g -
+                       FIX(0.0813) * b + ONE_HALF) >> SCALEBITS) + 128;
 
             data[j] = qRgba(r1, g1, b1, a);
         }
     }
 }
 
-MythImageReader::MythImageReader(const QString &fileName)
-  : QImageReader(),
-    m_fileName(fileName), m_networkReply(NULL)
+MythImageReader::MythImageReader(QString fileName)
+  : m_fileName(std::move(fileName))
 {
     if ((m_fileName.startsWith("http://")) ||
         (m_fileName.startsWith("https://")) ||
@@ -507,8 +495,8 @@ MythImageReader::~MythImageReader()
 {
     if (m_networkReply)
     {
-        setDevice(NULL);
+        setDevice(nullptr);
         m_networkReply->deleteLater();
-        m_networkReply = NULL;
+        m_networkReply = nullptr;
     }
 }

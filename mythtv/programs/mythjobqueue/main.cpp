@@ -1,17 +1,15 @@
-
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <signal.h>
-
-#include <iostream>
-#include <fstream>
-#include <string>
-#include <unistd.h>
-#include <cstdlib>
-#include <cstdio>
-#include <ctime>
 #include <cmath>
+#include <csignal>
+#include <cstdio>
+#include <cstdlib>
+#include <ctime>
+#include <fcntl.h>
+#include <fstream>
+#include <iostream>
+#include <string>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 #include <QCoreApplication>
 #include <QString>
@@ -40,14 +38,14 @@
 
 using namespace std;
 
-JobQueue *jobqueue = NULL;
+JobQueue *jobqueue = nullptr;
 QString   pidfile;
 QString   logfile;
 
 static void cleanup(void)
 {
     delete gContext;
-    gContext = NULL;
+    gContext = nullptr;
 
     if (pidfile.size())
     {
@@ -75,7 +73,7 @@ int main(int argc, char *argv[])
 
     if (cmdline.toBool("showversion"))
     {
-        cmdline.PrintVersion();
+        MythJobQueueCommandLineParser::PrintVersion();
         return GENERIC_EXIT_OK;
     }
 
@@ -121,9 +119,9 @@ int main(int argc, char *argv[])
 
     jobqueue = new JobQueue(false);
 
-    MythSystemEventHandler *sysEventHandler = new MythSystemEventHandler();
+    auto *sysEventHandler = new MythSystemEventHandler();
 
-    HouseKeeper *housekeeping = new HouseKeeper();
+    auto *housekeeping = new HouseKeeper();
 #ifdef __linux__
  #ifdef CONFIG_BINDINGS_PYTHON
     housekeeping->RegisterTask(new HardwareProfileTask());
@@ -131,10 +129,9 @@ int main(int argc, char *argv[])
 #endif
     housekeeping->Start();
 
-    int exitCode = a.exec();
+    int exitCode = QCoreApplication::exec();
 
-    if (sysEventHandler)
-        delete sysEventHandler;
+    delete sysEventHandler;
 
     return exitCode ? exitCode : GENERIC_EXIT_OK;
 }

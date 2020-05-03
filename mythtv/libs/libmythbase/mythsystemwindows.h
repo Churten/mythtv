@@ -4,7 +4,7 @@
 #define _MYTHSYSTEM_WINDOWS_H_
 
 #include <Windows.h>
-#include <signal.h>
+#include <csignal>
 
 #include <QWaitCondition>
 #include <QBuffer>
@@ -20,16 +20,16 @@
 
 class MythSystemLegacyWindows;
 
-typedef QMap<HANDLE, MythSystemLegacyWindows *> MSMap_t;
-typedef QMap<HANDLE, QBuffer *> PMap_t;
-typedef QList<MythSystemLegacyWindows *> MSList_t;
+using MSMap_t  = QMap<HANDLE, MythSystemLegacyWindows *>;
+using PMap_t   = QMap<HANDLE, QBuffer *>;
+using MSList_t = QList<MythSystemLegacyWindows *>;
 
 class MythSystemLegacyIOHandler: public MThread
 {
     public:
         explicit MythSystemLegacyIOHandler(bool read);
         ~MythSystemLegacyIOHandler() { wait(); }
-        void   run(void);
+        void   run(void) override; // MThread
 
         void   insert(HANDLE h, QBuffer *buff);
         void   Wait(HANDLE h);
@@ -52,30 +52,34 @@ class MythSystemLegacyIOHandler: public MThread
 class MythSystemLegacyManager : public MThread
 {
     public:
-        MythSystemLegacyManager();
+        MythSystemLegacyManager()
+            : MThread("SystemManager") {}
         ~MythSystemLegacyManager();
-        void run(void);
+        void run(void) override; // MThread
         void append(MythSystemLegacyWindows *);
         void jumpAbort(void);
 
     private:
         void ChildListRebuild();
 
-        int        m_childCount;
-        HANDLE    *m_children;
+        int        m_childCount {0};
+        HANDLE    *m_children   {nullptr};
         MSMap_t    m_pMap;
         QMutex     m_mapLock;
 
-        bool       m_jumpAbort;
+        bool       m_jumpAbort  {false};
         QMutex     m_jumpLock;
 };
 
+// spawn separate thread for signals to prevent manager
+// thread from blocking in some slot
 class MythSystemLegacySignalManager : public MThread
 {
     public:
-        MythSystemLegacySignalManager();
+        MythSystemLegacySignalManager()
+            : MThread("SystemSignalManager") {}
         ~MythSystemLegacySignalManager() { wait(); }
-        void run(void);
+        void run(void) override; // MThread
     private:
 };
 
@@ -86,25 +90,25 @@ class MBASE_PUBLIC MythSystemLegacyWindows : public MythSystemLegacyPrivate
 
     public:
         explicit MythSystemLegacyWindows(MythSystemLegacy *parent);
-        ~MythSystemLegacyWindows();
+        ~MythSystemLegacyWindows() = default;
 
-        virtual void Fork(time_t timeout) MOVERRIDE;
-        virtual void Manage(void) MOVERRIDE;
+        void Fork(time_t timeout) override; // MythSystemLegacyPrivate
+        void Manage(void) override; // MythSystemLegacyPrivate
 
-        virtual void Term(bool force=false) MOVERRIDE;
-        virtual void Signal(int sig) MOVERRIDE;
-        virtual void JumpAbort(void) MOVERRIDE;
+        void Term(bool force=false) override; // MythSystemLegacyPrivate
+        void Signal(int sig) override; // MythSystemLegacyPrivate
+        void JumpAbort(void) override; // MythSystemLegacyPrivate
 
-        virtual bool ParseShell(const QString &cmd, QString &abscmd,
-                                QStringList &args) MOVERRIDE;
+        bool ParseShell(const QString &cmd, QString &abscmd,
+                        QStringList &args) override; // MythSystemLegacyPrivate
 
         friend class MythSystemLegacyManager;
         friend class MythSystemLegacySignalManager;
         friend class MythSystemLegacyIOHandler;
 
     private:
-        HANDLE      m_child;
-        time_t      m_timeout;
+        HANDLE      m_child   {nullptr};
+        time_t      m_timeout {0};
 
         HANDLE      m_stdpipe[3];
 };

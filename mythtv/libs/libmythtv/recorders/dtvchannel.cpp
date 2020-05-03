@@ -8,35 +8,24 @@
 #include "mpegtables.h"
 #include "mythlogging.h"
 
-#define LOC QString("DTVChan[%1](%2): ").arg(m_inputid).arg(GetDevice())
+#define LOC QString("DTVChan[%1](%2): ").arg(m_inputId).arg(GetDevice())
 
-QReadWriteLock DTVChannel::master_map_lock(QReadWriteLock::Recursive);
-typedef QMap<QString,QList<DTVChannel*> > MasterMap;
-MasterMap DTVChannel::master_map;
-
-DTVChannel::DTVChannel(TVRec *parent)
-    : ChannelBase(parent),
-      tunerType(DTVTunerType::kTunerTypeUnknown),
-      sistandard("mpeg"),         tuningMode(QString::null),
-      currentProgramNum(-1),
-      currentATSCMajorChannel(0), currentATSCMinorChannel(0),
-      currentTransportID(0),      currentOriginalNetworkID(0),
-      genPAT(NULL),               genPMT(NULL)
-{
-}
+QReadWriteLock DTVChannel::s_master_map_lock(QReadWriteLock::Recursive);
+using MasterMap = QMap<QString,QList<DTVChannel*> >;
+MasterMap DTVChannel::s_master_map;
 
 DTVChannel::~DTVChannel()
 {
-    if (genPAT)
+    if (m_genPAT)
     {
-        delete genPAT;
-        genPAT = NULL;
+        delete m_genPAT;
+        m_genPAT = nullptr;
     }
 
-    if (genPMT)
+    if (m_genPMT)
     {
-        delete genPMT;
-        genPMT = NULL;
+        delete m_genPMT;
+        m_genPMT = nullptr;
     }
 }
 
@@ -44,26 +33,24 @@ void DTVChannel::SetDTVInfo(uint atsc_major, uint atsc_minor,
                             uint dvb_orig_netid,
                             uint mpeg_tsid, int mpeg_pnum)
 {
-    QMutexLocker locker(&dtvinfo_lock);
-    currentProgramNum        = mpeg_pnum;
-    currentATSCMajorChannel  = atsc_major;
-    currentATSCMinorChannel  = atsc_minor;
-    currentTransportID       = mpeg_tsid;
-    currentOriginalNetworkID = dvb_orig_netid;
+    QMutexLocker locker(&m_dtvinfo_lock);
+    m_currentProgramNum        = mpeg_pnum;
+    m_currentATSCMajorChannel  = atsc_major;
+    m_currentATSCMinorChannel  = atsc_minor;
+    m_currentTransportID       = mpeg_tsid;
+    m_currentOriginalNetworkID = dvb_orig_netid;
 }
 
 QString DTVChannel::GetSIStandard(void) const
 {
-    QMutexLocker locker(&dtvinfo_lock);
-    QString tmp = sistandard; tmp.detach();
-    return tmp;
+    QMutexLocker locker(&m_dtvinfo_lock);
+    return m_sistandard;
 }
 
 void DTVChannel::SetSIStandard(const QString &si_std)
 {
-    QMutexLocker locker(&dtvinfo_lock);
-    sistandard = si_std.toLower();
-    sistandard.detach();
+    QMutexLocker locker(&m_dtvinfo_lock);
+    m_sistandard = si_std.toLower();
 }
 
 QString DTVChannel::GetSuggestedTuningMode(bool is_live_tv) const
@@ -71,41 +58,35 @@ QString DTVChannel::GetSuggestedTuningMode(bool is_live_tv) const
     QString input = GetInputName();
 
     uint quickTuning = 0;
-    if (m_inputid && !input.isEmpty())
-        quickTuning = CardUtil::GetQuickTuning(m_inputid, input);
+    if (m_inputId && !input.isEmpty())
+        quickTuning = CardUtil::GetQuickTuning(m_inputId, input);
 
     bool useQuickTuning = (quickTuning && is_live_tv) || (quickTuning > 1);
 
-    QMutexLocker locker(&dtvinfo_lock);
-    if (!useQuickTuning && ((sistandard == "atsc") || (sistandard == "dvb")))
-    {
-        QString tmp = sistandard; tmp.detach();
-        return tmp;
-    }
-
+    QMutexLocker locker(&m_dtvinfo_lock);
+    if (!useQuickTuning && ((m_sistandard == "atsc") || (m_sistandard == "dvb")))
+        return m_sistandard;
     return "mpeg";
 }
 
 QString DTVChannel::GetTuningMode(void) const
 {
-    QMutexLocker locker(&dtvinfo_lock);
-    QString tmp = tuningMode; tmp.detach();
-    return tmp;
+    QMutexLocker locker(&m_dtvinfo_lock);
+    return m_tuningMode;
 }
 
 vector<DTVTunerType> DTVChannel::GetTunerTypes(void) const
 {
     vector<DTVTunerType> tts;
-    if (tunerType != DTVTunerType::kTunerTypeUnknown)
-        tts.push_back(tunerType);
+    if (m_tunerType != DTVTunerType::kTunerTypeUnknown)
+        tts.push_back(m_tunerType);
     return tts;
 }
 
 void DTVChannel::SetTuningMode(const QString &tuning_mode)
 {
-    QMutexLocker locker(&dtvinfo_lock);
-    tuningMode = tuning_mode.toLower();
-    tuningMode.detach();
+    QMutexLocker locker(&m_dtvinfo_lock);
+    m_tuningMode = tuning_mode.toLower();
 }
 
 /** \brief Returns cached MPEG PIDs for last tuned channel.
@@ -131,44 +112,44 @@ void DTVChannel::SaveCachedPids(const pid_cache_t &pid_cache) const
 
 void DTVChannel::RegisterForMaster(const QString &key)
 {
-    master_map_lock.lockForWrite();
-    master_map[key].push_back(this);
-    master_map_lock.unlock();
+    s_master_map_lock.lockForWrite();
+    s_master_map[key].push_back(this);
+    s_master_map_lock.unlock();
 }
 
 void DTVChannel::DeregisterForMaster(const QString &key)
 {
-    master_map_lock.lockForWrite();
-    MasterMap::iterator mit = master_map.find(key);
-    if (mit == master_map.end())
-        mit = master_map.begin();
-    for (; mit != master_map.end(); ++mit)
+    s_master_map_lock.lockForWrite();
+    MasterMap::iterator mit = s_master_map.find(key);
+    if (mit == s_master_map.end())
+        mit = s_master_map.begin();
+    for (; mit != s_master_map.end(); ++mit)
     {
         (*mit).removeAll(this);
         if (mit.key() == key)
             break;
     }
-    master_map_lock.unlock();
+    s_master_map_lock.unlock();
 }
 
 DTVChannel *DTVChannel::GetMasterLock(const QString &key)
 {
-    master_map_lock.lockForRead();
-    MasterMap::iterator mit = master_map.find(key);
-    if (mit == master_map.end() || (*mit).empty())
+    s_master_map_lock.lockForRead();
+    MasterMap::iterator mit = s_master_map.find(key);
+    if (mit == s_master_map.end() || (*mit).empty())
     {
-        master_map_lock.unlock();
-        return NULL;
+        s_master_map_lock.unlock();
+        return nullptr;
     }
     return (*mit).front();
 }
 
 void DTVChannel::ReturnMasterLock(DTVChannelP &chan)
 {
-    if (chan != NULL)
+    if (chan != nullptr)
     {
-        chan = NULL;
-        master_map_lock.unlock();
+        chan = nullptr;
+        s_master_map_lock.unlock();
     }
 }
 
@@ -187,34 +168,43 @@ bool DTVChannel::SetChannelByString(const QString &channum)
         return false;
     }
 
-    if (!m_inputid)
+    if (!m_inputId)
         return false;
 
-    uint mplexid_restriction;
-    uint chanid_restriction;
+    uint mplexid_restriction = 0;
+    uint chanid_restriction = 0;
     if (!IsInputAvailable(mplexid_restriction, chanid_restriction))
     {
         LOG(VB_GENERAL, LOG_INFO, loc +
             QString("Requested channel '%1' is on input '%2' "
                     "which is in a busy input group")
-                .arg(channum).arg(m_inputid));
+                .arg(channum).arg(m_inputId));
 
         return false;
     }
 
     // Fetch tuning data from the database.
-    QString tvformat, modulation, freqtable, freqid, si_std;
-    int finetune;
-    uint64_t frequency;
-    int mpeg_prog_num;
-    uint atsc_major, atsc_minor, mplexid, chanid, tsid, netid;
+    QString tvformat;
+    QString modulation;
+    QString freqtable;
+    QString freqid;
+    QString si_std;
+    int finetune = 0;
+    uint64_t frequency = 0;
+    int mpeg_prog_num = 0;
+    uint atsc_major = 0;
+    uint atsc_minor = 0;
+    uint mplexid = 0;
+    uint chanid = 0;
+    uint tsid = 0;
+    uint netid = 0;
 
     if (!ChannelUtil::GetChannelData(
-        m_sourceid, chanid, channum,
+        m_sourceId, chanid, channum,
         tvformat, modulation, freqtable, freqid,
         finetune, frequency,
         si_std, mpeg_prog_num, atsc_major, atsc_minor, tsid, netid,
-        mplexid, m_commfree))
+        mplexid, m_commFree))
     {
         LOG(VB_GENERAL, LOG_ERR, loc + "Unable to find channel in database.");
 
@@ -257,20 +247,20 @@ bool DTVChannel::SetChannelByString(const QString &channum)
 
     // Clear out any old PAT or PMT & save version info
     uint version = 0;
-    if (genPAT)
+    if (m_genPAT)
     {
-        version = (genPAT->Version()+1) & 0x1f;
-        delete genPAT; genPAT = NULL;
-        delete genPMT; genPMT = NULL;
+        version = (m_genPAT->Version()+1) & 0x1f;
+        delete m_genPAT; m_genPAT = nullptr;
+        delete m_genPMT; m_genPMT = nullptr;
     }
 
     bool ok = true;
-    if (m_externalChanger.isEmpty())
+    if (!IsExternalChannelChangeInUse())
     {
         if (IsIPTV())
         {
-            int chanid = ChannelUtil::GetChanID(m_sourceid, channum);
-            IPTVTuningData tuning = ChannelUtil::GetIPTVTuningData(chanid);
+            int chanid2 = ChannelUtil::GetChanID(m_sourceId, channum);
+            IPTVTuningData tuning = ChannelUtil::GetIPTVTuningData(chanid2);
             if (!Tune(tuning, false))
             {
                 LOG(VB_GENERAL, LOG_ERR, loc + "Tuning to IPTV URL");
@@ -294,7 +284,7 @@ bool DTVChannel::SetChannelByString(const QString &channum)
         {
             // Initialize basic the tuning parameters
             DTVMultiplex tuning;
-            if (!mplexid || !tuning.FillFromDB(tunerType, mplexid))
+            if (!mplexid || !tuning.FillFromDB(m_tunerType, mplexid))
             {
                 LOG(VB_GENERAL, LOG_ERR, loc +
                         "Failed to initialize multiplex options");
@@ -302,6 +292,10 @@ bool DTVChannel::SetChannelByString(const QString &channum)
             }
             else
             {
+                LOG(VB_GENERAL, LOG_DEBUG, loc +
+                    QString("Initialize multiplex options m_tunerType:%1 mplexid:%2")
+                        .arg(m_tunerType).arg(mplexid));
+
                 // Try to fix any problems with the multiplex
                 CheckOptions(tuning);
 
@@ -337,8 +331,8 @@ bool DTVChannel::SetChannelByString(const QString &channum)
     {
         // We need to pull the pid_cache since there are no tuning tables
         pid_cache_t pid_cache;
-        int chanid = ChannelUtil::GetChanID(m_sourceid, channum);
-        ChannelUtil::GetCachedPids(chanid, pid_cache);
+        int chanid3 = ChannelUtil::GetChanID(m_sourceId, channum);
+        ChannelUtil::GetCachedPids(chanid3, pid_cache);
         if (pid_cache.empty())
         {
             LOG(VB_GENERAL, LOG_ERR, loc + "PID cache is empty");
@@ -348,27 +342,26 @@ bool DTVChannel::SetChannelByString(const QString &channum)
         // Now we construct the PAT & PMT
         vector<uint> pnum; pnum.push_back(1);
         vector<uint> pid;  pid.push_back(9999);
-        genPAT = ProgramAssociationTable::Create(0,version,pnum,pid);
+        m_genPAT = ProgramAssociationTable::Create(0,version,pnum,pid);
 
         int pcrpid = -1;
         vector<uint> pids;
         vector<uint> types;
-        pid_cache_t::iterator pit = pid_cache.begin();
-        for (; pit != pid_cache.end(); ++pit)
+        for (auto & pit : pid_cache)
         {
-            if (!pit->GetStreamID())
+            if (!pit.GetStreamID())
                 continue;
-            pids.push_back(pit->GetPID());
-            types.push_back(pit->GetStreamID());
-            if (pit->IsPCRPID())
-                pcrpid = pit->GetPID();
-            if ((pcrpid < 0) && StreamID::IsVideo(pit->GetStreamID()))
-                pcrpid = pit->GetPID();
+            pids.push_back(pit.GetPID());
+            types.push_back(pit.GetStreamID());
+            if (pit.IsPCRPID())
+                pcrpid = pit.GetPID();
+            if ((pcrpid < 0) && StreamID::IsVideo(pit.GetStreamID()))
+                pcrpid = pit.GetPID();
         }
         if (pcrpid < 0)
             pcrpid = pid_cache[0].GetPID();
 
-        genPMT = ProgramMapTable::Create(
+        m_genPMT = ProgramMapTable::Create(
             pnum.back(), pid.back(), pcrpid, version, pids, types);
 
         SetSIStandard("mpeg");
@@ -376,7 +369,7 @@ bool DTVChannel::SetChannelByString(const QString &channum)
     }
 
     // Set the current channum to the new channel's channum
-    m_curchannelname = channum;
+    m_curChannelName = channum;
 
     // Setup filters & recording picture attributes for framegrabing recorders
     // now that the new curchannelname has been established.
@@ -398,10 +391,10 @@ void DTVChannel::HandleScriptEnd(bool /*ok*/)
     // will save the current channel to (*it)->startChanNum
 }
 
-bool DTVChannel::TuneMultiplex(uint mplexid, QString inputname)
+bool DTVChannel::TuneMultiplex(uint mplexid, const QString& /*inputname*/)
 {
     DTVMultiplex tuning;
-    if (!tuning.FillFromDB(tunerType, mplexid))
+    if (!tuning.FillFromDB(m_tunerType, mplexid))
         return false;
 
     CheckOptions(tuning);

@@ -7,7 +7,7 @@
 #ifndef CETONRTSP_H
 #define CETONRTSP_H
 
-#include <stdint.h>
+#include <cstdint>
 
 #include <QObject>
 #include <QMap>
@@ -19,7 +19,7 @@
 class QTcpSocket;
 class QUdpSocket;
 
-typedef QMap<QString, QString> Params;
+using Params = QMap<QString, QString>;
 
 class CetonRTSP : QObject
 {
@@ -27,8 +27,8 @@ class CetonRTSP : QObject
 
   public:
     explicit CetonRTSP(const QString &ip, uint tuner, ushort port);
-    explicit CetonRTSP(const QUrl&);
-    ~CetonRTSP();
+    explicit CetonRTSP(const QUrl &url);
+    ~CetonRTSP() override;
 
     bool GetOptions(QStringList &options);
     bool Describe(void);
@@ -42,31 +42,31 @@ class CetonRTSP : QObject
 
 protected:
     bool ProcessRequest(
-        const QString &method, const QStringList *headers = NULL,
+        const QString &method, const QStringList *headers = nullptr,
                         bool use_control = false, bool waitforanswer = true,
                         const QString &alternative = QString());
 
   private:
-    QStringList splitLines(const QByteArray &lines);
+    static QStringList splitLines(const QByteArray &lines);
     QString readParameters(const QString &key, Params &parameters);
     QUrl GetBaseUrl(void);
-    void timerEvent(QTimerEvent*);
+    void timerEvent(QTimerEvent *event) override; // QObject
 
-    QTcpSocket *_socket;
-    uint        _sequenceNumber;
-    QString     _sessionId;
-    QUrl        _requestUrl;
-    QUrl        _controlUrl;
+    QTcpSocket    *m_socket          {nullptr};
+    uint           m_sequenceNumber  {0};
+    QString        m_sessionId       {"0"};
+    QUrl           m_requestUrl;
+    QUrl           m_controlUrl;
 
-    int                     _responseCode;
-    QString                 _responseMessage;
-    Params                  _responseHeaders;
-    QByteArray              _responseContent;
-    int                     _timeout;
-    int                     _timer;
-    bool                    _canGetParameter;
+    int            m_responseCode    {-1};
+    QString        m_responseMessage;
+    Params         m_responseHeaders;
+    QByteArray     m_responseContent;
+    int            m_timeout         {60};
+    int            m_timer           {0};
+    bool           m_canGetParameter {false};
 
-    static QMutex _rtspMutex;
+    static QMutex  s_rtspMutex;
 
 };
 

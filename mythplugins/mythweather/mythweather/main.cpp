@@ -17,13 +17,13 @@
 #include "sourceManager.h"
 #include "dbcheck.h"
 
-SourceManager *srcMan = 0;
+SourceManager *srcMan = nullptr;
 
 static int RunWeather()
 {
     MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
 
-    Weather *weather = new Weather(mainStack, "mythweather", srcMan);
+    auto *weather = new Weather(mainStack, "mythweather", srcMan);
 
     if (weather->Create())
     {
@@ -58,8 +58,8 @@ static void setupKeys()
 
 int mythplugin_init(const char *libversion)
 {
-    if (!gCoreContext->TestPluginVersion("mythweather", libversion,
-                                    MYTH_BINARY_VERSION))
+    if (!MythCoreContext::TestPluginVersion("mythweather", libversion,
+                                            MYTH_BINARY_VERSION))
         return -1;
 
     gCoreContext->ActivateSettingsCache(false);
@@ -68,7 +68,7 @@ int mythplugin_init(const char *libversion)
 
     setupKeys();
 
-    if (gCoreContext->GetNumSetting("weatherbackgroundfetch", 0))
+    if (gCoreContext->GetBoolSetting("weatherbackgroundfetch", false))
     {
         srcMan = new SourceManager();
         srcMan->startTimers();
@@ -91,7 +91,7 @@ static void WeatherCallback(void *data, QString &selection)
 
     if (selection == "SETTINGS_GENERAL")
     {
-        GlobalSetup *gsetup = new GlobalSetup(mainStack, "weatherglobalsetup");
+        auto *gsetup = new GlobalSetup(mainStack, "weatherglobalsetup");
 
         if (gsetup->Create())
             mainStack->AddScreen(gsetup);
@@ -100,7 +100,7 @@ static void WeatherCallback(void *data, QString &selection)
     }
     else if (selection == "SETTINGS_SCREEN")
     {
-        ScreenSetup *ssetup = new ScreenSetup(mainStack, "weatherscreensetup", srcMan);
+        auto *ssetup = new ScreenSetup(mainStack, "weatherscreensetup", srcMan);
 
         if (ssetup->Create())
             mainStack->AddScreen(ssetup);
@@ -109,7 +109,7 @@ static void WeatherCallback(void *data, QString &selection)
     }
     else if (selection == "SETTINGS_SOURCE")
     {
-        SourceSetup *srcsetup = new SourceSetup(mainStack, "weathersourcesetup");
+        auto *srcsetup = new SourceSetup(mainStack, "weathersourcesetup");
 
         if (srcsetup->Create())
             mainStack->AddScreen(srcsetup);
@@ -123,11 +123,11 @@ int mythplugin_config()
     QString menuname = "weather_settings.xml";
     QString themedir = GetMythUI()->GetThemeDir();
 
-    MythThemedMenu *menu = new MythThemedMenu(
-        themedir, menuname,
-        GetMythMainWindow()->GetMainStack(), "weather menu");
+    auto *menu = new MythThemedMenu(themedir, menuname,
+                                    GetMythMainWindow()->GetMainStack(),
+                                    "weather menu");
 
-    menu->setCallback(WeatherCallback, 0);
+    menu->setCallback(WeatherCallback, nullptr);
     menu->setKillable();
     if (menu->foundTheme())
     {
@@ -139,13 +139,10 @@ int mythplugin_config()
         GetMythMainWindow()->GetMainStack()->AddScreen(menu);
         return 0;
     }
-    else
-    {
-        LOG(VB_GENERAL, LOG_ERR, QString("Couldn't find menu %1 or theme %2")
-                .arg(menuname).arg(themedir));
-        delete menu;
-        return -1;
-    }
+    LOG(VB_GENERAL, LOG_ERR, QString("Couldn't find menu %1 or theme %2")
+        .arg(menuname).arg(themedir));
+    delete menu;
+    return -1;
 }
 
 void  mythplugin_destroy()
@@ -153,7 +150,7 @@ void  mythplugin_destroy()
     if (srcMan)
     {
         delete srcMan;
-        srcMan = 0;
+        srcMan = nullptr;
     }
 }
 

@@ -8,20 +8,12 @@
 
 #define LOC QString("Channel Group: ")
 
-ChannelGroupItem& ChannelGroupItem::operator=(const ChannelGroupItem &other)
-{
-    grpid     = other.grpid;
-    name      = (other.name);
-
-    return *this;
-}
-
 inline bool lt_group(const ChannelGroupItem &a, const ChannelGroupItem &b)
 {
-    return QString::localeAwareCompare(a.name, b.name) < 0;
+    return QString::localeAwareCompare(a.m_name, b.m_name) < 0;
 }
 
-bool ChannelGroup::ToggleChannel(uint chanid, int changrpid, int delete_chan)
+bool ChannelGroup::ToggleChannel(uint chanid, int changrpid, bool delete_chan)
 {
     // Check if it already exists for that chanid...
     MSqlQuery query(MSqlQuery::InitCon());
@@ -39,7 +31,7 @@ bool ChannelGroup::ToggleChannel(uint chanid, int changrpid, int delete_chan)
         MythDB::DBError("ChannelGroup::ToggleChannel", query);
         return false;
     }
-    else if (query.next() && delete_chan)
+    if (query.next() && delete_chan)
     {
         // We have a record...Remove it to toggle...
         QString id = query.value(0).toString();
@@ -69,8 +61,50 @@ bool ChannelGroup::ToggleChannel(uint chanid, int changrpid, int delete_chan)
 
 bool ChannelGroup::AddChannel(uint chanid, int changrpid)
 {
-    // Check if it already exists for that chanid...
+    // Make sure the channel group exists
     MSqlQuery query(MSqlQuery::InitCon());
+    query.prepare(
+        "SELECT grpid, name FROM channelgroupnames "
+        "WHERE grpid = :GRPID");
+    query.bindValue(":GRPID", changrpid);
+
+    if (!query.exec())
+    {
+        MythDB::DBError("ChannelGroup::AddChannel", query);
+        return false;
+    }
+    if (query.size() == 0)
+    {
+        LOG(VB_GENERAL, LOG_INFO, LOC +
+            QString("AddChannel failed to find channel group %1.").arg(changrpid));
+        return false;
+    }
+
+    query.first();
+    QString groupName = query.value(1).toString();
+
+    // Make sure the channel exists
+    query.prepare(
+        "SELECT chanid, name FROM channel "
+        "WHERE chanid = :CHANID");
+    query.bindValue(":CHANID", chanid);
+
+    if (!query.exec())
+    {
+        MythDB::DBError("ChannelGroup::AddChannel", query);
+        return false;
+    }
+    if (query.size() == 0)
+    {
+        LOG(VB_GENERAL, LOG_INFO, LOC +
+            QString("AddChannel failed to find channel %1.").arg(chanid));
+        return false;
+    }
+
+    query.first();
+    QString chanName = query.value(1).toString();
+
+    // Check if it already exists for that chanid...
     query.prepare(
         "SELECT channelgroup.id "
         "FROM channelgroup "
@@ -85,7 +119,7 @@ bool ChannelGroup::AddChannel(uint chanid, int changrpid)
         MythDB::DBError("ChannelGroup::AddChannel", query);
         return false;
     }
-    else if (query.size() == 0)
+    if (query.size() == 0)
     {
         // We have no record...Add one to toggle...
         query.prepare("INSERT INTO channelgroup (chanid,grpid) "
@@ -96,7 +130,7 @@ bool ChannelGroup::AddChannel(uint chanid, int changrpid)
             MythDB::DBError("ChannelGroup::AddChannel -- insert", query);
         LOG(VB_GENERAL, LOG_INFO, LOC +
             QString("Adding channel %1 to group %2.")
-                 .arg(chanid).arg(changrpid));
+                 .arg(chanName).arg(groupName));
     }
 
     return true;
@@ -120,7 +154,7 @@ bool ChannelGroup::DeleteChannel(uint chanid, int changrpid)
         MythDB::DBError("ChannelGroup::DeleteChannel", query);
         return false;
     }
-    else if (query.next())
+    if (query.next())
     {
         // We have a record...Remove it to toggle...
         QString id = query.value(0).toString();
@@ -177,9 +211,9 @@ int ChannelGroup::GetNextChannelGroup(const ChannelGroupList &sorted, int grpid)
 
     // If grpid is all channels (-1), then return the first grpid
     if (grpid == -1)
-      return sorted[0].grpid;
+      return sorted[0].m_grpId;
 
-    ChannelGroupList::const_iterator it = find(sorted.begin(), sorted.end(), grpid);
+    auto it = find(sorted.cbegin(), sorted.cend(), grpid);
 
     // If grpid is not in the list, return -1 for all channels
     if (it == sorted.end())
@@ -191,7 +225,7 @@ int ChannelGroup::GetNextChannelGroup(const ChannelGroupList &sorted, int grpid)
     if (it == sorted.end())
        return -1;
 
-    return it->grpid;
+    return it->m_grpId;
 }
 
 QString ChannelGroup::GetChannelGroupName(int grpid)
@@ -216,7 +250,7 @@ QString ChannelGroup::GetChannelGroupName(int grpid)
     return "";
 }
 
-int ChannelGroup::GetChannelGroupId(QString changroupname)
+int ChannelGroup::GetChannelGroupId(const QString& changroupname)
 {
     // All Channels
     if (changroupname == "All Channels")

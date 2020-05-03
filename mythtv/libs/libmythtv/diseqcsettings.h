@@ -10,7 +10,7 @@
 #include "diseqc.h"
 #include "standardsettings.h"
 
-typedef QMap<uint, StandardSetting*> devid_to_setting_t;
+using devid_to_setting_t = QMap<uint, StandardSetting*>;
 
 class SwitchTypeSetting;
 class SwitchPortsSetting;
@@ -22,7 +22,7 @@ class DiseqcConfigBase : public GroupSetting
     Q_OBJECT
 
   public:
-    virtual bool keyPressEvent(QKeyEvent *);
+    bool keyPressEvent(QKeyEvent *event) override; // StandardSetting
     static DiseqcConfigBase* CreateByType(DiSEqCDevDevice *dev,
                                           StandardSetting *parent);
 
@@ -36,16 +36,16 @@ class SwitchConfig : public DiseqcConfigBase
 
   public:
     SwitchConfig(DiSEqCDevSwitch &switch_dev, StandardSetting *parent);
-    void Load(void);
+    void Load(void) override; // StandardSetting
 
   public slots:
     void update(void);
 
   private:
-    DeviceDescrSetting *m_deviceDescr;
-    SwitchTypeSetting  *m_type;
-    SwitchPortsSetting *m_ports;
-    SwitchAddressSetting *m_address;
+    DeviceDescrSetting   *m_deviceDescr {nullptr};
+    SwitchTypeSetting    *m_type        {nullptr};
+    SwitchPortsSetting   *m_ports       {nullptr};
+    SwitchAddressSetting *m_address     {nullptr};
 };
 
 class RotorPosMap : public GroupSetting
@@ -53,13 +53,14 @@ class RotorPosMap : public GroupSetting
     Q_OBJECT
 
   public:
-    explicit RotorPosMap(DiSEqCDevRotor &rotor);
+    explicit RotorPosMap(DiSEqCDevRotor &rotor) :
+        m_rotor(rotor) { }
 
-    virtual void Load(void);
-    virtual void Save(void);
+    void Load(void) override; // StandardSetting
+    void Save(void) override; // StandardSetting
 
   private slots:
-    void valueChanged(StandardSetting*);
+    void valueChanged(StandardSetting *setting);
 
   protected:
     void PopulateList(void);
@@ -74,7 +75,7 @@ class RotorConfig : public DiseqcConfigBase
     Q_OBJECT
 
   public:
-    void Load();
+    void Load() override; // StandardSetting
     RotorConfig(DiSEqCDevRotor &rotor, StandardSetting *parent);
 
   public slots:
@@ -82,7 +83,7 @@ class RotorConfig : public DiseqcConfigBase
 
   private:
     DiSEqCDevRotor     &m_rotor;
-    RotorPosMap        *m_pos;
+    RotorPosMap        *m_pos {nullptr};
 };
 
 class SCRConfig : public DiseqcConfigBase
@@ -109,19 +110,19 @@ class LNBConfig : public DiseqcConfigBase
 
   public:
     LNBConfig(DiSEqCDevLNB &lnb, StandardSetting *parent);
-    void Load(void);
+    void Load(void) override; // StandardSetting
 
   public slots:
     void SetPreset(const QString &value);
     void UpdateType(void);
 
   private:
-    LNBPresetSetting    *m_preset;
-    LNBTypeSetting      *m_type;
-    LNBLOFSwitchSetting *m_lof_switch;
-    LNBLOFLowSetting    *m_lof_lo;
-    LNBLOFHighSetting   *m_lof_hi;
-    LNBPolarityInvertedSetting *m_pol_inv;
+    LNBPresetSetting           *m_preset     {nullptr};
+    LNBTypeSetting             *m_type       {nullptr};
+    LNBLOFSwitchSetting        *m_lofSwitch  {nullptr};
+    LNBLOFLowSetting           *m_lofLo      {nullptr};
+    LNBLOFHighSetting          *m_lofHi      {nullptr};
+    LNBPolarityInvertedSetting *m_polInv     {nullptr};
 };
 
 class DeviceTypeSetting;
@@ -131,17 +132,18 @@ class DeviceTree : public GroupSetting
     Q_OBJECT
 
   public:
-    explicit DeviceTree(DiSEqCDevTree &tree);
+    explicit DeviceTree(DiSEqCDevTree &tree) :
+        m_tree(tree) { }
     void DeleteDevice(DeviceTypeSetting *devtype);
 
-    virtual void Load(void);
+    void Load(void) override; // StandardSetting
 
   protected:
     void PopulateTree(void);
     void PopulateTree(DiSEqCDevDevice *node,
-                      DiSEqCDevDevice *parent   = NULL,
+                      DiSEqCDevDevice *parent   = nullptr,
                       uint             childnum = 0,
-                      GroupSetting    *parentSetting = NULL);
+                      GroupSetting    *parentSetting = nullptr);
     void PopulateChildren(DiSEqCDevDevice *node, GroupSetting *parentSetting);
     void AddDeviceTypeSetting(DeviceTypeSetting *devtype,
                               DiSEqCDevDevice *parent,
@@ -164,20 +166,20 @@ class DTVDeviceConfigGroup : public GroupSetting
   public:
     DTVDeviceConfigGroup(DiSEqCDevSettings &settings, uint cardid,
                          bool switches_enabled);
-    ~DTVDeviceConfigGroup(void);
+    ~DTVDeviceConfigGroup(void) override = default;
 
   protected:
     void AddNodes(StandardSetting *group, const QString &trigger,
                   DiSEqCDevDevice *node);
 
-    void AddChild(StandardSetting *group, const QString &trigger,
-                  StandardSetting *setting);
+    static void AddChild(StandardSetting *group, const QString &trigger,
+                         StandardSetting *setting);
 
   private:
     DiSEqCDevTree       m_tree;
     DiSEqCDevSettings  &m_settings;
     devid_to_setting_t  m_devs;
-    bool                m_switches_enabled;
+    bool                m_switchesEnabled;
 };
 
 #endif // _DISEQCSETTINGS_H_

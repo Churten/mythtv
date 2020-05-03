@@ -35,9 +35,9 @@ class UPNP_PUBLIC Xsd : public QDomDocument
 {
     protected:
 
-        QString     ReadPropertyMetadata ( QObject *pObject, 
-                                           QString  sPropName, 
-                                           QString  sKey );
+        static QString     ReadPropertyMetadata ( QObject *pObject, 
+                                           const QString&  sPropName,
+                                           const QString&  sKey );
                                          
         bool        RenderXSD            ( HTTPRequest *pRequest,
                                            QObject     *pClass );
@@ -55,20 +55,20 @@ class UPNP_PUBLIC Xsd : public QDomDocument
 
         QDomElement CreateComplexTypeNode( QMetaObject *pMetaObject );
 
-        bool        IsNillable           ( const QString       &sType );
-        bool        IsEnum               ( const QMetaProperty &metaProperty,
+        static bool        IsNillable           ( const QString       &sType );
+        static bool        IsEnum               ( const QMetaProperty &metaProperty,
                                            const QString       &sType );
 
     public:
 
         bool GetXSD    ( HTTPRequest *pRequest, QString sTypeName );
-        bool GetEnumXSD( HTTPRequest *pRequest, QString sEnumName );
+        bool GetEnumXSD( HTTPRequest *pRequest, const QString& sEnumName );
 
         static QString ConvertTypeToXSD( const QString &sType, bool bCustomType = false );
 };
 
 //////////////////////////////////////////////////////////////////////////////
 
-typedef struct TypeInfo { QString sAttrName; QString sContentType; } TypeInfo;
+struct TypeInfo { QString sAttrName; QString sContentType; };
 
 #endif

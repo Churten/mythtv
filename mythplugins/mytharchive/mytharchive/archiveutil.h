@@ -7,50 +7,50 @@
 #ifndef ARCHIVEUTIL_H_
 #define ARCHIVEUTIL_H_
 
-#include <stdint.h>
+#include <cstdint>
 #include <QString>
 #include <QMetaType>
 
 class ProgramInfo;
 
-typedef enum
+enum ARCHIVEDESTINATION
 {
     AD_DVD_SL = 0,
     AD_DVD_DL = 1,
     AD_DVD_RW = 2,
     AD_FILE   = 3
-} ARCHIVEDESTINATION;
+};
 
 Q_DECLARE_METATYPE (ARCHIVEDESTINATION);
 
-typedef struct ArchiveDestination
+struct ArchiveDestination
 {
     ARCHIVEDESTINATION type;
     const char *name;
     const char *description;
     int64_t freeSpace;
-}_ArchiveDestination;
+};
 
 extern struct ArchiveDestination ArchiveDestinations[];
 extern int ArchiveDestinationsCount;
 
-typedef struct
+struct EncoderProfile
 {
     QString name;
     QString description;
-    float bitrate;
-} EncoderProfile;
+    float bitrate { 0.0F };
+};
 
-typedef struct ThumbImage
+struct ThumbImage
 {
     QString caption;
     QString filename;
-    qint64  frame;
-} ThumbImage;
+    qint64  frame { 0 };
+};
 
-typedef struct
+struct ArchiveItem
 {
-    int     id;
+    int     id                     { 0 };
     QString type;
     QString title;
     QString subtitle;
@@ -58,19 +58,20 @@ typedef struct
     QString startDate;
     QString startTime;
     QString filename;
-    int64_t size;
-    int64_t newsize;
-    int duration;
-    int cutDuration;
-    EncoderProfile *encoderProfile;
+    int64_t size                   { 0 };
+    int64_t newsize                { 0 };
+    int duration                   { 0 };
+    int cutDuration                { 0 };
+    EncoderProfile *encoderProfile { nullptr };
     QString fileCodec;
     QString videoCodec;
-    int videoWidth, videoHeight;
-    bool hasCutlist;
-    bool useCutlist;
-    bool editedDetails;
+    int videoWidth                 { 0 };
+    int videoHeight                { 0 };
+    bool hasCutlist                { false };
+    bool useCutlist                { false };
+    bool editedDetails             { false };
     QList<ThumbImage*> thumbList;
-} ArchiveItem;
+};
 
 QString formatSize(int64_t sizeKB, int prec = 2);
 QString getTempDirectory(bool showError = false);

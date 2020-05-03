@@ -27,7 +27,7 @@
 #include <QFile>
 #include <QMutex>
 
-#include <math.h>
+#include <cmath>
 
 #include "video.h"
 
@@ -70,7 +70,7 @@ DTC::VideoMetadataInfoList* Video::GetVideoList( const QString &Folder,
         sql.append(" WHERE filename LIKE '" + Folder + "%'");
 
     sql.append(" ORDER BY ");
-    QString sort = QString(Sort.toLower());
+    QString sort = Sort.toLower();
     if (sort == "added")
         sql.append("insertdate");
     else if (sort == "released")
@@ -90,7 +90,7 @@ DTC::VideoMetadataInfoList* Video::GetVideoList( const QString &Folder,
     // Build Response
     // ----------------------------------------------------------------------
 
-    DTC::VideoMetadataInfoList *pVideoMetadataInfos = new DTC::VideoMetadataInfoList();
+    auto *pVideoMetadataInfos = new DTC::VideoMetadataInfoList();
 
     nStartIndex   = (nStartIndex > 0) ? min( nStartIndex, (int)videos.size() ) : 0;
     nCount        = (nCount > 0) ? min( nCount, (int)videos.size() ) : videos.size();
@@ -106,7 +106,8 @@ DTC::VideoMetadataInfoList* Video::GetVideoList( const QString &Folder,
             FillVideoMetadataInfo ( pVideoMetadataInfo, metadata, true );
     }
 
-    int curPage = 0, totalPages = 0;
+    int curPage = 0;
+    int totalPages = 0;
     if (nCount == 0)
         totalPages = 1;
     else
@@ -143,7 +144,7 @@ DTC::VideoMetadataInfo* Video::GetVideo( int Id )
     if ( !metadata )
         throw( QString( "No metadata found for selected ID!." ));
 
-    DTC::VideoMetadataInfo *pVideoMetadataInfo = new DTC::VideoMetadataInfo();
+    auto *pVideoMetadataInfo = new DTC::VideoMetadataInfo();
 
     FillVideoMetadataInfo ( pVideoMetadataInfo, metadata, true );
 
@@ -165,7 +166,7 @@ DTC::VideoMetadataInfo* Video::GetVideoByFileName( const QString &FileName )
     if ( !metadata )
         throw( QString( "No metadata found for selected filename!." ));
 
-    DTC::VideoMetadataInfo *pVideoMetadataInfo = new DTC::VideoMetadataInfo();
+    auto *pVideoMetadataInfo = new DTC::VideoMetadataInfo();
 
     FillVideoMetadataInfo ( pVideoMetadataInfo, metadata, true );
 
@@ -184,18 +185,20 @@ DTC::VideoLookupList* Video::LookupVideo( const QString    &Title,
                                               const QString    &GrabberType,
                                               bool             AllowGeneric )
 {
-    DTC::VideoLookupList *pVideoLookups = new DTC::VideoLookupList();
+    auto *pVideoLookups = new DTC::VideoLookupList();
 
     MetadataLookupList list;
 
-    MetadataFactory *factory = new MetadataFactory(NULL);
+    auto *factory = new MetadataFactory(nullptr);
 
     if (factory)
+    {
         list = factory->SynchronousLookup(Title, Subtitle,
                                          Inetref, Season, Episode,
                                          GrabberType, AllowGeneric);
+    }
 
-    if ( !list.size() )
+    if ( list.empty() )
         return pVideoLookups;
 
     //MetadataLookupList is a reference counted list.
@@ -343,21 +346,19 @@ bool Video::AddVideo( const QString &sFileName,
         hash = "";
     }
 
-    VideoMetadata newFile(sFileName, hash,
+    VideoMetadata newFile(sFileName, QString(), hash,
                           VIDEO_TRAILER_DEFAULT,
                           VIDEO_COVERFILE_DEFAULT,
                           VIDEO_SCREENSHOT_DEFAULT,
                           VIDEO_BANNER_DEFAULT,
                           VIDEO_FANART_DEFAULT,
-                          VideoMetadata::FilenameToMeta(sFileName, 1),
-                          VideoMetadata::FilenameToMeta(sFileName, 4),
+                          QString(), QString(), QString(), QString(),
                           QString(), VIDEO_YEAR_DEFAULT,
                           QDate::fromString("0000-00-00","YYYY-MM-DD"),
                           VIDEO_INETREF_DEFAULT, 0, QString(),
                           VIDEO_DIRECTOR_DEFAULT, QString(), VIDEO_PLOT_DEFAULT,
                           0.0, VIDEO_RATING_DEFAULT, 0, 0,
-                          VideoMetadata::FilenameToMeta(sFileName, 2).toInt(),
-                          VideoMetadata::FilenameToMeta(sFileName, 3).toInt(),
+                          0, 0,
                           MythDate::current().date(), 0,
                           ParentalLevel::plLowest);
 
@@ -403,7 +404,7 @@ DTC::BlurayInfo* Video::GetBluray( const QString &sPath )
     LOG(VB_GENERAL, LOG_NOTICE,
         QString("Parsing Blu-ray at path: %1 ").arg(path));
 
-    BlurayMetadata *bdmeta = new BlurayMetadata(path);
+    auto *bdmeta = new BlurayMetadata(path);
 
     if ( !bdmeta )
         throw( QString( "Unable to open Blu-ray Metadata Parser!" ));
@@ -414,7 +415,7 @@ DTC::BlurayInfo* Video::GetBluray( const QString &sPath )
     if ( !bdmeta->ParseDisc() )
         throw( QString( "Unable to parse metadata from Blu-ray Disc/Path!" ));
 
-    DTC::BlurayInfo *pBlurayInfo = new DTC::BlurayInfo();
+    auto *pBlurayInfo = new DTC::BlurayInfo();
 
     pBlurayInfo->setPath(path);
     pBlurayInfo->setTitle(bdmeta->GetTitle());
@@ -426,9 +427,9 @@ DTC::BlurayInfo* Video::GetBluray( const QString &sPath )
     pBlurayInfo->setThumbCount(bdmeta->GetThumbnailCount());
     pBlurayInfo->setTopMenuSupported(bdmeta->GetTopMenuSupported());
     pBlurayInfo->setFirstPlaySupported(bdmeta->GetFirstPlaySupported());
-    pBlurayInfo->setNumHDMVTitles((uint)bdmeta->GetNumHDMVTitles());
-    pBlurayInfo->setNumBDJTitles((uint)bdmeta->GetNumBDJTitles());
-    pBlurayInfo->setNumUnsupportedTitles((uint)bdmeta->GetNumUnsupportedTitles());
+    pBlurayInfo->setNumHDMVTitles(bdmeta->GetNumHDMVTitles());
+    pBlurayInfo->setNumBDJTitles(bdmeta->GetNumBDJTitles());
+    pBlurayInfo->setNumUnsupportedTitles(bdmeta->GetNumUnsupportedTitles());
     pBlurayInfo->setAACSDetected(bdmeta->GetAACSDetected());
     pBlurayInfo->setLibAACSDetected(bdmeta->GetLibAACSDetected());
     pBlurayInfo->setAACSHandled(bdmeta->GetAACSHandled());
@@ -437,7 +438,7 @@ DTC::BlurayInfo* Video::GetBluray( const QString &sPath )
     pBlurayInfo->setBDPlusHandled(bdmeta->GetBDPlusHandled());
 
     QStringList thumbs = bdmeta->GetThumbnails();
-    if (thumbs.size())
+    if (!thumbs.empty())
         pBlurayInfo->setThumbPath(thumbs.at(0));
 
     delete bdmeta;
@@ -773,7 +774,7 @@ bool Video::UpdateVideoMetadata ( int           nId,
         update_required = true;
     }
 
-    if (update_required == true)
+    if (update_required)
         metadata->UpdateDatabase();
 
     return true;

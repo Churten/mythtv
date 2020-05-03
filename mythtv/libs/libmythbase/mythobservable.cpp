@@ -19,17 +19,13 @@
  *  to addListener was too big a patch.
  */
 
-MythObservable::MythObservable() : m_lock(new QMutex())
-{
-}
-
 MythObservable::~MythObservable()
 {
     m_lock->lock();
     m_listeners.clear();
     m_lock->unlock();
     delete m_lock;
-    m_lock = NULL;
+    m_lock = nullptr;
 }
 
 /** \brief Add a listener to the observable

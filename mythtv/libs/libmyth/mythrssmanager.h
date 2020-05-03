@@ -27,7 +27,7 @@ class MPUBLIC RSSSite : public QObject
       public:
         void clear(void)
         {
-            while (size())
+            while (!empty())
             {
                 RSSSite *tmp = back();
                 pop_back();
@@ -36,20 +36,22 @@ class MPUBLIC RSSSite : public QObject
         }
     };
 
-    RSSSite(const QString& title,
-                  const QString& image,
-                  const ArticleType& type,
-                  const QString& description,
-                  const QString& url,
-                  const QString& author,
-                  const bool& download,
-                  const QDateTime& updated);
+    RSSSite(QString title,
+            QString sortTitle,
+            QString image,
+            const ArticleType& type,
+            QString description,
+            QString url,
+            QString author,
+            const bool& download,
+            QDateTime updated);
 
-    ~RSSSite();
+    ~RSSSite() override = default;
 
-    typedef QList<RSSSite *> rssList;
+    using rssList = QList<RSSSite *>;
 
     const QString& GetTitle() const { return m_title; }
+    const QString& GetSortTitle() const { return m_sortTitle; }
     const QString& GetImage() const { return m_image; }
     const ArticleType& GetType() const { return m_type; }
     const QString& GetDescription() const { return m_description; }
@@ -71,10 +73,11 @@ class MPUBLIC RSSSite : public QObject
 
   private:
 
-    QUrl redirectUrl(const QUrl& possibleRedirectUrl,
-                     const QUrl& oldRedirectUrl) const;
+    static QUrl redirectUrl(const QUrl& possibleRedirectUrl,
+                            const QUrl& oldRedirectUrl) ;
 
     QString     m_title;
+    QString     m_sortTitle;
     QString     m_image;
     ArticleType m_type;
     QString     m_description;
@@ -84,15 +87,15 @@ class MPUBLIC RSSSite : public QObject
     bool        m_download;
     QDateTime   m_updated;
 
-    mutable    QMutex m_lock;
+    mutable    QMutex m_lock          {QMutex::Recursive};
     QByteArray m_data;
     QString    m_imageURL;
-    bool       m_podcast;
+    bool       m_podcast              {false};
 
     ResultItem::resultList m_articleList;
 
-    QNetworkReply          *m_reply;
-    QNetworkAccessManager  *m_manager;
+    QNetworkReply          *m_reply   {nullptr};
+    QNetworkAccessManager  *m_manager {nullptr};
 
   private slots:
     void slotCheckRedirect(QNetworkReply* reply);
@@ -109,7 +112,7 @@ class MPUBLIC RSSManager : public QObject
 
   public:
     RSSManager();
-    ~RSSManager();
+    ~RSSManager() override;
     void startTimer();
     void stopTimer();
 
@@ -121,14 +124,14 @@ class MPUBLIC RSSManager : public QObject
 
   private slots:
     void slotRefreshRSS(void);
-    void slotRSSRetrieved(RSSSite*);
+    void slotRSSRetrieved(RSSSite *site);
 
   private:
     void processAndInsertRSS(RSSSite *site);
 
-    QTimer                        *m_timer;
+    QTimer                        *m_timer      {nullptr};
     RSSSite::rssList               m_sites;
-    uint                           m_updateFreq;
+    uint                           m_updateFreq {6 * 3600 * 1000};
     RSSSite::rssList               m_inprogress;
 };
 

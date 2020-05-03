@@ -26,13 +26,17 @@ class VideoList
     VideoList();
     ~VideoList();
 
+    // Deleted functions should be public.
+    VideoList(const VideoList &) = delete;            // not copyable
+    VideoList &operator=(const VideoList &) = delete; // not copyable
+
     MythGenericTree *buildVideoList(bool filebrowser, bool flatlist,
                                 int group_type,
                                 const ParentalLevel &parental_level,
                                 bool include_updirs);
 
     void refreshList(bool filebrowser, const ParentalLevel &parental_level,
-                     bool flatlist, int group_type);
+                     bool flat_list, int group_type);
     bool refreshNode(MythGenericTree *node);
 
     unsigned int count() const;
@@ -61,7 +65,7 @@ class VideoMetadata;
 class TreeNodeData
 {
   public:
-    TreeNodeData();
+    TreeNodeData() = default;;
     explicit TreeNodeData(VideoMetadata *metadata);
     TreeNodeData(QString path, QString host, QString prefix);
 
@@ -77,7 +81,7 @@ class TreeNodeData
     QString GetPrefix() const;
 
   private:
-    class TreeNodeDataPrivate *m_d;
+    class TreeNodeDataPrivate *m_d {nullptr};
 };
 
 Q_DECLARE_METATYPE(TreeNodeData)

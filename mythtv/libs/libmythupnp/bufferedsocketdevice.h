@@ -39,16 +39,16 @@ class BufferedSocketDevice
 {
     protected:
 
-        MSocketDevice          *m_pSocket;
+        MSocketDevice          *m_pSocket             {nullptr};
 
-        qulonglong              m_nMaxReadBufferSize; 
-        qint64                  m_nWriteSize;          ///< write total buf size
-        qint64                  m_nWriteIndex;         ///< write index
+        qulonglong              m_nMaxReadBufferSize  {0};
+        qint64                  m_nWriteSize          {0}; ///< write total buf size
+        qint64                  m_nWriteIndex         {0}; ///< write index
 
-        bool                    m_bHandleSocketDelete;
+        bool                    m_bHandleSocketDelete {true};
 
         QHostAddress            m_DestHostAddress;
-        quint16                 m_nDestPort;
+        quint16                 m_nDestPort           {0};
 
         MMembuf                 m_bufRead;
         deque<QByteArray*>      m_bufWrite;
@@ -59,7 +59,7 @@ class BufferedSocketDevice
     public:
 
         explicit BufferedSocketDevice( int nSocket );
-        explicit BufferedSocketDevice( MSocketDevice *pSocket = NULL,
+        explicit BufferedSocketDevice( MSocketDevice *pSocket = nullptr,
                                        bool bTakeOwnership    = false );
 
         virtual ~BufferedSocketDevice( );
@@ -75,13 +75,13 @@ class BufferedSocketDevice
         void                Close               ();
         void                Flush               ();
         qint64              Size                ();
-        qint64              At                  () const; 
-        bool                At                  ( qlonglong );
+        static qint64       At                  () ; 
+        bool                At                  ( qlonglong index );
         bool                AtEnd               ();
 
         qulonglong          BytesAvailable      (); 
         qulonglong          WaitForMore         ( int msecs,
-                                                  bool *timeout = NULL );
+                                                  bool *timeout = nullptr );
 
         qulonglong          BytesToWrite        () const;
         void                ClearPendingData    ();
@@ -95,8 +95,8 @@ class BufferedSocketDevice
                                                   qulonglong len );
 
         int                 Getch               ();
-        int                 Putch               ( int );
-        int                 Ungetch             (int);
+        int                 Putch               ( int ch );
+        int                 Ungetch             ( int ch );
 
         bool                CanReadLine         ();
         QString             ReadLine            ();
@@ -109,7 +109,7 @@ class BufferedSocketDevice
         QHostAddress        Address             () const;
         QHostAddress        PeerAddress         () const;
 
-        void                SetReadBufferSize   ( qulonglong );
+        void                SetReadBufferSize   ( qulonglong bufSize );
         qulonglong             ReadBufferSize      () const;
 
         bool                IsValid             () { return( ( m_pSocket ) ? m_pSocket->isValid() : false ); }

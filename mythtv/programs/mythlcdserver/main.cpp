@@ -5,11 +5,11 @@
 
 */
 
-#include <iostream>
-using namespace std;
-#include <unistd.h>
+#include <csignal>
 #include <fcntl.h>
-#include <signal.h>
+#include <iostream>
+#include <unistd.h>
+using namespace std;
 
 #include <QCoreApplication>
 #include <QFile>
@@ -52,7 +52,7 @@ int main(int argc, char **argv)
 
     if (cmdline.toBool("showversion"))
     {
-        cmdline.PrintVersion();
+        MythLCDServerCommandLineParser::PrintVersion();
         return GENERIC_EXIT_OK;
     }
 
@@ -130,10 +130,11 @@ int main(int argc, char **argv)
         assigned_port = special_port;
     }
 
-    new LCDServer(assigned_port, startup_message, message_time);
+    auto *server = new LCDServer(assigned_port, startup_message, message_time);
 
-    a.exec();
+    QCoreApplication::exec();
 
+    delete server;
     delete gContext;
 
     SignalHandler::Done();

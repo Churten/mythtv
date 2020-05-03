@@ -22,7 +22,7 @@
 #include "hdhrstreamhandler.h"
 
 #define LOC QString("HDHRSigMon[%1](%2): ") \
-            .arg(capturecardnum).arg(channel->GetDevice())
+            .arg(m_inputid).arg(m_channel->GetDevice())
 
 /**
  *  \brief Initializes signal lock and signal values.
@@ -42,16 +42,17 @@ HDHRSignalMonitor::HDHRSignalMonitor(int db_cardnum,
                                      HDHRChannel* _channel,
                                      bool _release_stream,
                                      uint64_t _flags)
-    : DTVSignalMonitor(db_cardnum, _channel, _release_stream, _flags),
-      streamHandlerStarted(false), streamHandler(NULL)
+    : DTVSignalMonitor(db_cardnum, _channel, _release_stream, _flags)
 {
     LOG(VB_CHANNEL, LOG_INFO, LOC + "ctor");
 
-    signalStrength.SetThreshold(45);
+    m_signalStrength.SetThreshold(45);
 
     AddFlags(kSigMon_WaitForSig);
 
-    streamHandler = HDHRStreamHandler::Get(_channel->GetDevice());
+    m_streamHandler = HDHRStreamHandler::Get(m_channel->GetDevice(),
+                                           m_channel->GetInputID(),
+                                           m_channel->GetMajorID());
 }
 
 /** \fn HDHRSignalMonitor::~HDHRSignalMonitor()
@@ -60,8 +61,8 @@ HDHRSignalMonitor::HDHRSignalMonitor(int db_cardnum,
 HDHRSignalMonitor::~HDHRSignalMonitor()
 {
     LOG(VB_CHANNEL, LOG_INFO, LOC + "dtor");
-    Stop();
-    HDHRStreamHandler::Return(streamHandler);
+    HDHRSignalMonitor::Stop();
+    HDHRStreamHandler::Return(m_streamHandler, m_inputid);
 }
 
 /** \fn HDHRSignalMonitor::Stop(void)
@@ -72,15 +73,15 @@ void HDHRSignalMonitor::Stop(void)
     LOG(VB_CHANNEL, LOG_INFO, LOC + "Stop() -- begin");
     SignalMonitor::Stop();
     if (GetStreamData())
-        streamHandler->RemoveListener(GetStreamData());
-    streamHandlerStarted = false;
+        m_streamHandler->RemoveListener(GetStreamData());
+    m_streamHandlerStarted = false;
 
     LOG(VB_CHANNEL, LOG_INFO, LOC + "Stop() -- end");
 }
 
 HDHRChannel *HDHRSignalMonitor::GetHDHRChannel(void)
 {
-    return dynamic_cast<HDHRChannel*>(channel);
+    return dynamic_cast<HDHRChannel*>(m_channel);
 }
 
 /** \fn HDHRSignalMonitor::UpdateValues(void)
@@ -91,10 +92,10 @@ HDHRChannel *HDHRSignalMonitor::GetHDHRChannel(void)
  */
 void HDHRSignalMonitor::UpdateValues(void)
 {
-    if (!running || exit)
+    if (!m_running || m_exit)
         return;
 
-    if (streamHandlerStarted)
+    if (m_streamHandlerStarted)
     {
         EmitStatus();
         if (IsAllGood())
@@ -102,12 +103,12 @@ void HDHRSignalMonitor::UpdateValues(void)
 
         // TODO dtv signals...
 
-        update_done = true;
+        m_update_done = true;
         return;
     }
 
-    struct hdhomerun_tuner_status_t status;
-    streamHandler->GetTunerStatus(&status);
+    struct hdhomerun_tuner_status_t status {};
+    m_streamHandler->GetTunerStatus(&status);
 
     uint sig = status.signal_strength;
     uint snq = status.signal_to_noise_quality;
@@ -122,10 +123,10 @@ void HDHRSignalMonitor::UpdateValues(void)
     // Set SignalMonitorValues from info from card.
     bool isLocked = false;
     {
-        QMutexLocker locker(&statusLock);
-        signalStrength.SetValue(sig);
-        signalLock.SetValue(status.lock_supported);
-        isLocked = signalLock.IsGood();
+        QMutexLocker locker(&m_statusLock);
+        m_signalStrength.SetValue(sig);
+        m_signalLock.SetValue(status.lock_supported);
+        isLocked = m_signalLock.IsGood();
     }
 
     EmitStatus();
@@ -139,9 +140,9 @@ void HDHRSignalMonitor::UpdateValues(void)
                    kDTVSigMon_WaitForMGT | kDTVSigMon_WaitForVCT |
                    kDTVSigMon_WaitForNIT | kDTVSigMon_WaitForSDT))
     {
-        streamHandler->AddListener(GetStreamData());
-        streamHandlerStarted = true;
+        m_streamHandler->AddListener(GetStreamData());
+        m_streamHandlerStarted = true;
     }
 
-    update_done = true;
+    m_update_done = true;
 }

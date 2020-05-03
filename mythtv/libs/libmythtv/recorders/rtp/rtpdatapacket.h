@@ -30,12 +30,14 @@
 class RTPDataPacket : public UDPPacket
 {
   public:
-    RTPDataPacket(const RTPDataPacket &o) : UDPPacket(o), m_off(o.m_off) { }
+    RTPDataPacket(const RTPDataPacket&)  = default;
     explicit RTPDataPacket(const UDPPacket &o) : UDPPacket(o), m_off(0) { }
     explicit RTPDataPacket(uint64_t key) : UDPPacket(key), m_off(0) { }
-    RTPDataPacket(void) : UDPPacket(0ULL), m_off(0) { }
+    RTPDataPacket(void) : UDPPacket(0ULL) { }
 
-    bool IsValid(void) const
+    RTPDataPacket& operator=(const RTPDataPacket&) = default;
+
+    bool IsValid(void) const override // UDPPacket
     {
         if (m_data.size() < 12)
         {
@@ -122,7 +124,7 @@ class RTPDataPacket : public UDPPacket
     }
 
   protected:
-    mutable uint m_off;
+    mutable uint m_off { 0 };
 };
 
 #endif // _RTP_DATA_PACKET_H_

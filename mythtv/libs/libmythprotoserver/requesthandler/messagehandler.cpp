@@ -3,7 +3,7 @@
 
 #include "requesthandler/messagehandler.h"
 
-MessageHandler::MessageHandler(void) : SocketRequestHandler()
+MessageHandler::MessageHandler(void)
 {
     if (!gCoreContext)
     {
@@ -15,14 +15,14 @@ MessageHandler::MessageHandler(void) : SocketRequestHandler()
 
 void MessageHandler::customEvent(QEvent *e)
 {
-    if ((MythEvent::Type)(e->type()) != MythEvent::MythEventMessage)
+    if (e->type() != MythEvent::MythEventMessage)
         return;
 
     if (!gCoreContext->IsMasterBackend())
         // only master backend should forward events
         return;
 
-    //MythEvent *me = (MythEvent *)e;
+    //MythEvent *me = static_cast<MythEvent *>(e);
 
     // TODO: actually do something
     // right now, this really doesnt need to do anything, but at such time as
@@ -76,8 +76,21 @@ bool MessageHandler::HandleInbound(SocketHandler *sock, QStringList &slist)
     return true;
 }
 
-// outbound events from master backend
-bool MessageHandler::HandleOutbound(SocketHandler *sock, QStringList &slist)
+/**
+ * \fn MessageHandler::HandleOutbound
+ *
+ * Handle an asynchronous message received from the master backend.
+ * These are converted into a MythEvent and dispatched to all classes
+ * registered for events.
+ *
+ * \param sock  The socket on which the message arrived. This class of
+ *              messages are never responded to, so this variable is
+ *              never used.
+ * \param slist The contents of the asynchronous message. This is put
+ *              into an event and sent to any classes that are
+ *              interested.
+ */
+bool MessageHandler::HandleOutbound(SocketHandler */*sock*/, QStringList &slist)
 {
     QStringList::const_iterator iter = slist.begin();
     QString message = *(iter++);

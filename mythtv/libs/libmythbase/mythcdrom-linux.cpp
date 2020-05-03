@@ -1,15 +1,15 @@
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <sys/ioctl.h>       // ioctls
+#include <cerrno>
+#include <climits>
+#include <cstdint>
+#include <fcntl.h>
 #include <linux/cdrom.h>     // old ioctls for cdrom
 #include <linux/fs.h>        // BLKRRPART
+#include <linux/iso_fs.h>
 #include <scsi/scsi.h>
 #include <scsi/sg.h>
-#include <fcntl.h>
-#include <errno.h>
-#include <stdint.h>
-#include <limits.h>
-#include <linux/iso_fs.h>
+#include <sys/ioctl.h>       // ioctls
+#include <sys/stat.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 #include <QDateTime>
@@ -31,82 +31,82 @@
 // Some features cannot be detected (reliably) using the standard
 // Linux ioctl()s, so we use some direct low-level device queries.
 
-typedef struct cdrom_generic_command CDROMgenericCmd;
+using CDROMgenericCmd = struct cdrom_generic_command;
 
 // Some structures stolen from the __KERNEL__ section of linux/cdrom.h.
 
 // This contains the result of a GPCMD_GET_EVENT_STATUS_NOTIFICATION.
 // It is the joining of a struct event_header and a struct media_event_desc
-typedef struct
+struct CDROMeventStatus
 {
-    uint16_t data_len[2];
+    uint16_t m_dataLen[2];
 #if HAVE_BIGENDIAN
-    uint8_t  nea                : 1;
-    uint8_t  reserved1          : 4;
-    uint8_t  notification_class : 3;
+    uint8_t  m_nea               : 1;
+    uint8_t  m_reserved1         : 4;
+    uint8_t  m_notificationClass : 3;
 #else
-    uint8_t  notification_class : 3;
-    uint8_t  reserved1          : 4;
-    uint8_t  nea                : 1;
+    uint8_t  m_notificationClass : 3;
+    uint8_t  m_reserved1         : 4;
+    uint8_t  m_nea               : 1;
 #endif
-    uint8_t  supp_event_class;
+    uint8_t  m_suppEventClass;
 #if HAVE_BIGENDIAN
-    uint8_t  reserved2          : 4;
-    uint8_t  media_event_code   : 4;
-    uint8_t  reserved3          : 6;
-    uint8_t  media_present      : 1;
-    uint8_t  door_open          : 1;
+    uint8_t  m_reserved2         : 4;
+    uint8_t  m_mediaEventCode    : 4;
+    uint8_t  m_reserved3         : 6;
+    uint8_t  m_mediaPresent      : 1;
+    uint8_t  m_doorOpen          : 1;
 #else
-    uint8_t  media_event_code   : 4;
-    uint8_t  reserved2          : 4;
-    uint8_t  door_open          : 1;
-    uint8_t  media_present      : 1;
-    uint8_t  reserved3          : 6;
+    uint8_t  m_mediaEventCode    : 4;
+    uint8_t  m_reserved2         : 4;
+    uint8_t  m_doorOpen          : 1;
+    uint8_t  m_mediaPresent      : 1;
+    uint8_t  m_reserved3         : 6;
 #endif
-    uint8_t  start_slot;
-    uint8_t  end_slot;
-} CDROMeventStatus;
+    uint8_t  m_startSlot;
+    uint8_t  m_endSlot;
+};
 
 // and this is returned by GPCMD_READ_DISC_INFO
-typedef struct {
-    uint16_t disc_information_length;
+struct CDROMdiscInfo {
+    uint16_t m_discInformationLength;
 #if HAVE_BIGENDIAN
-    uint8_t  reserved1          : 3;
-    uint8_t  erasable           : 1;
-    uint8_t  border_status      : 2;
-    uint8_t  disc_status        : 2;
+    uint8_t  m_reserved1         : 3;
+    uint8_t  m_erasable          : 1;
+    uint8_t  m_borderStatus      : 2;
+    uint8_t  m_discStatus        : 2;
 #else
-    uint8_t  disc_status        : 2;
-    uint8_t  border_status      : 2;
-    uint8_t  erasable           : 1;
-    uint8_t  reserved1          : 3;
+    uint8_t  m_discStatus        : 2;
+    uint8_t  m_borderStatus      : 2;
+    uint8_t  m_erasable          : 1;
+    uint8_t  m_reserved1         : 3;
 #endif
-    uint8_t  n_first_track;
-    uint8_t  n_sessions_lsb;
-    uint8_t  first_track_lsb;
-    uint8_t  last_track_lsb;
+    uint8_t  m_nFirstTrack;
+    uint8_t  m_nSessionsLsb;
+    uint8_t  m_firstTrackLsb;
+    uint8_t  m_lastTrackLsb;
 #if HAVE_BIGENDIAN
-    uint8_t  did_v              : 1;
-    uint8_t  dbc_v              : 1;
-    uint8_t  uru                : 1;
-    uint8_t  reserved2          : 5;
+    uint8_t  m_didV              : 1;
+    uint8_t  m_dbcV              : 1;
+    uint8_t  m_uru               : 1;
+    uint8_t  m_reserved2         : 5;
 #else
-    uint8_t  reserved2          : 5;
-    uint8_t  uru                : 1;
-    uint8_t  dbc_v              : 1;
-    uint8_t  did_v              : 1;
+    uint8_t  m_reserved2         : 5;
+    uint8_t  m_uru               : 1;
+    uint8_t  m_dbcV              : 1;
+    uint8_t  m_didV              : 1;
 #endif
-    uint8_t  disc_type;
-    uint8_t  n_sessions_msb;
-    uint8_t  first_track_msb;
-    uint8_t  last_track_msb;
-    uint32_t disc_id;
-    uint32_t lead_in;
-    uint32_t lead_out;
-    uint8_t  disc_bar_code[8];
-    uint8_t  reserved3;
-    uint8_t  n_opc;
-} CDROMdiscInfo;
+    uint8_t  m_discType;
+    uint8_t  m_nSessionsMsb;
+    uint8_t  m_firstTrackMsb;
+    uint8_t  m_lastTrackMsb;
+    uint32_t m_discId;
+    uint32_t m_leadIn;
+    uint32_t m_leadOut;
+    uint8_t  m_discBarCode[8];
+    uint8_t  m_reserved3;
+    uint8_t  m_nOpc;
+};
 
 enum CDROMdiscStatus
 {
@@ -131,15 +131,15 @@ public:
         MythCDROM(par, DevicePath, SuperMount, AllowEject) {
     }
 
-    virtual MythMediaError testMedia(void);
-    virtual bool mediaChanged(void);
-    virtual bool checkOK(void);
-    virtual MythMediaStatus checkMedia(void);
-    virtual MythMediaError eject(bool open_close = true);
-    virtual void setDeviceSpeed(const char *device, int speed);
-    virtual bool isSameDevice(const QString &path);
-    virtual MythMediaError lock(void);
-    virtual MythMediaError unlock(void);
+    MythMediaError testMedia(void) override; // MythMediaDevice
+    bool mediaChanged(void) override; // MythCDROM
+    bool checkOK(void) override; // MythCDROM
+    MythMediaStatus checkMedia(void) override; // MythMediaDevice
+    MythMediaError eject(bool open_close = true) override; // MythMediaDevice
+    void setDeviceSpeed(const char *device, int speed) override; // MythMediaDevice
+    bool isSameDevice(const QString &path) override; // MythMediaDevice
+    MythMediaError lock(void) override; // MythMediaDevice
+    MythMediaError unlock(void) override; // MythMediaDevice
 
 protected:
     MythMediaError ejectCDROM(bool open_close);
@@ -189,8 +189,6 @@ bool MythCDROMLinux::hasWritableMedia()
 {
     unsigned char    buffer[32];
     CDROMgenericCmd  cgc;
-    CDROMdiscInfo   *di;
-
 
     memset(buffer, 0, sizeof(buffer));
     memset(&cgc,   0, sizeof(cgc));
@@ -209,9 +207,8 @@ bool MythCDROMLinux::hasWritableMedia()
         return false;
     }
 
-    di = (CDROMdiscInfo *) buffer;
-
-    switch (di->disc_status)
+    auto *di = (CDROMdiscInfo *) buffer;
+    switch (di->m_discStatus)
     {
         case MEDIA_IS_EMPTY:
             return true;
@@ -221,7 +218,7 @@ bool MythCDROMLinux::hasWritableMedia()
             // writing, so we treat it just like a finished disc:
 
         case MEDIA_IS_COMPLETE:
-            return di->erasable;
+            return di->m_erasable;
 
         case MEDIA_IS_OTHER:
             ;
@@ -242,8 +239,6 @@ int MythCDROMLinux::SCSIstatus()
 {
     unsigned char    buffer[8];
     CDROMgenericCmd  cgc;
-    CDROMeventStatus *es;
-
 
     memset(buffer, 0, sizeof(buffer));
     memset(&cgc,   0, sizeof(cgc));
@@ -257,25 +252,25 @@ int MythCDROMLinux::SCSIstatus()
     cgc.buflen = sizeof(buffer);
     cgc.data_direction = CGC_DATA_READ;
 
-    es = (CDROMeventStatus *) buffer;
+    auto *es = (CDROMeventStatus *) buffer;
 
     if ((ioctl(m_DeviceHandle, CDROM_SEND_PACKET, &cgc) < 0)
-        || es->nea                           // drive does not support request
-        || (es->notification_class != 0x4))  // notification class mismatch
+        || es->m_nea                         // drive does not support request
+        || (es->m_notificationClass != 0x4)) // notification class mismatch
     {
         LOG(VB_MEDIA, LOG_ERR, LOC +
             ":SCSIstatus() - failed to send SCSI packet to " + m_DevicePath + ENO);
         return CDS_TRAY_OPEN;
     }
 
-    if (es->media_present)
+    if (es->m_mediaPresent)
     {
         LOG(VB_MEDIA, LOG_DEBUG, LOC +
             ":SCSIstatus() - ioctl said tray was open, "
             "but drive is actually closed with a disc");
         return CDS_DISC_OK;
     }
-    else if (es->door_open)
+    if (es->m_doorOpen)
     {
         LOG(VB_MEDIA, LOG_DEBUG, LOC +
             ":SCSIstatus() - tray is definitely open");
@@ -315,29 +310,33 @@ MythMediaError MythCDROMLinux::ejectCDROM(bool open_close)
 
         return (res == 0) ? MEDIAERR_OK : MEDIAERR_FAILED;
     }
-    else
-    {
-        LOG(VB_MEDIA, LOG_DEBUG, LOC + ":eject - Loading CDROM");
-        // If the tray is empty, this will fail (Input/Output error)
-        int res = ioctl(m_DeviceHandle, CDROMCLOSETRAY);
 
-        if (res < 0)
-            LOG(VB_MEDIA, LOG_DEBUG, "CDROMCLOSETRAY ioctl failed" + ENO);
+    LOG(VB_MEDIA, LOG_DEBUG, LOC + ":eject - Loading CDROM");
+    // If the tray is empty, this will fail (Input/Output error)
+    int res = ioctl(m_DeviceHandle, CDROMCLOSETRAY);
 
-        // This allows us to catch any drives that the OS has problems
-        // detecting the status of (some always report OPEN when empty)
-        if (driveStatus() == CDS_TRAY_OPEN)
-            return MEDIAERR_FAILED;
-        else
-            return MEDIAERR_OK;
-    }
+    if (res < 0)
+        LOG(VB_MEDIA, LOG_DEBUG, "CDROMCLOSETRAY ioctl failed" + ENO);
+
+    // This allows us to catch any drives that the OS has problems
+    // detecting the status of (some always report OPEN when empty)
+    if (driveStatus() == CDS_TRAY_OPEN)
+        return MEDIAERR_FAILED;
+    return MEDIAERR_OK;
 }
+
+struct StHandle {
+    const int m_fd;
+    explicit StHandle(const char *dev) : m_fd(open(dev, O_RDWR | O_NONBLOCK)) { }
+    ~StHandle() { close(m_fd); }
+    operator int() const { return m_fd; } // NOLINT(google-explicit-constructor)
+};
 
 // This is copied from eject.c by Jeff Tranter (tranter@pobox.com)
 MythMediaError MythCDROMLinux::ejectSCSI()
 {
-    int k;
-    sg_io_hdr_t io_hdr = { 'S' };
+    int k = 0;
+    sg_io_hdr_t io_hdr;
     unsigned char allowRmBlk[6] = {ALLOW_MEDIUM_REMOVAL, 0, 0, 0, 0, 0};
     unsigned char startStop1Blk[6] = {START_STOP, 0, 0, 0, 1, 0}; // start
     unsigned char startStop2Blk[6] = {START_STOP, 0, 0, 0, 2, 0}; // load eject
@@ -346,21 +345,18 @@ MythMediaError MythCDROMLinux::ejectSCSI()
     const unsigned DRIVER_OK = 0;
 
     // ALLOW_MEDIUM_REMOVAL requires r/w access so re-open the device
-    struct StHandle {
-        const int m_fd;
-        StHandle(const char *dev) : m_fd(open(dev, O_RDWR | O_NONBLOCK)) { }
-        ~StHandle() { close(m_fd); }
-        operator int() const { return m_fd; }
-    } fd(qPrintable(m_DevicePath));
+    struct StHandle fd(qPrintable(m_DevicePath));
 
     LOG(VB_MEDIA, LOG_DEBUG, LOC + ":ejectSCSI");
-	if ((ioctl(fd, SG_GET_VERSION_NUM, &k) < 0) || (k < 30000))
+    if ((ioctl(fd, SG_GET_VERSION_NUM, &k) < 0) || (k < 30000))
     {
 	    // not an sg device, or old sg driver
         LOG(VB_MEDIA, LOG_DEBUG, "SG_GET_VERSION_NUM ioctl failed" + ENO);
         return MEDIAERR_FAILED;
-	}
+    }
 
+    memset(&io_hdr, 0, sizeof(sg_io_hdr_t));
+    io_hdr.interface_id = 'S';
     io_hdr.cmd_len = 6;
     io_hdr.mx_sb_len = sizeof(sense_buffer);
     io_hdr.dxfer_direction = SG_DXFER_NONE;
@@ -373,7 +369,7 @@ MythMediaError MythCDROMLinux::ejectSCSI()
         LOG(VB_MEDIA, LOG_DEBUG, "SG_IO allowRmBlk ioctl failed" + ENO);
 	    return MEDIAERR_FAILED;
     }
-    else if (io_hdr.host_status != DID_OK || io_hdr.driver_status != DRIVER_OK)
+    if (io_hdr.host_status != DID_OK || io_hdr.driver_status != DRIVER_OK)
     {
         LOG(VB_MEDIA, LOG_DEBUG, "SG_IO allowRmBlk failed");
 	    return MEDIAERR_FAILED;
@@ -385,7 +381,7 @@ MythMediaError MythCDROMLinux::ejectSCSI()
         LOG(VB_MEDIA, LOG_DEBUG, "SG_IO START_STOP(start) ioctl failed" + ENO);
 	    return MEDIAERR_FAILED;
     }
-    else if (io_hdr.host_status != DID_OK || io_hdr.driver_status != DRIVER_OK)
+    if (io_hdr.host_status != DID_OK || io_hdr.driver_status != DRIVER_OK)
     {
         LOG(VB_MEDIA, LOG_DEBUG, "SG_IO START_STOP(start) failed");
 	    return MEDIAERR_FAILED;
@@ -397,7 +393,7 @@ MythMediaError MythCDROMLinux::ejectSCSI()
         LOG(VB_MEDIA, LOG_DEBUG, "SG_IO START_STOP(eject) ioctl failed" + ENO);
 	    return MEDIAERR_FAILED;
     }
-    else if (io_hdr.host_status != DID_OK || io_hdr.driver_status != DRIVER_OK)
+    if (io_hdr.host_status != DID_OK || io_hdr.driver_status != DRIVER_OK)
     {
         LOG(VB_MEDIA, LOG_DEBUG, "SG_IO START_STOP(eject) failed");
 	    return MEDIAERR_FAILED;
@@ -432,8 +428,7 @@ MythMediaError MythCDROMLinux::testMedia()
                                      m_DevicePath +  "' : " +ENO);
             if (errno == EBUSY)
                 return isMounted() ? MEDIAERR_OK : MEDIAERR_FAILED;
-            else
-                return MEDIAERR_FAILED;
+            return MEDIAERR_FAILED;
         }
         LOG(VB_MEDIA, LOG_DEBUG, LOC + ":testMedia - Opened device");
         OpenedHere = true;
@@ -567,7 +562,7 @@ MythMediaStatus MythCDROMLinux::checkMedia()
                 off_t sr = lseek(m_DeviceHandle,
                                  (off_t) 2048*16, SEEK_SET);
 
-                struct iso_primary_descriptor buf;
+                struct iso_primary_descriptor buf {};
                 ssize_t readin = 0;
                 while ((sr != (off_t) -1) && (readin < 2048))
                 {
@@ -575,7 +570,7 @@ MythMediaStatus MythCDROMLinux::checkMedia()
                         m_DeviceHandle, ((char*)&buf) + readin, 2048 - readin);
                     if ((rr < 0) && ((EAGAIN == errno) || (EINTR == errno)))
                         continue;
-                    else if (rr < 0)
+                    if (rr < 0)
                         break;
                     readin += rr;
                 }
@@ -626,15 +621,13 @@ MythMediaStatus MythCDROMLinux::checkMedia()
                     m_Status = MEDIASTAT_NOTMOUNTED;
                     return setStatus(MEDIASTAT_MOUNTED, OpenedHere);
                 }
-                else if (m_MediaType == MEDIATYPE_DVD)
+                if (m_MediaType == MEDIATYPE_DVD)
                 {
                     // pretend we're NOTMOUNTED so setStatus emits a signal
                     m_Status = MEDIASTAT_NOTMOUNTED;
                     return setStatus(MEDIASTAT_USEABLE, OpenedHere);
                 }
-                else
-                    return setStatus(MEDIASTAT_NOTMOUNTED, OpenedHere);
-                break;
+                return setStatus(MEDIASTAT_NOTMOUNTED, OpenedHere);
             }
             case CDS_AUDIO:
                 LOG(VB_MEDIA, LOG_DEBUG, "found an audio disk");
@@ -642,7 +635,6 @@ MythMediaStatus MythCDROMLinux::checkMedia()
                 m_Status = MEDIASTAT_NOTMOUNTED;
                 m_MediaType = MEDIATYPE_AUDIO;
                 return setStatus(MEDIASTAT_USEABLE, OpenedHere);
-                break;
             case CDS_MIXED:
                 LOG(VB_MEDIA, LOG_DEBUG, "found a mixed CD");
                 // Note: Mixed mode CDs require an explixit mount call
@@ -738,8 +730,7 @@ MythMediaError MythCDROMLinux::unlock()
 
 bool MythCDROMLinux::isSameDevice(const QString &path)
 {
-    dev_t new_rdev;
-    struct stat sb;
+    struct stat sb {};
 
     if (stat(path.toLocal8Bit().constData(), &sb) < 0)
     {
@@ -747,7 +738,7 @@ bool MythCDROMLinux::isSameDevice(const QString &path)
             QString("Failed to stat '%1'").arg(path) + ENO);
         return false;
     }
-    new_rdev = sb.st_rdev;
+    dev_t new_rdev = sb.st_rdev;
 
     // Check against m_DevicePath...
     if (stat(m_DevicePath.toLocal8Bit().constData(), &sb) < 0)
@@ -765,21 +756,15 @@ bool MythCDROMLinux::isSameDevice(const QString &path)
  */
 void MythCDROMLinux::setDeviceSpeed(const char *device, int speed)
 {
-    int fd;
-    unsigned char buffer[28];
-    unsigned char cmd[16];
-    unsigned char sense[16];
-    struct sg_io_hdr sghdr;
-    struct stat st;
+    unsigned char buffer[28] {};
+    unsigned char cmd[16] {};
+    unsigned char sense[16] {};
+    struct sg_io_hdr sghdr {};
+    struct stat st {};
     int rate = 0;
 
-    memset(&sghdr, 0, sizeof(sghdr));
-    memset(buffer, 0, sizeof(buffer));
-    memset(sense, 0, sizeof(sense));
-    memset(cmd, 0, sizeof(cmd));
-    memset(&st, 0, sizeof(st));
-
-    if ((fd = open(device, O_RDWR | O_NONBLOCK)) == -1)
+    int fd = open(device, O_RDWR | O_NONBLOCK);
+    if (fd == -1)
     {
         LOG(VB_MEDIA, LOG_ERR, LOC +
             " Changing CD/DVD speed needs write access");

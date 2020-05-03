@@ -23,14 +23,14 @@ using TagLib::String;
 class META_PUBLIC MetaIOWavPack : public MetaIOTagLib
 {
 public:
-    MetaIOWavPack(void);
-    virtual ~MetaIOWavPack(void);
+    MetaIOWavPack(void) = default;
+    ~MetaIOWavPack(void) override = default;
 
-    bool write(const QString &filename, MusicMetadata* mdata);
-    MusicMetadata* read(const QString &filename);
+    bool write(const QString &filename, MusicMetadata* mdata) override; // MetaIOTagLib
+    MusicMetadata* read(const QString &filename) override; // MetaIOTagLib
 
 private:
-    TagLib::WavPack::File *OpenFile(const QString &filename);
+    static TagLib::WavPack::File *OpenFile(const QString &filename);
 };
 
 #endif

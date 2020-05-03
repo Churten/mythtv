@@ -24,7 +24,7 @@ QString ProfileGroupStorage::GetSetClause(MSqlBindings &bindings) const
             GetColumnName() + " = " + colTag);
 
     bindings.insert(idTag, m_parent.getProfileNum());
-    bindings.insert(colTag, user->GetDBValue());
+    bindings.insert(colTag, m_user->GetDBValue());
 
     return query;
 }
@@ -33,29 +33,28 @@ void ProfileGroup::HostName::fillSelections()
 {
     QStringList hostnames;
     ProfileGroup::getHostNames(&hostnames);
-    for(QStringList::Iterator it = hostnames.begin();
-                 it != hostnames.end(); it++)
-        this->addSelection(*it);
+    foreach (auto & hostname, hostnames)
+        this->addSelection(hostname);
 }
 
 ProfileGroup::ProfileGroup()
 {
     // This must be first because it is needed to load/save the other settings
-    addChild(id = new ID());
-    addChild(is_default = new Is_default(*this));
+    addChild(m_id = new ID());
+    addChild(m_isDefault = new Is_default(*this));
 
     setLabel(tr("Profile Group"));
-    addChild(name = new Name(*this));
-    CardInfo *cardInfo = new CardInfo(*this);
+    addChild(m_name = new Name(*this));
+    auto *cardInfo = new CardInfo(*this);
     addChild(cardInfo);
     CardType::fillSelections(cardInfo);
-    host = new HostName(*this);
-    addChild(host);
-    host->fillSelections();
+    m_host = new HostName(*this);
+    addChild(m_host);
+    m_host->fillSelections();
 };
 
 void ProfileGroup::loadByID(int profileId) {
-    id->setValue(profileId);
+    m_id->setValue(profileId);
     Load();
 }
 
@@ -83,8 +82,8 @@ bool ProfileGroup::addMissingDynamicProfiles(void)
 
     CardUtil::InputTypes cardtypes = CardUtil::GetInputTypes();
 
-    CardUtil::InputTypes::iterator Itype = cardtypes.begin();
-    for ( ; Itype != cardtypes.end(); ++Itype)
+    for (auto Itype = cardtypes.begin();
+         Itype != cardtypes.end(); ++Itype)
     {
         if (Itype.key().startsWith("V4L2:") && existing.indexOf(Itype.key()) == -1)
         {
@@ -102,12 +101,12 @@ bool ProfileGroup::addMissingDynamicProfiles(void)
             // get the id of the new profile group
             int groupid = query.lastInsertId().toInt();
 
-            for (uint idx = 0 ; idx < num_profiles; ++idx)
+            for (const auto & name : profile_names)
             {
                 // insert the recording profiles
                 query.prepare("INSERT INTO recordingprofiles SET name = "
                               ":NAME, profilegroup = :GROUPID;");
-                query.bindValue(":NAME", profile_names[idx]);
+                query.bindValue(":NAME", name);
                 query.bindValue(":GROUPID", groupid);
                 if (!query.exec())
                 {
@@ -125,7 +124,7 @@ bool ProfileGroup::addMissingDynamicProfiles(void)
 void ProfileGroup::fillSelections(GroupSetting* setting)
 {
     CardUtil::InputTypes cardtypes = CardUtil::GetInputTypes();
-    QString     tid       = QString::null;
+    QString     tid;
 
     MSqlQuery result(MSqlQuery::InitCon());
     result.prepare(
@@ -164,7 +163,7 @@ void ProfileGroup::fillSelections(GroupSetting* setting)
             }
             else
             {
-                ProfileGroup *profileGroup = new ProfileGroup();
+                auto *profileGroup = new ProfileGroup();
                 profileGroup->loadByID(id.toInt());
                 profileGroup->setLabel(name);
                 profileGroup->addChild(
@@ -191,7 +190,7 @@ QString ProfileGroup::getName(int group)
         return result.value(0).toString();
     }
 
-    return NULL;
+    return nullptr;
 }
 
 bool ProfileGroup::allowedGroupName(void)
@@ -199,12 +198,10 @@ bool ProfileGroup::allowedGroupName(void)
     MSqlQuery result(MSqlQuery::InitCon());
     QString querystr = QString("SELECT DISTINCT id FROM profilegroups WHERE "
                             "name = '%1' AND hostname = '%2';")
-                            .arg(getName()).arg(host->getValue());
+                            .arg(getName()).arg(m_host->getValue());
     result.prepare(querystr);
 
-    if (result.exec() && result.next())
-        return false;
-    return true;
+    return !(result.exec() && result.next());
 }
 
 void ProfileGroup::getHostNames(QStringList *hostnames)

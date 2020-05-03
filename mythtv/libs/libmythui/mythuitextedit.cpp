@@ -40,9 +40,9 @@ MythUITextEdit::MythUITextEdit(MythUIType *parent, const QString &name)
 
     m_maxLength = 255;
 
-    m_backgroundState = NULL;
-    m_cursorImage = NULL;
-    m_Text = NULL;
+    m_backgroundState = nullptr;
+    m_cursorImage = nullptr;
+    m_Text = nullptr;
 
     m_keyboardPosition = VK_POSBELOWEDIT;
 
@@ -56,10 +56,6 @@ MythUITextEdit::MythUITextEdit(MythUIType *parent, const QString &name)
     m_lastKeyPress.start();
 
     m_composeKey = 0;
-}
-
-MythUITextEdit::~MythUITextEdit()
-{
 }
 
 void MythUITextEdit::Select()
@@ -186,9 +182,9 @@ void MythUITextEdit::SetInitialStates()
 
     if (!m_Text || !m_cursorImage)
     {
-        m_Text = NULL;
-        m_cursorImage = NULL;
-        m_backgroundState = NULL;
+        m_Text = nullptr;
+        m_cursorImage = nullptr;
+        m_backgroundState = nullptr;
         return;
     }
 
@@ -223,7 +219,6 @@ void MythUITextEdit::SetText(const QString &text, bool moveCursor)
         return;
 
     m_Message = text;
-    m_Message.detach();
 
     if (m_isPassword)
     {
@@ -241,24 +236,13 @@ void MythUITextEdit::SetText(const QString &text, bool moveCursor)
     emit valueChanged();
 }
 
-QString MythUITextEdit::GetText(void) const
-{
-    QString ret = m_Message;
-    ret.detach();
-    return ret;
-}
-
 void MythUITextEdit::InsertText(const QString &text)
 {
     if (!m_Text)
         return;
 
-    int i = 0;
-
-    for (; i < text.size(); ++i)
-    {
-        InsertCharacter(text.data()[i]);
-    }
+    foreach (auto c, text)
+        InsertCharacter(c);
 
     emit valueChanged();
 }
@@ -394,7 +378,7 @@ void MythUITextEdit::PasteTextFromClipboard(QClipboard::Mode mode)
     InsertText(clipboard->text(mode));
 }
 
-typedef QPair<int, int> keyCombo;
+using keyCombo = QPair<int, int>;
 static QMap<keyCombo, int> gDeadKeyMap;
 
 static void LoadDeadKeys(QMap<QPair<int, int>, int> &map)
@@ -434,8 +418,6 @@ static void LoadDeadKeys(QMap<QPair<int, int>, int> &map)
 
     map[keyCombo(Qt::Key_Dead_Acute,      Qt::Key_Y)] = Qt::Key_Yacute;
     map[keyCombo(Qt::Key_Dead_Diaeresis,  Qt::Key_Y)] = Qt::Key_ydiaeresis;
-
-    return;
 }
 
 bool MythUITextEdit::keyPressEvent(QKeyEvent *event)
@@ -457,7 +439,7 @@ bool MythUITextEdit::keyPressEvent(QKeyEvent *event)
     QString character;
     // Compose key handling
     // Enter composition mode
-    if ((modifiers & Qt::GroupSwitchModifier) &&
+    if (((modifiers & Qt::GroupSwitchModifier) != 0U) &&
         (keynum >= Qt::Key_Dead_Grave) && (keynum <= Qt::Key_Dead_Horn))
     {
         m_composeKey = keynum;
@@ -477,7 +459,7 @@ bool MythUITextEdit::keyPressEvent(QKeyEvent *event)
             //QKeyEvent key(QEvent::KeyPress, keycode, modifiers);
             character = QChar(keycode);
 
-            if (modifiers & Qt::ShiftModifier)
+            if ((modifiers & Qt::ShiftModifier) != 0U)
                 character = character.toUpper();
             else
                 character = character.toLower();
@@ -541,7 +523,7 @@ bool MythUITextEdit::keyPressEvent(QKeyEvent *event)
                  && GetMythDB()->GetNumSetting("UseVirtualKeyboard", 1) == 1)
         {
             MythScreenStack *popupStack = GetMythMainWindow()->GetStack("popup stack");
-            MythUIVirtualKeyboard *kb =  new MythUIVirtualKeyboard(popupStack, this);
+            auto *kb = new MythUIVirtualKeyboard(popupStack, this);
 
             if (kb->Create())
             {
@@ -573,7 +555,6 @@ bool MythUITextEdit::keyPressEvent(QKeyEvent *event)
 /** \brief Mouse click/movement handler, receives mouse gesture events from the
  *         QCoreApplication event loop. Should not be used directly.
  *
- *  \param uitype The mythuitype receiving the event
  *  \param event Mouse event
  */
 bool MythUITextEdit::gestureEvent(MythGestureEvent *event)
@@ -591,7 +572,7 @@ bool MythUITextEdit::gestureEvent(MythGestureEvent *event)
 
 void MythUITextEdit::CopyFrom(MythUIType *base)
 {
-    MythUITextEdit *textedit = dynamic_cast<MythUITextEdit *>(base);
+    auto *textedit = dynamic_cast<MythUITextEdit *>(base);
 
     if (!textedit)
     {
@@ -615,6 +596,6 @@ void MythUITextEdit::CopyFrom(MythUIType *base)
 
 void MythUITextEdit::CreateCopy(MythUIType *parent)
 {
-    MythUITextEdit *textedit = new MythUITextEdit(parent, objectName());
+    auto *textedit = new MythUITextEdit(parent, objectName());
     textedit->CopyFrom(this);
 }

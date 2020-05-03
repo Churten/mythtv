@@ -3,8 +3,8 @@
 #ifndef CCDECODER_H_
 #define CCDECODER_H_
 
-#include <time.h>
-#include <stdint.h>
+#include <cstdint>
+#include <ctime>
 
 #include <vector>
 using namespace std;
@@ -18,7 +18,7 @@ using namespace std;
 class CC608Input
 {
   public:
-    virtual ~CC608Input() { }
+    virtual ~CC608Input() = default;
     virtual void AddTextData(unsigned char *buf, int len,
                              int64_t timecode, char type) = 0;
 };
@@ -52,7 +52,7 @@ class CC608Decoder
     void DecodeVPS(const unsigned char *buf);
     void DecodeWSS(const unsigned char *buf);
 
-    void SetIgnoreTimecode(bool val) { ignore_time_code = val; }
+    void SetIgnoreTimecode(bool val) { m_ignoreTimeCode = val; }
 
     uint    GetRatingSystems(bool future) const;
     uint    GetRating(uint i, bool future) const;
@@ -62,18 +62,18 @@ class CC608Decoder
     QString GetXDS(const QString &key) const;
 
     /// \return Services seen in last few seconds as specified.
-    void GetServices(uint seconds, bool[4]) const;
+    void GetServices(uint seconds, bool seen[4]) const;
 
     static QString ToASCII(const QString &cc608, bool suppress_unknown);
 
   private:
-    QChar CharCC(int code) const { return stdchar[code]; }
+    QChar CharCC(int code) const { return m_stdChar[code]; }
     void ResetCC(int mode);
     void BufferCC(int mode, int len, int clr);
     int NewRowCC(int mode, int len);
 
-    QString XDSDecodeString(const vector<unsigned char>&,
-                            uint string, uint end) const;
+    QString XDSDecodeString(const vector<unsigned char>&buf,
+                            uint start, uint end) const;
     bool XDSDecode(int field, int b1, int b2);
 
     bool XDSPacketParseProgram(const vector<unsigned char> &xds_buf,
@@ -82,69 +82,69 @@ class CC608Decoder
     void XDSPacketParse(const vector<unsigned char> &xds_buf);
     bool XDSPacketCRC(const vector<unsigned char> &xds_buf);
 
-    CC608Input *reader;
+    CC608Input     *m_reader                {nullptr};
 
-    bool ignore_time_code;
+    bool            m_ignoreTimeCode        {false};
 
-    time_t last_seen[4];
+    time_t          m_lastSeen[4]           {0};
 
     // per-field
-    int badvbi[2];
-    int lasttc[2];
-    int lastcode[2];
-    int lastcodetc[2];
-    int ccmode[2];      // 0=cc1/txt1, 1=cc2/txt2
-    int xds[2];
-    int txtmode[4];
+    int             m_badVbi[2]             { 0,  0};
+    int             m_lastTc[2]             { 0,  0};
+    int             m_lastCode[2]           {-1, -1};
+    int             m_lastCodeTc[2]         { 0,  0};
+    int             m_ccMode[2]             {-1, -1}; // 0=cc1/txt1, 1=cc2/txt2
+    int             m_xds[2]                { 0,  0};
+    int             m_txtMode[4]            { 0,  0,  0,  0};
 
     // per-mode state
-    int lastrow[8];
-    int newrow[8];
-    int newcol[8];
-    int newattr[8]; // color+italic+underline
-    int timecode[8];
-    int row[8];
-    int col[8];
-    int rowcount[8];
-    int style[8];
-    int linecont[8];
-    int resumetext[8];
-    int lastclr[8];
-    QString ccbuf[8];
+    int             m_lastRow[8]            {0};
+    int             m_newRow[8]             {0};
+    int             m_newCol[8]             {0};
+    int             m_newAttr[8]            {0}; // color+italic+underline
+    int             m_timeCode[8]           {0};
+    int             m_row[8]                {0};
+    int             m_col[8]                {0};
+    int             m_rowCount[8]           {0};
+    int             m_style[8]              {0};
+    int             m_lineCont[8]           {0};
+    int             m_resumeText[8]         {0};
+    int             m_lastClr[8]            {0};
+    QString         m_ccBuf[8];
 
     // translation table
-    QChar stdchar[128];
+    QChar           m_stdChar[128];
 
     // temporary buffer
-    unsigned char *rbuf;
-    int last_format_tc[2];
-    int last_format_data[2];
+    unsigned char  *m_rbuf                  {nullptr};
+    int             m_lastFormatTc[2]       {0, 0};
+    int             m_lastFormatData[2]     {0, 0};
 
     // VPS data
-    char            vps_pr_label[20];
-    char            vps_label[20];
-    int             vps_l;
+    char            m_vpsPrLabel[20]        {0};
+    char            m_vpsLabel[20]          {0};
+    int             m_vpsL                  {0};
 
     // WSS data
-    uint            wss_flags;
-    bool            wss_valid;
+    uint            m_wssFlags              {0};
+    bool            m_wssValid              {false};
 
-    int             xds_cur_service;
-    vector<unsigned char> xds_buf[7];
-    uint            xds_crc_passed;
-    uint            xds_crc_failed;
+    int             m_xdsCurService         {-1};
+    vector<unsigned char> m_xdsBuf[7];
+    uint            m_xdsCrcPassed          {0};
+    uint            m_xdsCrcFailed          {0};
 
-    mutable QMutex  xds_lock;
-    uint            xds_rating_systems[2];
-    uint            xds_rating[2][4];
-    QString         xds_program_name[2];
-    vector<uint>    xds_program_type[2];
+    mutable QMutex  m_xdsLock               {QMutex::Recursive};
+    uint            m_xdsRatingSystems[2]   {0};
+    uint            m_xdsRating[2][4]       {{0}};
+    QString         m_xdsProgramName[2];
+    vector<uint>    m_xdsProgramType[2];
 
-    QString         xds_net_call;
-    QString         xds_net_name;
-    uint            xds_tsid;
+    QString         m_xdsNetCall;
+    QString         m_xdsNetName;
+    uint            m_xdsTsid               {0};
 
-    QString         xds_program_type_string[96];
+    QString         m_xdsProgramTypeString[96];
 };
 
 #endif

@@ -5,6 +5,7 @@
 #include <QStringList>
 #include <QTimer>
 #include <QUrl>
+#include <utility>
 
 #include "mythlogging.h"
 
@@ -21,16 +22,12 @@
 #include "mythcorecontext.h"
 
 /////////////////////////////////////////////////////////////////////
-MFileInfo::MFileInfo(QString fileName, QString sgDir, bool isDir, qint64 size)
+MFileInfo::MFileInfo(const QString& fileName, QString sgDir, bool isDir, qint64 size)
 {
-    init(fileName, sgDir, isDir, size);
+    init(fileName, std::move(sgDir), isDir, size);
 }
 
-MFileInfo::~MFileInfo()
-{
-}
-
-void MFileInfo::init(QString fileName, QString sgDir, bool isDir,
+void MFileInfo::init(const QString& fileName, QString sgDir, bool isDir,
                      qint64 size)
 {
     m_fileName = fileName;
@@ -42,7 +39,7 @@ void MFileInfo::init(QString fileName, QString sgDir, bool isDir,
         QUrl qurl(fileName);
         m_hostName = qurl.host();
         m_storageGroup = qurl.userName();
-        m_storageGroupDir = sgDir;
+        m_storageGroupDir = std::move(sgDir);
         m_subDir = qurl.path();
 
         if (!qurl.fragment().isEmpty())
@@ -64,6 +61,9 @@ void MFileInfo::init(QString fileName, QString sgDir, bool isDir,
 
 MFileInfo &MFileInfo::operator=(const MFileInfo &other)
 {
+    if (this == &other)
+        return *this;
+
     QString sgDir = other.storageGroupDir();
     bool isDir    = other.isDir();
     qint64 size   = other.size();
@@ -76,64 +76,56 @@ QString MFileInfo::fileName(void) const
 {
     if (m_isRemote)
         return m_fileName;
-    else
-        return QFileInfo::fileName();
+    return QFileInfo::fileName();
 }
 
 QString MFileInfo::filePath(void) const
 {
     if (m_isRemote)
         return m_fileName;
-    else
-        return QFileInfo::filePath();
+    return QFileInfo::filePath();
 }
 
 bool MFileInfo::isDir(void) const
 {
     if (m_isRemote)
         return m_isDir;
-    else
-        return QFileInfo::isDir();
+    return QFileInfo::isDir();
 }
 
 bool MFileInfo::isFile(void) const
 {
     if (m_isRemote)
         return m_isFile;
-    else
-        return QFileInfo::isFile();
+    return QFileInfo::isFile();
 }
 
 bool MFileInfo::isParentDir(void) const
 {
     if (m_isRemote)
         return m_isParentDir;
-    else
-        return (QFileInfo::fileName() == "..");
+    return (QFileInfo::fileName() == "..");
 }
 
 bool MFileInfo::isExecutable(void) const
 {
     if (m_isRemote)
         return false;
-    else
-        return QFileInfo::isExecutable();
+    return QFileInfo::isExecutable();
 }
 
 QString MFileInfo::absoluteFilePath(void) const
 {
     if (m_isRemote)
         return m_fileName;
-    else
-        return QFileInfo::absoluteFilePath();
+    return QFileInfo::absoluteFilePath();
 }
 
 qint64 MFileInfo::size(void) const
 {
     if (m_isRemote)
         return m_size;
-    else
-        return QFileInfo::size();
+    return QFileInfo::size();
 }
 
 /////////////////////////////////////////////////////////////////////
@@ -147,16 +139,7 @@ qint64 MFileInfo::size(void) const
 
 MythUIFileBrowser::MythUIFileBrowser(MythScreenStack *parent,
                                      const QString &startPath)
-    : MythScreenType(parent, "mythuifilebrowser"),
-        m_isRemote(false),      m_previewTimer(NULL),
-        m_typeFilter(QDir::AllDirs | QDir::Drives | QDir::Files |
-                    QDir::Readable | QDir::Writable | QDir::Executable),
-        m_fileList(NULL),       m_locationEdit(NULL),
-        m_okButton(NULL),       m_cancelButton(NULL),
-        m_backButton(NULL),     m_homeButton(NULL),
-        m_previewImage(NULL),   m_infoText(NULL),
-        m_filenameText(NULL),   m_fullpathText(NULL),
-        m_retObject(NULL)
+    : MythScreenType(parent, "mythuifilebrowser")
 {
     SetPath(startPath);
 
@@ -166,10 +149,6 @@ MythUIFileBrowser::MythUIFileBrowser(MythScreenStack *parent,
     m_previewTimer = new QTimer(this);
     m_previewTimer->setSingleShot(true);
     connect(m_previewTimer, SIGNAL(timeout()), SLOT(LoadPreview()));
-}
-
-MythUIFileBrowser::~MythUIFileBrowser()
-{
 }
 
 void MythUIFileBrowser::SetPath(const QString &startPath)
@@ -183,10 +162,10 @@ void MythUIFileBrowser::SetPath(const QString &startPath)
         if (!qurl.path().isEmpty())
         {
             // Force browing of remote SG's to start at their root
-            m_baseDirectory = gCoreContext->GenMythURL(qurl.host(),
-                                                       0,
-                                                       "",
-                                                       qurl.userName());
+            m_baseDirectory = MythCoreContext::GenMythURL(qurl.host(),
+                                                          0,
+                                                          "",
+                                                          qurl.userName());
 
         }
         else
@@ -315,9 +294,8 @@ void MythUIFileBrowser::PathClicked(MythUIButtonListItem *item)
     {
         if (m_retObject)
         {
-            DialogCompletionEvent *dce =
-                new DialogCompletionEvent(m_id, 0, finfo.filePath(),
-                                          item->GetData());
+            auto *dce = new DialogCompletionEvent(m_id, 0, finfo.filePath(),
+                                                  item->GetData());
             QCoreApplication::postEvent(m_retObject, dce);
         }
 
@@ -358,10 +336,7 @@ bool MythUIFileBrowser::IsImage(QString extension)
 
     QList<QByteArray> formats = QImageReader::supportedImageFormats();
 
-    if (formats.contains(extension.toLatin1()))
-        return true;
-
-    return false;
+    return formats.contains(extension.toLatin1());
 }
 
 void MythUIFileBrowser::editLostFocus()
@@ -427,9 +402,8 @@ void MythUIFileBrowser::OKPressed()
     if (m_retObject)
     {
         QString selectedPath = m_locationEdit->GetText();
-        DialogCompletionEvent *dce = new DialogCompletionEvent(m_id, 0,
-                                                               selectedPath,
-                                                               item->GetData());
+        auto *dce = new DialogCompletionEvent(m_id, 0, selectedPath,
+                                              item->GetData());
         QCoreApplication::postEvent(m_retObject, dce);
     }
 
@@ -520,9 +494,8 @@ void MythUIFileBrowser::updateRemoteFileList()
             m_parentSGDir = "";
         }
 
-        MythUIButtonListItem *item = new MythUIButtonListItem(
-            m_fileList, displayName,
-            qVariantFromValue(finfo));
+        auto *item = new MythUIButtonListItem(m_fileList, displayName,
+                                              QVariant::fromValue(finfo));
 
         item->SetText(QString("0"), "filesize");
         item->SetText(m_parentDir, "fullpath");
@@ -555,16 +528,20 @@ void MythUIFileBrowser::updateRemoteFileList()
         if (tokens[0] == "sgdir")
             dataName = m_baseDirectory;
         else if (m_subDirectory.isEmpty())
+        {
             dataName = QString("%1%2").arg(m_baseDirectory)
                        .arg(displayName);
+        }
         else
+        {
             dataName = QString("%1%2/%3").arg(m_baseDirectory)
                        .arg(m_subDirectory).arg(displayName);
+        }
 
         MFileInfo finfo(dataName, m_storageGroupDir);
 
         if ((tokens[0] == "dir") &&
-            (m_typeFilter & (QDir::Dirs | QDir::AllDirs)))
+            ((m_typeFilter & (QDir::Dirs | QDir::AllDirs)) != 0))
         {
             type = "folder";
             finfo.setIsDir(true);
@@ -572,7 +549,7 @@ void MythUIFileBrowser::updateRemoteFileList()
             finfo.setSize(0);
         }
         else if ((tokens[0] == "sgdir") &&
-                 (m_typeFilter & (QDir::Dirs | QDir::AllDirs)))
+                 ((m_typeFilter & (QDir::Dirs | QDir::AllDirs)) != 0))
         {
             type = "folder";
             finfo.setIsDir(true);
@@ -580,7 +557,7 @@ void MythUIFileBrowser::updateRemoteFileList()
             finfo.setSize(0);
         }
         else if ((tokens[0] == "file") &&
-                 (m_typeFilter & QDir::Files))
+                 ((m_typeFilter & QDir::Files) != 0))
         {
             finfo.setIsDir(false);
             finfo.setSize(tokens[2].toInt());
@@ -597,9 +574,8 @@ void MythUIFileBrowser::updateRemoteFileList()
             continue;
         }
 
-        MythUIButtonListItem *item =
-            new MythUIButtonListItem(m_fileList, displayName,
-                                     qVariantFromValue(finfo));
+        auto *item = new MythUIButtonListItem(m_fileList, displayName,
+                                              QVariant::fromValue(finfo));
 
         if (finfo.size())
             item->SetText(FormatSize(finfo.size()), "filesize");
@@ -637,18 +613,17 @@ void MythUIFileBrowser::updateLocalFileList()
 
     if (list.isEmpty())
     {
-        MythUIButtonListItem *item = new MythUIButtonListItem(m_fileList,
-                                                              tr("Parent Directory"));
+        auto *item = new MythUIButtonListItem(m_fileList,
+                                              tr("Parent Directory"));
         item->DisplayState("upfolder", "nodetype");
     }
     else
     {
         QFileInfoList::const_iterator it = list.begin();
-        const QFileInfo *fi;
 
         while (it != list.end())
         {
-            fi = &(*it);
+            const QFileInfo *fi = &(*it);
             MFileInfo finfo(fi->filePath());
 
             if (finfo.fileName() == ".")
@@ -685,9 +660,8 @@ void MythUIFileBrowser::updateLocalFileList()
                 type = "file";
             }
 
-            MythUIButtonListItem *item =
-                new MythUIButtonListItem(m_fileList, displayName,
-                                         qVariantFromValue(finfo));
+            auto *item = new MythUIButtonListItem(m_fileList, displayName,
+                                                  QVariant::fromValue(finfo));
 
             if (IsImage(finfo.suffix()))
             {
@@ -709,16 +683,16 @@ void MythUIFileBrowser::updateLocalFileList()
     m_locationEdit->SetText(m_subDirectory);
 }
 
-QString MythUIFileBrowser::FormatSize(int size)
+QString MythUIFileBrowser::FormatSize(int64_t size)
 {
     QString filesize("%L1 %2");
 
     if (size < 1000000)
-        filesize = filesize.arg((double)(size / 1000)).arg("KB");
+        filesize = filesize.arg((double)size /       1000.0, 0, 'f', 0).arg("KB");
     else if (size < 1000000000)
-        filesize = filesize.arg((double)(size / 1000000)).arg("MB");
+        filesize = filesize.arg((double)size /    1000000.0, 0, 'f', 1).arg("MB");
     else
-        filesize = filesize.arg((double)(size / 1000000000)).arg("GB");
+        filesize = filesize.arg((double)size / 1000000000.0, 0, 'f', 1).arg("GB");
 
     return filesize;
 }

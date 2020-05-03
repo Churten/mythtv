@@ -19,8 +19,8 @@
 #include "weatherScreen.h"
 #include "weatherSource.h"
 
-QStringList WeatherSource::ProbeTypes(QString workingDirectory,
-                                      QString program)
+QStringList WeatherSource::ProbeTypes(const QString& workingDirectory,
+                                      const QString& program)
 {
     QStringList arguments("-t");
     const QString loc = QString("WeatherSource::ProbeTypes(%1 %2): ")
@@ -58,8 +58,8 @@ QStringList WeatherSource::ProbeTypes(QString workingDirectory,
     return types;
 }
 
-bool WeatherSource::ProbeTimeouts(QString  workingDirectory,
-                                  QString  program,
+bool WeatherSource::ProbeTimeouts(const QString&  workingDirectory,
+                                  const QString&  program,
                                   uint    &updateTimeout,
                                   uint    &scriptTimeout)
 {
@@ -196,14 +196,14 @@ ScriptInfo *WeatherSource::ProbeScript(const QFileInfo &fi)
     QStringList temp;
 
     if (!fi.isReadable() || !fi.isExecutable())
-        return NULL;
+        return nullptr;
 
     ScriptInfo info;
     info.path = fi.absolutePath();
     info.program = fi.absoluteFilePath();
 
     if (!WeatherSource::ProbeInfo(info))
-        return NULL;
+        return nullptr;
 
     MSqlQuery db(MSqlQuery::InitCon());
     QString query =
@@ -217,7 +217,7 @@ ScriptInfo *WeatherSource::ProbeScript(const QFileInfo &fi)
     if (!db.exec())
     {
         LOG(VB_GENERAL, LOG_ERR, "Invalid response from database");
-        return NULL;
+        return nullptr;
     }
 
     // the script exists in the db
@@ -257,7 +257,7 @@ ScriptInfo *WeatherSource::ProbeScript(const QFileInfo &fi)
             if (!db.exec())
             {
                 MythDB::DBError("Updating weather source settings.", db);
-                return NULL;
+                return nullptr;
             }
         }
     }
@@ -275,7 +275,7 @@ ScriptInfo *WeatherSource::ProbeScript(const QFileInfo &fi)
                                           info.updateTimeout,
                                           info.scriptTimeout))
         {
-            return NULL;
+            return nullptr;
         }
         db.prepare(query);
         db.bindValue(":NAME", info.name);
@@ -291,7 +291,7 @@ ScriptInfo *WeatherSource::ProbeScript(const QFileInfo &fi)
         if (!db.exec())
         {
             MythDB::DBError("Inserting weather source", db);
-            return NULL;
+            return nullptr;
         }
         query = "SELECT sourceid FROM weathersourcesettings "
                 "WHERE source_name = :NAME AND hostname = :HOST;";
@@ -303,42 +303,40 @@ ScriptInfo *WeatherSource::ProbeScript(const QFileInfo &fi)
         if (!db.exec())
         {
             MythDB::DBError("Getting weather sourceid", db);
-            return NULL;
+            return nullptr;
         }
-        else if (!db.next())
+        if (!db.next())
         {
             LOG(VB_GENERAL, LOG_ERR, "Error getting weather sourceid");
-            return NULL;
+            return nullptr;
         }
-        else
-        {
-            info.id = db.value(0).toInt();
-        }
+        info.id = db.value(0).toInt();
     }
 
     return new ScriptInfo(info);
 }
 
-/*
+/**
  * Watch out, we store the parameter as a member variable, don't go deleting it,
  * that wouldn't be good.
+ *
+ * \param info is a required variable.
  */
 WeatherSource::WeatherSource(ScriptInfo *info)
-    : m_ready(info ? true : false),    m_inuse(info ? true : false),
+    : m_ready(info != nullptr),
+      m_inuse(info != nullptr),
       m_info(info),
-      m_ms(NULL),
-      m_locale(""),
-      m_cachefile(""),
-      m_units(SI_UNITS),
-      m_updateTimer(new QTimer(this)), m_connectCnt(0)
+      m_updateTimer(new QTimer(this))
 {
     QDir dir(GetConfDir());
     if (!dir.exists("MythWeather"))
         dir.mkdir("MythWeather");
     dir.cd("MythWeather");
-    if (!dir.exists(info->name))
-        dir.mkdir(info->name);
-    dir.cd(info->name);
+    if (info != nullptr) {
+        if (!dir.exists(info->name))
+            dir.mkdir(info->name);
+        dir.cd(info->name);
+    }
     m_dir = dir.absolutePath();
 
     connect( m_updateTimer, SIGNAL(timeout()), this, SLOT(updateTimeout()));
@@ -361,7 +359,7 @@ void WeatherSource::connectScreen(WeatherScreen *ws)
             ws, SLOT(newData(QString, units_t, DataMap)));
     ++m_connectCnt;
 
-    if (m_data.size() > 0)
+    if (!m_data.empty())
     {
         emit newData(m_locale, m_units, m_data);
     }
@@ -369,7 +367,7 @@ void WeatherSource::connectScreen(WeatherScreen *ws)
 
 void WeatherSource::disconnectScreen(WeatherScreen *ws)
 {
-    disconnect(this, 0, ws, 0);
+    disconnect(this, nullptr, ws, nullptr);
     --m_connectCnt;
 }
 
@@ -462,12 +460,9 @@ void WeatherSource::startUpdate(bool forceUpdate)
                 }
                 return;
             }
-            else
-            {
-                LOG(VB_GENERAL, LOG_NOTICE,
-                    QString("No cachefile for %1, forcing update.")
-                        .arg(m_info->name));
-            }
+            LOG(VB_GENERAL, LOG_NOTICE,
+                QString("No cachefile for %1, forcing update.")
+                .arg(m_info->name));
         }
     }
 
@@ -512,7 +507,7 @@ void WeatherSource::processExit(uint status)
     }
 
     delete m_ms;
-    m_ms = NULL;
+    m_ms = nullptr;
 
     if (status != GENERIC_EXIT_OK)
     {

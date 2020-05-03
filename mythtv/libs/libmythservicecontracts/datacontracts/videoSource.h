@@ -26,6 +26,9 @@ class SERVICE_PUBLIC VideoSource : public QObject
     Q_PROPERTY( bool            UseEIT          READ UseEIT           WRITE setUseEIT         )
     Q_PROPERTY( QString         ConfigPath      READ ConfigPath       WRITE setConfigPath     )
     Q_PROPERTY( int             NITId           READ NITId            WRITE setNITId          )
+    Q_PROPERTY( uint            BouquetId       READ BouquetId        WRITE setBouquetId      )
+    Q_PROPERTY( uint            RegionId        READ RegionId         WRITE setRegionId       )
+    Q_PROPERTY( uint            ScanFrequency   READ ScanFrequency    WRITE setScanFrequency  )
 
     PROPERTYIMP    ( int        , Id             )
     PROPERTYIMP    ( QString    , SourceName     )
@@ -37,53 +40,51 @@ class SERVICE_PUBLIC VideoSource : public QObject
     PROPERTYIMP    ( bool       , UseEIT         )
     PROPERTYIMP    ( QString    , ConfigPath     )
     PROPERTYIMP    ( int        , NITId          )
+    PROPERTYIMP    ( uint       , BouquetId      )
+    PROPERTYIMP    ( uint       , RegionId       )
+    PROPERTYIMP    ( uint       , ScanFrequency  )
 
     public:
 
         static inline void InitializeCustomTypes();
 
-    public:
-
-        VideoSource(QObject *parent = 0)
+        Q_INVOKABLE VideoSource(QObject *parent = nullptr)
             : QObject         ( parent ),
               m_Id            ( 0      ),
               m_UseEIT        ( false  ),
-              m_NITId         ( 0      )
+              m_NITId         ( 0      ),
+              m_BouquetId     ( 0      ),
+              m_RegionId      ( 0      ),
+              m_ScanFrequency ( 0      )
         {
         }
 
-        VideoSource( const VideoSource &src )
+        void Copy( const VideoSource *src )
         {
-            Copy( src );
+            m_Id            = src->m_Id            ;
+            m_SourceName    = src->m_SourceName    ;
+            m_Grabber       = src->m_Grabber       ;
+            m_UserId        = src->m_UserId        ;
+            m_FreqTable     = src->m_FreqTable     ;
+            m_LineupId      = src->m_LineupId      ;
+            m_Password      = src->m_Password      ;
+            m_UseEIT        = src->m_UseEIT        ;
+            m_ConfigPath    = src->m_ConfigPath    ;
+            m_NITId         = src->m_NITId         ;
+            m_BouquetId     = src->m_BouquetId     ;
+            m_RegionId      = src->m_RegionId      ;
+            m_ScanFrequency = src->m_ScanFrequency ;
         }
 
-        void Copy( const VideoSource &src )
-        {
-            m_Id            = src.m_Id            ;
-            m_SourceName    = src.m_SourceName    ;
-            m_Grabber       = src.m_Grabber       ;
-            m_UserId        = src.m_UserId        ;
-            m_FreqTable     = src.m_FreqTable     ;
-            m_LineupId      = src.m_LineupId      ;
-            m_Password      = src.m_Password      ;
-            m_UseEIT        = src.m_UseEIT        ;
-            m_ConfigPath    = src.m_ConfigPath    ;
-            m_NITId         = src.m_NITId         ;
-        }
+    private:
+        Q_DISABLE_COPY(VideoSource);
 };
 
-} // namespace DTC
-
-Q_DECLARE_METATYPE( DTC::VideoSource  )
-Q_DECLARE_METATYPE( DTC::VideoSource* )
-
-namespace DTC
-{
 inline void VideoSource::InitializeCustomTypes()
 {
-    qRegisterMetaType< VideoSource   >();
     qRegisterMetaType< VideoSource*  >();
 }
-}
+
+} // namespace DTC
 
 #endif

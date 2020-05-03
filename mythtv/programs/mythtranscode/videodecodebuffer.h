@@ -6,38 +6,40 @@
 #include <QMutex>
 #include <QRunnable>
 
-#include "videooutbase.h"
+#include "mythvideoout.h"
 
 class MythPlayer;
-class VideoOutput;
+class MythVideoOutput;
 
 class VideoDecodeBuffer : public QRunnable
 {
   public:
-    VideoDecodeBuffer(MythPlayer *player, VideoOutput *videoout,
-        bool cutlist, int size = 5);
-    virtual ~VideoDecodeBuffer();
+    VideoDecodeBuffer(MythPlayer *player, MythVideoOutput *videoout,
+        bool cutlist, int size = 5)
+        : m_player(player),        m_videoOutput(videoout),
+          m_honorCutlist(cutlist), m_maxFrames(size) {}
+    ~VideoDecodeBuffer() override;
 
     void          stop(void);
-    virtual void run();
+    void run() override; // QRunnable
     VideoFrame *GetFrame(int &didFF, bool &isKey);
 
   private:
-    typedef struct decodedFrameInfo
+    struct DecodedFrameInfo
     {
         VideoFrame *frame;
         int         didFF;
         bool        isKey;
-    } DecodedFrameInfo;
+    };
 
-    MythPlayer * const      m_player;
-    VideoOutput * const     m_videoOutput;
+    MythPlayer * const      m_player      {nullptr};
+    MythVideoOutput * const m_videoOutput {nullptr};
     bool const              m_honorCutlist;
     int const               m_maxFrames;
-    bool volatile           m_runThread;
-    bool volatile           m_isRunning;
+    bool volatile           m_runThread   {true};
+    bool volatile           m_isRunning   {false};
     QMutex mutable          m_queueLock; // Guards the following...
-    bool                    m_eof;
+    bool                    m_eof         {false};
     QList<DecodedFrameInfo> m_frameList;
     QWaitCondition          m_frameWaitCond;
 };

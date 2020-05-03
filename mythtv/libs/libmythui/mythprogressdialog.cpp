@@ -12,10 +12,13 @@
 QEvent::Type ProgressUpdateEvent::kEventType =
     (QEvent::Type) QEvent::registerEventType();
 
+ProgressUpdateEvent::~ProgressUpdateEvent()
+{
+}
+
 MythUIBusyDialog::MythUIBusyDialog(const QString &message,
                              MythScreenStack *parent, const char *name)
-         : MythScreenType(parent, name, false),
-            m_haveNewMessage(false), m_messageText(NULL)
+         : MythScreenType(parent, name, false)
 {
     if (!message.isEmpty())
         m_message = message;
@@ -90,46 +93,37 @@ bool MythUIBusyDialog::keyPressEvent(QKeyEvent *event)
 MythUIBusyDialog  *ShowBusyPopup(const QString &message)
 {
     QString                  LOC = "ShowBusyPopup('" + message + "') - ";
-    MythUIBusyDialog        *pop = NULL;
-    static MythScreenStack  *stk = NULL;
+    MythUIBusyDialog        *pop = nullptr;
+    static MythScreenStack  *s_stk = nullptr;
 
 
-    if (!stk)
+    if (!s_stk)
     {
         MythMainWindow *win = GetMythMainWindow();
 
         if (win)
-            stk = win->GetStack("popup stack");
+            s_stk = win->GetStack("popup stack");
         else
         {
             LOG(VB_GENERAL, LOG_ERR, LOC + "no main window?");
-            return NULL;
+            return nullptr;
         }
 
-        if (!stk)
+        if (!s_stk)
         {
             LOG(VB_GENERAL, LOG_ERR, LOC + "no popup stack? "
                                            "Is there a MythThemeBase?");
-            return NULL;
+            return nullptr;
         }
     }
 
-    pop = new MythUIBusyDialog(message, stk, "showBusyPopup");
+    pop = new MythUIBusyDialog(message, s_stk, "showBusyPopup");
     if (pop->Create())
-        stk->AddScreen(pop);
+        s_stk->AddScreen(pop);
 
     return pop;
 }
 //---------------------------------------------------------
-
-MythUIProgressDialog::MythUIProgressDialog(const QString &message,
-                             MythScreenStack *parent, const char *name)
-         : MythScreenType(parent, name, false),
-            m_total(0), m_count(0),
-            m_messageText(NULL), m_progressText(NULL), m_progressBar(NULL)
-{
-    m_message = message;
-}
 
 bool MythUIProgressDialog::Create(void)
 {
@@ -174,8 +168,7 @@ void MythUIProgressDialog::customEvent(QEvent *event)
 {
     if (event->type() == ProgressUpdateEvent::kEventType)
     {
-        ProgressUpdateEvent *pue = dynamic_cast<ProgressUpdateEvent*>(event);
-
+        auto *pue = dynamic_cast<ProgressUpdateEvent*>(event);
         if (!pue)
         {
             LOG(VB_GENERAL, LOG_ERR,
@@ -235,7 +228,7 @@ void MythUIProgressDialog::UpdateProgress()
          m_progressBar->SetUsed(m_count);
      }
 
-    uint percentage = (uint)(((float)m_count/(float)m_total) * 100.0);
+    uint percentage = (uint)(((float)m_count/(float)m_total) * 100.0F);
 
     if (m_progressText)
         m_progressText->SetText(QString("%1%").arg(percentage));

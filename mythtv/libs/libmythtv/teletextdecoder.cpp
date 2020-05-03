@@ -16,13 +16,12 @@
  * GNU General Public License for more details.
  *
  * ============================================================= */
+#include <cctype>
+#include <cstdint>
 #include <cstring>
 
-#include <stdint.h>
-#include <ctype.h>
-
 extern "C" {
-#include <inttypes.h>
+#include <cinttypes>
 #include "ivtv_myth.h"
 #include "vbitext/vt.h"
 }
@@ -43,13 +42,20 @@ using namespace std;
  */
 void TeletextDecoder::Decode(const unsigned char *buf, int vbimode)
 {
-    int err = 0, latin1 = -1, pagenum, subpagenum, lang, flags;
-    uint magazine, packet, header;
+    int err = 0;
+    int latin1 = -1;
+    int pagenum = 0;
+    int subpagenum = 0;
+    int lang = 0;
+    int flags = 0;
+    uint magazine = 0;
+    uint packet = 0;
+    uint header = 0;
 
-    if (!m_teletext_reader)
+    if (!m_teletextReader)
         return;
 
-    m_decodertype = vbimode;
+    m_decoderType = vbimode;
 
     switch (vbimode)
     {
@@ -99,10 +105,10 @@ void TeletextDecoder::Decode(const unsigned char *buf, int vbimode)
             return; // error in vbimode
     }
 
+    int b1=0, b2=0, b3=0, b4=0;
     switch (packet)
     {
         case 0:  // Page Header
-            int b1, b2, b3, b4;
             switch (vbimode)
             {
                 case VBI_IVTV:
@@ -137,14 +143,14 @@ void TeletextDecoder::Decode(const unsigned char *buf, int vbimode)
             flags = b4 & 0x1F;
             flags |= b3 & 0xC0;
             flags |= (b2 & 0x80) >> 2;
-            m_teletext_reader->AddPageHeader(pagenum, subpagenum, buf,
-                                             vbimode, lang, flags);
+            m_teletextReader->AddPageHeader(pagenum, subpagenum, buf,
+                                            vbimode, lang, flags);
 
             break;
 
         default: // Page Data
-            m_teletext_reader->AddTeletextData((magazine ? magazine : 8), packet,
-                                               buf, vbimode);
+            m_teletextReader->AddTeletextData((magazine ? magazine : 8), packet,
+                                              buf, vbimode);
             break;
     }
 }

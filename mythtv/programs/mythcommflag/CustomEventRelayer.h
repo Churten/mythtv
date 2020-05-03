@@ -16,7 +16,7 @@ class CustomEventRelayer : public QObject
     Q_OBJECT
 
   public:
-    explicit CustomEventRelayer(void (*fp_in)(QEvent*)) : fp(fp_in)
+    explicit CustomEventRelayer(void (*fp_in)(QEvent*)) : m_fp(fp_in)
     {
         gCoreContext->addListener(this);
     }
@@ -32,13 +32,14 @@ class CustomEventRelayer : public QObject
         QObject::deleteLater();
     }
 
-    void customEvent(QEvent *e) { fp(e); }
+    void customEvent(QEvent *e) override //QObject
+        { m_fp(e); }
 
   protected:
-    virtual ~CustomEventRelayer() {}
+    ~CustomEventRelayer() override = default;
 
   private:
-    void (*fp)(QEvent*);
+    void (*m_fp)(QEvent*) {nullptr};
 };
 
 #endif

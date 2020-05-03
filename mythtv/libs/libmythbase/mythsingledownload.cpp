@@ -1,5 +1,6 @@
 
 #include "mythsingledownload.h"
+#include "mythversion.h"
 #include "mythlogging.h"
 
 /*
@@ -11,7 +12,7 @@
 #define LOC QString("MythSingleDownload: ")
 
 bool MythSingleDownload::DownloadURL(const QUrl &url, QByteArray *buffer,
-                                     uint timeout, uint redirs, qint64 maxsize)
+                                     uint timeout, uint redirs, qint64 maxsize, QString *final_url)
 {
     m_lock.lock();
 
@@ -20,6 +21,8 @@ bool MythSingleDownload::DownloadURL(const QUrl &url, QByteArray *buffer,
 
     // the HTTP request
     QNetworkRequest req(url);
+    req.setRawHeader("User-Agent",
+                     "MythTV v" MYTH_BINARY_VERSION " MythSingleDownload");
     m_replylock.lock();
     m_reply = m_mgr.get(req);
     m_replylock.unlock();
@@ -37,15 +40,15 @@ bool MythSingleDownload::DownloadURL(const QUrl &url, QByteArray *buffer,
     m_timer.setSingleShot(true);
     m_timer.start(timeout);  // 30 secs. by default
 
-    bool ret = event_loop.exec(); // blocks stack until quit() is called
+    bool ret = event_loop.exec() != 0; // blocks stack until quit() is called
 
     disconnect(&m_timer, SIGNAL(timeout()), &event_loop, SLOT(quit()));
     disconnect(m_reply, SIGNAL(finished()), &event_loop, SLOT(quit()));
     disconnect(m_reply, SIGNAL(downloadProgress(qint64,qint64)), this, SLOT(Progress(qint64,qint64)));
 
-    if (ret != 0)
+    if (ret)
     {
-        LOG(VB_GENERAL, LOG_ERR, QString(LOC + "evenloop failed"));
+        LOG(VB_GENERAL, LOG_ERR, LOC + "eventloop failed");
     }
 
     m_replylock.lock();
@@ -65,22 +68,21 @@ bool MythSingleDownload::DownloadURL(const QUrl &url, QByteArray *buffer,
 
         if (redir.length())
         {
-            if (redirs > 3)
-            {
-                LOG(VB_GENERAL, LOG_ERR, QString("%1: too many redirects").arg(url.toString()));
-                ret = false;
-            }
-            else
+            if (redirs <= 3)
             {
                 LOG(VB_GENERAL, LOG_INFO, QString("%1 -> %2").arg(url.toString()).arg(redir));
                 m_replylock.unlock();
                 m_lock.unlock();
-                return DownloadURL(redir, buffer, timeout, redirs + 1);
+                return DownloadURL(redir, buffer, timeout, redirs + 1, maxsize, final_url);
             }
-        }
 
-        if (m_errorcode == QNetworkReply::NoError)
+            LOG(VB_GENERAL, LOG_ERR, QString("%1: too many redirects").arg(url.toString()));
+            ret = false;
+        }
+        else if (m_errorcode == QNetworkReply::NoError)
         {
+            if (final_url != nullptr)
+                *final_url = url.toString();
             *m_buffer += m_reply->readAll();
             m_errorstring.clear();
             ret = true;
@@ -96,8 +98,8 @@ bool MythSingleDownload::DownloadURL(const QUrl &url, QByteArray *buffer,
     m_lock.unlock();
 
     delete m_reply;
-    m_reply = NULL;
-    m_buffer = NULL;
+    m_reply = nullptr;
+    m_buffer = nullptr;
 
     return ret;
 }
@@ -112,7 +114,7 @@ void MythSingleDownload::Cancel(void)
     }
 }
 
-void MythSingleDownload::Progress(qint64 bytesRead, qint64 totalBytes)
+void MythSingleDownload::Progress(qint64 bytesRead, qint64 /*totalBytes*/)
 {
     if (m_maxsize && bytesRead>=m_maxsize)
     {

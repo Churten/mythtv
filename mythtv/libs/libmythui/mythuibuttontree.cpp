@@ -4,6 +4,7 @@
 
 // Qt headers
 #include <QDomDocument>
+#include <utility>
 
 // Mythdb headers
 #include "mythlogging.h"
@@ -15,27 +16,10 @@
 MythUIButtonTree::MythUIButtonTree(MythUIType *parent, const QString &name)
     : MythUIType(parent, name)
 {
-    m_initialized = false;
-
-    m_numLists = 1;
-    m_visibleLists = 0;
-    m_currentDepth = m_oldDepth = m_depthOffset = 0;
-    m_rootNode = m_currentNode = NULL;
-    m_listSpacing = 0;
-    m_activeList = NULL;
-    m_activeListID = 0;
-
-    m_active = true;
-
-    m_listTemplate = NULL;
     SetCanTakeFocus(true);
 
     connect(this, SIGNAL(TakingFocus()), this, SLOT(Select()));
     connect(this, SIGNAL(LosingFocus()), this, SLOT(Deselect()));
-}
-
-MythUIButtonTree::~MythUIButtonTree()
-{
 }
 
 /*!
@@ -66,7 +50,7 @@ void MythUIButtonTree::Init()
     while (i < (int)m_numLists)
     {
         QString listname = QString("buttontree list %1").arg(i);
-        MythUIButtonList *list = new MythUIButtonList(this, listname);
+        auto *list = new MythUIButtonList(this, listname);
         list->CopyFrom(m_listTemplate);
         list->SetVisible(false);
         list->SetActive(false);
@@ -121,7 +105,7 @@ void MythUIButtonTree::SetTreeState(bool refreshAll)
         list->SetVisible(false);
         list->SetActive(false);
 
-        MythGenericTree *selectedNode = NULL;
+        MythGenericTree *selectedNode = nullptr;
 
         if (node)
             selectedNode = node->getSelectedChild(true);
@@ -162,11 +146,11 @@ void MythUIButtonTree::SetTreeState(bool refreshAll)
  */
 bool MythUIButtonTree::UpdateList(MythUIButtonList *list, MythGenericTree *node)
 {
-    disconnect(list, 0, 0, 0);
+    disconnect(list, nullptr, nullptr, nullptr);
 
     list->Reset();
 
-    QList<MythGenericTree *> *nodelist = NULL;
+    QList<MythGenericTree *> *nodelist = nullptr;
 
     if (node)
         nodelist = node->getAllChildren();
@@ -176,7 +160,7 @@ bool MythUIButtonTree::UpdateList(MythUIButtonList *list, MythGenericTree *node)
 
     MythGenericTree *selectedNode = node->getSelectedChild(true);
 
-    MythUIButtonListItem *selectedItem = NULL;
+    MythUIButtonListItem *selectedItem = nullptr;
     QList<MythGenericTree *>::iterator it;
 
     for (it = nodelist->begin(); it != nodelist->end(); ++it)
@@ -247,10 +231,10 @@ bool MythUIButtonTree::AssignTree(MythGenericTree *tree)
  */
 void MythUIButtonTree::Reset(void)
 {
-    m_rootNode = m_currentNode = NULL;
+    m_rootNode = m_currentNode = nullptr;
     m_visibleLists = 0;
     m_currentDepth = m_oldDepth = 0;
-    m_activeList = NULL;
+    m_activeList = nullptr;
     m_activeListID = 0;
     m_active = true;
 
@@ -270,7 +254,7 @@ void MythUIButtonTree::Reset(void)
  */
 bool MythUIButtonTree::SetNodeById(QList<int> route)
 {
-    MythGenericTree *node = m_rootNode->findNode(route);
+    MythGenericTree *node = m_rootNode->findNode(std::move(route));
 
     if (node && node->isSelectable())
     {
@@ -294,7 +278,7 @@ bool MythUIButtonTree::SetNodeByString(QStringList route)
 {
     if (!m_rootNode)
     {
-        DoSetCurrentNode(NULL);
+        DoSetCurrentNode(nullptr);
         return false;
     }
 
@@ -403,7 +387,7 @@ void MythUIButtonTree::RemoveItem(MythUIButtonListItem *item, bool deleteNode)
     if (!item || !m_rootNode)
         return;
 
-    MythGenericTree *node = item->GetData().value<MythGenericTree *>();
+    auto *node = item->GetData().value<MythGenericTree *>();
 
     if (node && node->getParent())
     {
@@ -539,7 +523,7 @@ void MythUIButtonTree::handleSelect(MythUIButtonListItem *item)
     m_activeList = list;
 
 
-        MythGenericTree *node = item->GetData().value<MythGenericTree *> ();
+        auto *node = item->GetData().value<MythGenericTree *> ();
     DoSetCurrentNode(node);
     SetTreeState();
 }
@@ -554,7 +538,7 @@ void MythUIButtonTree::handleClick(MythUIButtonListItem *item)
     if (!item)
         return;
 
-    MythGenericTree *node = item->GetData().value<MythGenericTree *>();
+    auto *node = item->GetData().value<MythGenericTree *>();
 
     if (DoSetCurrentNode(node))
         emit itemClicked(item);
@@ -570,7 +554,7 @@ MythUIButtonListItem *MythUIButtonTree::GetItemCurrent() const
     if (m_activeList)
         return m_activeList->GetItemCurrent();
 
-    return NULL;
+    return nullptr;
 }
 
 /*!
@@ -649,7 +633,7 @@ bool MythUIButtonTree::gestureEvent(MythGestureEvent *event)
         if (!type)
             return false;
 
-        MythUIButtonList *list = dynamic_cast<MythUIButtonList *>(type);
+        auto *list = dynamic_cast<MythUIButtonList *>(type);
 
         if (list)
             handled = list->gestureEvent(event);
@@ -685,7 +669,7 @@ bool MythUIButtonTree::ParseElement(
  */
 void MythUIButtonTree::CreateCopy(MythUIType *parent)
 {
-    MythUIButtonTree *bt = new MythUIButtonTree(parent, objectName());
+    auto *bt = new MythUIButtonTree(parent, objectName());
     bt->CopyFrom(this);
 }
 
@@ -694,7 +678,7 @@ void MythUIButtonTree::CreateCopy(MythUIType *parent)
  */
 void MythUIButtonTree::CopyFrom(MythUIType *base)
 {
-    MythUIButtonTree *bt = dynamic_cast<MythUIButtonTree *>(base);
+    auto *bt = dynamic_cast<MythUIButtonTree *>(base);
 
     if (!bt)
         return;

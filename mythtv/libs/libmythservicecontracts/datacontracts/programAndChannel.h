@@ -30,7 +30,7 @@ class Program;
 class SERVICE_PUBLIC ChannelInfo : public QObject
 {
     Q_OBJECT
-    Q_CLASSINFO( "version", "2.0" );
+    Q_CLASSINFO( "version", "2.2" );
 
     // Q_CLASSINFO Used to augment Metadata for properties. 
     // See datacontracthelper.h for details
@@ -56,8 +56,12 @@ class SERVICE_PUBLIC ChannelInfo : public QObject
     Q_PROPERTY( bool      CommFree        READ CommFree       WRITE setCommFree       DESIGNABLE SerializeDetails )
     Q_PROPERTY( bool      UseEIT          READ UseEIT         WRITE setUseEIT         DESIGNABLE SerializeDetails )
     Q_PROPERTY( bool      Visible         READ Visible        WRITE setVisible        DESIGNABLE SerializeDetails )
+    Q_PROPERTY( QString   ExtendedVisible READ ExtendedVisible WRITE setExtendedVisible DESIGNABLE SerializeDetails )
     Q_PROPERTY( QString   XMLTVID         READ XMLTVID        WRITE setXMLTVID        DESIGNABLE SerializeDetails )
     Q_PROPERTY( QString   DefaultAuth     READ DefaultAuth    WRITE setDefaultAuth    DESIGNABLE SerializeDetails )
+    Q_PROPERTY( QString   ChannelGroups   READ ChannelGroups  WRITE setChannelGroups  DESIGNABLE SerializeDetails )
+    Q_PROPERTY( QString   Inputs          READ Inputs         WRITE setInputs         DESIGNABLE SerializeDetails )
+    Q_PROPERTY( uint      ServiceType     READ ServiceType    WRITE setServiceType    DESIGNABLE SerializeDetails )
 
     Q_PROPERTY( QVariantList Programs    READ Programs DESIGNABLE true )
 
@@ -79,10 +83,14 @@ class SERVICE_PUBLIC ChannelInfo : public QObject
     PROPERTYIMP       ( bool        , CommFree       )
     PROPERTYIMP       ( bool        , UseEIT         )
     PROPERTYIMP       ( bool        , Visible        )
+    PROPERTYIMP       ( QString     , ExtendedVisible )
     PROPERTYIMP       ( QString     , XMLTVID        )
     PROPERTYIMP       ( QString     , DefaultAuth    )
+    PROPERTYIMP       ( QString     , ChannelGroups  )
+    PROPERTYIMP       ( QString     , Inputs         )
+    PROPERTYIMP       ( uint        , ServiceType    )
 
-    PROPERTYIMP_RO_REF( QVariantList, Programs      )
+    PROPERTYIMP_RO_REF( QVariantList, Programs       )
 
     // Used only by Serializer
     PROPERTYIMP( bool, SerializeDetails )
@@ -91,9 +99,7 @@ class SERVICE_PUBLIC ChannelInfo : public QObject
 
         static void InitializeCustomTypes();
 
-    public:
-
-        ChannelInfo(QObject *parent = 0) 
+        Q_INVOKABLE explicit ChannelInfo(QObject *parent = nullptr)
             : QObject           ( parent ),
               m_ChanId          ( 0      ),
               m_MplexId         ( 0      ),
@@ -103,37 +109,36 @@ class SERVICE_PUBLIC ChannelInfo : public QObject
               m_FineTune        ( 0      ),
               m_SourceId        ( 0      ),
               m_InputId         ( 0      ),
-              m_CommFree        ( 0      ),
+              m_CommFree        ( false  ),
               m_UseEIT          ( false  ),
               m_Visible         ( true   ),
               m_SerializeDetails( true   )
         {
         }
-        
-        ChannelInfo( const ChannelInfo &src )
-        {
-            Copy( src );
-        }
 
-        void Copy( const ChannelInfo &src )
+        void Copy( const ChannelInfo *src )
         {
-            m_ChanId       = src.m_ChanId      ;
-            m_ChanNum      = src.m_ChanNum     ;
-            m_CallSign     = src.m_CallSign    ;
-            m_IconURL      = src.m_IconURL     ;
-            m_ChannelName  = src.m_ChannelName ;
-            m_ChanFilters  = src.m_ChanFilters ;
-            m_SourceId     = src.m_SourceId    ;
-            m_InputId      = src.m_InputId     ;
-            m_CommFree     = src.m_CommFree    ;
-            m_UseEIT       = src.m_UseEIT      ;
-            m_Visible      = src.m_Visible     ;
+            m_ChanId        = src->m_ChanId      ;
+            m_ChanNum       = src->m_ChanNum     ;
+            m_CallSign      = src->m_CallSign    ;
+            m_IconURL       = src->m_IconURL     ;
+            m_ChannelName   = src->m_ChannelName ;
+            m_ChanFilters   = src->m_ChanFilters ;
+            m_SourceId      = src->m_SourceId    ;
+            m_InputId       = src->m_InputId     ;
+            m_CommFree      = src->m_CommFree    ;
+            m_UseEIT        = src->m_UseEIT      ;
+            m_Visible       = src->m_Visible     ;
+            m_ChannelGroups = src->m_ChannelGroups;
+            m_Inputs        = src->m_Inputs;
 
-            CopyListContents< Program >( this, m_Programs, src.m_Programs );
+            CopyListContents< Program >( this, m_Programs, src->m_Programs );
         }
 
         Program *AddNewProgram();
 
+    private:
+        Q_DISABLE_COPY(ChannelInfo);
 };
 
 class SERVICE_PUBLIC Program : public QObject
@@ -220,15 +225,13 @@ class SERVICE_PUBLIC Program : public QObject
     PROPERTYIMP( bool, SerializeChannel )
     PROPERTYIMP( bool, SerializeRecording )
     PROPERTYIMP( bool, SerializeArtwork )
-    PROPERTYIMP( bool, SerializeCast )
+    PROPERTYIMP( bool, SerializeCast );
 
     public:
 
         static inline void InitializeCustomTypes();
 
-    public:
-
-        Program(QObject *parent = 0) 
+        Q_INVOKABLE explicit Program(QObject *parent = nullptr)
             : QObject               ( parent ),
               m_Repeat              ( false  ),
               m_Stars               ( 0      ),
@@ -240,10 +243,10 @@ class SERVICE_PUBLIC Program : public QObject
               m_Episode             ( 0      ),
               m_TotalEpisodes       ( 0      ),
               m_FileSize            ( 0      ), // DEPRECATED
-              m_Channel             ( NULL   ),
-              m_Recording           ( NULL   ),
-              m_Artwork             ( NULL   ),
-              m_Cast                ( NULL   ),
+              m_Channel             ( nullptr ),
+              m_Recording           ( nullptr ),
+              m_Artwork             ( nullptr ),
+              m_Cast                ( nullptr ),
               m_SerializeDetails    ( true   ),
               m_SerializeChannel    ( true   ),
               m_SerializeRecording  ( true   ),
@@ -252,56 +255,51 @@ class SERVICE_PUBLIC Program : public QObject
         {
         }
 
-        Program( const Program &src )
+        void Copy( const Program *src )
         {
-            Copy( src );
-        }
-
-        void Copy( const Program &src )
-        {
-            m_StartTime         = src.m_StartTime;
-            m_EndTime           = src.m_EndTime;
-            m_Title             = src.m_Title;
-            m_SubTitle          = src.m_SubTitle;
-            m_Category          = src.m_Category;
-            m_CatType           = src.m_CatType;
-            m_Repeat            = src.m_Repeat;
-            m_SeriesId          = src.m_SeriesId;
-            m_ProgramId         = src.m_ProgramId;
-            m_Stars             = src.m_Stars;
-            m_LastModified      = src.m_LastModified;
-            m_ProgramFlags      = src.m_ProgramFlags;
-            m_VideoProps        = src.m_VideoProps;
-            m_AudioProps        = src.m_AudioProps;
-            m_SubProps          = src.m_SubProps;
-            m_Airdate           = src.m_Airdate;
-            m_Description       = src.m_Description;
-            m_Inetref           = src.m_Inetref;
-            m_Season            = src.m_Season;
-            m_Episode           = src.m_Episode;
-            m_TotalEpisodes     = src.m_TotalEpisodes;
+            m_StartTime         = src->m_StartTime;
+            m_EndTime           = src->m_EndTime;
+            m_Title             = src->m_Title;
+            m_SubTitle          = src->m_SubTitle;
+            m_Category          = src->m_Category;
+            m_CatType           = src->m_CatType;
+            m_Repeat            = src->m_Repeat;
+            m_SeriesId          = src->m_SeriesId;
+            m_ProgramId         = src->m_ProgramId;
+            m_Stars             = src->m_Stars;
+            m_LastModified      = src->m_LastModified;
+            m_ProgramFlags      = src->m_ProgramFlags;
+            m_VideoProps        = src->m_VideoProps;
+            m_AudioProps        = src->m_AudioProps;
+            m_SubProps          = src->m_SubProps;
+            m_Airdate           = src->m_Airdate;
+            m_Description       = src->m_Description;
+            m_Inetref           = src->m_Inetref;
+            m_Season            = src->m_Season;
+            m_Episode           = src->m_Episode;
+            m_TotalEpisodes     = src->m_TotalEpisodes;
             // DEPRECATED
-            m_FileSize          = src.m_FileSize;
-            m_FileName          = src.m_FileName;
-            m_HostName          = src.m_HostName;
+            m_FileSize          = src->m_FileSize;
+            m_FileName          = src->m_FileName;
+            m_HostName          = src->m_HostName;
             // ----
-            m_SerializeDetails  = src.m_SerializeDetails;
-            m_SerializeChannel  = src.m_SerializeChannel;    
-            m_SerializeRecording= src.m_SerializeRecording;  
-            m_SerializeArtwork  = src.m_SerializeArtwork;
-            m_SerializeCast     = src.m_SerializeCast;
+            m_SerializeDetails  = src->m_SerializeDetails;
+            m_SerializeChannel  = src->m_SerializeChannel;
+            m_SerializeRecording= src->m_SerializeRecording;
+            m_SerializeArtwork  = src->m_SerializeArtwork;
+            m_SerializeCast     = src->m_SerializeCast;
 
-            if ( src.m_Channel != NULL)
-                Channel()->Copy( src.m_Channel );
+            if ( src->m_Channel != nullptr)
+                Channel()->Copy( src->m_Channel );
 
-            if ( src.m_Recording != NULL)
-                Recording()->Copy( src.m_Recording );
+            if ( src->m_Recording != nullptr)
+                Recording()->Copy( src->m_Recording );
 
-            if ( src.m_Artwork != NULL)
-                Artwork()->Copy( src.m_Artwork );
+            if ( src->m_Artwork != nullptr)
+                Artwork()->Copy( src->m_Artwork );
 
-            if (src.m_Cast != NULL)
-                Cast()->Copy( src.m_Cast );
+            if (src->m_Cast != nullptr)
+                Cast()->Copy( src->m_Cast );
         }
 
 };
@@ -311,48 +309,37 @@ inline Program *ChannelInfo::AddNewProgram()
     // We must make sure the object added to the QVariantList has
     // a parent of 'this'
 
-    Program *pObject = new Program( this );
+    auto *pObject = new Program( this );
     m_Programs.append( QVariant::fromValue<QObject *>( pObject ));
 
     return pObject;
 }
 
-} // namespace DTC
-
-Q_DECLARE_METATYPE( DTC::Program  )
-Q_DECLARE_METATYPE( DTC::Program* )
-
-Q_DECLARE_METATYPE( DTC::ChannelInfo  )
-Q_DECLARE_METATYPE( DTC::ChannelInfo* )
-
-namespace DTC
-{
 inline void ChannelInfo::InitializeCustomTypes()
 {
-    qRegisterMetaType< ChannelInfo  >();
     qRegisterMetaType< ChannelInfo* >();
 
-    if (QMetaType::type( "DTC::Program" ) == 0)
+    if (QMetaType::type( "DTC::Program*" ) == 0)
         Program::InitializeCustomTypes();
 }
 
 inline void Program::InitializeCustomTypes()
 {
-    qRegisterMetaType< Program  >();
     qRegisterMetaType< Program* >();
 
-    if (QMetaType::type( "DTC::ChannelInfo" ) == 0)
+    if (QMetaType::type( "DTC::ChannelInfo*" ) == 0)
         ChannelInfo::InitializeCustomTypes();
 
-    if (QMetaType::type( "DTC::RecordingInfo" ) == 0)
+    if (QMetaType::type( "DTC::RecordingInfo*" ) == 0)
         RecordingInfo::InitializeCustomTypes();
 
-    if (QMetaType::type( "DTC::ArtworkInfoList" ) == 0)
+    if (QMetaType::type( "DTC::ArtworkInfoList*" ) == 0)
         ArtworkInfoList::InitializeCustomTypes();
 
-     if (QMetaType::type( "DTC::CastMemberList" ) == 0)
+     if (QMetaType::type( "DTC::CastMemberList*" ) == 0)
         CastMemberList::InitializeCustomTypes();
 }
-}
+
+} // namespace DTC
 
 #endif

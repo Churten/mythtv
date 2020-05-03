@@ -1,9 +1,15 @@
 #ifndef JITTEROMETER_H
 #define JITTEROMETER_H
 
+// Qt
 #include <QVector>
 #include <QFile>
+
+// MythTV
 #include "mythtvexp.h"
+
+// Std
+#include <sys/time.h>
 
 /* Jitterometer usage. There are 2 ways to use this:
 ------------------------------------------------------------------
@@ -37,12 +43,16 @@
 class MTV_PUBLIC Jitterometer
 {
   public:
-    Jitterometer(const QString &nname, int num_cycles = 0);
+    explicit Jitterometer(QString nname, int ncycles = 0);
    ~Jitterometer();
 
-    float GetLastFPS(void) const { return last_fps; }
-    float GetLastSD(void) const { return last_sd;  }
-    QString GetLastCPUStats(void) const { return lastcpustats; }
+    // Deleted functions should be public.
+    Jitterometer(const Jitterometer &) = delete;            // not copyable
+    Jitterometer &operator=(const Jitterometer &) = delete; // not copyable
+
+    float GetLastFPS(void) const { return m_lastFps; }
+    float GetLastSD(void) const { return m_lastSd;  }
+    QString GetLastCPUStats(void) const { return m_lastCpuStats; }
     void SetNumCycles(int cycles);
     bool RecordCycleTime();
     void RecordStartTime();
@@ -50,17 +60,17 @@ class MTV_PUBLIC Jitterometer
     QString GetCPUStat(void);
 
  private:
-    int count;
-    int num_cycles;
-    struct timeval starttime;
-    int starttime_valid;
-    QVector<uint> times; // array of cycle lengths, in uS
-    float last_fps;
-    float last_sd;
-    QString name;
-    QFile *cpustat;
-    unsigned long long *laststats;
-    QString lastcpustats;
+    int                 m_count           {0};
+    int                 m_numCycles;
+    struct timeval      m_starttime       {0,0};
+    bool                m_starttimeValid  {false};
+    QVector<uint>       m_times; // array of cycle lengths, in uS
+    float               m_lastFps         {0};
+    float               m_lastSd          {0};
+    QString             m_name;
+    QFile              *m_cpuStat         {nullptr};
+    unsigned long long *m_lastStats       {nullptr};
+    QString             m_lastCpuStats;
 };
 
 #endif // JITTEROMETER_H

@@ -19,9 +19,11 @@
 
 using namespace std;
 
+// Based on MediaPlayCallback.  Parameters only seem to have local significance.
 static int handleMedia(const QString &url, const QString &directory, const QString &filename,
-                       const QString &, const QString &, int, int, const QString &, int,
-                       const QString &, const QString &, bool)
+                       const QString & /*unused*/, const QString & /*unused*/, int /*unused*/,
+                       int /*unused*/, const QString & /*unused*/, int /*unused*/,
+                       const QString & /*unused*/, const QString & /*unused*/, bool /*unused*/)
 {
     if (url.isEmpty())
     {
@@ -35,7 +37,7 @@ static int handleMedia(const QString &url, const QString &directory, const QStri
 
     if (urls[0].startsWith("mythflash://"))
     {
-        MythFlashPlayer *flashplayer = new MythFlashPlayer(mainStack, urls);
+        auto *flashplayer = new MythFlashPlayer(mainStack, urls);
         if (flashplayer->Create())
             mainStack->AddScreen(flashplayer);
         else
@@ -43,7 +45,7 @@ static int handleMedia(const QString &url, const QString &directory, const QStri
     }
     else
     {
-        MythBrowser *mythbrowser = new MythBrowser(mainStack, urls);
+        auto *mythbrowser = new MythBrowser(mainStack, urls);
 
         if (!directory.isEmpty())
             mythbrowser->setDefaultSaveDirectory(directory);
@@ -93,8 +95,7 @@ static void runHomepage()
         MythScreenStack *m_popupStack =
                 GetMythMainWindow()->GetStack("popup stack");
 
-        MythConfirmationDialog *okPopup =
-                new MythConfirmationDialog(m_popupStack, message, false);
+        auto *okPopup = new MythConfirmationDialog(m_popupStack, message, false);
 
         if (okPopup->Create())
             m_popupStack->AddScreen(okPopup);
@@ -119,7 +120,8 @@ static void setupKeys(void)
 
 int mythplugin_init(const char *libversion)
 {
-    if (!gCoreContext->TestPluginVersion("mythbrowser", libversion, MYTH_BINARY_VERSION))
+    if (!MythCoreContext::TestPluginVersion("mythbrowser", libversion,
+                                            MYTH_BINARY_VERSION))
         return -1;
 
     UpgradeBrowserDatabaseSchema();
@@ -143,34 +145,28 @@ int mythplugin_run(void)
 {
     MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
 
-    BookmarkManager *manager = new BookmarkManager(mainStack, "bookmarkmanager");
+    auto *manager = new BookmarkManager(mainStack, "bookmarkmanager");
 
     if (manager->Create())
     {
         mainStack->AddScreen(manager);
         return 0;
     }
-    else
-    {
-        delete manager;
-        return -1;
-    }
+    delete manager;
+    return -1;
 }
 
 int mythplugin_config(void)
 {
     MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
 
-    BrowserConfig *config = new BrowserConfig(mainStack, "browserconfig");
+    auto *config = new BrowserConfig(mainStack, "browserconfig");
 
     if (config->Create())
     {
         mainStack->AddScreen(config);
         return 0;
     }
-    else
-    {
-        delete config;
-        return -1;
-    }
+    delete config;
+    return -1;
 }

@@ -34,8 +34,9 @@ class MythExternRecApp : public QObject
     Q_OBJECT
 
   public:
-    MythExternRecApp(const QString & command, const QString & conf_file);
-    ~MythExternRecApp(void);
+    MythExternRecApp(QString command,  QString conf_file,
+                     QString log_file, QString logging);
+    ~MythExternRecApp(void) override;
 
     bool Open(void);
     void Run(void);
@@ -68,53 +69,63 @@ class MythExternRecApp : public QObject
     void StopStreaming(const QString & serial, bool silent);
     void LockTimeout(const QString & serial);
     void HasTuner(const QString & serial);
+    void Cleanup(void);
     void LoadChannels(const QString & serial);
     void FirstChannel(const QString & serial);
     void NextChannel(const QString & serial);
 
     void TuneChannel(const QString & serial, const QString & channum);
+    void TuneStatus(const QString & serial);
     void HasPictureAttributes(const QString & serial);
     void SetBlockSize(const QString & serial, int blksz);
 
   protected:
     void GetChannel(const QString & serial, const QString & func);
+    void TerminateProcess(QProcess & proc, const QString & desc);
 
   private:
     bool config(void);
 
-    bool      m_fatal;
+    bool                    m_fatal        { false };
 
-    std::atomic<bool>       m_run;
-    std::condition_variable m_run_cond;
-    std::mutex              m_run_mutex;
-    std::atomic<bool>       m_streaming;
-    int       m_result;
+    std::atomic<bool>       m_run          { true };
+    std::condition_variable m_runCond;
+    std::mutex              m_runMutex;
+    std::atomic<bool>       m_streaming    { false };
+    int                     m_result       { 0 };
 
-    uint      m_buffer_max;
-    uint      m_block_size;
+    uint                    m_bufferMax    { 188 * 10000 };
+    uint                    m_blockSize    { m_bufferMax / 4 };
 
-    QProcess  m_proc;
-    QString   m_command;
+    QProcess                m_proc;
+    QString                 m_command;
+    QString                 m_cleanup;
 
-    QString   m_rec_command;
-    QString   m_rec_desc;
+    QString                 m_recCommand;
+    QString                 m_recDesc;
 
-    QString   m_tune_command;
-    QString   m_channels_ini;
-    uint      m_lock_timeout;
+    QMap<QString, QString>  m_appEnv;
 
-    QString   m_scan_command;
-    uint      m_scan_timeout;
+    QProcess                m_tuneProc;
+    QString                 m_tuneCommand;
+    QString                 m_channelsIni;
+    uint                    m_lockTimeout  { 0 };
 
-    QString   m_config_ini;
-    QString   m_desc;
+    QString                 m_scanCommand;
+    uint                    m_scanTimeout  { 120000 };
 
-    bool      m_tuned;
+    QString                 m_logFile;
+    QString                 m_logging;
+    QString                 m_configIni;
+    QString                 m_desc;
+
+    QString                 m_tuningChannel;
+    QString                 m_tunedChannel;
 
     // Channel scanning
-    QSettings  *m_chan_settings;
-    QStringList m_channels;
-    int         m_channel_idx;
+    QSettings              *m_chanSettings { nullptr };
+    QStringList             m_channels;
+    int                     m_channelIdx   { -1 };
 
 };
 

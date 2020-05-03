@@ -20,25 +20,10 @@
 
 using namespace std;
 
-MythPlugin::MythPlugin(const QString &libname, const QString &plugname)
-          : QLibrary(libname), m_plugName(plugname)
-{
-    enabled = true;
-    position = 0;
-}
-
-MythPlugin::~MythPlugin()
-{
-    // Commented out because it causes segfaults... dtk 2008-10-08
-    //if (isLoaded())
-    //    unload();
-}
-
 int MythPlugin::init(const char *libversion)
 {
-    typedef int (*PluginInitFunc)(const char *);
-    PluginInitFunc ifunc = (PluginInitFunc)QLibrary::resolve("mythplugin_init");
-
+    using PluginInitFunc = int (*)(const char *);
+    auto ifunc = (PluginInitFunc)QLibrary::resolve("mythplugin_init");
     if (ifunc)
         return ifunc(libversion);
 
@@ -58,10 +43,10 @@ int MythPlugin::init(const char *libversion)
 
 int MythPlugin::run(void)
 {
-    typedef int (*PluginRunFunc)();
+    using PluginRunFunc = int (*)();
 
-    int           rVal  = -1;
-    PluginRunFunc rfunc = (PluginRunFunc)QLibrary::resolve("mythplugin_run");
+    int rVal = -1;
+    auto rfunc = (PluginRunFunc)QLibrary::resolve("mythplugin_run");
 
     if (rfunc)
         rVal = rfunc();
@@ -71,11 +56,10 @@ int MythPlugin::run(void)
 
 int MythPlugin::config(void)
 {
-    typedef int (*PluginConfigFunc)();
+    using PluginConfigFunc = int (*)();
 
-    int              rVal  = -1;
-    PluginConfigFunc rfunc = (PluginConfigFunc)QLibrary::resolve(
-                                                   "mythplugin_config");
+    int rVal  = -1;
+    auto rfunc = (PluginConfigFunc)QLibrary::resolve("mythplugin_config");
 
     if (rfunc)
     {
@@ -88,8 +72,8 @@ int MythPlugin::config(void)
 
 MythPluginType MythPlugin::type(void)
 {
-    typedef MythPluginType (*PluginTypeFunc)();
-    PluginTypeFunc rfunc = (PluginTypeFunc)QLibrary::resolve("mythplugin_type");
+    using PluginTypeFunc = MythPluginType (*)();
+    auto rfunc = (PluginTypeFunc)QLibrary::resolve("mythplugin_type");
 
     if (rfunc)
         return rfunc();
@@ -99,8 +83,8 @@ MythPluginType MythPlugin::type(void)
 
 void MythPlugin::destroy(void)
 {
-    typedef void (*PluginDestFunc)();
-    PluginDestFunc rfunc = (PluginDestFunc)QLibrary::resolve("mythplugin_destroy");
+    using PluginDestFunc = void (*)();
+    PluginDestFunc rfunc = QLibrary::resolve("mythplugin_destroy");
 
     if (rfunc)
         rfunc();
@@ -126,11 +110,8 @@ MythPluginManager::MythPluginManager()
             LOG(VB_GENERAL, LOG_WARNING,
                     "No libraries in plugins directory " + filterDir.path());
 
-        for (QStringList::iterator i = libraries.begin(); i != libraries.end();
-             ++i)
+        foreach (auto library, libraries)
         {
-            QString library = *i;
-
             // pull out the base library name
             library = library.right(library.length() - prefixLength);
             library = library.left(library.length() - suffixLength);
@@ -141,10 +122,6 @@ MythPluginManager::MythPluginManager()
     else
         LOG(VB_GENERAL, LOG_WARNING,
                  "No plugins directory " + filterDir.path());
-}
-
-MythPluginManager::~MythPluginManager()
-{
 }
 
 bool MythPluginManager::init_plugin(const QString &plugname)
@@ -173,7 +150,7 @@ bool MythPluginManager::init_plugin(const QString &plugname)
     {
         case kPluginType_Module:
         default:
-            moduleMap[newname] = m_dict[newname];
+            m_moduleMap[newname] = m_dict[newname];
             break;
     }
 
@@ -236,30 +213,28 @@ MythPlugin *MythPluginManager::GetPlugin(const QString &plugname)
 {
     QString newname = FindPluginName(plugname);
 
-    if (moduleMap.find(newname) == moduleMap.end())
-        return NULL;
+    if (m_moduleMap.find(newname) == m_moduleMap.end())
+        return nullptr;
 
-    return moduleMap[newname];
+    return m_moduleMap[newname];
 }
 
 void MythPluginManager::DestroyAllPlugins(void)
 {
-    QHash<QString, MythPlugin*>::iterator it = m_dict.begin();
-    for (; it != m_dict.end(); ++it)
+    foreach (auto & it, m_dict)
     {
-        (*it)->destroy();
-        delete *it;
+        it->destroy();
+        delete it;
     }
 
     m_dict.clear();
-    moduleMap.clear();
+    m_moduleMap.clear();
 }
 
 QStringList MythPluginManager::EnumeratePlugins(void)
 {
     QStringList ret;
-    QHash<QString, MythPlugin*>::const_iterator it = m_dict.begin();
-    for (; it != m_dict.end(); ++it)
-        ret << (*it)->getName();
+    foreach (auto it, m_dict)
+        ret << it->getName();
     return ret;
 }

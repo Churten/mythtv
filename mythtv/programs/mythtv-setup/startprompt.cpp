@@ -16,10 +16,10 @@ struct StartPrompterPrivate
 {
     StartPrompterPrivate()
     {
-        stk = GetMythMainWindow()->GetStack("popup stack");
+        m_stk = GetMythMainWindow()->GetStack("popup stack");
     }
 
-    MythScreenStack *stk;
+    MythScreenStack *m_stk;
 };
 
 StartPrompter::StartPrompter()
@@ -35,7 +35,7 @@ StartPrompter::~StartPrompter()
 void StartPrompter::handleStart()
 {
     // Offer to stop the backend if sensible
-    if (gCoreContext->BackendIsRunning() && gCoreContext->IsMasterHost())
+    if (MythCoreContext::BackendIsRunning() && gCoreContext->IsMasterHost())
     {
         backendRunningPrompt();
     }    
@@ -66,7 +66,7 @@ void StartPrompter::backendRunningPrompt(void)
     if (!gCoreContext->IsConnectedToMaster() &&
         gCoreContext->ConnectToMasterServer(false))
     {
-        backendIsRecording = RemoteGetRecordingStatus(NULL, false);
+        backendIsRecording = RemoteGetRecordingStatus(nullptr, false);
     }
     
     QString warning = tr("WARNING: The backend is currently running.")+"\n\n"+
@@ -82,19 +82,20 @@ void StartPrompter::backendRunningPrompt(void)
         warning += tr("Recording Status: None.");
     }
 
-    MythDialogBox *dia = new MythDialogBox(warning, m_d->stk, "actionmenu");
+    auto *dia = new MythDialogBox(warning, m_d->m_stk, "actionmenu");
 
     if (!dia->Create())
     {
         LOG(VB_GENERAL, LOG_ERR, "Can't create Prompt dialog?");
         delete dia;
         quit();
+        return;
     }
 
     // This is a hack so that the button clicks target the correct slot:
     dia->SetReturnEvent(this, QString());
 
-    m_d->stk->AddScreen(dia);
+    m_d->m_stk->AddScreen(dia);
 
     QString commandString = gCoreContext->GetSetting("BackendStopCommand");
     if (!commandString.isEmpty())

@@ -31,13 +31,13 @@ class ImportIconsWizard : public MythScreenType
 
   public:
     ImportIconsWizard(MythScreenStack *parent, bool fRefresh,
-                      const QString &channelname = "");
-   ~ImportIconsWizard();
+                      QString channelname = "");
+   ~ImportIconsWizard() override;
 
-    bool Create(void);
-    void Load(void);
-//    bool keyPressEvent(QKeyEvent *);
-    void customEvent(QEvent *event);
+    bool Create(void) override; // MythScreenType
+    void Load(void) override; // MythScreenType
+//    bool keyPressEvent(QKeyEvent *) override; // MythScreenType
+    void customEvent(QEvent *event) override; // MythUIType
 
     struct SearchEntry               //! search entry results
     {
@@ -70,9 +70,9 @@ class ImportIconsWizard : public MythScreenType
         QString strNameCSV;          //!< name (csv form)
     };
     //! List of CSV entries
-    typedef QList<CSVEntry> ListEntries;
+    using ListEntries = QList<CSVEntry>;
     //! iterator over list of CSV entries
-    typedef QList<CSVEntry>::Iterator ListEntriesIter;
+    using ListEntriesIter = QList<CSVEntry>::Iterator;
 
     ListEntries m_listEntries;       //!< list of TV channels to search for
     ListEntries m_missingEntries;    //!< list of TV channels with no unique icon
@@ -80,37 +80,37 @@ class ImportIconsWizard : public MythScreenType
     ListEntriesIter m_missingIter;
 
     //! List of SearchEntry entries
-    typedef QList<SearchEntry> ListSearchEntries;
+    using ListSearchEntries = QList<SearchEntry>;
     //! iterator over list of SearchEntry entries
-    typedef QList<SearchEntry>::Iterator ListSearchEntriesIter;
+    using ListSearchEntriesIter = QList<SearchEntry>::Iterator;
 
     /*! \brief changes a string into csv format
      * \param str the string to change
      * \return the actual string
      */
-    QString escape_csv(const QString& str);
+    static QString escape_csv(const QString& str);
 
     /*! \brief extracts the csv values out of a string
-     * \param str the string to work on
+     * \param strLine the string to work on
      * \return the actual QStringList
      */
-    QStringList extract_csv(const QString& strLine);
+    static QStringList extract_csv(const QString& strLine);
 
     /*! \brief use the equivalent of wget to fetch the POST command
      * \param url the url to send this to
      * \param strParam the string to send
      * \return the actual string
      */
-    QString wget(QUrl& url,const QString& strParam);
+    static QString wget(QUrl& url,const QString& strParam);
 
     /*! \brief looks up the string to determine the caller/xmltvid
-     * \param str the string to work on
+     * \param strParam the string to work on
      * \return true/false
      */
     bool lookup(const QString& strParam);
 
     /*! \brief search the remote db for icons etc
-     * \param str the string to work on
+     * \param strParam the string to work on
      * \return true/false
      */
     bool search(const QString& strParam);
@@ -121,7 +121,7 @@ class ImportIconsWizard : public MythScreenType
     bool submit();
 
     /*! \brief retrieve the actual logo for the TV channel
-     * \param str the string to work on
+     * \param strParam str the string to work on
      * \return true/false
      */
     bool findmissing(const QString& strParam);
@@ -137,7 +137,7 @@ class ImportIconsWizard : public MythScreenType
     /*! \brief attempt the inital load of the TV channel information
      * \return true if successful
      */
-    bool initialLoad(QString name="");
+    bool initialLoad(const QString& name="");
 
     /*! \brief attempts to move the iteration on one/more than one
      * \return true if we can go again or false if we cannot
@@ -145,18 +145,18 @@ class ImportIconsWizard : public MythScreenType
     bool doLoad();
 
   protected slots:
-    void enableControls(dialogState state=STATE_NORMAL, bool selectEnabled=true);         //!< enable/disable the controls
+    void enableControls(dialogState state=STATE_NORMAL);         //!< enable/disable the controls
     void manualSearch();           //!< process the manual search
-    void menuSelection(MythUIButtonListItem *);//!< process the icon selection
+    void menuSelection(MythUIButtonListItem *item);//!< process the icon selection
     void skip();                   //!< skip this icon
     void askSubmit(const QString& strParam);
-    void Close();
+    void Close() override; // MythScreenType
 
   private slots:
     void itemChanged(MythUIButtonListItem *item);
 
   protected:
-    void Init(void);
+    void Init(void) override; // MythScreenType
 
   private:
     ListSearchEntries m_listSearch;  //!< the list of SearchEntry
@@ -166,29 +166,30 @@ class ImportIconsWizard : public MythScreenType
     QString m_strChannelname;        //!< the channel name if searching for a single channel icon
     QString m_strParam;
 
-    bool m_fRefresh;                 //!< are we doing a refresh or not
-    int m_nMaxCount;                 //!< the maximum number of TV channels
-    int m_nCount;                    //!< the current search point (0..m_nMaxCount)
-    int m_missingMaxCount;           //!< the total number of missing icons
-    int m_missingCount;              //!< the current search point (0..m_missingCount)
+    bool m_fRefresh       {false};   //!< are we doing a refresh or not
+    int m_nMaxCount       {0};       //!< the maximum number of TV channels
+    int m_nCount          {0};       //!< the current search point (0..m_nMaxCount)
+    int m_missingMaxCount {0};       //!< the total number of missing icons
+    int m_missingCount    {0};       //!< the current search point (0..m_missingCount)
 
-    const QString m_url;        //!< the default url
+                        //!< the default url
+    const QString m_url {"http://services.mythtv.org/channel-icon/"}; 
     QDir m_tmpDir;
 
     void startDialog();
 
-    MythScreenStack    *m_popupStack;
-    MythUIProgressDialog *m_progressDialog;
+    MythScreenStack      *m_popupStack     {nullptr};
+    MythUIProgressDialog *m_progressDialog {nullptr};
 
-    MythUIButtonList *m_iconsList;    //!< list of potential icons
-    MythUITextEdit   *m_manualEdit;  //!< manual edit field
-    MythUIText       *m_nameText;    //!< name field for the icon
-    MythUIButton     *m_manualButton;  //!< manual button field
-    MythUIButton     *m_skipButton;    //!< button skip
-    MythUIText       *m_statusText;
+    MythUIButtonList     *m_iconsList      {nullptr}; //!< list of potential icons
+    MythUITextEdit       *m_manualEdit     {nullptr}; //!< manual edit field
+    MythUIText           *m_nameText       {nullptr}; //!< name field for the icon
+    MythUIButton         *m_manualButton   {nullptr}; //!< manual button field
+    MythUIButton         *m_skipButton     {nullptr}; //!< button skip
+    MythUIText           *m_statusText     {nullptr};
 
-    MythUIImage      *m_preview;
-    MythUIText       *m_previewtitle;
+    MythUIImage          *m_preview        {nullptr};
+    MythUIText           *m_previewtitle   {nullptr};
 
 };
 

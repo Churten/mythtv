@@ -2,11 +2,10 @@
 #define _PROGRAMDATA_H_
 
 // C++ headers
+#include <cstdint>
+#include <utility>
 #include <vector>
 using namespace std;
-
-// POSIX headers
-#include <stdint.h>
 
 // Qt headers
 #include <QString>
@@ -26,7 +25,7 @@ class MSqlQuery;
 class MTV_PUBLIC DBPerson
 {
   public:
-    typedef enum
+    enum Role
     {
         kUnknown = 0,
         kActor,
@@ -40,11 +39,11 @@ class MTV_PUBLIC DBPerson
         kPresenter,
         kCommentator,
         kGuest,
-    } Role;
+    };
 
-    DBPerson(const DBPerson&);
-    DBPerson(Role _role, const QString &_name);
-    DBPerson(const QString &_role, const QString &_name);
+    DBPerson(const DBPerson &other);
+    DBPerson(Role _role, QString _name);
+    DBPerson(const QString &_role, QString _name);
 
     QString GetRole(void) const;
 
@@ -58,135 +57,107 @@ class MTV_PUBLIC DBPerson
                          const QDateTime &starttime) const;
 
   private:
-    Role    role;
-    QString name;
+    Role    m_role;
+    QString m_name;
 };
-typedef vector<DBPerson> DBCredits;
+using DBCredits = vector<DBPerson>;
 
 class MTV_PUBLIC EventRating
 {
   public:
-    QString system;
-    QString rating;
+    QString m_system;
+    QString m_rating;
 };
 
 class MTV_PUBLIC DBEvent
 {
   public:
-    DBEvent(uint _listingsource) :
-        title(),
-        subtitle(),
-        description(),
-        category(),
-        /*starttime, endtime,*/
-        airdate(0),
-        credits(NULL),
-        partnumber(0),
-        parttotal(0),
-        syndicatedepisodenumber(),
-        subtitleType(0),
-        audioProps(0),
-        videoProps(0),
-        stars(0.0),
-        categoryType(ProgramInfo::kCategoryNone),
-        seriesId(),
-        programId(),
-        inetref(),
-        previouslyshown(false),
-        listingsource(_listingsource),
-        season(0),
-        episode(0),
-        totalepisodes(0) {}
+    explicit DBEvent(uint listingsource) :
+        m_listingsource(listingsource) {}
 
-    DBEvent(const QString   &_title,     const QString   &_subtitle,
-            const QString   &_desc,
-            const QString   &_category,  ProgramInfo::CategoryType _category_type,
-            const QDateTime &_start,     const QDateTime &_end,
+    DBEvent(QString   _title,     QString _subtitle,
+            QString   _desc,
+            QString   _category,  ProgramInfo::CategoryType _category_type,
+            QDateTime _start,     QDateTime _end,
             unsigned char    _subtitleType,
             unsigned char    _audioProps,
             unsigned char    _videoProps,
             float            _stars,
-            const QString   &_seriesId,  const QString   &_programId,
+            QString          _seriesId,  QString _programId,
             uint32_t         _listingsource,
             uint _season,                uint _episode,
             uint _totalepisodes ) :
-        title(_title),           subtitle(_subtitle),
-        description(_desc),
-        category(_category),
-        starttime(_start),       endtime(_end),
-        airdate(0),
-        credits(NULL),
-        partnumber(0),           parttotal(0),
-        syndicatedepisodenumber(),
-        subtitleType(_subtitleType),
-        audioProps(_audioProps), videoProps(_videoProps),
-        stars(_stars),
-        categoryType(_category_type),
-        seriesId(_seriesId),
-        programId(_programId),
-        inetref(),
-        previouslyshown(false),
-        listingsource(_listingsource),
-        season(_season),
-        episode(_episode),
-        totalepisodes(_totalepisodes)
+        m_title(std::move(_title)),           m_subtitle(std::move(_subtitle)),
+        m_description(std::move(_desc)),
+        m_category(std::move(_category)),
+        m_starttime(std::move(_start)),       m_endtime(std::move(_end)),
+        m_subtitleType(_subtitleType),
+        m_audioProps(_audioProps), m_videoProps(_videoProps),
+        m_stars(_stars),
+        m_categoryType(_category_type),
+        m_seriesId(std::move(_seriesId)),
+        m_programId(std::move(_programId)),
+        m_listingsource(_listingsource),
+        m_season(_season),
+        m_episode(_episode),
+        m_totalepisodes(_totalepisodes)
     {
     }
 
-    virtual ~DBEvent() { delete credits; }
+    virtual ~DBEvent() { delete m_credits; }
 
-    void AddPerson(DBPerson::Role, const QString &name);
+    void AddPerson(DBPerson::Role role, const QString &name);
     void AddPerson(const QString &role, const QString &name);
 
     uint UpdateDB(MSqlQuery &query, uint chanid, int match_threshold) const;
 
-    bool HasCredits(void) const { return credits; }
+    bool HasCredits(void) const { return m_credits; }
     bool HasTimeConflict(const DBEvent &other) const;
 
-    DBEvent &operator=(const DBEvent&);
+    DBEvent &operator=(const DBEvent &other);
 
   protected:
     uint GetOverlappingPrograms(
-        MSqlQuery&, uint chanid, vector<DBEvent> &programs) const;
+        MSqlQuery &query, uint chanid, vector<DBEvent> &programs) const;
     int  GetMatch(
         const vector<DBEvent> &programs, int &bestmatch) const;
     uint UpdateDB(
-        MSqlQuery&, uint chanid, const vector<DBEvent> &p, int match) const;
+        MSqlQuery &q, uint chanid, const vector<DBEvent> &p, int match) const;
     uint UpdateDB(
-        MSqlQuery&, uint chanid, const DBEvent &match) const;
+        MSqlQuery &query, uint chanid, const DBEvent &match) const;
     bool MoveOutOfTheWayDB(
-        MSqlQuery&, uint chanid, const DBEvent &nonmatch) const;
-    virtual uint InsertDB(MSqlQuery&, uint chanid) const;
+        MSqlQuery &query, uint chanid, const DBEvent &prog) const;
+    virtual uint InsertDB(MSqlQuery &query, uint chanid) const;
     virtual void Squeeze(void);
 
   public:
-    QString       title;
-    QString       subtitle;
-    QString       description;
-    QString       category;
-    QDateTime     starttime;
-    QDateTime     endtime;
-    uint16_t      airdate;          ///< movie year / production year
-    QDate         originalairdate;  ///< origial broadcast date
-    DBCredits    *credits;
-    uint16_t      partnumber;
-    uint16_t      parttotal;
-    QString       syndicatedepisodenumber;
-    unsigned char subtitleType;
-    unsigned char audioProps;
-    unsigned char videoProps;
-    float         stars;
-    ProgramInfo::CategoryType categoryType;
-    QString       seriesId;
-    QString       programId;
-    QString       inetref;
-    bool          previouslyshown;
-    uint32_t      listingsource;
-    QList<EventRating> ratings;
-    QStringList   genres;
-    uint          season;
-    uint          episode;
-    uint          totalepisodes;
+    QString                   m_title;
+    QString                   m_subtitle;
+    QString                   m_description;
+    QString                   m_category;
+    QDateTime                 m_starttime;
+    QDateTime                 m_endtime;
+    uint16_t                  m_airdate         {0}; ///< movie year / production year
+    QDate                     m_originalairdate;     ///< origial broadcast date
+    DBCredits                *m_credits         {nullptr};
+    uint16_t                  m_partnumber      {0};
+    uint16_t                  m_parttotal       {0};
+    QString                   m_syndicatedepisodenumber;
+    unsigned char             m_subtitleType    {0};
+    unsigned char             m_audioProps      {0};
+    unsigned char             m_videoProps      {0};
+    float                     m_stars           {0.0};
+    ProgramInfo::CategoryType m_categoryType    {ProgramInfo::kCategoryNone};
+    QString                   m_seriesId;
+    QString                   m_programId;
+    QString                   m_inetref;
+    bool                      m_previouslyshown {false};
+    uint32_t                  m_listingsource;
+    QList<EventRating>        m_ratings;
+    QStringList               m_genres;
+    uint                      m_season          {0};
+    uint                      m_episode         {0};
+    uint                      m_totalepisodes   {0};
 };
 
 class MTV_PUBLIC DBEventEIT : public DBEvent
@@ -209,7 +180,7 @@ class MTV_PUBLIC DBEventEIT : public DBEvent
                 _start, _end, _subtitleType, _audioProps, _videoProps,
                 _stars, _seriesId, _programId, kListingSourceEIT,
                 _season, _episode, _totalepisodes),
-        chanid(_chanid), fixup(_fixup)
+        m_chanid(_chanid), m_fixup(_fixup)
     {
     }
 
@@ -223,54 +194,45 @@ class MTV_PUBLIC DBEventEIT : public DBEvent
         DBEvent(_title, QString(), _desc, QString(), ProgramInfo::kCategoryNone,
                 _start, _end, _subtitleType, _audioProps, _videoProps,
                 0.0, QString(), QString(), kListingSourceEIT, 0, 0, 0), // Season, Episode and Total Episodes are not set with this constructor!
-        chanid(_chanid), fixup(_fixup)
+        m_chanid(_chanid), m_fixup(_fixup)
     {
     }
 
     uint UpdateDB(MSqlQuery &query, int match_threshold) const
     {
-        return DBEvent::UpdateDB(query, chanid, match_threshold);
+        return DBEvent::UpdateDB(query, m_chanid, match_threshold);
     }
 
   public:
-    uint32_t      chanid;
-    FixupValue    fixup;
-    QMap<QString,QString> items;
+    uint32_t              m_chanid;
+    FixupValue            m_fixup;
+    QMap<QString,QString> m_items;
 };
 
 class MTV_PUBLIC ProgInfo : public DBEvent
 {
   public:
     ProgInfo() :
-        DBEvent(kListingSourceXMLTV),
-        // extra XMLTV stuff
-        channel(QString::null),
-        startts(QString::null),
-        endts(QString::null),
-        title_pronounce(QString::null),
-        showtype(QString::null),
-        colorcode(QString::null),
-        clumpidx(QString::null),
-        clumpmax(QString::null) { }
+        DBEvent(kListingSourceXMLTV) { }
 
     ProgInfo(const ProgInfo &other);
 
-    uint InsertDB(MSqlQuery &query, uint chanid) const;
+    uint InsertDB(MSqlQuery &query, uint chanid) const override; // DBEvent
 
-    void Squeeze(void);
+    void Squeeze(void) override; // DBEvent
 
-    ProgInfo &operator=(const ProgInfo&);
+    ProgInfo &operator=(const ProgInfo &other);
 
   public:
     // extra XMLTV stuff
-    QString       channel;
-    QString       startts;
-    QString       endts;
-    QString       title_pronounce;
-    QString       showtype;
-    QString       colorcode;
-    QString       clumpidx;
-    QString       clumpmax;
+    QString       m_channel;
+    QString       m_startts;
+    QString       m_endts;
+    QString       m_title_pronounce;
+    QString       m_showtype;
+    QString       m_colorcode;
+    QString       m_clumpidx;
+    QString       m_clumpmax;
 };
 
 class MTV_PUBLIC ProgramData

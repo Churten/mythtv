@@ -1,13 +1,11 @@
-
+#include <csignal>
+#include <cstdio>
+#include <cstdlib>
 #include <fcntl.h>
-#include <signal.h>
-
-#include <iostream>
 #include <fstream>
+#include <iostream>
 #include <string>
 #include <unistd.h>
-#include <cstdlib>
-#include <cstdio>
 
 #include <QCoreApplication>
 #include <QString>
@@ -31,6 +29,13 @@
 #include "requesthandler/basehandler.h"
 #include "requesthandler/fileserverhandler.h"
 #include "requesthandler/messagehandler.h"
+#if CONFIG_SYSTEMD_NOTIFY
+#include <systemd/sd-daemon.h>
+#define ms_sd_notify(x) \
+    (void)sd_notify(0, x);
+#else
+#define ms_sd_notify(x)
+#endif
 
 #define LOC      QString("MythMediaServer: ")
 #define LOC_WARN QString("MythMediaServer, Warning: ")
@@ -44,7 +49,7 @@ QString   logfile  = "";
 static void cleanup(void)
 {
     delete gContext;
-    gContext = NULL;
+    gContext = nullptr;
 
     if (pidfile.size())
     {
@@ -72,7 +77,7 @@ int main(int argc, char *argv[])
 
     if (cmdline.toBool("showversion"))
     {
-        cmdline.PrintVersion();
+        MythMediaServerCommandLineParser::PrintVersion();
         return GENERIC_EXIT_OK;
     }
 
@@ -101,6 +106,7 @@ int main(int argc, char *argv[])
     SignalHandler::SetHandler(SIGHUP, logSigHup);
 #endif
 
+    ms_sd_notify("STATUS=Connecting to database.");
     gContext = new MythContext(MYTH_BINARY_VERSION);
     if (!gContext->Init(false))
     {
@@ -108,7 +114,7 @@ int main(int argc, char *argv[])
         return GENERIC_EXIT_NO_MYTHCONTEXT;
     }
 
-    if (!UpgradeTVDatabaseSchema(false))
+    if (!UpgradeTVDatabaseSchema(false, false, true))
     {
         LOG(VB_GENERAL, LOG_ERR, "Exiting due to schema mismatch.");
         return GENERIC_EXIT_DB_OUTOFDATE;
@@ -117,6 +123,7 @@ int main(int argc, char *argv[])
     cmdline.ApplySettingsOverride();
 
     gCoreContext->SetAsBackend(true); // blocks the event connection
+    ms_sd_notify("STATUS=Connecting to master server.");
     if (!gCoreContext->ConnectToMasterServer())
     {
         LOG(VB_GENERAL, LOG_ERR, LOC + "Failed to connect to master server");
@@ -132,7 +139,8 @@ int main(int argc, char *argv[])
         return GENERIC_EXIT_SETUP_ERROR;
     }
 
-    MythSocketManager *sockmanager = new MythSocketManager();
+    ms_sd_notify("STATUS=Creating socket manager");
+    auto *sockmanager = new MythSocketManager();
     if (!sockmanager->Listen(port))
     {
         LOG(VB_GENERAL, LOG_ERR,
@@ -145,16 +153,20 @@ int main(int argc, char *argv[])
     sockmanager->RegisterHandler(new FileServerHandler());
     sockmanager->RegisterHandler(new MessageHandler());
 
-    ControlRequestHandler *controlRequestHandler = new ControlRequestHandler();
+    auto *controlRequestHandler = new ControlRequestHandler();
     sockmanager->RegisterHandler(controlRequestHandler);
     controlRequestHandler->ConnectToMaster();
 
-    MythSystemEventHandler *sysEventHandler = new MythSystemEventHandler();
+    auto *sysEventHandler = new MythSystemEventHandler();
 
-    int exitCode = a.exec();
+    // Provide systemd ready notification (for type=notify units)
+    ms_sd_notify("STATUS=");
+    ms_sd_notify("READY=1");
 
-    if (sysEventHandler)
-        delete sysEventHandler;
+    int exitCode = QCoreApplication::exec();
+
+    ms_sd_notify("STOPPING=1\nSTATUS=Exiting");
+    delete sysEventHandler;
 
     return exitCode ? exitCode : GENERIC_EXIT_OK;
 }

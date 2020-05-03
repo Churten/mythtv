@@ -36,10 +36,9 @@
  *  \brief Create a new KeyBindings instance.
  *  \param hostname The host for which to create the key bindings.
  */
-KeyBindings::KeyBindings(const QString &hostname)
-    : m_hostname(hostname)
+KeyBindings::KeyBindings(QString hostname)
+    : m_hostname(std::move(hostname))
 {
-    m_hostname.detach();
     LoadMandatoryBindings();
     LoadContexts();
     LoadJumppoints();
@@ -77,7 +76,7 @@ QStringList KeyBindings::GetActions(const QString &context) const
 /** \fn KeyBindings::GetKeyActions(const QString&, ActionList&) const
  *  \brief Get a list of the actions in a context.
  *  \param key The name of the context.
- *  \return A list of action (names) for the target context.
+ *  \param list A list of action (names) for the target context.
  *  \note Store this instead of calling repeatedly.  Every time you
  *        do, ActionSet has to iterate over all contexts and actions.
  */
@@ -117,9 +116,9 @@ QStringList KeyBindings::GetKeyContexts(const QString &key) const
     ActionList actions = m_actionSet.GetActions(key);
     QStringList contexts;
 
-    for (int i = 0; i < actions.size(); i++)
+    foreach (auto & action, actions)
     {
-        QString context = actions[i].GetContext();
+        QString context = action.GetContext();
         if (!contexts.contains(context))
             contexts.push_back(context);
     }
@@ -194,19 +193,19 @@ ActionID *KeyBindings::GetConflict(
             level = KeyBindings::kKeyBindingError;
             return new ActionID(ids[i]);
         }
-        else if (ids[i].GetContext() == context_name)
+        if (ids[i].GetContext() == context_name)
         {
             level = KeyBindings::kKeyBindingError;
             return new ActionID(ids[i]);
         }
-        else if (ids[i].GetContext() == ActionSet::kGlobalContext)
+        if (ids[i].GetContext() == ActionSet::kGlobalContext)
         {
             level = KeyBindings::kKeyBindingWarning;
             return new ActionID(ids[i]);
         }
     }
 
-    return NULL; // no conflicts
+    return nullptr; // no conflicts
 }
 
 /**
@@ -325,7 +324,7 @@ void KeyBindings::CommitChanges(void)
 {
     ActionList modified = m_actionSet.GetModified();
 
-    while (modified.size() > 0)
+    while (!modified.empty())
     {
         ActionID id = modified.front();
 

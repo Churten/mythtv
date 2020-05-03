@@ -8,10 +8,9 @@
 #define __PGMCONVERTER_H__
 
 extern "C" {
-#include "libavcodec/avcodec.h"    /* AVPicture */
+#include "libavcodec/avcodec.h"    /* AVFrame */
 }
 
-typedef struct VideoFrame_ VideoFrame;
 class MythPlayer;
 class MythAVCopy;
 
@@ -31,22 +30,23 @@ class PGMConverter
 {
 public:
     /* Ctor/dtor. */
-    PGMConverter(void);
+    PGMConverter(void) = default;
     ~PGMConverter(void);
 
     int MythPlayerInited(const MythPlayer *player);
-    const AVPicture *getImage(const VideoFrame *frame, long long frameno,
+    const AVFrame *getImage(const VideoFrame *frame, long long frameno,
             int *pwidth, int *pheight);
     int reportTime(void);
 
 private:
-    long long       frameno;            /* frame number */
-    int             width, height;      /* frame dimensions */
-    AVPicture       pgm;                /* grayscale frame */
+    long long       m_frameNo       {-1}; /* frame number */
+    int             m_width         {-1}; /* frame dimensions */
+    int             m_height        {-1}; /* frame dimensions */
+    AVFrame         m_pgm           {};   /* grayscale frame */
 #ifdef PGM_CONVERT_GREYSCALE
-    struct timeval  convert_time;
-    bool            time_reported;
-    MythAVCopy     *m_copy;
+    struct timeval  m_convertTime   {0,0};
+    bool            m_timeReported  {false};
+    MythAVCopy     *m_copy          {nullptr};
 #endif /* PGM_CONVERT_GREYSCALE */
 };
 

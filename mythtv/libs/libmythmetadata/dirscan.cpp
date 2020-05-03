@@ -12,37 +12,33 @@
 #include "videoutils.h"
 #include "storagegroup.h"
 
-DirectoryHandler::~DirectoryHandler()
-{
-}
-
 namespace
 {
     class ext_lookup
     {
       private:
-        typedef std::map<QString, bool> ext_map;
+        using ext_map = std::map<QString, bool>;
         ext_map m_extensions;
-        bool m_list_unknown;
+        bool m_listUnknown;
 
       public:
         ext_lookup(const FileAssociations::ext_ignore_list &ext_disposition,
-                   bool list_unknown) : m_list_unknown(list_unknown)
+                   bool list_unknown) : m_listUnknown(list_unknown)
         {
-            for (FileAssociations::ext_ignore_list::const_iterator p =
-                 ext_disposition.begin(); p != ext_disposition.end(); ++p)
+            for (const auto & ext : ext_disposition)
             {
-                m_extensions.insert(ext_map::value_type(p->first.toLower(),
-                                                        p->second));
+                m_extensions.insert(ext_map::value_type(ext.first.toLower(),
+                                                        ext.second));
             }
         }
 
         bool extension_ignored(const QString &extension) const
         {
+            //NOLINTNEXTLINE(modernize-use-auto)
             ext_map::const_iterator p = m_extensions.find(extension.toLower());
             if (p != m_extensions.end())
                 return p->second;
-            return !m_list_unknown;
+            return !m_listUnknown;
         }
     };
 
@@ -63,23 +59,23 @@ namespace
 
         QDir dir_tester;
 
-        for (QFileInfoList::iterator p = list.begin(); p != list.end(); ++p)
+        foreach (auto & entry, list)
         {
-            if (p->fileName() == "Thumbs.db")
+            if (entry.fileName() == "Thumbs.db")
                 continue;
 
-            if (!p->isDir() &&
-                ext_settings.extension_ignored(p->suffix())) continue;
+            if (!entry.isDir() &&
+                ext_settings.extension_ignored(entry.suffix())) continue;
 
             bool add_as_file = true;
 
-            if (p->isDir())
+            if (entry.isDir())
             {
                 add_as_file = false;
 
-                dir_tester.setPath(p->absoluteFilePath() + "/VIDEO_TS");
+                dir_tester.setPath(entry.absoluteFilePath() + "/VIDEO_TS");
                 QDir bd_dir_tester;
-                bd_dir_tester.setPath(p->absoluteFilePath() + "/BDMV");
+                bd_dir_tester.setPath(entry.absoluteFilePath() + "/BDMV");
                 if (dir_tester.exists() || bd_dir_tester.exists())
                 {
                     add_as_file = true;
@@ -88,15 +84,15 @@ namespace
                 {
 #if 0
                     LOG(VB_GENERAL, LOG_DEBUG, 
-                        QString(" -- Dir : %1").arg(p->absoluteFilePath()));
+                        QString(" -- Dir : %1").arg(entry.!absoluteFilePath()));
 #endif
                     DirectoryHandler *dh =
-                            handler->newDir(p->fileName(),
-                                            p->absoluteFilePath());
+                            handler->newDir(entry.fileName(),
+                                            entry.absoluteFilePath());
 
                     // Since we are dealing with a subdirectory failure is fine,
                     // so we'll just ignore the failue and continue
-                    (void) scan_dir(p->absoluteFilePath(), dh, ext_settings);
+                    (void) scan_dir(entry.absoluteFilePath(), dh, ext_settings);
                 }
             }
 
@@ -104,10 +100,10 @@ namespace
             {
 #if 0
                 LOG(VB_GENERAL, LOG_DEBUG,
-                    QString(" -- File : %1").arg(p->fileName()));
+                    QString(" -- File : %1").arg(entry.fileName()));
 #endif
-                handler->handleFile(p->fileName(), p->absoluteFilePath(),
-                                    p->suffix(), "");
+                handler->handleFile(entry.fileName(), entry.absoluteFilePath(),
+                                    entry.suffix(), "");
             }
         }
 
@@ -152,10 +148,10 @@ namespace
         if (list.isEmpty() || (list.at(0) == "EMPTY LIST"))
             return true;
 
-        for (QStringList::iterator p = list.begin(); p != list.end(); ++p)
+        foreach (auto & entry, list)
         {
-            QStringList fInfo = p->split("::");
-            QString type = fInfo.at(0);
+            QStringList fInfo = entry.split("::");
+            const QString& type = fInfo.at(0);
             QString fileName = fInfo.at(1);
 
             if (type == "nop")

@@ -8,27 +8,10 @@
 // mytharchive
 #include "editmetadata.h"
 
-EditMetadataDialog::EditMetadataDialog(
-    MythScreenStack *parent, ArchiveItem *source_metadata) :
-    MythScreenType(parent, "EditMetadataDialog"),
-    m_sourceMetadata(source_metadata),
-    m_titleEdit(NULL),
-    m_subtitleEdit(NULL),
-    m_descriptionEdit(NULL),
-    m_startdateEdit(NULL),
-    m_starttimeEdit(NULL),
-    m_cancelButton(NULL),
-    m_okButton(NULL)
-{
-}
-
 bool EditMetadataDialog::Create(void)
 {
-    bool foundtheme = false;
-
     // Load the theme for this screen
-    foundtheme = LoadWindowFromXML("mythburn-ui.xml", "edit_metadata", this);
-
+    bool foundtheme = LoadWindowFromXML("mythburn-ui.xml", "edit_metadata", this);
     if (!foundtheme)
         return false;
 
@@ -91,8 +74,4 @@ void EditMetadataDialog::cancelPressed(void)
 {
     emit haveResult(false, m_sourceMetadata);
     Close();
-}
-
-EditMetadataDialog::~EditMetadataDialog()
-{
 }

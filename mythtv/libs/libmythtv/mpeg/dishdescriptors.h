@@ -14,61 +14,61 @@
 class DishEventMPAADescriptor : public MPEGDescriptor
 {
   public:
-    DishEventMPAADescriptor(const unsigned char *data, int len = 300) :
+    explicit DishEventMPAADescriptor(const unsigned char *data, int len = 300) :
         MPEGDescriptor(data, len, PrivateDescriptorID::dish_event_mpaa) { }
     //       Name             bits  loc  expected value
     // descriptor_tag           8   0.0       0x89
     // descriptor_length        8   1.0
     // stars                    3   2.0
-    uint stars_raw(void) const { return (_data[2] & 0xe0) >> 0x05; }
+    uint stars_raw(void) const { return (m_data[2] & 0xe0) >> 0x05; }
     float stars(void) const;
 
     // rating                   3   2.3
-    uint rating_raw(void) const { return (_data[2] & 0x1c) >> 0x02; }
+    uint rating_raw(void) const { return (m_data[2] & 0x1c) >> 0x02; }
     QString rating(void) const;
 
     // advisories               8   3.0
-    uint advisory_raw(void) const { return _data[3]; }
+    uint advisory_raw(void) const { return m_data[3]; }
     QString advisory(void) const;
 
   private:
     static void Init(void);
 
   private:
-    static QMutex             mpaaRatingsLock;
-    static QMap<uint,QString> mpaaRatingsDesc;
-    static bool               mpaaRatingsExists;
+    static QMutex             s_mpaaRatingsLock;
+    static QMap<uint,QString> s_mpaaRatingsDesc;
+    static bool               s_mpaaRatingsExists;
 };
 
 class DishEventVCHIPDescriptor : public MPEGDescriptor
 {
   public:
-    DishEventVCHIPDescriptor(const unsigned char *data, int len = 300) :
+    explicit DishEventVCHIPDescriptor(const unsigned char *data, int len = 300) :
         MPEGDescriptor(data, len, PrivateDescriptorID::dish_event_vchip) { }
     //       Name             bits  loc  expected value
     // descriptor_tag           8   0.0       0x95
     // descriptor_length        8   1.0
     // rating                   8   2.0
-    uint rating_raw(void) const { return _data[2]; }
+    uint rating_raw(void) const { return m_data[2]; }
     QString rating(void) const;
 
     // advisory                 8   3.0
-    uint advisory_raw(void) const { return _data[3]; }
+    uint advisory_raw(void) const { return m_data[3]; }
     QString advisory(void) const;
 
   private:
     static void Init(void);
 
   private:
-    static QMutex             vchipRatingsLock;
-    static QMap<uint,QString> vchipRatingsDesc;
-    static bool               vchipRatingsExists;
+    static QMutex             s_vchipRatingsLock;
+    static QMap<uint,QString> s_vchipRatingsDesc;
+    static bool               s_vchipRatingsExists;
 };
 
 class DishEventNameDescriptor : public MPEGDescriptor
 {
   public:
-    DishEventNameDescriptor(const unsigned char *data, int len = 300) :
+    explicit DishEventNameDescriptor(const unsigned char *data, int len = 300) :
         MPEGDescriptor(data, len, PrivateDescriptorID::dish_event_name) { }
     //       Name             bits  loc  expected value
     // descriptor_tag           8   0.0       0x91
@@ -76,13 +76,13 @@ class DishEventNameDescriptor : public MPEGDescriptor
     // unknown                  8   2.0
     // event_name            dlen-1 3.0
     bool HasName(void) const { return DescriptorLength() > 1; }
-    QString Name(uint) const;
+    QString Name(uint compression_type) const;
 };
 
 class DishEventDescriptionDescriptor : public MPEGDescriptor
 {
   public:
-    DishEventDescriptionDescriptor(const unsigned char *data, int len = 300) :
+    explicit DishEventDescriptionDescriptor(const unsigned char *data, int len = 300) :
         MPEGDescriptor(
             data, len, PrivateDescriptorID::dish_event_description) { }
     //       Name             bits  loc  expected value
@@ -93,13 +93,13 @@ class DishEventDescriptionDescriptor : public MPEGDescriptor
     const unsigned char *DescriptionRaw(void) const;
     uint DescriptionRawLength(void) const;
     bool HasDescription(void) const { return DescriptionRawLength(); }
-    QString Description(uint) const;
+    QString Description(uint compression_type) const;
 };
 
 class DishEventPropertiesDescriptor : public MPEGDescriptor
 {
   public:
-    DishEventPropertiesDescriptor(const unsigned char *data, int len = 300) :
+    explicit DishEventPropertiesDescriptor(const unsigned char *data, int len = 300) :
         MPEGDescriptor(
             data, len, PrivateDescriptorID::dish_event_properties) { }
     //       Name             bits  loc  expected value
@@ -115,15 +115,15 @@ class DishEventPropertiesDescriptor : public MPEGDescriptor
     void decompress_properties(uint compression_type) const;
 
   private:
-    static uint subtitle_props;
-    static uint audio_props;
-    static bool decompressed;
+    static uint s_subtitleProps;
+    static uint s_audioProps;
+    static bool s_decompressed;
 };
 
 class DishEventTagsDescriptor : public MPEGDescriptor
 {
   public:
-    DishEventTagsDescriptor(const unsigned char *data, int len = 300) :
+    explicit DishEventTagsDescriptor(const unsigned char *data, int len = 300) :
         MPEGDescriptor(data, len, PrivateDescriptorID::dish_event_tags) { }
     //       Name             bits  loc  expected value
     // descriptor_tag           8   0.0       0x96
@@ -134,7 +134,7 @@ class DishEventTagsDescriptor : public MPEGDescriptor
     QDate originalairdate(void) const;
 };
 
-typedef enum
+enum DishThemeType
 {
     kThemeNone = 0,
     kThemeMovie,
@@ -147,28 +147,28 @@ typedef enum
     kThemeReligious,
     kThemeOffAir,
     kThemeLast,
-} DishThemeType;
+};
 
-QString dish_theme_type_to_string(uint category_type);
+QString dish_theme_type_to_string(uint theme_type);
 DishThemeType string_to_dish_theme_type(const QString &type);
 
 class DishContentDescriptor : public ContentDescriptor
 {
   public:
-    DishContentDescriptor(const unsigned char *data, int len = 300) :
+    explicit DishContentDescriptor(const unsigned char *data, int len = 300) :
         ContentDescriptor(data, len) { }
 
     DishThemeType GetTheme(void) const;
     QString GetCategory(void) const;
-    QString toString() const;
+    QString toString() const override; // ContentDescriptor
 
   private:
     static void Init(void);
 
   private:
-    static QMap<uint,QString> themeDesc;
-    static QMap<uint,QString> dishCategoryDesc;
-    static volatile bool      dishCategoryDescExists;
+    static QMap<uint,QString> s_themeDesc;
+    static QMap<uint,QString> s_dishCategoryDesc;
+    static volatile bool      s_dishCategoryDescExists;
 };
 
 #endif // _DISH_DESCRIPTORS_H_

@@ -2,11 +2,12 @@
 #define FILESELECTOR_H_
 
 #include <iostream>
+#include <utility>
 
 // qt
+#include <QKeyEvent>
 #include <QString>
 #include <QStringList>
-#include <QKeyEvent>
 
 // myth
 #include <mythscreentype.h>
@@ -14,20 +15,20 @@
 // mytharchive
 #include "archiveutil.h"
 
-typedef struct
+struct FileData
 {
-    bool directory;
-    bool selected;
+    bool directory   { false };
+    bool selected    { false };
     QString filename;
-    int64_t size;
-} FileData;
+    int64_t size     { 0 };
+};
 
-typedef enum
+enum FSTYPE
 {
     FSTYPE_FILELIST = 0,
     FSTYPE_FILE = 1,
     FSTYPE_DIRECTORY = 2
-} FSTYPE;
+};
 
 class MythUIText;
 class MythUITextEdit;
@@ -41,11 +42,16 @@ class FileSelector : public MythScreenType
 
   public:
     FileSelector(MythScreenStack *parent, QList<ArchiveItem *> *archiveList,
-                 FSTYPE type, const QString &startDir, const QString &filemask);
-    ~FileSelector();
+                 FSTYPE type, QString startDir, QString filemask)
+        : MythScreenType(parent, "FileSelector"),
+          m_selectorType(type),
+          m_filemask(std::move(filemask)),
+          m_curDirectory(std::move(startDir)),
+          m_archiveList(archiveList) {}
+    ~FileSelector() override;
 
-    bool Create(void);
-    bool keyPressEvent(QKeyEvent *e);
+    bool Create(void) override; // MythScreenType
+    bool keyPressEvent(QKeyEvent *e) override; // MythScreenType
 
     QString getSelected(void);
 
@@ -77,13 +83,13 @@ class FileSelector : public MythScreenType
     //
     //  GUI stuff
     //
-    MythUIText       *m_titleText;
-    MythUIButtonList *m_fileButtonList;
-    MythUITextEdit   *m_locationEdit;
-    MythUIButton     *m_okButton;
-    MythUIButton     *m_cancelButton;
-    MythUIButton     *m_backButton;
-    MythUIButton     *m_homeButton;
+    MythUIText       *m_titleText      {nullptr};
+    MythUIButtonList *m_fileButtonList {nullptr};
+    MythUITextEdit   *m_locationEdit   {nullptr};
+    MythUIButton     *m_okButton       {nullptr};
+    MythUIButton     *m_cancelButton   {nullptr};
+    MythUIButton     *m_backButton     {nullptr};
+    MythUIButton     *m_homeButton     {nullptr};
 };
 
 Q_DECLARE_METATYPE(FileData *)

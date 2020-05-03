@@ -51,15 +51,6 @@
 
 #define LOC QString("JoystickMenuThread: ")
 
-JoystickMenuThread::JoystickMenuThread(QObject *main_window)
-    : MThread("JoystickMenu"),
-      m_mainWindow(main_window), m_devicename(""),
-      m_fd(-1),                  m_buttonCount(0),
-      m_axesCount(0),            m_buttons(NULL),
-      m_axes(NULL),              m_bStop(false)
-{
-}
-
 JoystickMenuThread::~JoystickMenuThread()
 {
     if (m_fd != -1)
@@ -69,10 +60,10 @@ JoystickMenuThread::~JoystickMenuThread()
     }
 
     delete [] m_axes;
-    m_axes = NULL;
+    m_axes = nullptr;
 
     delete [] m_buttons;
-    m_buttons = NULL;
+    m_buttons = nullptr;
 }
 
 /**
@@ -80,8 +71,6 @@ JoystickMenuThread::~JoystickMenuThread()
  */
 bool JoystickMenuThread::Init(QString &config_file)
 {
-    int rc;
-
     /*------------------------------------------------------------------------
     ** Read the config file
     **----------------------------------------------------------------------*/
@@ -100,7 +89,7 @@ bool JoystickMenuThread::Init(QString &config_file)
         return false;
     }
 
-    rc = ioctl(m_fd, JSIOCGAXES, &m_axesCount);
+    int rc = ioctl(m_fd, JSIOCGAXES, &m_axesCount);
     if (rc == -1)
     {
         LOG(VB_GENERAL, LOG_ERR, LOC +
@@ -144,17 +133,15 @@ bool JoystickMenuThread::Init(QString &config_file)
  *                                  move that axis into the range and the
  *                                  keystring is sent
  */
-bool JoystickMenuThread::ReadConfig(QString config_file)
+bool JoystickMenuThread::ReadConfig(const QString& config_file)
 {
-    FILE *fp;
-
     if (!QFile::exists(config_file))
     {
         LOG(VB_GENERAL, LOG_INFO, "No joystick configuration found, not enabling joystick control");
         return false;
     }
 
-    fp = fopen(qPrintable(config_file), "r");
+    FILE *fp = fopen(qPrintable(config_file), "r");
     if (!fp)
     {
         LOG(VB_GENERAL, LOG_ERR, LOC +
@@ -177,18 +164,28 @@ bool JoystickMenuThread::ReadConfig(QString config_file)
         QString firstTok = tokens[0].toLower();
 
         if (firstTok.startsWith("devicename") && tokens.count() == 2)
+        {
             m_devicename = tokens[1];
+        }
         else if (firstTok.startsWith("button") && tokens.count() == 3)
+        {
             m_map.AddButton(tokens[1].toInt(), tokens[2]);
+        }
         else if (firstTok.startsWith("axis") && tokens.count() == 5)
+        {
             m_map.AddAxis(tokens[1].toInt(), tokens[2].toInt(),
                           tokens[3].toInt(), tokens[4]);
+        }
         else if (firstTok.startsWith("chord") && tokens.count() == 4)
+        {
             m_map.AddButton(tokens[2].toInt(), tokens[3], tokens[1].toInt());
+        }
         else
+        {
             LOG(VB_GENERAL, LOG_WARNING, LOC +
                 QString("ReadConfig(%1) unrecognized or malformed line \"%2\" ")
                                         .arg(line) .arg(rawline));
+        }
     }
 
     fclose(fp);
@@ -204,11 +201,9 @@ void JoystickMenuThread::run(void)
 {
     RunProlog();
 
-    int rc;
-
     fd_set readfds;
-    struct js_event js;
-    struct timeval timeout;
+    struct js_event js {};
+    struct timeval timeout {};
 
     while (!m_bStop)
     {
@@ -217,14 +212,14 @@ void JoystickMenuThread::run(void)
         ** Wait for activity from the joy stick (we wait a configurable
         **      poll time)
         **------------------------------------------------------------------*/
-        FD_ZERO(&readfds);
+        FD_ZERO(&readfds); // NOLINT(readability-isolate-declaration)
         FD_SET(m_fd, &readfds);
 
         // the maximum time select() should wait
         timeout.tv_sec = 0;
         timeout.tv_usec = 100000;
 
-        rc = select(m_fd + 1, &readfds, NULL, NULL, &timeout);
+        int rc = select(m_fd + 1, &readfds, nullptr, nullptr, &timeout);
         if (rc == -1)
         {
             /*----------------------------------------------------------------
@@ -299,7 +294,7 @@ void JoystickMenuThread::run(void)
 /**
  *  \brief Send a keyevent to the main UI loop with the appropriate keycode
  */
-void JoystickMenuThread::EmitKey(QString code)
+void JoystickMenuThread::EmitKey(const QString& code)
 {
     QKeySequence a(code);
 
@@ -312,12 +307,7 @@ void JoystickMenuThread::EmitKey(QString code)
         QCoreApplication::postEvent(m_mainWindow, new JoystickKeycodeEvent(code,
                                 keycode, true));
 
-#if QT_VERSION < QT_VERSION_CHECK(5, 0, 0)
-    unsigned int i;
-#else
-    int i;
-#endif
-    for (i = 0; i < a.count(); i++)
+    for (int i = 0; i < a.count(); i++)
     {
         keycode = a[i];
 

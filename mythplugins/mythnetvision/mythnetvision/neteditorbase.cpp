@@ -23,13 +23,7 @@
  */
 NetEditorBase::NetEditorBase(MythScreenStack *parent,
                              const QString &name) :
-    MythScreenType(parent, name),
-    m_grabbers(NULL),
-    m_busyPopup(NULL),
-    m_popupStack(),
-    m_manager(NULL),
-    m_reply(NULL),
-    m_changed(false)
+    MythScreenType(parent, name)
 {
     m_popupStack = GetMythMainWindow()->GetStack("popup stack");
 }
@@ -40,7 +34,7 @@ NetEditorBase::~NetEditorBase()
     {
         m_manager->disconnect();
         m_manager->deleteLater();
-        m_manager = NULL;
+        m_manager = nullptr;
     }
 
     qDeleteAll(m_grabberList);
@@ -116,8 +110,12 @@ void NetEditorBase::SlotLoadedData()
 
     while (!grabber.isNull())
     {
-        QString title, author, image, description, type, commandline;
-        double version;
+        QString title;
+        QString author;
+        QString image;
+        QString description;
+        QString type;
+        QString commandline;
         bool search = false;
         bool tree = false;
 
@@ -127,7 +125,7 @@ void NetEditorBase::SlotLoadedData()
         image = grabber.firstChildElement("thumbnail").text();
         type = grabber.firstChildElement("type").text();
         description = grabber.firstChildElement("description").text();
-        version = grabber.firstChildElement("version").text().toDouble();
+        double version = grabber.firstChildElement("version").text().toDouble();
 
         QString searchstring = grabber.firstChildElement("search").text();
 
@@ -166,18 +164,18 @@ void NetEditorBase::ParsedData()
     if (m_busyPopup)
     {
         m_busyPopup->Close();
-        m_busyPopup = NULL;
+        m_busyPopup = nullptr;
     }
 
     FillGrabberButtonList();
 }
 
-void NetEditorBase::CreateBusyDialog(QString title)
+void NetEditorBase::CreateBusyDialog(const QString& title)
 {
     if (m_busyPopup)
         return;
 
-    QString message = title;
+    const QString& message = title;
 
     m_busyPopup = new MythUIBusyDialog(message, m_popupStack,
             "mythvideobusydialog");
@@ -187,32 +185,34 @@ void NetEditorBase::CreateBusyDialog(QString title)
     else
     {
         delete m_busyPopup;
-        m_busyPopup = NULL;
+        m_busyPopup = nullptr;
     }
 }
 
 void NetEditorBase::FillGrabberButtonList()
 {
-    for (GrabberScript::scriptList::iterator i = m_grabberList.begin();
-            i != m_grabberList.end(); ++i)
+    foreach (auto & g, m_grabberList)
     {
-        MythUIButtonListItem *item =
-            new MythUIButtonListItem(m_grabbers, (*i)->GetTitle());
-        item->SetText((*i)->GetTitle(), "title");
-        item->SetData(qVariantFromValue(*i));
-        QString img = (*i)->GetImage();
+        auto *item = new MythUIButtonListItem(m_grabbers, g->GetTitle());
+        item->SetText(g->GetTitle(), "title");
+        item->SetData(QVariant::fromValue(g));
+        const QString& img = g->GetImage();
         QString thumb;
 
         if (!img.startsWith("/") && !img.isEmpty())
+        {
             thumb = QString("%1mythnetvision/icons/%2").arg(GetShareDir())
-                .arg((*i)->GetImage());
+                .arg(g->GetImage());
+        }
         else
+        {
             thumb = img;
+        }
 
         item->SetImage(thumb);
         item->setCheckable(true);
         item->setChecked(MythUIButtonListItem::NotChecked);
-        QFileInfo fi((*i)->GetCommandline());
+        QFileInfo fi(g->GetCommandline());
 
         if (FindGrabberInDB(fi.fileName()))
             item->setChecked(MythUIButtonListItem::FullChecked);
@@ -224,8 +224,7 @@ void NetEditorBase::ToggleItem(MythUIButtonListItem *item)
     if (!item)
         return;
 
-    GrabberScript *script = item->GetData().value<GrabberScript*>();
-
+    auto *script = item->GetData().value<GrabberScript*>();
     if (!script)
         return;
 

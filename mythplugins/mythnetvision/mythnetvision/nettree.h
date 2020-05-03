@@ -43,17 +43,17 @@ class NetTree : public NetBase
   Q_OBJECT
 
   public:
-    NetTree(DialogType type, MythScreenStack *parent, const char *name = 0);
-    ~NetTree();
+    NetTree(DialogType type, MythScreenStack *parent, const char *name = nullptr);
+    ~NetTree() override;
 
-    bool Create(void);
-    bool keyPressEvent(QKeyEvent *);
+    bool Create(void) override; // MythScreenType
+    bool keyPressEvent(QKeyEvent *event) override; // MythScreenType
 
   protected:
-    virtual ResultItem *GetStreamItem();
+    ResultItem *GetStreamItem() override; // NetBase
 
   private:
-    virtual void Load();
+    void Load() override; // MythScreenType
 
     void FillTree(void);
     void SetCurrentNode(MythGenericTree *node);
@@ -65,15 +65,15 @@ class NetTree : public NetBase
                           QDomElement& domElem);
     void BuildGenericTree(MythGenericTree *dst,
                           QStringList paths,
-                          QString dirthumb,
-                          QList<ResultItem*> videos);
+                          const QString& dirthumb,
+                          const QList<ResultItem*>& videos);
 
     void AddFileNode(MythGenericTree *where_to_add,
                      ResultItem *video);
 
     void SwitchView(void);
 
-    void SetSubfolderData(MythGenericTree *folder);
+    static void SetSubfolderData(MythGenericTree *folder);
     void UpdateResultItem(ResultItem *item);
     void UpdateSiteItem(RSSSite *site);
     void UpdateCurrentItem(void);
@@ -81,29 +81,29 @@ class NetTree : public NetBase
     // Only to keep track of what to delete
     QList<ResultItem*> m_videos;
 
-    MythUIButtonTree   *m_siteMap;
-    MythUIButtonList   *m_siteButtonList;
-    MythGenericTree    *m_siteGeneric;
-    MythGenericTree    *m_currentNode;
+    MythUIButtonTree   *m_siteMap        {nullptr};
+    MythUIButtonList   *m_siteButtonList {nullptr};
+    MythGenericTree    *m_siteGeneric    {nullptr};
+    MythGenericTree    *m_currentNode    {nullptr};
 
-    MythUIText         *m_noSites;
+    MythUIText         *m_noSites        {nullptr};
 
-    GrabberDownloadThread *m_gdt;
+    GrabberDownloadThread *m_gdt         {nullptr};
     RSSSite::rssList m_rssList;
 
     DialogType          m_type;
 
-    uint                m_updateFreq;
-    bool                m_rssAutoUpdate;
-    bool                m_treeAutoUpdate;
+    uint                m_updateFreq     {6};
+    bool                m_rssAutoUpdate  {false};
+    bool                m_treeAutoUpdate {false};
 
   private slots:
-    void ShowMenu(void);
+    void ShowMenu(void) override; // MythScreenType
     MythMenu* CreateShowViewMenu(void);
     MythMenu* CreateShowManageMenu(void);
     void RunTreeEditor(void);
     void RunRSSEditor(void);
-    void LoadData(void);
+    void LoadData(void) override; // NetBase
     void HandleSelect(MythUIButtonListItem *item);
 
     void SwitchTreeView(void);
@@ -120,12 +120,12 @@ class NetTree : public NetBase
     void DoTreeRefresh();
     void TreeRefresh();
 
-    void customEvent(QEvent *levent);
+    void customEvent(QEvent *levent) override; // NetBase
 
   protected:
-    static const QString RSSNode;
-    static const QString SearchNode;
-    static const QString DownloadNode;
+    static const QString kRSSNode;
+    static const QString kSearchNode;
+    static const QString kDownloadNode;
 };
 
 #endif

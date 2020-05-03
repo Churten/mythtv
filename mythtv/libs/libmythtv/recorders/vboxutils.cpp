@@ -28,11 +28,6 @@ VBox::VBox(const QString &url)
     m_url = url;
 }
 
-VBox::~VBox(void)
-{
-}
-
-
 // static method
 QStringList VBox::probeDevices(void)
 {
@@ -74,7 +69,7 @@ QStringList VBox::doUPNPSearch(void)
 {
     QStringList result;
 
-    SSDPCacheEntries *vboxes = SSDP::Instance()->Find(VBOX_URI);
+    SSDPCacheEntries *vboxes = SSDP::Find(VBOX_URI);
 
     if (!vboxes)
     {
@@ -97,10 +92,8 @@ QStringList VBox::doUPNPSearch(void)
     EntryMap map;
     vboxes->GetEntryMap(map);
 
-    EntryMap::const_iterator it = map.begin();
-    for (; it != map.end(); ++it)
+    foreach (auto BE, map)
     {
-        DeviceLocation *BE = (*it);
         if (!BE->GetDeviceDesc())
         {
             LOG(VB_GENERAL, LOG_INFO, LOC + QString("GetDeviceDesc() failed for %1").arg(BE->GetFriendlyName()));
@@ -108,8 +101,8 @@ QStringList VBox::doUPNPSearch(void)
         }
 
         QString friendlyName = BE->GetDeviceDesc()->m_rootDevice.m_sFriendlyName;
-        QString ip = BE->GetDeviceDesc()->m_HostUrl.host();
-        int port = BE->GetDeviceDesc()->m_HostUrl.port();
+        QString ip = BE->GetDeviceDesc()->m_hostUrl.host();
+        int port = BE->GetDeviceDesc()->m_hostUrl.port();
 
         LOG(VB_GENERAL, LOG_DEBUG, LOC + QString("Found possible VBox at %1 (%2:%3)").arg(friendlyName).arg(ip).arg(port));
 
@@ -136,7 +129,7 @@ QStringList VBox::doUPNPSearch(void)
             {
                 // add a device in the format ID IP TUNERNO TUNERTYPE
                 // eg vbox_3718 192.168.1.204 1 DVBT/T2
-                QString tuner = tuners.at(x);
+                const QString& tuner = tuners.at(x);
                 QString device = QString("%1 %2 %3").arg(id).arg(ip).arg(tuner);
                 result << device;
                 LOG(VB_GENERAL, LOG_INFO, QString("Found VBox - %1").arg(device));
@@ -147,7 +140,7 @@ QStringList VBox::doUPNPSearch(void)
     }
 
     vboxes->DecrRef();
-    vboxes = NULL;
+    vboxes = nullptr;
 
     return result;
 }
@@ -185,7 +178,7 @@ QString VBox::getIPFromVideoDevice(const QString& dev)
             continue;
         }
 
-        QString vboxID = vboxItems.at(0);
+        const QString& vboxID = vboxItems.at(0);
         QString vboxIP = vboxItems.at(1);
 
         if (vboxID == id)
@@ -198,7 +191,7 @@ QString VBox::getIPFromVideoDevice(const QString& dev)
 
 QDomDocument *VBox::getBoardInfo(void)
 {
-    QDomDocument *xmlDoc = new QDomDocument();
+    auto *xmlDoc = new QDomDocument();
     QString query = QUERY_BOARDINFO;
 
     query.replace("{URL}", m_url);
@@ -206,7 +199,7 @@ QDomDocument *VBox::getBoardInfo(void)
     if (!sendQuery(query, xmlDoc))
     {
         delete xmlDoc;
-        return NULL;
+        return nullptr;
     }
 
     return xmlDoc;
@@ -215,7 +208,7 @@ QDomDocument *VBox::getBoardInfo(void)
 bool VBox::checkConnection(void)
 {
     // assume if we can download the board info we have a good connection
-    return (getBoardInfo() != NULL);
+    return (getBoardInfo() != nullptr);
 }
 
 bool VBox::checkVersion(QString &version)
@@ -299,8 +292,8 @@ QStringList VBox::getTuners(void)
 
 vbox_chan_map_t *VBox::getChannels(void)
 {
-    vbox_chan_map_t *result = new vbox_chan_map_t;
-    QDomDocument *xmlDoc = new QDomDocument();
+    auto *result = new vbox_chan_map_t;
+    auto *xmlDoc = new QDomDocument();
     QString query = QUERY_CHANNELS;
 
     query.replace("{URL}", m_url);
@@ -309,7 +302,7 @@ vbox_chan_map_t *VBox::getChannels(void)
     {
         delete xmlDoc;
         delete result;
-        return NULL;
+        return nullptr;
     }
 
     QDomNodeList chanNodes = xmlDoc->elementsByTagName("channel");
@@ -323,12 +316,12 @@ vbox_chan_map_t *VBox::getChannels(void)
         QString triplet = getStrValue(chanElem, "display-name", 2);
         bool    fta = (getStrValue(chanElem, "display-name", 3) == "Free");
         QString lcn = getStrValue(chanElem, "display-name", 4);
-        uint serviceID = triplet.right(4).toUInt(0, 16);
+        uint serviceID = triplet.right(4).toUInt(nullptr, 16);
 
         QString transType = "UNKNOWN";
         QStringList slist = triplet.split('-');
-        uint networkID = slist[2].left(4).toUInt(0, 16);
-        uint transportID = slist[2].mid(4, 4).toUInt(0, 16);
+        uint networkID = slist[2].left(4).toUInt(nullptr, 16);
+        uint transportID = slist[2].mid(4, 4).toUInt(nullptr, 16);
         LOG(VB_GENERAL, LOG_DEBUG, LOC + QString("NIT/TID/SID %1 %2 %3)").arg(networkID).arg(transportID).arg(serviceID));
 
         //sanity check - the triplet should look something like this: T-GER-111100020001

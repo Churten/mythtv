@@ -58,10 +58,11 @@
 #include <cstdlib>
 
 #include <QCoreApplication>
-#include <QStringList>
-#include <QRegExp>
 #include <QDir>
 #include <QList>
+#include <QRegExp>
+#include <QStringList>
+#include <utility>
 
 #include "mythdate.h"
 #include "mythcontext.h"
@@ -76,15 +77,14 @@ int debug_level = 0;
 #define LOC_ERR  QString("LCDServer, Error: ")
 
 LCDServer::LCDServer(int port, QString message, int messageTime)
-    :QObject(),
-     m_lcd(new LCDProcClient(this)),
+    : m_lcd(new LCDProcClient(this)),
      m_serverPool(new ServerPool()),
-     m_lastSocket(NULL)
+     m_lastSocket(nullptr)
 {
     if (!m_lcd->SetupLCD())
     {
         delete m_lcd;
-        m_lcd = NULL;
+        m_lcd = nullptr;
     }
 
     connect(m_serverPool, SIGNAL(newConnection(QTcpSocket*)),
@@ -100,7 +100,7 @@ LCDServer::LCDServer(int port, QString message, int messageTime)
     }
 
     if (m_lcd)
-        m_lcd->setStartupMessage(message, messageTime);
+        m_lcd->setStartupMessage(std::move(message), messageTime);
 }
 
 void LCDServer::newConnection(QTcpSocket *socket)
@@ -119,7 +119,7 @@ void LCDServer::newConnection(QTcpSocket *socket)
 
 void LCDServer::endConnection(void)
 {
-    QTcpSocket *socket = dynamic_cast<QTcpSocket*>(sender());
+    auto *socket = dynamic_cast<QTcpSocket*>(sender());
     if (socket)
     {
         socket->close();
@@ -129,13 +129,12 @@ void LCDServer::endConnection(void)
     }
 
     if (m_lastSocket == socket)
-        m_lastSocket = NULL;
+        m_lastSocket = nullptr;
 }
 
 void LCDServer::readSocket()
 {
-    QTcpSocket *socket = dynamic_cast<QTcpSocket*>(sender());
-
+    auto *socket = dynamic_cast<QTcpSocket*>(sender());
     if (socket)
     {
         m_lastSocket = socket;
@@ -145,7 +144,7 @@ void LCDServer::readSocket()
             QString incoming_data = socket->readLine();
             incoming_data = incoming_data.replace( QRegExp("\n"), "" );
             incoming_data = incoming_data.replace( QRegExp("\r"), "" );
-            incoming_data.simplified();
+            incoming_data = incoming_data.simplified();
             QStringList tokens = parseCommand(incoming_data);
             parseTokens(tokens, socket);
         }
@@ -159,9 +158,9 @@ QStringList LCDServer::parseCommand(QString &command)
     QChar c;
     bool bInString = false;
 
-    for (int x = 0; x < command.length(); x++)
+    foreach (auto && x, command)
     {
-        c = command[x];
+        c = x;
         if (!bInString && c == '"')
             bInString = true;
         else if (bInString && c == '"')
@@ -279,7 +278,7 @@ void LCDServer::shutDown()
     m_serverPool->disconnect();
     m_serverPool->close();
     delete m_serverPool;
-    m_serverPool = NULL;
+    m_serverPool = nullptr;
 
     exit(0);
 }
@@ -292,7 +291,7 @@ void LCDServer::sendMessage(QTcpSocket *where, const QString &what)
     where->write(tmp.constData(), tmp.length());
 }
 
-void LCDServer::sendKeyPress(QString key_pressed)
+void LCDServer::sendKeyPress(const QString& key_pressed)
 {
     if (debug_level > 0)
         LOG(VB_GENERAL, LOG_INFO, "LCDServer:: send key press: " + key_pressed);
@@ -304,8 +303,10 @@ void LCDServer::sendKeyPress(QString key_pressed)
 
 void LCDServer::sendConnected(QTcpSocket *socket)
 {
-    QString sWidth, sHeight;
-    int nWidth = 0, nHeight = 0;
+    QString sWidth;
+    QString sHeight;
+    int nWidth = 0;
+    int nHeight = 0;
 
     if (m_lcd)
     {
@@ -370,7 +371,7 @@ void LCDServer::switchToGeneric(const QStringList &tokens, QTcpSocket *socket)
 
     for (int x = 1; x < tokens.count(); x += 5)
     {
-        bool bOK;
+        bool bOK = false;
         int row = tokens[x].toInt(&bOK);
         if (!bOK)
         {
@@ -381,7 +382,7 @@ void LCDServer::switchToGeneric(const QStringList &tokens, QTcpSocket *socket)
             return;
         }
 
-        TEXT_ALIGNMENT align;
+        TEXT_ALIGNMENT align = ALIGN_LEFT;
         if (tokens[x + 1] == "ALIGN_LEFT")
             align = ALIGN_LEFT;
         else if (tokens[x + 1] == "ALIGN_RIGHT")
@@ -399,7 +400,7 @@ void LCDServer::switchToGeneric(const QStringList &tokens, QTcpSocket *socket)
 
         QString text = tokens[x + 2];
         QString screen = tokens[x + 3];
-        bool scrollable;
+        bool scrollable = false;
         if (tokens[x + 4] == "TRUE")
             scrollable = true;
         else if (tokens[x + 4] == "FALSE")
@@ -493,7 +494,7 @@ void LCDServer::switchToMenu(const QStringList &tokens, QTcpSocket *socket)
 
     QString appName = tokens[1];
 
-    bool bPopup;
+    bool bPopup = false;
     if (tokens[2] == "TRUE")
         bPopup = true;
     else if (tokens[2] == "FALSE")
@@ -513,7 +514,7 @@ void LCDServer::switchToMenu(const QStringList &tokens, QTcpSocket *socket)
     {
         QString text = tokens[x];
 
-        CHECKED_STATE checked;
+        CHECKED_STATE checked = CHECKED;
         if (tokens[x + 1] == "CHECKED")
             checked = CHECKED;
         else if (tokens[x + 1] == "UNCHECKED")
@@ -529,7 +530,7 @@ void LCDServer::switchToMenu(const QStringList &tokens, QTcpSocket *socket)
             return;
         }
 
-        bool selected;
+        bool selected = false;
         if (tokens[x + 2] == "TRUE")
             selected = true;
         else if (tokens[x + 2] == "FALSE")
@@ -543,7 +544,7 @@ void LCDServer::switchToMenu(const QStringList &tokens, QTcpSocket *socket)
             return;
         }
 
-        bool scrollable;
+        bool scrollable = false;
         if (tokens[x + 3] == "TRUE")
             scrollable = true;
         else if (tokens[x + 3] == "FALSE")
@@ -557,7 +558,7 @@ void LCDServer::switchToMenu(const QStringList &tokens, QTcpSocket *socket)
             return;
         }
 
-        bool bOK;
+        bool bOK = false;
         int indent = tokens[x + 4].toInt(&bOK);
         if (!bOK)
         {
@@ -592,7 +593,7 @@ void LCDServer::setChannelProgress(const QStringList &tokens, QTcpSocket *socket
         return;
     }
 
-    bool bOK;
+    bool bOK = false;
     float progress = tokens[2].toFloat(&bOK);
     if (!bOK)
     {
@@ -624,8 +625,8 @@ void LCDServer::setGenericProgress(const QStringList &tokens, QTcpSocket *socket
         return;
     }
 
-    bool bOK;
-    bool busy = tokens[1].toInt(&bOK);
+    bool bOK = false;
+    bool busy = tokens[1].toInt(&bOK) != 0;
     if (!bOK)
     {
         LOG(VB_GENERAL, LOG_ERR,
@@ -665,7 +666,7 @@ void LCDServer::setMusicProgress(const QStringList &tokens, QTcpSocket *socket)
         return;
     }
 
-    bool bOK;
+    bool bOK = false;
     float progress = tokens[2].toFloat(&bOK);
     if (!bOK)
     {
@@ -707,7 +708,7 @@ void LCDServer::setMusicProp(const QStringList &tokens, QTcpSocket *socket)
             sendMessage(socket, "HUH?");
             return;
         }
-        bool bOk;
+        bool bOk = false;
         int state = tokens[2].toInt (&bOk);
         if (!bOk)
         {
@@ -730,7 +731,7 @@ void LCDServer::setMusicProp(const QStringList &tokens, QTcpSocket *socket)
             sendMessage(socket, "HUH?");
             return;
         }
-        bool bOk;
+        bool bOk = false;
         int state = tokens[2].toInt (&bOk);
         if (!bOk)
         {
@@ -769,7 +770,7 @@ void LCDServer::setVolumeLevel(const QStringList &tokens, QTcpSocket *socket)
         return;
     }
 
-    bool bOK;
+    bool bOK = false;
     float progress = tokens[1].toFloat(&bOK);
     if (!bOK)
     {
@@ -800,7 +801,7 @@ void LCDServer::updateLEDs(const QStringList &tokens, QTcpSocket *socket)
         return;
     }
 
-    bool bOK;
+    bool bOK = false;
     int mask = tokens[1].toInt(&bOK);
     if (!bOK)
     {

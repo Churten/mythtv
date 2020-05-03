@@ -21,14 +21,7 @@ MythScreenStack::MythScreenStack(MythMainWindow *parent, const QString &name,
     if (parent)
         parent->AddScreenStack(this, mainstack);
 
-    m_newTop = NULL;
-    m_topScreen = NULL;
-
     EnableEffects();
-    m_InNewTransition = false;
-
-    m_DoInit = false;
-    m_InitTimerStarted = false;
 }
 
 MythScreenStack::~MythScreenStack()
@@ -38,7 +31,7 @@ MythScreenStack::~MythScreenStack()
     while (!m_Children.isEmpty())
     {
         MythScreenType *child = m_Children.back();
-        PopScreen(child, false, true); // Don't fade, do delete
+        MythScreenStack::PopScreen(child, false, true); // Don't fade, do delete
     }
 }
 
@@ -106,7 +99,7 @@ void MythScreenStack::PopScreen(MythScreenType *screen, bool allowFade,
 
     MythMainWindow *mainwindow = GetMythMainWindow();
 
-    screen->setParent(0);
+    screen->setParent(nullptr);
     if ((screen == m_topScreen) && allowFade && m_DoTransitions
         && !mainwindow->IsExitingToMain())
     {
@@ -128,7 +121,7 @@ void MythScreenStack::PopScreen(MythScreenType *screen, bool allowFade,
         if (deleteScreen)
             screen->deleteLater();
 
-        screen = NULL;
+        screen = nullptr;
 
         mainwindow->update();
         if (mainwindow->IsExitingToMain())
@@ -138,9 +131,9 @@ void MythScreenStack::PopScreen(MythScreenType *screen, bool allowFade,
         }
     }
 
-    m_topScreen = NULL;
+    m_topScreen = nullptr;
 
-    RecalculateDrawOrder();
+    MythScreenStack::RecalculateDrawOrder();
 
     // If we're fading it, we still want to draw it.
     if (screen && !m_DrawOrder.contains(screen))
@@ -148,15 +141,14 @@ void MythScreenStack::PopScreen(MythScreenType *screen, bool allowFade,
 
     if (!m_Children.isEmpty())
     {
-        QVector<MythScreenType *>::Iterator it;
-        for (it = m_DrawOrder.begin(); it != m_DrawOrder.end(); ++it)
+        foreach (auto & draw, m_DrawOrder)
         {
-            if (*it != screen && !(*it)->IsDeleting())
+            if (draw != screen && !draw->IsDeleting())
             {
-                m_topScreen = (*it);
-                (*it)->SetAlpha(255);
+                m_topScreen = draw;
+                draw->SetAlpha(255);
                 if (poppedFullscreen)
-                    (*it)->aboutToShow();
+                    draw->aboutToShow();
             }
         }
     }
@@ -180,7 +172,7 @@ void MythScreenStack::PopScreen(MythScreenType *screen, bool allowFade,
         }
 
         if (!allowFade || !m_DoTransitions)
-            emit topScreenChanged(NULL);
+            emit topScreenChanged(nullptr);
     }
 }
 
@@ -190,7 +182,7 @@ MythScreenType *MythScreenStack::GetTopScreen(void) const
         return m_topScreen;
     if (!m_DrawOrder.isEmpty())
         return m_DrawOrder.back();
-    return NULL;
+    return nullptr;
 }
 
 void MythScreenStack::GetDrawOrder(QVector<MythScreenType *> &screens)
@@ -244,12 +236,8 @@ void MythScreenStack::RecalculateDrawOrder(void)
     if (m_Children.isEmpty())
         return;
 
-    QVector<MythScreenType *>::Iterator it;
-
-    for (it = m_Children.begin(); it != m_Children.end(); ++it)
+    foreach (auto screen, m_Children)
     {
-        MythScreenType *screen = (*it);
-
         if (screen->IsFullscreen())
             m_DrawOrder.clear();
 
@@ -272,11 +260,10 @@ void MythScreenStack::DoNewFadeTransition(void)
 
     if (m_newTop->IsFullscreen())
     {
-        QVector<MythScreenType *>::Iterator it;
-        for (it = m_DrawOrder.begin(); it != m_DrawOrder.end(); ++it)
+        foreach (auto & draw, m_DrawOrder)
         {
-            if (!(*it)->IsDeleting())
-                (*it)->AdjustAlpha(1, -kFadeVal);
+            if (!draw->IsDeleting())
+                draw->AdjustAlpha(1, -kFadeVal);
         }
 
         m_DrawOrder.push_back(m_newTop);
@@ -298,7 +285,7 @@ void MythScreenStack::CheckNewFadeTransition(void)
         m_InNewTransition = false;
         if (!m_newTop->IsInitialized())
             m_DoInit = true;
-        m_newTop = NULL;
+        m_newTop = nullptr;
 
         RecalculateDrawOrder();
     }
@@ -325,10 +312,9 @@ void MythScreenStack::CheckDeletes(bool force)
         {
             bool found = false;
 
-            QVector<MythScreenType *>::Iterator test;
-            for (test = m_DrawOrder.begin(); test != m_DrawOrder.end(); ++test)
+            foreach (auto & test, m_DrawOrder)
             {
-                if (*it == *test)
+                if (*it == test)
                 {
                     found = true;
                     break;
@@ -341,8 +327,9 @@ void MythScreenStack::CheckDeletes(bool force)
 
         if (deleteit)
         {
-            QVector<MythScreenType *>::Iterator test;
-            for (test = m_Children.begin(); test != m_Children.end(); ++test)
+            for (auto *test = m_Children.begin();
+                 test != m_Children.end();
+                 ++test)
             {
                 if (*test == *it)
                 {
@@ -352,7 +339,7 @@ void MythScreenStack::CheckDeletes(bool force)
             }
 
             if (*it == m_newTop)
-                m_newTop = NULL;
+                m_newTop = nullptr;
             delete (*it);
             m_ToDelete.erase(it);
             it = m_ToDelete.begin();
@@ -375,24 +362,21 @@ QString MythScreenStack::GetLocation(bool fullPath) const
     if (fullPath)
     {
         QString path;
-        QVector<MythScreenType *>::const_iterator it;
-        for (it = m_Children.begin(); it != m_Children.end(); ++it)
+        foreach (auto child, m_Children)
         {
-            if (!(*it)->IsDeleting())
+            if (!child->IsDeleting())
             {
                 if (path.isEmpty())
-                    path = (*it)->objectName();
+                    path = child->objectName();
                 else
-                    path += '/' + (*it)->objectName();
+                    path += '/' + child->objectName();
             }
         }
         return path;
     }
-    else
-    {
-        if (m_topScreen)
-            return m_topScreen->objectName();
-    }
+
+    if (m_topScreen)
+        return m_topScreen->objectName();
 
     return QString();
 }

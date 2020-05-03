@@ -11,22 +11,22 @@
 
 #include "xmlparsebase.h" // for VERBOSE_XML && Xml Parsing helpers
 
-typedef enum {
+enum ThemeType {
     THEME_UNKN  = 0x00,
     THEME_UI    = 0x01,
     THEME_OSD   = 0x02,
     THEME_MENU  = 0x04
-} ThemeType;
+};
 
 class MUI_PUBLIC ThemeInfo : public XMLParseBase
 {
   public:
-    explicit ThemeInfo(QString theme);
-    ~ThemeInfo();
+    explicit ThemeInfo(const QString& theme);
+    ~ThemeInfo() = default;
 
     bool IsWide() const;
     QString GetAspect() const { return m_aspect; }
-    const QSize   *GetBaseRes() const { return &m_baseres; }
+    const QSize GetBaseRes() const { return m_baseres; }
     QString GetName() const { return m_name; }
     QString GetBaseTheme() const { return m_baseTheme; }
     QString GetDescription() const { return m_description; }
@@ -50,15 +50,15 @@ class MUI_PUBLIC ThemeInfo : public XMLParseBase
     QString   m_themeurl;
     QFileInfo m_theme;
     QString   m_baseTheme;
-    int       m_type;
+    int       m_type         {THEME_UNKN};
     QString   m_aspect;
-    QSize     m_baseres;
+    QSize     m_baseres      {800,600};
     QString   m_name;
     QString   m_previewpath;
     QString   m_description;
     QString   m_errata;
-    int       m_majorver;
-    int       m_minorver;
+    int       m_majorver     {0};
+    int       m_minorver     {0};
 
     QString   m_authorName;
     QString   m_authorEmail;

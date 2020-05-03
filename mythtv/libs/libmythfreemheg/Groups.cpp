@@ -37,13 +37,6 @@
 #include "TokenGroup.h"
 #include "Logging.h"
 
-MHGroup::MHGroup()
-{
-    m_nOrigGCPriority = 127; // Default.
-    m_fIsApp = false;
-    m_nLastId = 0;
-}
-
 MHGroup::~MHGroup()
 {
     while (!m_Timers.isEmpty())
@@ -94,16 +87,16 @@ void MHGroup::Initialise(MHParseNode *p, MHEngine *engine)
     // Ignore the other stuff at the moment.
     MHParseNode *pItems = p->GetNamedArg(C_ITEMS);
 
-    if (pItems == NULL)
+    if (pItems == nullptr)
     {
-        p->Failure("Missing :Items block");
+        MHParseNode::Failure("Missing :Items block");
         return;
     }
 
     for (int i = 0; i < pItems->GetArgCount(); i++)
     {
         MHParseNode *pItem = pItems->GetArgN(i);
-        MHIngredient *pIngredient = NULL;
+        MHIngredient *pIngredient = nullptr;
 
         try
         {
@@ -351,11 +344,11 @@ MHRoot *MHGroup::FindByObjectNo(int n)
         }
     }
 
-    return NULL;
+    return nullptr;
 }
 
 // Set up a timer or cancel a timer.
-void MHGroup::SetTimer(int nTimerId, bool fAbsolute, int nMilliSecs, MHEngine *)
+void MHGroup::SetTimer(int nTimerId, bool fAbsolute, int nMilliSecs, MHEngine * /*engine*/)
 {
     // First remove any existing timer with the same Id.
     for (int i = 0; i < m_Timers.size(); i++)
@@ -378,7 +371,7 @@ void MHGroup::SetTimer(int nTimerId, bool fAbsolute, int nMilliSecs, MHEngine *)
         return;
     }
 
-    MHTimer *pTimer = new MHTimer;
+    auto *pTimer = new MHTimer;
     m_Timers.append(pTimer);
     pTimer->m_nTimerId = nTimerId;
 
@@ -397,12 +390,11 @@ int MHGroup::CheckTimers(MHEngine *engine)
 {
     QTime currentTime = QTime::currentTime(); // Get current time
     QList<MHTimer *>::iterator it = m_Timers.begin();
-    MHTimer *pTimer;
     int nMSecs = 0;
 
     while (it != m_Timers.end())
     {
-        pTimer = *it;
+        MHTimer *pTimer = *it;
 
         if (pTimer->m_Time <= currentTime)   // Use <= rather than < here so we fire timers with zero time immediately.
         {
@@ -440,22 +432,6 @@ void MHGroup::MakeClone(MHRoot *pTarget, MHRoot *pRef, MHEngine *engine)
     pClone->Preparation(engine); // Prepare the clone.
 }
 
-MHApplication::MHApplication()
-{
-    m_fIsApp = true;
-    m_nCharSet = 0;
-    m_nTextCHook = 0;
-    m_nIPCHook = 0;
-    m_nStrCHook = 0;
-    m_nBitmapCHook = 0;
-    m_nLineArtCHook = 0;
-    m_tuneinfo = 0;
-
-    m_pCurrentScene = NULL;
-    m_nLockCount = 0;
-    m_fRestarting = false;
-}
-
 MHApplication::~MHApplication()
 {
     delete(m_pCurrentScene);
@@ -484,7 +460,7 @@ void MHApplication::Initialise(MHParseNode *p, MHEngine *engine)
     MHParseNode *pDefattrs = p->GetNamedArg(C_DEFAULT_ATTRIBUTES);
 
     // but in the text form they're encoded in the Application block.
-    if (pDefattrs == NULL)
+    if (pDefattrs == nullptr)
     {
         pDefattrs = p;
     }
@@ -573,7 +549,7 @@ void MHApplication::Initialise(MHParseNode *p, MHEngine *engine)
     // finds the first occurrence of :Font in the table and returns 13.
     MHParseNode *pFont = pDefattrs->GetNamedArg(C_FONT2);
 
-    if (pFont == NULL)
+    if (pFont == nullptr)
     {
         pFont = pDefattrs->GetNamedArg(C_FONT);
     }
@@ -743,21 +719,6 @@ int MHApplication::FindOnStack(const MHRoot *pVis) // Returns the index on the s
     return -1; // Not there
 }
 
-MHScene::MHScene()
-{
-    m_fIsApp = false;
-
-    m_nEventReg = 0;
-    m_nSceneCoordX = 0;
-    m_nSceneCoordY = 0;
-
-    // TODO: In UK MHEG 1.06 the aspect ratio is optional and if not specified "the
-    // scene has no aspect ratio".
-    m_nAspectRatioW = 4;
-    m_nAspectRatioH = 3;
-    m_fMovingCursor = false;
-}
-
 void MHScene::Initialise(MHParseNode *p, MHEngine *engine)
 {
     MHGroup::Initialise(p, engine);
@@ -856,7 +817,7 @@ void MHSendEvent::Initialise(MHParseNode *p, MHEngine *engine)
     }
 }
 
-void MHSendEvent::PrintArgs(FILE *fd, int) const
+void MHSendEvent::PrintArgs(FILE *fd, int /*nTabs*/) const
 {
     m_EventSource.PrintMe(fd, 0);
     QByteArray tmp = MHLink::EventTypeToString(m_EventType).toLatin1();
@@ -872,7 +833,8 @@ void MHSendEvent::PrintArgs(FILE *fd, int) const
 void MHSendEvent::Perform(MHEngine *engine)
 {
     // The target is always the current scene so we ignore it here.
-    MHObjectRef target, source;
+    MHObjectRef target;
+    MHObjectRef source;
     m_Target.GetValue(target, engine); // TODO: Check this is the scene?
     m_EventSource.GetValue(source, engine);
 
@@ -942,7 +904,8 @@ void MHSetTimer::Perform(MHEngine *engine)
             newTime = -1;
             break; // We treat an absolute time of -1 as "cancel"
         case ST_TimerAbsolute:
-            fAbsolute = m_AbsFlag.GetValue(engine); // And drop to the next
+            fAbsolute = m_AbsFlag.GetValue(engine);
+            [[clang::fallthrough]];
         case ST_TimerRelative:
             newTime = m_TimerValue.GetValue(engine);
     }
@@ -958,7 +921,7 @@ void MHPersistent::Initialise(MHParseNode *p, MHEngine *engine)
 
     for (int i = 0; i < pVarSeq->GetSeqCount(); i++)
     {
-        MHObjectRef *pVar = new MHObjectRef;
+        auto *pVar = new MHObjectRef;
         m_Variables.Append(pVar);
         pVar->Initialise(pVarSeq->GetSeqN(i), engine);
     }

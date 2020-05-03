@@ -88,23 +88,21 @@ desc_list_t SpliceDescriptor::ParseOnlyInclude(
 const unsigned char *SpliceDescriptor::Find(
     const desc_list_t &parsed, uint desc_tag)
 {
-    desc_list_t::const_iterator it = parsed.begin();
-    for (; it != parsed.end(); ++it)
+    for (const auto *item : parsed)
     {
-        if ((*it)[0] == desc_tag)
-            return *it;
+        if (item[0] == desc_tag)
+            return item;
     }
-    return NULL;
+    return nullptr;
 }
 
 desc_list_t SpliceDescriptor::FindAll(const desc_list_t &parsed, uint desc_tag)
 {
     desc_list_t tmp;
-    desc_list_t::const_iterator it = parsed.begin();
-    for (; it != parsed.end(); ++it)
+    for (const auto *item : parsed)
     {
-        if ((*it)[0] == desc_tag)
-            tmp.push_back(*it);
+        if (item[0] == desc_tag)
+            tmp.push_back(item);
     }
     return tmp;
 }
@@ -128,12 +126,26 @@ QString SpliceDescriptor::toString(void) const
 {
     QString str;
 
+    if (!IsValid())
+        return "Invalid Splice Descriptor";
     if (SpliceDescriptorID::avail == DescriptorTag())
-        str = AvailDescriptor(_data).toString();
+    {
+        auto desc = AvailDescriptor(m_data);
+        if (desc.IsValid())
+            str = desc.toString();
+    }
     else if (SpliceDescriptorID::dtmf == DescriptorTag())
-        str = DTMFDescriptor(_data).toString();
+    {
+        auto desc = DTMFDescriptor(m_data);
+        if (desc.IsValid())
+            str = desc.toString();
+    }
     else if (SpliceDescriptorID::segmentation == DescriptorTag())
-        str = SegmentationDescriptor(_data).toString();
+    {
+        auto desc = SegmentationDescriptor(m_data);
+        if (desc.IsValid())
+            str = desc.toString();
+    }
     else
     {
         str.append(QString("%1 Splice Descriptor (0x%2)")
@@ -141,10 +153,10 @@ QString SpliceDescriptor::toString(void) const
                    .arg(int(DescriptorTag()), 0, 16));
         str.append(QString(" length(%1)").arg(int(DescriptorLength())));
         for (uint i=0; i<DescriptorLength(); i++)
-            str.append(QString(" 0x%1").arg(int(_data[i+2]), 0, 16));
+            str.append(QString(" 0x%1").arg(int(m_data[i+2]), 0, 16));
     }
 
-    return str;
+    return str.isEmpty() ? "Invalid Splice Descriptor" : str;
 }
 
 /// Returns XML representation of string the TS Reader XML format.
@@ -163,7 +175,7 @@ QString SpliceDescriptor::toStringXML(uint level) const
 
     str += indent_1 + "<DATA>";
     for (uint i = 0; i < DescriptorLength(); i++)
-        str += QString("0x%1 ").arg(_data[i+2],2,16,QChar('0'));
+        str += QString("0x%1 ").arg(m_data[i+2],2,16,QChar('0'));
     str = str.trimmed();
     str += "</DATA>\n";
 
@@ -191,7 +203,7 @@ bool DTMFDescriptor::IsParsible(const unsigned char *data, uint safe_bytes)
 
 bool SegmentationDescriptor::Parse(void)
 {
-    _ptrs[0] = _data + (IsProgramSegmentation() ? 12 : 13 + ComponentCount() * 6);
+    _ptrs[0] = m_data + (IsProgramSegmentation() ? 12 : 13 + ComponentCount() * 6);
     _ptrs[1] = _ptrs[0] + (HasSegmentationDuration() ? 5 : 0);
     _ptrs[2] = _ptrs[1] + 2 + SegmentationUPIDLength();
     return true;

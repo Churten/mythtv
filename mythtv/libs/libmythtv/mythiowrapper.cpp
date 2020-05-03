@@ -3,11 +3,11 @@
 #else
 #include <dlfcn.h>
 #endif
-#include <stdio.h>
-#include <sys/types.h>
-#include <sys/stat.h>
+#include <cstdio>
 #include <dirent.h>
 #include <fcntl.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 #include <QFile>
@@ -122,11 +122,9 @@ int mythfile_check(int id)
     int result = 0;
 
     m_fileWrapperLock.lockForWrite();
-    if (m_localfiles.contains(id))
-        result = 1;
-    else if (m_remotefiles.contains(id))
-        result = 1;
-    else if (m_ringbuffers.contains(id))
+    if ((m_localfiles.contains(id))  ||
+        (m_remotefiles.contains(id)) ||
+        (m_ringbuffers.contains(id)))
         result = 1;
     m_fileWrapperLock.unlock();
 
@@ -138,7 +136,7 @@ int mythfile_open(const char *pathname, int flags)
     LOG(VB_FILE, LOG_DEBUG, QString("mythfile_open('%1', %2)")
             .arg(pathname).arg(flags));
 
-    struct stat fileinfo;
+    struct stat fileinfo {};
     if (mythfile_stat(pathname, &fileinfo))
         return -1;
 
@@ -146,7 +144,7 @@ int mythfile_open(const char *pathname, int flags)
         return errno = EISDIR, -1;
 
     int fileID = -1;
-    if (strncmp(pathname, "myth://", 7))
+    if (strncmp(pathname, "myth://", 7) != 0)
     {
         int lfd = open(pathname, flags);
         if (lfd < 0)
@@ -160,11 +158,11 @@ int mythfile_open(const char *pathname, int flags)
     }
     else
     {
-        RingBuffer *rb = NULL;
-        RemoteFile *rf = NULL;
+        RingBuffer *rb = nullptr;
+        RemoteFile *rf = nullptr;
 
         if ((fileinfo.st_size < 512) &&
-            (fileinfo.st_mtime < (time(NULL) - 300)))
+            (fileinfo.st_mtime < (time(nullptr) - 300)))
         {
             if (flags & O_WRONLY)
                 rf = new RemoteFile(pathname, true, false); // Writeable
@@ -177,13 +175,17 @@ int mythfile_open(const char *pathname, int flags)
         else
         {
             if (flags & O_WRONLY)
+            {
                 rb = RingBuffer::Create(
                     pathname, true, false,
                     RingBuffer::kDefaultOpenTimeout, true); // Writeable
+            }
             else
+            {
                 rb = RingBuffer::Create(
                     pathname, false, true,
                     RingBuffer::kDefaultOpenTimeout, true); // Read-Only
+            }
 
             if (!rb)
                 return -1;
@@ -344,7 +346,7 @@ int mythfile_stat(const char *path, struct stat *buf)
     LOG(VB_FILE, LOG_DEBUG, QString("mythfile_stat('%1', %2)")
             .arg(path).arg((long long)buf));
 
-    if (!strncmp(path, "myth://", 7))
+    if (strncmp(path, "myth://", 7) == 0)
     {
         bool res = RemoteFile::Exists(path, buf);
         if (res)
@@ -371,12 +373,16 @@ int mythfile_stat_fd(int fileID, struct stat *buf)
     return mythfile_stat(filename.toLocal8Bit().constData(), buf);
 }
 
+/*
+ * This function exists for the use of dvd_reader.c, thus the return
+ * value of int instead of bool.  C doesn't have a bool type.
+ */
 int mythfile_exists(const char *path, const char *file)
 {
     LOG(VB_FILE, LOG_DEBUG, QString("mythfile_exists('%1', '%2')")
             .arg(path).arg(file));
 
-    if (!strncmp(path, "myth://", 7))
+    if (strncmp(path, "myth://", 7) == 0)
         return RemoteFile::Exists(QString("%1/%2").arg(path).arg(file));
 
     return QFile::exists(QString("%1/%2").arg(path).arg(file));
@@ -409,9 +415,8 @@ int mythdir_check(int id)
     int result = 0;
 
     m_dirWrapperLock.lockForWrite();
-    if (m_localdirs.contains(id))
-        result = 1;
-    else if (m_remotedirs.contains(id))
+    if ((m_localdirs.contains(id)) ||
+        (m_remotedirs.contains(id)))
         result = 1;
     m_dirWrapperLock.unlock();
 
@@ -423,15 +428,16 @@ int mythdir_opendir(const char *dirname)
     LOG(VB_FILE, LOG_DEBUG, LOC + QString("mythdir_opendir(%1)").arg(dirname));
 
     int id = 0;
-    if (strncmp(dirname, "myth://", 7))
+    if (strncmp(dirname, "myth://", 7) != 0)
     {
         DIR *dir = opendir(dirname);
-
-        m_dirWrapperLock.lockForWrite();
-        id = getNextDirID();
-        m_localdirs[id] = dir;
-        m_dirnames[id] = dirname;
-        m_dirWrapperLock.unlock();
+        if (dir) {
+            m_dirWrapperLock.lockForWrite();
+            id = getNextDirID();
+            m_localdirs[id] = dir;
+            m_dirnames[id] = dirname;
+            m_dirWrapperLock.unlock();
+        }
     }
     else
     {
@@ -499,7 +505,7 @@ int mythdir_closedir(int dirID)
 
 char *mythdir_readdir(int dirID)
 {
-    char *result = NULL;
+    char *result = nullptr;
 
     LOG(VB_FILE, LOG_DEBUG, LOC + QString("mythdir_readdir(%1)").arg(dirID));
 
@@ -516,13 +522,11 @@ char *mythdir_readdir(int dirID)
     }
     else if (m_localdirs.contains(dirID))
     {
-        int sz = offsetof(struct dirent, d_name) + FILENAME_MAX + 1;
-        struct dirent *entry =
-            reinterpret_cast<struct dirent*>(calloc(1, sz));
-        struct dirent *r = NULL;
-        if ((0 == readdir_r(m_localdirs[dirID], entry, &r)) && (NULL != r))
+        struct dirent *r = nullptr;
+        // glibc deprecated readdir_r in version 2.24,
+        // cppcheck-suppress readdirCalled
+        if ((r = readdir(m_localdirs[dirID])) != nullptr)
             result = strdup(r->d_name);
-        free(entry);
     }
     m_dirWrapperLock.unlock();
 

@@ -6,7 +6,7 @@
 #ifndef _EIT_CACHE_H
 #define _EIT_CACHE_H
 
-#include <stdint.h>
+#include <cstdint>
 
 // Qt headers
 #include <QString>
@@ -16,8 +16,8 @@
 // MythTV headers
 #include "mythtvexp.h"
 
-typedef QMap<uint, uint64_t> event_map_t;
-typedef QMap<uint, event_map_t*> key_map_t;
+using event_map_t = QMap<uint, uint64_t>;
+using key_map_t = QMap<uint, event_map_t*>;
 
 class EITCache
 {
@@ -39,22 +39,22 @@ class EITCache
     bool WriteChannelToDB(QStringList &value_clauses, uint chanid);
 
     // event key cache
-    key_map_t   channelMap;
+    key_map_t      m_channelMap;
 
-    mutable QMutex eventMapLock;
-    uint            lastPruneTime;
+    mutable QMutex m_eventMapLock;
+    uint           m_lastPruneTime;
 
     // statistics
-    uint        accessCnt;
-    uint        hitCnt;
-    uint        tblChgCnt;
-    uint        verChgCnt;
-    uint        endChgCnt;
-    uint        entryCnt;
-    uint        pruneCnt;
-    uint        prunedHitCnt;
-    uint        futureHitCnt;
-    uint        wrongChannelHitCnt;
+    uint           m_accessCnt          {0};
+    uint           m_hitCnt             {0};
+    uint           m_tblChgCnt          {0};
+    uint           m_verChgCnt          {0};
+    uint           m_endChgCnt          {0};
+    uint           m_entryCnt           {0};
+    uint           m_pruneCnt           {0};
+    uint           m_prunedHitCnt       {0};
+    uint           m_futureHitCnt       {0};
+    uint           m_wrongChannelHitCnt {0};
 
     static const uint kVersionMax;
 

@@ -9,11 +9,7 @@ namespace MythDate
 
 QDateTime current(bool stripped)
 {
-#if QT_VERSION >= QT_VERSION_CHECK(4,7,0)
     QDateTime rettime = QDateTime::currentDateTimeUtc();
-#else
-    QDateTime rettime = QDateTime::currentDateTime().toUTC();
-#endif
     if (stripped)
         rettime = rettime.addMSecs(-rettime.time().msec());
     return rettime;
@@ -57,16 +53,49 @@ MBASE_PUBLIC QDateTime fromString(const QString &str, const QString &format)
     return dt;
 }
 
+#if QT_VERSION < QT_VERSION_CHECK(5,8,0)
+/**
+ *  This function takes the number of seconds since the start of the
+ *  epoch and returns a QDateTime with the equivalent value.
+ *
+ *  Note: This function returns a QDateTime set to UTC, whereas the
+ *  QDateTime::fromTime_t function returns a value set to localtime.
+ *
+ *  \param seconds  The number of seconds since the start of the epoch
+ *                  at Jan 1 1970 at 00:00:00.
+ *  \return A QDateTime.
+ */
 MBASE_PUBLIC QDateTime fromTime_t(uint seconds)
 {
     QDateTime dt = QDateTime::fromTime_t(seconds);
     return dt.toUTC();
 }
 
+#else
+
+/**
+ *  This function takes the number of seconds since the start of the
+ *  epoch and returns a QDateTime with the equivalent value.
+ *
+ *  Note: This function returns a QDateTime set to UTC, whereas the
+ *  QDateTime::fromSecsSinceEpoch function returns a value set to
+ *  localtime.
+ *
+ *  \param seconds  The number of seconds since the start of the epoch
+ *                  at Jan 1 1970 at 00:00:00.
+ *  \return A QDateTime.
+ */
+MBASE_PUBLIC QDateTime fromSecsSinceEpoch(uint seconds)
+{
+    QDateTime dt = QDateTime::fromSecsSinceEpoch(seconds);
+    return dt.toUTC();
+}
+#endif
+
 /** \fn toString(const QDateTime&,uint)
  *  \brief Returns a formatted QString based on the supplied QDateTime
  *
- *  \param datetime The QDateTime object to use
+ *  \param raw_dt    The QDateTime object to use
  *  \param format   The format of the string to return
  */
 QString toString(const QDateTime &raw_dt, uint format)
@@ -101,7 +130,7 @@ QString toString(const QDateTime &raw_dt, uint format)
     if (format & kScreenShotFilename)
         return datetime.toString("yyyy-MM-ddThh-mm-ss.zzz");
 
-    if (format & (kDateFull | kDateShort))
+    if (format & kDateEither)
         result += toString(datetime.date(), format);
 
     if (format & kTime)
@@ -128,7 +157,7 @@ QString toString(const QDate &date, uint format)
     if (!date.isValid())
         return result;
 
-    if (format & (kDateFull | kDateShort))
+    if (format & kDateEither)
     {
         QString stringformat;
         if (format & kDateShort)
@@ -154,9 +183,9 @@ QString toString(const QDate &date, uint format)
             QDate now = current().toLocalTime().date();
             if ((format & kSimplify) && (now == date))
                 result = QCoreApplication::translate("(Common)", "Today");
-            else if ((format & kSimplify) && (now.addDays(-1) == date))
+            else if (((format & kSimplify) != 0U) && (now.addDays(-1) == date))
                 result = QCoreApplication::translate("(Common)", "Yesterday");
-            else if ((format & kSimplify) && (now.addDays(1) == date))
+            else if (((format & kSimplify) != 0U) && (now.addDays(1) == date))
                 result = QCoreApplication::translate("(Common)", "Tomorrow");
         }
 
@@ -169,8 +198,7 @@ QString toString(const QDate &date, uint format)
 
 /** \brief Returns the total number of seconds since midnight of the supplied QTime
  *
- *  \param date     The QDate object to use
- *  \param format   The format of the string to return
+ *  \param time     The QTime object to use
  */
 int toSeconds( const QTime &time )
 {

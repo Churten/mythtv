@@ -30,7 +30,6 @@
 #ifndef _MISC_SETTINGS_H_
 #define _MISC_SETTINGS_H_
 
-#include "settings.h"
 #include "standardsettings.h"
 #include "channelscantypes.h"
 
@@ -112,12 +111,93 @@ class FreeToAirOnly : public TransMythUICheckBoxSetting
   public:
     FreeToAirOnly()
     {
-        setValue(true);
         setLabel(QObject::tr("Unencrypted Only"));
         setHelpText(
             QObject::tr(
                 "If set, only non-encrypted channels will be "
                 "added during the scan."));
+        setValue(true);
+    };
+};
+
+class ChannelNumbersOnly : public TransMythUICheckBoxSetting
+{
+  public:
+    ChannelNumbersOnly()
+    {
+        setLabel(QObject::tr("Logical Channel Numbers required"));
+        setHelpText(
+            QObject::tr(
+                "If set, only services with a Logical Channel Number will "
+                "be added during the scan. This will filter out services "
+                "for set-top-box firmware download and video-on-demand "
+                "that can be present on DVB-C networks."));
+        setValue(false);
+    };
+};
+
+class CompleteChannelsOnly : public TransMythUICheckBoxSetting
+{
+  public:
+    CompleteChannelsOnly()
+    {
+        setLabel(QObject::tr("Complete scan data required"));
+        setHelpText(
+            QObject::tr(
+                "If set, only services that are present in the PAT, the PMT "
+                "and the SDT and that have a name will be added during the scan. "
+                "On satellites there are many incomplete channels, "
+                "such as feeds and offline channels, "
+                "that are not useful in a MythTV system. "
+                "These are filtered out by this option."));
+        setValue(true);
+    };
+};
+
+class FullChannelSearch : public TransMythUICheckBoxSetting
+{
+  public:
+    FullChannelSearch()
+    {
+        setLabel(QObject::tr("Full search for old channels"));
+        setHelpText(
+            QObject::tr(
+                "If set, compare all channels in the database with the channels found in "
+                "the scan; otherwise only the channels in the same transport are compared. "
+                "This option is useful when you want to keep channel data such as "
+                "the xmltvid and the icon path when doing a rescan "
+                "after channels have been rearranged across transports."));
+        setValue(true);
+    };
+};
+
+class RemoveDuplicates : public TransMythUICheckBoxSetting
+{
+  public:
+    RemoveDuplicates()
+    {
+        setLabel(QObject::tr("Remove duplicates"));
+        setHelpText(
+            QObject::tr(
+                "If set, select the transport stream multiplex with the best signal "
+                "when identical transports are received on different frequencies. "
+                "This option is useful for DVB-T2 and ATSC/OTA when a transport "
+                "can sometimes be received from different transmitters."));
+        setValue(true);
+    };
+};
+
+class AddFullTS : public TransMythUICheckBoxSetting
+{
+  public:
+    AddFullTS()
+    {
+        setLabel(QObject::tr("Add full Transport Stream channels"));
+        setHelpText(
+            QObject::tr(
+                "If set, create MPTS channels, which allow "
+                "recording of the full, unaltered, transport stream."));
+        setValue(false);
     };
 };
 
@@ -133,6 +213,7 @@ class TrustEncSISetting : public TransMythUICheckBoxSetting
                         "flag is set spuriously. Attention: Enabling this "
                         "option increases the scan time for each encrypted "
                         "channel by a couple of seconds."));
+        setValue(false);
     }
 };
 
@@ -143,7 +224,7 @@ class ScanFrequencykHz: public TransTextEditSetting
     {
         setLabel(QObject::tr("Frequency"));
         setHelpText(QObject::tr("Frequency (Option has no default)\n"
-                                "The frequency for this channel in kHz."));
+                                "The frequency for this transport (multiplex) in kHz."));
     };
 };
 
@@ -154,7 +235,7 @@ class ScanFrequency: public TransTextEditSetting
     {
         setLabel(QObject::tr("Frequency"));
         setHelpText(QObject::tr("Frequency (Option has no default)\n"
-                                "The frequency for this channel in Hz."));
+                                "The frequency for this transport (multiplex) in Hz."));
     };
 };
 
@@ -177,6 +258,7 @@ class ScanSymbolRateDVBS: public TransMythUIComboBoxSetting
         addSelection("28000000");
         addSelection("28500000");
         addSelection("29500000");
+        addSelection("29700000");
         addSelection("29900000");
     }
 };
@@ -382,7 +464,7 @@ class PaneError : public GroupSetting
   public:
     explicit PaneError(const QString &error)
     {
-        TransTextEditSetting* label = new TransTextEditSetting();
+        auto* label = new TransTextEditSetting();
         label->setValue(error);
         addChild(label);
     }

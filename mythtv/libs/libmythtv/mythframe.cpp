@@ -30,8 +30,48 @@
 #include "mythcorecontext.h"
 #include "mythlogging.h"
 
-extern "C" {
-#include "libavcodec/avcodec.h"
+const char* format_description(VideoFrameType Type)
+{
+    switch (Type)
+    {
+        case FMT_NONE:       return "None";
+        case FMT_RGB24:      return "RGB24";
+        case FMT_YV12:       return "YUV420P";
+        case FMT_RGB32:      return "RGB32";
+        case FMT_ARGB32:     return "ARGB32";
+        case FMT_RGBA32:     return "RGBA32";
+        case FMT_YUV422P:    return "YUV422P";
+        case FMT_BGRA:       return "BGRA";
+        case FMT_YUY2:       return "YUY2";
+        case FMT_NV12:       return "NV12";
+        case FMT_P010:       return "P010";
+        case FMT_P016:       return "P016";
+        case FMT_YUV420P9:   return "YUV420P9";
+        case FMT_YUV420P10:  return "YUV420P10";
+        case FMT_YUV420P12:  return "YUV420P12";
+        case FMT_YUV420P14:  return "YUV420P14";
+        case FMT_YUV420P16:  return "YUV420P16";
+        case FMT_YUV422P9:   return "YUV422P9";
+        case FMT_YUV422P10:  return "YUV422P10";
+        case FMT_YUV422P12:  return "YUV422P12";
+        case FMT_YUV422P14:  return "YUV422P14";
+        case FMT_YUV422P16:  return "YUV422P16";
+        case FMT_YUV444P:    return "YUV444P";
+        case FMT_YUV444P9:   return "YUV444P9";
+        case FMT_YUV444P10:  return "YUV444P10";
+        case FMT_YUV444P12:  return "YUV444P12";
+        case FMT_YUV444P14:  return "YUV444P14";
+        case FMT_YUV444P16:  return "YUV444P16";
+        case FMT_VDPAU:      return "VDPAU";
+        case FMT_VAAPI:      return "VAAPI";
+        case FMT_DXVA2:      return "DXVA2";
+        case FMT_MMAL:       return "MMAL";
+        case FMT_MEDIACODEC: return "MediaCodec";
+        case FMT_VTB:        return "VideoToolBox";
+        case FMT_NVDEC:      return "NVDec";
+        case FMT_DRMPRIME:   return "DRM-PRIME";
+    }
+    return "?";
 }
 
 #ifndef __MAX
@@ -43,16 +83,18 @@ extern "C" {
 
 #if ARCH_X86
 
-static int has_sse2     = -1;
-static int has_sse3     = -1;
-static int has_ssse3    = -1;
-static int has_sse4     = -1;
+static bool features_detected = false;
+static bool has_sse2     = false;
+static bool has_sse3     = false;
+static bool has_ssse3    = false;
+static bool has_sse4     = false;
 
 #if defined _WIN32 && !defined __MINGW32__
 //  Windows
 #define cpuid    __cpuid
 
 #else
+/* NOLINTNEXTLINE(readability-non-const-parameter) */
 inline void cpuid(int CPUInfo[4],int InfoType)
 {
     __asm__ __volatile__ (
@@ -74,13 +116,8 @@ inline void cpuid(int CPUInfo[4],int InfoType)
 }
 #endif
 
-static inline bool sse2_check()
+static void cpu_detect_features()
 {
-    if (has_sse2 != -1)
-    {
-        return has_sse2;
-    }
-
     int info[4];
     cpuid(info, 0);
     int nIds = info[0];
@@ -89,54 +126,39 @@ static inline bool sse2_check()
     if (nIds >= 0x00000001)
     {
         cpuid(info,0x00000001);
-        has_sse2  = (info[3] & ((int)1 << 26)) != 0;
-        has_sse3  = (info[2] & ((int)1 <<  0)) != 0;
-        has_ssse3 = (info[2] & ((int)1 <<  9)) != 0;
-        has_sse4  = (info[2] & ((int)1 << 19)) != 0;
+        has_sse2  = (info[3] & (1 << 26)) != 0;
+        has_sse3  = (info[2] & (1 <<  0)) != 0;
+        has_ssse3 = (info[2] & (1 <<  9)) != 0;
+        has_sse4  = (info[2] & (1 << 19)) != 0;
     }
-    else
-    {
-        has_sse2  = 0;
-        has_sse3  = 0;
-        has_ssse3 = 0;
-        has_sse4  = 0;
-    }
+    features_detected = true;
+}
+
+static inline bool sse2_check()
+{
+    if (!features_detected)
+        cpu_detect_features();
     return has_sse2;
 }
 
 static inline bool sse3_check()
 {
-    if (has_sse3 != -1)
-    {
-        return has_sse3;
-    }
-
-    sse2_check();
-
+    if (!features_detected)
+        cpu_detect_features();
     return has_sse3;
 }
 
 static inline bool ssse3_check()
 {
-    if (has_ssse3 != -1)
-    {
-        return has_ssse3;
-    }
-
-    sse2_check();
-
+    if (!features_detected)
+        cpu_detect_features();
     return has_ssse3;
 }
 
 static inline bool sse4_check()
 {
-    if (has_sse4 != -1)
-    {
-        return has_sse4;
-    }
-
-    sse2_check();
-
+    if (!features_detected)
+        cpu_detect_features();
     return has_sse4;
 }
 
@@ -286,18 +308,6 @@ static inline void SSE_splitplanes(uint8_t* dstu, int dstu_pitch,
 }
 #endif /* ARCH_X86 */
 
-static inline void copyplane(uint8_t* dst, int dst_pitch,
-                             const uint8_t* src, int src_pitch,
-                             int width, int height)
-{
-    for (int y = 0; y < height; y++)
-    {
-        memcpy(dst, src, width);
-        src += src_pitch;
-        dst += dst_pitch;
-    }
-}
-
 static void splitplanes(uint8_t* dstu, int dstu_pitch,
                         uint8_t* dstv, int dstv_pitch,
                         const uint8_t* src, int src_pitch,
@@ -326,6 +336,12 @@ void framecopy(VideoFrame* dst, const VideoFrame* src, bool useSSE)
     dst->interlaced_frame = src->interlaced_frame;
     dst->repeat_pict      = src->repeat_pict;
     dst->top_field_first  = src->top_field_first;
+    dst->interlaced_reversed = src->interlaced_reversed;
+    dst->colorspace       = src->colorspace;
+    dst->colorrange       = src->colorrange;
+    dst->colorprimaries   = src->colorprimaries;
+    dst->colortransfer    = src->colortransfer;
+    dst->chromalocation   = src->chromalocation;
 
     if (FMT_YV12 == codec)
     {
@@ -350,6 +366,8 @@ void framecopy(VideoFrame* dst, const VideoFrame* src, bool useSSE)
                 asm volatile ("emms");
                 return;
             }
+#else
+            Q_UNUSED(useSSE);
 #endif
             splitplanes(dst->buf + dst->offsets[1], dst->pitches[1],
                         dst->buf + dst->offsets[2], dst->pitches[2],
@@ -578,13 +596,15 @@ static void SSE_splitplanes(uint8_t *dstu, int dstu_pitch,
 #endif // ARCH_X86
 
 MythUSWCCopy::MythUSWCCopy(int width, bool nocache)
-    :m_cache(NULL), m_size(0), m_uswc(-1)
 {
 #if ARCH_X86
     if (!nocache)
     {
         allocateCache(width);
     }
+#else
+    Q_UNUSED(width);
+    Q_UNUSED(nocache);
 #endif
 }
 
@@ -611,6 +631,12 @@ void MythUSWCCopy::copy(VideoFrame *dst, const VideoFrame *src)
     dst->interlaced_frame = src->interlaced_frame;
     dst->repeat_pict      = src->repeat_pict;
     dst->top_field_first  = src->top_field_first;
+    dst->interlaced_reversed = src->interlaced_reversed;
+    dst->colorspace       = src->colorspace;
+    dst->colorrange       = src->colorrange;
+    dst->colorprimaries   = src->colorprimaries;
+    dst->colortransfer    = src->colortransfer;
+    dst->chromalocation   = src->chromalocation;
 
     int width   = src->width;
     int height  = src->height;
@@ -620,11 +646,11 @@ void MythUSWCCopy::copy(VideoFrame *dst, const VideoFrame *src)
 #if ARCH_X86
         if (sse2_check())
         {
-            MythTimer *timer;
+            MythTimer *timer = nullptr;
 
-            if (m_uswc <= 0 && m_cache)
+            if ((m_uswc != uswcState::Use_SW) && m_cache)
             {
-                if (m_uswc < 0)
+                if (m_uswc == uswcState::Detect)
                 {
                     timer = new MythTimer(MythTimer::kStartRunning);
                 }
@@ -637,11 +663,11 @@ void MythUSWCCopy::copy(VideoFrame *dst, const VideoFrame *src)
                                 src->buf + src->offsets[1], src->pitches[1],
                                 m_cache, m_size,
                                 (width+1) / 2, (height+1) / 2);
-                if (m_uswc < 0)
+                if (m_uswc == uswcState::Detect)
                 {
                     // Measure how long standard method takes
                     // if shorter, use it in the future
-                    long duration = timer->nsecsElapsed();
+                    long sse_duration = timer->nsecsElapsed();
                     timer->restart();
                     copyplane(dst->buf + dst->offsets[0], dst->pitches[0],
                               src->buf + src->offsets[0], src->pitches[0],
@@ -650,10 +676,14 @@ void MythUSWCCopy::copy(VideoFrame *dst, const VideoFrame *src)
                                     dst->buf + dst->offsets[2], dst->pitches[2],
                                     src->buf + src->offsets[1], src->pitches[1],
                                     (width+1) / 2, (height+1) / 2);
-                    m_uswc = timer->nsecsElapsed() < duration;
-                    if (m_uswc == 0)
+                    if (timer->nsecsElapsed() < sse_duration)
                     {
+                        m_uswc = uswcState::Use_SW;
                         LOG(VB_GENERAL, LOG_DEBUG, "Enabling USWC code acceleration");
+                    }
+                    else
+                    {
+                        m_uswc = uswcState::Use_SSE;
                     }
                     delete timer;
                 }
@@ -683,11 +713,11 @@ void MythUSWCCopy::copy(VideoFrame *dst, const VideoFrame *src)
     }
 
 #if ARCH_X86
-    if (sse2_check() && m_uswc <= 0 && m_cache)
+    if (sse2_check() && (m_uswc != uswcState::Use_SW) && m_cache)
     {
-        MythTimer *timer;
+        MythTimer *timer = nullptr;
 
-        if (m_uswc < 0)
+        if (m_uswc == uswcState::Detect)
         {
             timer = new MythTimer(MythTimer::kStartRunning);
         }
@@ -703,11 +733,11 @@ void MythUSWCCopy::copy(VideoFrame *dst, const VideoFrame *src)
                       src->buf + src->offsets[2], src->pitches[2],
                       m_cache, m_size,
                       (width+1) / 2, (height+1) / 2);
-        if (m_uswc < 0)
+        if (m_uswc == uswcState::Detect)
         {
             // Measure how long standard method takes
             // if shorter, use it in the future
-            long duration = timer->nsecsElapsed();
+            long sse_duration = timer->nsecsElapsed();
             timer->restart();
             copyplane(dst->buf + dst->offsets[0], dst->pitches[0],
                       src->buf + src->offsets[0], src->pitches[0],
@@ -718,10 +748,14 @@ void MythUSWCCopy::copy(VideoFrame *dst, const VideoFrame *src)
             copyplane(dst->buf + dst->offsets[2], dst->pitches[2],
                       src->buf + src->offsets[2], src->pitches[2],
                       (width+1) / 2, (height+1) / 2);
-            m_uswc = timer->nsecsElapsed() < duration;
-            if (m_uswc == 0)
+            if (timer->nsecsElapsed() < sse_duration)
             {
+                m_uswc = uswcState::Use_SW;
                 LOG(VB_GENERAL, LOG_DEBUG, "Enabling USWC code acceleration");
+            }
+            else
+            {
+                m_uswc = uswcState::Use_SSE;
             }
             delete timer;
         }
@@ -741,12 +775,11 @@ void MythUSWCCopy::copy(VideoFrame *dst, const VideoFrame *src)
 }
 
 /**
- * \fn resetUSWCDetection
  * reset USWC detection. USWC detection will be made during the next copy
  */
 void MythUSWCCopy::resetUSWCDetection(void)
 {
-    m_uswc = -1;
+    m_uswc = uswcState::Detect;
 }
 
 void MythUSWCCopy::allocateCache(int width)
@@ -757,23 +790,81 @@ void MythUSWCCopy::allocateCache(int width)
 }
 
 /**
- * \fn setUSWC
  * disable USWC detection. If true: USWC code will always be used, otherwise
  * will use generic SSE code (faster with non-USWC memory
  */
 void MythUSWCCopy::setUSWC(bool uswc)
 {
-    m_uswc = !uswc;
+    m_uswc = uswc ? uswcState::Use_SW : uswcState::Use_SSE;
 }
 
 /**
- * \fn reset
  * Will reset the cache for a frame with "width" and reset USWC detection.
  */
 void MythUSWCCopy::reset(int width)
 {
 #if ARCH_X86
     allocateCache(width);
+#else
+    Q_UNUSED(width);
 #endif
     resetUSWCDetection();
+}
+
+/// \brief Return the color depth for the given MythTV frame format
+int ColorDepth(int Format)
+{
+    switch (Format)
+    {
+        case FMT_YUV420P9:
+        case FMT_YUV422P9:
+        case FMT_YUV444P9:  return 9;
+        case FMT_P010:
+        case FMT_YUV420P10:
+        case FMT_YUV422P10:
+        case FMT_YUV444P10: return 10;
+        case FMT_YUV420P12:
+        case FMT_YUV422P12:
+        case FMT_YUV444P12: return 12;
+        case FMT_YUV420P14:
+        case FMT_YUV422P14:
+        case FMT_YUV444P14: return 14;
+        case FMT_P016:
+        case FMT_YUV420P16:
+        case FMT_YUV422P16:
+        case FMT_YUV444P16: return 16;
+        default: break;
+    }
+    return 8;
+}
+
+MythDeintType GetSingleRateOption(const VideoFrame* Frame, MythDeintType Type,
+                                  MythDeintType Override)
+{
+    if (Frame)
+    {
+        MythDeintType options = Frame->deinterlace_single &
+                (Override ? Override : Frame->deinterlace_allowed);
+        if (options & Type)
+            return GetDeinterlacer(options);
+    }
+    return DEINT_NONE;
+}
+
+MythDeintType GetDoubleRateOption(const VideoFrame* Frame, MythDeintType Type,
+                                  MythDeintType Override)
+{
+    if (Frame)
+    {
+        MythDeintType options = Frame->deinterlace_double &
+                (Override ? Override : Frame->deinterlace_allowed);
+        if (options & Type)
+            return GetDeinterlacer(options);
+    }
+    return DEINT_NONE;
+}
+
+MythDeintType GetDeinterlacer(MythDeintType Option)
+{
+    return Option & (DEINT_BASIC | DEINT_MEDIUM | DEINT_HIGH);
 }

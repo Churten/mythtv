@@ -1,12 +1,13 @@
 #ifndef VIDEOPLAYERCOMMAND_H_
 #define VIDEOPLAYERCOMMAND_H_
 
+class VideoMetadata;
 class VideoPlayerCommand
 {
   public:
-    static VideoPlayerCommand PlayerFor(const class VideoMetadata *item);
+    static VideoPlayerCommand PlayerFor(const VideoMetadata *item);
     static VideoPlayerCommand PlayerFor(const QString &filename);
-    static VideoPlayerCommand AltPlayerFor(const class VideoMetadata *item);
+    static VideoPlayerCommand AltPlayerFor(const VideoMetadata *item);
 
   public:
     VideoPlayerCommand();
@@ -21,7 +22,7 @@ class VideoPlayerCommand
     QString GetCommandDisplayName() const;
 
   private:
-    class VideoPlayerCommandPrivate *m_d;
+    class VideoPlayerCommandPrivate *m_d {nullptr};
 };
 
 #endif // PLAYERCOMMAND_H_

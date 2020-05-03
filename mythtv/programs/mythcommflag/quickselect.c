@@ -14,10 +14,8 @@
 unsigned char
 quick_select(unsigned char *arr, int nelems, int select)
 {
-    int low, high, middle, ll, hh;
-
-    low = 0;
-    high = nelems - 1;
+    int low = 0;
+    int high = nelems - 1;
 
     for (;;) {
         if (high <= low) /* One element only */
@@ -30,7 +28,7 @@ quick_select(unsigned char *arr, int nelems, int select)
         }
 
         /* Find median of low, middle and high items; swap into position low */
-        middle = (low + high) / 2;
+        int middle = (low + high) / 2;
         if (arr[middle] > arr[high])    ELEM_SWAP(arr[middle], arr[high]);
         if (arr[low]    > arr[high])    ELEM_SWAP(arr[low],    arr[high]);
         if (arr[middle] > arr[low])     ELEM_SWAP(arr[middle], arr[low]);
@@ -39,8 +37,8 @@ quick_select(unsigned char *arr, int nelems, int select)
         ELEM_SWAP(arr[middle], arr[low+1]);
 
         /* Nibble from each end towards middle, swapping items when stuck */
-        ll = low + 1;
-        hh = high;
+        int ll = low + 1;
+        int hh = high;
         for (;;) {
             do ll++; while (arr[low] > arr[ll]);
             do hh--; while (arr[hh]  > arr[low]);
@@ -75,10 +73,8 @@ quick_select_median(unsigned char *arr, int nelems)
 unsigned short
 quick_select_ushort(unsigned short *arr, int nelems, int select)
 {
-    int low, high, middle, ll, hh;
-
-    low = 0;
-    high = nelems - 1;
+    int low = 0;
+    int high = nelems - 1;
 
     for (;;) {
         if (high <= low) /* One element only */
@@ -91,7 +87,7 @@ quick_select_ushort(unsigned short *arr, int nelems, int select)
         }
 
         /* Find median of low, middle and high items; swap into position low */
-        middle = (low + high) / 2;
+        int middle = (low + high) / 2;
         if (arr[middle] > arr[high])    ELEM_SWAP(arr[middle], arr[high]);
         if (arr[low]    > arr[high])    ELEM_SWAP(arr[low],    arr[high]);
         if (arr[middle] > arr[low])     ELEM_SWAP(arr[middle], arr[low]);
@@ -100,8 +96,8 @@ quick_select_ushort(unsigned short *arr, int nelems, int select)
         ELEM_SWAP(arr[middle], arr[low+1]);
 
         /* Nibble from each end towards middle, swapping items when stuck */
-        ll = low + 1;
-        hh = high;
+        int ll = low + 1;
+        int hh = high;
         for (;;) {
             do ll++; while (arr[low] > arr[ll]);
             do hh--; while (arr[hh]  > arr[low]);
@@ -136,10 +132,8 @@ quick_select_median_ushort(unsigned short *arr, int nelems)
 float
 quick_select_float(float *arr, int nelems, int select)
 {
-    int low, high, middle, ll, hh;
-
-    low = 0;
-    high = nelems - 1;
+    int low = 0;
+    int high = nelems - 1;
 
     for (;;) {
         if (high <= low) /* One element only */
@@ -152,7 +146,7 @@ quick_select_float(float *arr, int nelems, int select)
         }
 
         /* Find median of low, middle and high items; swap into position low */
-        middle = (low + high) / 2;
+        int middle = (low + high) / 2;
         if (arr[middle] > arr[high])    ELEM_SWAP(arr[middle], arr[high]);
         if (arr[low]    > arr[high])    ELEM_SWAP(arr[low],    arr[high]);
         if (arr[middle] > arr[low])     ELEM_SWAP(arr[middle], arr[low]);
@@ -161,8 +155,8 @@ quick_select_float(float *arr, int nelems, int select)
         ELEM_SWAP(arr[middle], arr[low+1]);
 
         /* Nibble from each end towards middle, swapping items when stuck */
-        ll = low + 1;
-        hh = high;
+        int ll = low + 1;
+        int hh = high;
         for (;;) {
             do ll++; while (arr[low] > arr[ll]);
             do hh--; while (arr[hh]  > arr[low]);

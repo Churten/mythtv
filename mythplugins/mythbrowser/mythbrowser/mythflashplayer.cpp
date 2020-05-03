@@ -1,4 +1,4 @@
-#include <stdlib.h>
+#include <cstdlib>
 #include <iostream>
 
 // qt
@@ -22,14 +22,14 @@ using namespace std;
 MythFlashPlayer::MythFlashPlayer(MythScreenStack *parent,
                          QStringList &urlList)
     : MythScreenType (parent, "mythflashplayer"),
-      m_browser(NULL), m_url(urlList[0])
+      m_url(urlList[0])
 {
     m_fftime       = PlayGroup::GetSetting("Default", "skipahead", 30);
     m_rewtime      = PlayGroup::GetSetting("Default", "skipback", 5);
     m_jumptime     = PlayGroup::GetSetting("Default", "jump", 10);
     qApp->setOverrideCursor(QCursor(Qt::BlankCursor));
     GetMythMainWindow()->PauseIdleTimer(true);
-    GetMythUI()->DisableScreensaver();
+    MythUIHelper::DisableScreensaver();
 }
 
 
@@ -41,10 +41,10 @@ MythFlashPlayer::~MythFlashPlayer()
     {
         m_browser->disconnect();
         DeleteChild(m_browser);
-        m_browser = NULL;
+        m_browser = nullptr;
     }
     GetMythMainWindow()->PauseIdleTimer(false);
-    GetMythUI()->RestoreScreensaver();
+    MythUIHelper::RestoreScreensaver();
 }
 
 bool MythFlashPlayer::Create(void)

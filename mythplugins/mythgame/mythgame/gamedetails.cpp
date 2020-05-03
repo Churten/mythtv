@@ -10,26 +10,9 @@
 
 #include "gamedetails.h"
 
-GameDetailsPopup::GameDetailsPopup(MythScreenStack *parent,
-                                   const RomInfo *romInfo)
-           : MythScreenType (parent, "gamedetailspopup"),
-        m_romInfo(romInfo), m_id(""), m_retObject(NULL),
-        m_gameName(NULL), m_gameType(NULL), m_romName(NULL),
-        m_crc(NULL), m_romPath(NULL), m_genre(NULL),
-        m_year(NULL), m_country(NULL), m_plot(NULL),
-        m_publisher(NULL), m_allSystems(NULL), m_fanartImage(NULL),
-        m_boxImage(NULL), m_playButton(NULL), m_doneButton(NULL)
-{
-    m_romInfo = romInfo;
-}
-
-GameDetailsPopup::~GameDetailsPopup(void)
-{
-}
-
 void GameDetailsPopup::handleText(const QString &name, const QString &value)
 {
-    MythUIText *textarea = NULL;
+    MythUIText *textarea = nullptr;
     UIUtilE::Assign(this, textarea, name);
     if (textarea)
     {
@@ -39,7 +22,7 @@ void GameDetailsPopup::handleText(const QString &name, const QString &value)
 
 void GameDetailsPopup::handleImage(const QString &name, const QString &filename)
 {
-    MythUIImage *image = NULL;
+    MythUIImage *image = nullptr;
     UIUtilW::Assign(this, image, name);
     if (image)
     {
@@ -94,8 +77,7 @@ void GameDetailsPopup::Play()
 {
     if (m_retObject)
     {
-        DialogCompletionEvent *dce =
-            new DialogCompletionEvent(m_id, 0, "", "");
+        auto *dce = new DialogCompletionEvent(m_id, 0, "", "");
         QApplication::postEvent(m_retObject, dce);
         Close();
     }

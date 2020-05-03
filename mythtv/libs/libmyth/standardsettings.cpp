@@ -2,6 +2,7 @@
 #include <QApplication>
 #include <QCoreApplication>
 #include <QThread>
+#include <utility>
 
 #include <mythcontext.h>
 #include <mythmainwindow.h>
@@ -15,15 +16,6 @@
 void MythUIButtonListItemSetting::ShouldUpdate(StandardSetting *setting)
 {
     setting->updateButton(this);
-}
-
-StandardSetting::StandardSetting(Storage *_storage) :
-    m_settingValue(""),
-    m_enabled(true), m_label(""), m_helptext(""), m_visible(true),
-    m_haveChanged(false),
-    m_storage(_storage),
-    m_parent(NULL)
-{
 }
 
 StandardSetting::~StandardSetting()
@@ -44,18 +36,17 @@ StandardSetting::~StandardSetting()
 
 MythUIButtonListItem * StandardSetting::createButton(MythUIButtonList * list)
 {
-    MythUIButtonListItemSetting *item =
-        new MythUIButtonListItemSetting(list, m_label);
-    item->SetData(qVariantFromValue(this));
+    auto *item = new MythUIButtonListItemSetting(list, m_label);
+    item->SetData(QVariant::fromValue(this));
     connect(this, SIGNAL(ShouldRedraw(StandardSetting *)),
             item, SLOT(ShouldUpdate(StandardSetting *)));
     updateButton(item);
     return item;
 }
 
-void StandardSetting::setEnabled(bool b)
+void StandardSetting::setEnabled(bool enabled)
 {
-    m_enabled = b;
+    m_enabled = enabled;
     emit ShouldRedraw(this);
 }
 
@@ -85,7 +76,7 @@ void StandardSetting::removeChild(StandardSetting *child)
     emit settingsChanged(this);
 }
 
-bool StandardSetting::keyPressEvent(QKeyEvent *)
+bool StandardSetting::keyPressEvent(QKeyEvent * /*e*/)
 {
     return false;
 }
@@ -148,7 +139,7 @@ void StandardSetting::clearTargetedSettings(const QString &value)
 QList<StandardSetting *> *StandardSetting::getSubSettings()
 {
     if (m_targets.contains(m_settingValue) &&
-        m_targets[m_settingValue].size() > 0)
+        !m_targets[m_settingValue].empty())
         return &m_targets[m_settingValue];
     return &m_children;
 }
@@ -156,7 +147,7 @@ QList<StandardSetting *> *StandardSetting::getSubSettings()
 bool StandardSetting::haveSubSettings()
 {
     QList<StandardSetting *> *subSettings = getSubSettings();
-    return subSettings && subSettings->size() > 0;
+    return subSettings && !subSettings->empty();
 }
 
 void StandardSetting::clearSettings()
@@ -190,7 +181,7 @@ bool StandardSetting::haveChanged()
     if (m_haveChanged)
     {
         LOG(VB_GENERAL, LOG_DEBUG,
-            QString("Setting %1 changed to %2").arg(getLabel())
+            QString("Setting '%1' changed to %2").arg(getLabel())
             .arg(getValue()));
         return true;
     }
@@ -235,19 +226,22 @@ void StandardSetting::Load(void)
 
 void StandardSetting::Save(void)
 {
-    m_haveChanged = false;
-
     if (m_storage)
         m_storage->Save();
 
     //we save only the relevant children
     QList<StandardSetting *> *children = getSubSettings();
-    if (!children)
+    if (children)
+    {
+        for (auto i = children->constBegin(); i != children->constEnd(); ++i)
+            (*i)->Save();
+    }
+
+    if (!m_haveChanged)
         return;
 
-    QList<StandardSetting *>::const_iterator i;
-    for (i = children->constBegin(); i != children->constEnd(); ++i)
-        (*i)->Save();
+    m_haveChanged = false;
+    emit ChangeSaved();
 }
 
 void StandardSetting::setName(const QString &name)
@@ -290,17 +284,12 @@ void StandardSetting::MoveToThread(QThread *thread)
 /******************************************************************************
                             Group Setting
 *******************************************************************************/
-GroupSetting::GroupSetting()
-{
-}
-
 void GroupSetting::edit(MythScreenType *screen)
 {
     if (!isEnabled())
         return;
 
-    DialogCompletionEvent *dce =
-        new DialogCompletionEvent("leveldown", 0, "", "");
+    auto *dce = new DialogCompletionEvent("leveldown", 0, "", "");
     QCoreApplication::postEvent(screen, dce);
 }
 
@@ -314,23 +303,12 @@ void GroupSetting::updateButton(MythUIButtonListItem *item)
     item->setDrawArrow(haveSubSettings());
 }
 
-StandardSetting* GroupSetting::byName(const QString &name)
-{
-    foreach (StandardSetting *setting, *getSubSettings())
-    {
-        StandardSetting *s = setting->byName(name);
-        if (s)
-            return s;
-    }
-    return NULL;
-}
-
 ButtonStandardSetting::ButtonStandardSetting(const QString &label)
 {
     setLabel(label);
 }
 
-void ButtonStandardSetting::edit(MythScreenType *screen)
+void ButtonStandardSetting::edit(MythScreenType */*screen*/)
 {
     emit clicked();
 }
@@ -340,8 +318,8 @@ void AutoIncrementSetting::Save(void)
     if (getValue() == "0")
     {
         // Generate a new, unique ID
-        QString querystr = QString("INSERT INTO " + m_table +
-                                   " (" + m_column + ") VALUES (0);");
+        QString querystr = "INSERT INTO " + m_table +
+                                   " (" + m_column + ") VALUES (0);";
 
         MSqlQuery query(MSqlQuery::InitCon());
 
@@ -363,8 +341,8 @@ void AutoIncrementSetting::Save(void)
             setValue(var.toInt());
         else
         {
-            querystr = QString("SELECT MAX(" + m_column + ") FROM " +
-                               m_table + ";");
+            querystr = "SELECT MAX(" + m_column + ") FROM " +
+                               m_table + ";";
             if (query.exec(querystr) && query.next())
             {
                 int lii = query.value(0).toInt();
@@ -372,18 +350,19 @@ void AutoIncrementSetting::Save(void)
                 setValue(lii);
             }
             else
+            {
                 LOG(VB_GENERAL, LOG_EMERG,
                     "Can't determine the Id of the last insert "
                     "QSqlQuery.lastInsertId() failed, the workaround "
                     "failed too!");
+            }
         }
         // XXX -- HACK END:
     }
 }
 
 AutoIncrementSetting::AutoIncrementSetting(QString _table, QString _column) :
-    StandardSetting(),
-    m_table(_table), m_column(_column)
+    m_table(std::move(_table)), m_column(std::move(_column))
 {
     setValue("0");
 }
@@ -391,11 +370,6 @@ AutoIncrementSetting::AutoIncrementSetting(QString _table, QString _column) :
 /******************************************************************************
                             Text Setting
 *******************************************************************************/
-
-MythUITextEditSetting::MythUITextEditSetting(Storage *_storage):
-    StandardSetting(_storage), m_passwordEcho(false)
-{
-}
 
 void MythUITextEditSetting::SetPasswordEcho(bool b)
 {
@@ -409,7 +383,7 @@ void MythUITextEditSetting::edit(MythScreenType * screen)
 
     MythScreenStack *popupStack = GetMythMainWindow()->GetStack("popup stack");
 
-    MythTextInputDialog *settingdialog =
+    auto *settingdialog =
         new MythTextInputDialog(popupStack, getLabel(), FilterNone,
                                 m_passwordEcho, m_settingValue);
 
@@ -440,15 +414,6 @@ void MythUITextEditSetting::updateButton(MythUIButtonListItem *item)
                             Directory Setting
 *******************************************************************************/
 
-MythUIFileBrowserSetting::MythUIFileBrowserSetting(Storage *_storage):
-    StandardSetting(_storage)
-{
-    m_typeFilter = (QDir::AllDirs | QDir::Drives | QDir::Files |
-                    QDir::Readable | QDir::Writable | QDir::Executable);
-    m_nameFilter.clear();
-    m_nameFilter << "*";
-}
-
 void MythUIFileBrowserSetting::edit(MythScreenType * screen)
 {
     if (!isEnabled())
@@ -456,8 +421,7 @@ void MythUIFileBrowserSetting::edit(MythScreenType * screen)
 
     MythScreenStack *popupStack = GetMythMainWindow()->GetStack("popup stack");
 
-    MythUIFileBrowser *settingdialog = new MythUIFileBrowser(popupStack,
-                                                             m_settingValue);
+    auto *settingdialog = new MythUIFileBrowser(popupStack, m_settingValue);
     settingdialog->SetTypeFilter(m_typeFilter);
     settingdialog->SetNameFilter(m_nameFilter);
 
@@ -486,17 +450,6 @@ void MythUIFileBrowserSetting::updateButton(MythUIButtonListItem *item)
 /******************************************************************************
                             ComboBoxSetting
 *******************************************************************************/
-/**
- * Create a Setting Widget to select the value from a list
- * \param rw if set to true, the user can input it's own value
- */
-MythUIComboBoxSetting::MythUIComboBoxSetting(Storage *_storage, bool rw):
-    StandardSetting(_storage),
-    m_rewrite(rw),
-    m_isSet(false)
-{
-}
-
 MythUIComboBoxSetting::~MythUIComboBoxSetting()
 {
     m_labels.clear();
@@ -566,8 +519,7 @@ void MythUIComboBoxSetting::edit(MythScreenType * screen)
 
     MythScreenStack *popupStack = GetMythMainWindow()->GetStack("popup stack");
 
-    MythDialogBox *menuPopup =
-        new MythDialogBox(getLabel(), popupStack, "optionmenu");
+    auto *menuPopup = new MythDialogBox(getLabel(), popupStack, "optionmenu");
 
     if (menuPopup->Create())
     {
@@ -579,11 +531,13 @@ void MythUIComboBoxSetting::edit(MythScreenType * screen)
         menuPopup->SetReturnEvent(screen, "editsetting");
 
         if (m_rewrite)
+        {
             menuPopup->AddButton(QObject::tr("New entry"),
                                  QString("NEWENTRY"),
                                  false,
                                  m_settingValue == "");
-        for (int i = 0; i < m_labels.size() && m_values.size(); ++i)
+        }
+        for (int i = 0; i < m_labels.size() && !m_values.empty(); ++i)
         {
             QString value = m_values.at(i);
             menuPopup->AddButton(m_labels.at(i),
@@ -611,7 +565,7 @@ void MythUIComboBoxSetting::resultEdit(DialogCompletionEvent *dce)
             MythScreenStack *popupStack =
                 GetMythMainWindow()->GetStack("popup stack");
 
-            MythTextInputDialog *settingdialog =
+            auto *settingdialog =
                 new MythTextInputDialog(popupStack, getLabel(), FilterNone,
                                         false, m_settingValue);
 
@@ -631,14 +585,8 @@ void MythUIComboBoxSetting::resultEdit(DialogCompletionEvent *dce)
 
 void MythUIComboBoxSetting::fillSelectionsFromDir(const QDir &dir, bool absPath)
 {
-    QFileInfoList il = dir.entryInfoList();
-
-    for (QFileInfoList::Iterator it = il.begin();
-                                 it != il.end();
-                               ++it )
+    foreach (auto & fi, dir.entryInfoList())
     {
-        QFileInfo &fi = *it;
-
         if (absPath)
             addSelection( fi.absoluteFilePath() );
         else
@@ -656,23 +604,23 @@ int MythUIComboBoxSetting::size(void) const
 *******************************************************************************/
 MythUISpinBoxSetting::MythUISpinBoxSetting(Storage *_storage, int min, int max,
                                            int step, int pageMultiple,
-                                           const QString &special_value_text)
+                                           QString special_value_text)
     : StandardSetting(_storage),
       m_min(min),
       m_max(max),
       m_step(step),
       m_pageMultiple(pageMultiple),
-      m_special_value_text(special_value_text)
+      m_specialValueText(std::move(special_value_text))
 {
-    //we default to 0 unless 0 is out of range
+    // We default to 0 unless 0 is out of range.
     if (m_min > 0 || m_max < 0)
         m_settingValue = QString::number(m_min);
 
-    // The setings pages were coded to assume a parameter true/false
+    // The settings pages were coded to assume a parameter true/false
     // meaning allow_single_step. Many pages use this but it was not
     // implemented. It is difficult to implement using the current
     // UI widget design. So I have changed it so you can specify
-    // the size of pageup / pagedown increments as an integer instead
+    // the size of pageup / pagedown increments as an integer instead.
     // For compatibility with callers still using true to indicate
     // allowing single step, the code will set the step size as 1 and
     // the pageup / pagedown as the requested step.
@@ -693,8 +641,8 @@ void MythUISpinBoxSetting::updateButton(MythUIButtonListItem *item)
     item->DisplayState("spinbox", "widgettype");
     item->setEnabled(isEnabled());
     item->SetText(m_label);
-    if (m_settingValue.toInt() == m_min && !m_special_value_text.isEmpty())
-        item->SetText(m_special_value_text, "value");
+    if (m_settingValue.toInt() == m_min && !m_specialValueText.isEmpty())
+        item->SetText(m_specialValueText, "value");
     else
         item->SetText(m_settingValue, "value");
     item->SetText(getHelpText(), "description");
@@ -713,14 +661,13 @@ void MythUISpinBoxSetting::edit(MythScreenType * screen)
 
     MythScreenStack *popupStack = GetMythMainWindow()->GetStack("popup stack");
 
-    MythSpinBoxDialog *settingdialog = new MythSpinBoxDialog(popupStack,
-                                                             getLabel());
+    auto *settingdialog = new MythSpinBoxDialog(popupStack, getLabel());
 
     if (settingdialog->Create())
     {
         settingdialog->SetRange(m_min, m_max, m_step, m_pageMultiple);
-        if (!m_special_value_text.isEmpty())
-            settingdialog->AddSelection(m_special_value_text, m_min);
+        if (!m_specialValueText.isEmpty())
+            settingdialog->AddSelection(m_specialValueText, m_min);
         settingdialog->SetValue(m_settingValue);
         settingdialog->SetReturnEvent(screen, "editsetting");
         popupStack->AddScreen(settingdialog);
@@ -742,11 +689,6 @@ void MythUISpinBoxSetting::resultEdit(DialogCompletionEvent *dce)
 MythUICheckBoxSetting::MythUICheckBoxSetting(Storage *_storage):
     StandardSetting(_storage)
 {
-}
-
-bool MythUICheckBoxSetting::boolValue()
-{
-    return m_settingValue == "1";
 }
 
 void MythUICheckBoxSetting::setValue(const QString &value)
@@ -780,12 +722,11 @@ void MythUICheckBoxSetting::edit(MythScreenType * screen)
     if (!isEnabled())
         return;
 
-    DialogCompletionEvent *dce =
-        new DialogCompletionEvent("editsetting", 0, "", "");
+    auto *dce = new DialogCompletionEvent("editsetting", 0, "", "");
     QCoreApplication::postEvent(screen, dce);
 }
 
-void MythUICheckBoxSetting::resultEdit(DialogCompletionEvent *dce)
+void MythUICheckBoxSetting::resultEdit(DialogCompletionEvent */*dce*/)
 {
     setValue(!boolValue());
 }
@@ -793,20 +734,6 @@ void MythUICheckBoxSetting::resultEdit(DialogCompletionEvent *dce)
 /******************************************************************************
                            Standard setting dialog
 *******************************************************************************/
-
-StandardSettingDialog::StandardSettingDialog(MythScreenStack *parent,
-                                             const char *name,
-                                             GroupSetting *groupSettings) :
-    MythScreenType(parent, name),
-    m_buttonList(0),
-    m_title(0),
-    m_groupHelp(0),
-    m_selectedSettingHelp(0),
-    m_menuPopup(0),
-    m_settingsTree(groupSettings),
-    m_currentGroupSetting(0)
-{
-}
 
 StandardSettingDialog::~StandardSettingDialog()
 {
@@ -849,16 +776,18 @@ void StandardSettingDialog::settingSelected(MythUIButtonListItem *item)
     if (!item)
         return;
 
-    StandardSetting *setting = item->GetData().value<StandardSetting*>();
+    auto *setting = item->GetData().value<StandardSetting*>();
     if (setting && m_selectedSettingHelp)
     {
+        disconnect(m_selectedSettingHelp);
         m_selectedSettingHelp->SetText(setting->getHelpText());
+        connect(setting, &StandardSetting::helpTextChanged, m_selectedSettingHelp, &MythUIText::SetText);
     }
 }
 
 void StandardSettingDialog::settingClicked(MythUIButtonListItem *item)
 {
-    StandardSetting* setting = item->GetData().value<StandardSetting*>();
+    auto* setting = item->GetData().value<StandardSetting*>();
     if (setting)
         setting->edit(this);
 }
@@ -867,7 +796,9 @@ void StandardSettingDialog::customEvent(QEvent *event)
 {
     if (event->type() == DialogCompletionEvent::kEventType)
     {
-        DialogCompletionEvent *dce = (DialogCompletionEvent*)(event);
+        auto *dce = dynamic_cast<DialogCompletionEvent*>(event);
+        if (dce == nullptr)
+            return;
         QString resultid  = dce->GetId();
 
         if (resultid == "leveldown")
@@ -880,7 +811,7 @@ void StandardSettingDialog::customEvent(QEvent *event)
             MythUIButtonListItem * item = m_buttonList->GetItemCurrent();
             if (item)
             {
-                StandardSetting *ss = item->GetData().value<StandardSetting*>();
+                auto *ss = item->GetData().value<StandardSetting*>();
                 if (ss)
                     ss->resultEdit(dce);
             }
@@ -929,7 +860,7 @@ void StandardSettingDialog::setCurrentGroupSetting(
     if (m_currentGroupSetting)
     {
         disconnect(m_currentGroupSetting,
-                   SIGNAL(settingsChanged(StandardSetting *)), 0, 0);
+                   SIGNAL(settingsChanged(StandardSetting *)), nullptr, nullptr);
         m_currentGroupSetting->Close();
     }
 
@@ -959,7 +890,7 @@ void StandardSettingDialog::updateSettings(StandardSetting * selectedSetting)
         return;
 
     QList<StandardSetting *>::const_iterator i;
-    MythUIButtonListItem *selectedItem = NULL;
+    MythUIButtonListItem *selectedItem = nullptr;
     for (i = settings->constBegin(); i != settings->constEnd(); ++i)
     {
         if ((*i)->isVisible())
@@ -998,7 +929,7 @@ void StandardSettingDialog::LevelDown()
     MythUIButtonListItem *item = m_buttonList->GetItemCurrent();
     if (item)
     {
-        StandardSetting *ss = item->GetData().value<StandardSetting*>();
+        auto *ss = item->GetData().value<StandardSetting*>();
         if (ss && ss->haveSubSettings() && ss->isEnabled())
             setCurrentGroupSetting(ss);
     }
@@ -1013,8 +944,7 @@ void StandardSettingDialog::Close(void)
         MythScreenStack *popupStack =
             GetMythMainWindow()->GetStack("popup stack");
 
-        MythDialogBox * menuPopup =
-            new MythDialogBox(label, popupStack, "exitmenu");
+        auto * menuPopup = new MythDialogBox(label, popupStack, "exitmenu");
 
         if (menuPopup->Create())
         {
@@ -1052,7 +982,7 @@ bool StandardSettingDialog::keyPressEvent(QKeyEvent *e)
     MythUIButtonListItem * item = m_buttonList->GetItemCurrent();
     if (item)
     {
-        StandardSetting *ss = item->GetData().value<StandardSetting*>();
+        auto *ss = item->GetData().value<StandardSetting*>();
         if (ss)
             handled = ss->keyPressEvent(e);
     }
@@ -1093,19 +1023,18 @@ void StandardSettingDialog::ShowMenu()
     if (!item)
         return;
 
-    GroupSetting *source = item->GetData().value<GroupSetting*>();
+    auto *source = item->GetData().value<GroupSetting*>();
     if (!source)
         return;
     // m_title->GetText() for screen title
-    MythMenu *menu = new MythMenu(source->getLabel(), this, "mainmenu");
+    auto *menu = new MythMenu(source->getLabel(), this, "mainmenu");
     menu->AddItem(tr("Edit"), SLOT(editEntry()));
     if (source->canDelete())
         menu->AddItem(tr("Delete"), SLOT(deleteSelected()));
 
     MythScreenStack *popupStack = GetMythMainWindow()->GetStack("popup stack");
 
-    MythDialogBox *menuPopup = new MythDialogBox(menu, popupStack,
-                                                 "menudialog");
+    auto *menuPopup = new MythDialogBox(menu, popupStack, "menudialog");
     menuPopup->SetReturnEvent(this, "mainmenu");
 
     if (menuPopup->Create())
@@ -1130,7 +1059,7 @@ void StandardSettingDialog::deleteEntry()
     if (!item)
         return;
 
-    GroupSetting *source = item->GetData().value<GroupSetting*>();
+    auto *source = item->GetData().value<GroupSetting*>();
     if (!source)
         return;
 
@@ -1149,7 +1078,7 @@ void StandardSettingDialog::deleteEntryConfirmed(bool ok)
         MythUIButtonListItem *item = m_buttonList->GetItemCurrent();
         if (!item)
             return;
-        GroupSetting *source = item->GetData().value<GroupSetting*>();
+        auto *source = item->GetData().value<GroupSetting*>();
         if (!source)
             return;
         source->deleteEntry();

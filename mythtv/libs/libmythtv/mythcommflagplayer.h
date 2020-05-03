@@ -6,10 +6,10 @@
 class MTV_PUBLIC MythCommFlagPlayer : public MythPlayer
 {
   public:
-    MythCommFlagPlayer(PlayerFlags flags = kNoFlags) : MythPlayer(flags) { }
+    explicit MythCommFlagPlayer(PlayerFlags flags = kNoFlags) : MythPlayer(flags) { }
     MythCommFlagPlayer(MythCommFlagPlayer& rhs);
-    bool RebuildSeekTable(bool showPercentage = true, StatusCallback cb = NULL,
-                          void* cbData = NULL);
+    bool RebuildSeekTable(bool showPercentage = true, StatusCallback cb = nullptr,
+                          void* cbData = nullptr);
 };
 
 #endif // MYTHCOMMFLAGPLAYER_H

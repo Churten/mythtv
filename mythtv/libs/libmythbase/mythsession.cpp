@@ -34,8 +34,8 @@ bool MythUserSession::IsValid(void) const
 /**
  * \public
  */
-bool MythUserSession::CheckPermission(const QString &context,
-                                      uint permission)
+bool MythUserSession::CheckPermission(const QString &/*context*/,
+                                      uint /*permission*/)
 {
     if (!gCoreContext->IsMasterBackend())
     {
@@ -92,10 +92,7 @@ bool MythUserSession::Save(void)
     // connection for other clients this has yet to be defined
     query.bindValue(":EXPIRES", m_sessionExpires);
 
-    if (query.exec())
-        return true;
-
-    return false;
+    return query.exec();
 }
 
 /**
@@ -115,14 +112,6 @@ MythSessionManager::MythSessionManager()
 {
     if (gCoreContext->IsMasterBackend())
         LoadSessions();
-}
-
-/**
- * \public
- */
-MythSessionManager::~MythSessionManager()
-{
-
 }
 
 /**
@@ -177,10 +166,7 @@ bool MythSessionManager::IsValidUser(const QString& username)
     if (!query.exec())
         MythDB::DBError("Error finding user", query);
 
-    if (query.next())
-        return true;
-
-   return false;
+    return query.next();
 }
 
 /**
@@ -235,7 +221,7 @@ MythUserSession MythSessionManager::GetSession(const QString &username,
 /**
  * \public
  */
-const QString MythSessionManager::GetPasswordDigest(const QString& username)
+QString MythSessionManager::GetPasswordDigest(const QString& username)
 {
     MSqlQuery query(MSqlQuery::InitCon());
     query.prepare("SELECT password_digest FROM users WHERE username = :USERNAME");
@@ -419,6 +405,132 @@ void MythSessionManager::DestroyUserSession(const QString &sessionToken)
 }
 
 /**
+ * \private
+ */
+bool MythSessionManager::AddDigestUser(const QString& username,
+                                       const QString& password,
+                                       const QString& adminPassword)
+{
+    if (adminPassword.isEmpty())
+    {
+        LOG(VB_GENERAL, LOG_ERR, QString("Admin password is missing."));
+        return false;
+    }
+
+    if (IsValidUser(username))
+    {
+        LOG(VB_GENERAL, LOG_ERR, QString("Tried to add an existing user: %1.")
+                                         .arg(username));
+        return false;
+    }
+
+    if (CreateDigest("admin", adminPassword) != GetPasswordDigest("admin"))
+    {
+        LOG(VB_GENERAL, LOG_ERR, QString("Incorrect password for user: %1.")
+                                         .arg("admin"));
+        return false;
+    }
+
+    MSqlQuery insert(MSqlQuery::InitCon());
+    insert.prepare("INSERT INTO users SET "
+                      "username = :USER_NAME, "
+                      "password_digest = :PASSWORD_DIGEST");
+    insert.bindValue(":USER_NAME", username);
+    insert.bindValue(":PASSWORD_DIGEST", CreateDigest(username, password));
+
+    bool bResult = insert.exec();
+    if (!bResult)
+        MythDB::DBError("Error adding digest user to database", insert);
+
+    return bResult;
+}
+
+/**
+ * \private
+ */
+bool MythSessionManager::RemoveDigestUser(const QString& username,
+                                          const QString& password)
+{
+    if (!IsValidUser(username))
+    {
+        LOG(VB_GENERAL, LOG_ERR, QString("Tried to remove a non-existing "
+                                         "user: %1.").arg(username));
+        return false;
+    }
+
+    if (username == "admin")
+    {
+        LOG(VB_GENERAL, LOG_ERR, QString("Tried to remove user: %1 (not "
+                                         "permitted.)").arg("admin"));
+        return false;
+    }
+
+    if (CreateDigest(username, password) != GetPasswordDigest(username))
+    {
+        LOG(VB_GENERAL, LOG_ERR, QString("Incorrect password for user: %1.")
+                                         .arg(username));
+        return false;
+    }
+
+    MSqlQuery deleteQuery(MSqlQuery::InitCon());
+    deleteQuery.prepare("DELETE FROM users WHERE " "username = :USER_NAME ");
+    deleteQuery.bindValue(":USER_NAME", username);
+
+    bool bResult = deleteQuery.exec();
+    if (!bResult)
+        MythDB::DBError("Error removing digest user from database",
+                        deleteQuery);
+
+    return bResult;
+}
+
+/**
+ * \private
+ */
+bool MythSessionManager::ChangeDigestUserPassword(const QString& username,
+                                                  const QString& oldPassword,
+                                                  const QString& newPassword)
+{
+    if (newPassword.isEmpty())
+    {
+        LOG(VB_GENERAL, LOG_ERR, QString("New password is missing."));
+        return false;
+    }
+
+    if (!IsValidUser(username))
+    {
+        LOG(VB_GENERAL, LOG_ERR, QString("Attempted to update non-existing"
+                                         " user: %1.").arg(username));
+        return false;
+    }
+
+    QByteArray oldPasswordDigest = CreateDigest(username, oldPassword);
+
+    if (oldPasswordDigest != GetPasswordDigest(username))
+    {
+        LOG(VB_GENERAL, LOG_ERR, QString("Incorrect old password for "
+                                         "user: %1.").arg(username));
+        return false;
+    }
+
+    MSqlQuery update(MSqlQuery::InitCon());
+    update.prepare("UPDATE users SET "
+                      "password_digest = :NEW_PASSWORD_DIGEST WHERE "
+                      "username = :USER_NAME AND "
+                      "password_digest = :OLD_PASSWORD_DIGEST");
+    update.bindValue(":NEW_PASSWORD_DIGEST", CreateDigest(username,
+                                                          newPassword));
+    update.bindValue(":USER_NAME", username);
+    update.bindValue(":OLD_PASSWORD_DIGEST", oldPasswordDigest);
+
+    bool bResult = update.exec();
+    if (!bResult)
+        MythDB::DBError("Error updating digest user in database", update);
+
+    return bResult;
+}
+
+/**
  * \public
  */
 QByteArray MythSessionManager::CreateDigest(const QString &username,
@@ -430,4 +542,29 @@ QByteArray MythSessionManager::CreateDigest(const QString &username,
     QByteArray digest = QCryptographicHash::hash(plainText.toLatin1(),
                                                  QCryptographicHash::Md5).toHex();
     return digest;
+}
+
+/**
+ * \public
+ */
+bool MythSessionManager::ManageDigestUser(DigestUserActions action,
+                                          const QString&    username,
+                                          const QString&    password,
+                                          const QString&    newPassword,
+                                          const QString&    adminPassword)
+{
+    bool returnCode = false;
+
+    if (username.isEmpty() || password.isEmpty())
+        LOG(VB_GENERAL, LOG_ERR, QString("Username and password required."));
+    else if (action == DIGEST_USER_ADD)
+        returnCode = AddDigestUser(username, password, adminPassword);
+    else if (action == DIGEST_USER_REMOVE)
+        returnCode = RemoveDigestUser(username, password);
+    else if (action == DIGEST_USER_CHANGE_PW)
+        returnCode = ChangeDigestUserPassword(username, password, newPassword);
+    else
+        LOG(VB_GENERAL, LOG_ERR, QString("Unknown action."));
+
+    return returnCode;
 }

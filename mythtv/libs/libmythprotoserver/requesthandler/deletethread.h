@@ -1,8 +1,8 @@
 #ifndef DELETETHREAD_H_
 #define DELETETHREAD_H_
 
-// ANSI C headers
-#include <stdint.h>
+// C++ headers
+#include <cstdint>
 #include <unistd.h>
 
 // Qt headers
@@ -21,8 +21,8 @@ class DeleteThread : public QObject, public MThread
     Q_OBJECT
   public:
     DeleteThread(void);
-    void run(void);
-    bool AddFile(QString path);
+    void run() override; // MThread
+    bool AddFile(const QString& path);
     bool AddFile(DeleteHandler *handler);
     void Stop(void)         { m_run = false; }
 
@@ -30,10 +30,10 @@ class DeleteThread : public QObject, public MThread
     void ProcessNew(void);
     void ProcessOld(void);
 
-    size_t               m_increment;
+    size_t               m_increment { 9961472 };
     bool                 m_slow;
     bool                 m_link;
-    bool                 m_run;
+    bool                 m_run       {    true };
 
     QList<DeleteHandler*> m_newfiles;
     QMutex                m_newlock;

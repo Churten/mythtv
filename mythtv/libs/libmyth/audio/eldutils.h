@@ -23,7 +23,7 @@
 #ifndef __ELDUTILS_H
 #define __ELDUTILS_H
 
-#include <stdint.h>
+#include <cstdint>
 #include <QString>
 #include "mythexp.h"
 
@@ -41,8 +41,8 @@ class MPUBLIC ELD
   public:
     ELD(const char *buf, int size);
     ELD();
-    ~ELD();
-    ELD& operator=(const ELD&);
+    ~ELD()= default;
+    ELD& operator=(const ELD& /*rhs*/);
     void show();
     QString eld_version_name();
     QString edid_version_name();
@@ -84,8 +84,8 @@ class MPUBLIC ELD
     int update_eld(const char *buf, int size);
     void update_sad(int index, const char *buf);
     QString sad_desc(int index);
-    QString print_pcm_rates(int pcm);
-    QString print_pcm_bits(int pcm);
+    static QString print_pcm_rates(int pcm);
+    static QString print_pcm_bits(int pcm);
 
         /*
          * CEA Short Audio Descriptor data
@@ -103,23 +103,23 @@ class MPUBLIC ELD
          * ELD: EDID Like Data
          */
     struct eld_data {
-        bool     eld_valid;
-        int      eld_size;
-        int      baseline_len;
-        int      eld_ver;
-        int      cea_edid_ver;
-        char     monitor_name[ELD_MAX_MNL + 1];
-        int      manufacture_id;
-        int      product_id;
-        uint64_t port_id;
-        uint64_t formats;
-        int      support_hdcp;
-        int      support_ai;
-        int      conn_type;
-        int      aud_synch_delay;
-        int      spk_alloc;
-        int      sad_count;
-        struct cea_sad sad[ELD_MAX_SAD];
+        bool     eld_valid       { false };
+        int      eld_size        { 0 };
+        int      baseline_len    { 0 };
+        int      eld_ver         { 0 };
+        int      cea_edid_ver    { 0 };
+        char     monitor_name[ELD_MAX_MNL + 1] {};
+        int      manufacture_id  { 0 };
+        int      product_id      { 0 };
+        uint64_t port_id         { 0 };
+        uint64_t formats         { 0 };
+        int      support_hdcp    { 0 };
+        int      support_ai      { 0 };
+        int      conn_type       { 0 };
+        int      aud_synch_delay { 0 };
+        int      spk_alloc       { 0 };
+        int      sad_count       { 0 };
+        struct cea_sad sad[ELD_MAX_SAD] {};
         eld_data() { memset(this, 0, sizeof(*this)); }
     };
     eld_data m_e;

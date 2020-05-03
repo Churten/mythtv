@@ -34,44 +34,34 @@ class SERVICE_PUBLIC ChannelGroup : public QObject
 
     PROPERTYIMP       ( uint        , GroupId        )
     PROPERTYIMP       ( QString     , Name           )
-    PROPERTYIMP       ( QString     , Password       )
+    PROPERTYIMP       ( QString     , Password       );
 
     public:
 
         static void InitializeCustomTypes();
 
-        ChannelGroup(QObject *parent = 0)
+        Q_INVOKABLE ChannelGroup(QObject *parent = nullptr)
             : QObject           ( parent ),
               m_GroupId         ( 0      )
         {
         }
 
-        ChannelGroup( const ChannelGroup &src )
+        void Copy( const ChannelGroup *src )
         {
-            Copy( src );
+            m_GroupId      = src->m_GroupId     ;
+            m_Name         = src->m_Name        ;
+            m_Password     = src->m_Password    ;
         }
 
-        void Copy( const ChannelGroup &src )
-        {
-            m_GroupId      = src.m_GroupId     ;
-            m_Name         = src.m_Name        ;
-            m_Password     = src.m_Password    ;
-        }
-
+    private:
+        Q_DISABLE_COPY(ChannelGroup);
 };
 
-}
-
-Q_DECLARE_METATYPE( DTC::ChannelGroup  )
-Q_DECLARE_METATYPE( DTC::ChannelGroup* )
-
-namespace DTC
-{
 inline void ChannelGroup::InitializeCustomTypes()
 {
-    qRegisterMetaType< ChannelGroup   >();
     qRegisterMetaType< ChannelGroup*  >();
 }
+
 }
 
 #endif

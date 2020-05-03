@@ -1,8 +1,8 @@
 #include "audiooutputgraph.h"
 
-#include <limits.h>
-#include <stdint.h>
-#include <math.h>
+#include <climits>
+#include <cmath>
+#include <cstdint>
 
 #include <QtGlobal>
 #include <QImage>
@@ -25,26 +25,19 @@ const int kBufferMilliSecs = 500;
 class AudioOutputGraph::Buffer : protected QByteArray
 {
 public:
-    Buffer() :
-        m_maxSamples(0),
-        m_sample_rate(44100),
-        m_tcFirst(0), m_tcNext(0),
-        m_bits(0),
-        m_channels(0),
-        m_sizeMax(0)
-    { }
+    Buffer() = default;
 
     // Properties
     void SetMaxSamples(unsigned samples) { m_maxSamples = samples; }
-    void SetSampleRate(unsigned sample_rate) { m_sample_rate = sample_rate; }
+    void SetSampleRate(unsigned sample_rate) { m_sampleRate = sample_rate; }
 
-    inline int BitsPerChannel() const { return sizeof(short) * CHAR_BIT; }
+    static inline int BitsPerChannel() { return sizeof(short) * CHAR_BIT; }
     inline int Channels() const { return m_channels; }
 
     inline int64_t Next() const { return m_tcNext; }
     inline int64_t First() const { return m_tcFirst; }
 
-    typedef QPair<int64_t, int64_t> range_t;
+    using range_t = QPair<int64_t, int64_t>;
     range_t Avail(int64_t timecode) const
     {
         if (timecode == 0 || timecode == -1)
@@ -65,7 +58,7 @@ public:
                     tc1 = m_tcFirst;
             }
         }
-        return range_t(tc1, tc2);
+        return {tc1, tc2};
     }
 
     int Samples(const range_t &avail) const
@@ -143,12 +136,12 @@ protected:
 
     inline unsigned long Samples2MS(unsigned samples) const
     {
-        return m_sample_rate ? (samples * 1000UL + m_sample_rate - 1) / m_sample_rate : 0; // round up
+        return m_sampleRate ? (samples * 1000UL + m_sampleRate - 1) / m_sampleRate : 0; // round up
     }
 
     inline unsigned MS2Samples(int64_t ms) const
     {
-        return ms > 0 ? (ms * m_sample_rate) / 1000 : 0; // NB round down
+        return ms > 0 ? (ms * m_sampleRate) / 1000 : 0; // NB round down
     }
 
     void Append(const void *b, unsigned long len, int bits)
@@ -161,8 +154,8 @@ protected:
                 unsigned long cnt = len;
                 int n = size();
                 resize(n + sizeof(int16_t) * cnt);
-                const uchar *s = reinterpret_cast< const uchar* >(b);
-                int16_t *p = reinterpret_cast< int16_t* >(data() + n);
+                const auto *s = reinterpret_cast< const uchar* >(b);
+                auto *p = reinterpret_cast< int16_t* >(data() + n);
                 while (cnt--)
                     *p++ = (int16_t(*s++) - CHAR_MAX) << (16 - CHAR_BIT);
             }
@@ -179,8 +172,8 @@ protected:
                 int n = size();
                 resize(n + sizeof(int16_t) * cnt);
                 const float f((1 << 15) - 1);
-                const float *s = reinterpret_cast< const float* >(b);
-                int16_t *p = reinterpret_cast< int16_t* >(data() + n);
+                const auto *s = reinterpret_cast< const float* >(b);
+                auto *p = reinterpret_cast< int16_t* >(data() + n);
                 while (cnt--)
                     *p++ = int16_t(f * *s++);
             }
@@ -197,17 +190,17 @@ private:
     {
         m_bits = bits;
         m_channels = channels;
-        m_sizeMax = ((m_sample_rate * kBufferMilliSecs) / 1000) * BytesPerSample();
+        m_sizeMax = ((m_sampleRate * kBufferMilliSecs) / 1000) * BytesPerSample();
         resize(0);
     }
 
 private:
-    unsigned m_maxSamples;
-    unsigned m_sample_rate;
-    unsigned long m_tcFirst, m_tcNext;
-    int m_bits;
-    int m_channels;
-    int m_sizeMax;
+    unsigned m_maxSamples {0};
+    unsigned m_sampleRate {44100};
+    unsigned long m_tcFirst {0}, m_tcNext {0};
+    int m_bits {0};
+    int m_channels {0};
+    int m_sizeMax {0};
 };
 
 
@@ -215,8 +208,6 @@ private:
  * Audio graphic
  */
 AudioOutputGraph::AudioOutputGraph() :
-    m_painter(0),
-    m_dBsilence(-72), m_dBquiet(-60), m_dBLoud(-12), m_dbMax(-6),
     m_buffer(new AudioOutputGraph::Buffer())
 { }
 
@@ -279,13 +270,13 @@ MythImage *AudioOutputGraph::GetImage(int64_t timecode) const
 
     const int width = m_buffer->Samples(avail);
     if (width <= 0)
-        return 0;
+        return nullptr;
 
-    const unsigned range = 1U << m_buffer->BitsPerChannel();
+    const unsigned range = 1U << AudioOutputGraph::Buffer::BitsPerChannel();
     const double threshold = 20 * log10(1.0 / range); // 16bit=-96.3296dB => ~6dB/bit
     const int height = (int)-ceil(threshold); // 96
     if (height <= 0)
-        return 0;
+        return nullptr;
 
     QImage image(width, height, QImage::Format_ARGB32);
     image.fill(0);
@@ -321,7 +312,7 @@ MythImage *AudioOutputGraph::GetImage(int64_t timecode) const
             image.setPixel(x, height - 1 - y, rgb);
     }
 
-    MythImage *mi = new MythImage(m_painter);
+    auto *mi = new MythImage(m_painter);
     mi->Assign(image);
     return mi;
 }

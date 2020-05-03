@@ -15,22 +15,10 @@ using namespace std;
 
 // ---------------------------------------------------
 
-MetadataSettings::MetadataSettings(MythScreenStack *parent, const char *name)
-    : MythScreenType(parent, name),
-      m_trailerSpin(NULL),
-      m_unknownFileCheck(NULL),            m_autoMetaUpdateCheck(NULL),
-      m_treeLoadsMetaCheck(NULL),          m_randomTrailerCheck(NULL),
-      m_okButton(NULL),                    m_cancelButton(NULL)
-{
-}
-
 bool MetadataSettings::Create()
 {
-    bool foundtheme = false;
-
     // Load the theme for this screen
-    foundtheme = LoadWindowFromXML("video-ui.xml", "metadatasettings", this);
-
+    bool foundtheme = LoadWindowFromXML("video-ui.xml", "metadatasettings", this);
     if (!foundtheme)
         return false;
 
@@ -119,10 +107,6 @@ bool MetadataSettings::Create()
     return true;
 }
 
-MetadataSettings::~MetadataSettings()
-{
-}
-
 void MetadataSettings::slotSave(void)
 {
     gCoreContext->SaveSetting("mythvideo.TrailersRandomCount",
@@ -156,12 +140,7 @@ bool MetadataSettings::keyPressEvent(QKeyEvent *event)
     if (GetFocusWidget()->keyPressEvent(event))
         return true;
 
-    bool handled = false;
-
-    if (!handled && MythScreenType::keyPressEvent(event))
-        handled = true;
-
-    return handled;
+    return MythScreenType::keyPressEvent(event);
 }
 
 void MetadataSettings::toggleTrailers()
@@ -170,5 +149,5 @@ void MetadataSettings::toggleTrailers()
     if (m_randomTrailerCheck->GetCheckState() == MythUIStateType::Full)
         checkstate = 1;
 
-    m_trailerSpin->SetVisible(checkstate);
+    m_trailerSpin->SetVisible(checkstate != 0);
 }

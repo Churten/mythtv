@@ -28,24 +28,25 @@ class UPNP_PUBLIC HtmlServerExtension : public HttpServerExtension
 {
     private:
 
-        ServerSideScripting m_Scripting;
-        QString             m_IndexFilename;
+        ServerSideScripting m_scripting;
+        QString             m_indexFilename;
 
     public:
                  HtmlServerExtension( const QString &sSharePath,
                                       const QString &sApplicationPrefix);
-        virtual ~HtmlServerExtension( );
+        ~HtmlServerExtension( ) override = default;
 
         // Special case, this extension is called if no other extension
         // processes the request.  
 
-        virtual QStringList GetBasePaths() { return QStringList(); }
+        QStringList GetBasePaths() override // HttpServerExtension
+            { return QStringList(); }
 
-        bool     ProcessRequest( HTTPRequest *pRequest );
+        bool ProcessRequest( HTTPRequest *pRequest ) override; // HttpServerExtension
 
         QScriptEngine* ScriptEngine()
         {
-            return &(m_Scripting.m_engine);
+            return &(m_scripting.m_engine);
         }
 
 };

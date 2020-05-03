@@ -2,6 +2,7 @@
 
 // Myth headers
 #include "mythstorage.h"
+
 #include "mythdb.h"
 #include "mythcorecontext.h"
 
@@ -25,20 +26,20 @@ void SimpleDBStorage::Load(void)
         // a 'NULL' QVariant does not get converted to a 'NULL' QString
         if (!query.value(0).isNull())
         {
-            initval = result;
-            user->SetDBValue(result);
+            m_initval = result;
+            m_user->SetDBValue(result);
         }
     }
 }
 
-void SimpleDBStorage::Save(QString _table)
+void SimpleDBStorage::Save(const QString &table)
 {
     if (!IsSaveRequired())
         return;
 
     MSqlBindings bindings;
-    QString querystr = QString("SELECT * FROM " + _table + " WHERE "
-                               + GetWhereClause(bindings) + ';');
+    QString querystr = "SELECT * FROM " + table + " WHERE "
+                       + GetWhereClause(bindings) + ';';
 
     MSqlQuery query(MSqlQuery::InitCon());
     query.prepare(querystr);
@@ -54,10 +55,8 @@ void SimpleDBStorage::Save(QString _table)
     {
         // Row already exists
         // Don"t change this QString. See the CVS logs rev 1.91.
-        MSqlBindings bindings;
-
-        querystr = QString("UPDATE " + _table + " SET " + GetSetClause(bindings) +
-                           " WHERE " + GetWhereClause(bindings) + ';');
+        querystr = "UPDATE " + table + " SET " + GetSetClause(bindings) +
+                   " WHERE " + GetWhereClause(bindings) + ';';
 
         query.prepare(querystr);
         query.bindValues(bindings);
@@ -68,10 +67,8 @@ void SimpleDBStorage::Save(QString _table)
     else
     {
         // Row does not exist yet
-        MSqlBindings bindings;
-
-        querystr = QString("INSERT INTO " + _table + " SET "
-                           + GetSetClause(bindings) + ';');
+        querystr = "INSERT INTO " + table + " SET "
+                   + GetSetClause(bindings) + ';';
 
         query.prepare(querystr);
         query.bindValues(bindings);
@@ -91,48 +88,48 @@ QString SimpleDBStorage::GetSetClause(MSqlBindings &bindings) const
     QString tagname(":SET" + GetColumnName().toUpper());
     QString clause(GetColumnName() + " = " + tagname);
 
-    bindings.insert(tagname, user->GetDBValue());
+    bindings.insert(tagname, m_user->GetDBValue());
 
     return clause;
 }
 
 bool SimpleDBStorage::IsSaveRequired(void) const
 {
-    return user->GetDBValue() != initval;
+    return m_user->GetDBValue() != m_initval;
 }
 
 void SimpleDBStorage::SetSaveRequired(void)
 {
-    initval.clear();
+    m_initval.clear();
 }
 
 //////////////////////////////////////////////////////////////////////
 
 QString GenericDBStorage::GetWhereClause(MSqlBindings &bindings) const
 {
-    QString keycolumnTag = ":WHERE" + keycolumn.toUpper();
+    QString keycolumnTag = ":WHERE" + m_keycolumn.toUpper();
 
-    bindings.insert(keycolumnTag, keyvalue);
+    bindings.insert(keycolumnTag, m_keyvalue);
 
-    return keycolumn + " = " + keycolumnTag;
+    return m_keycolumn + " = " + keycolumnTag;
 }
 
 QString GenericDBStorage::GetSetClause(MSqlBindings &bindings) const
 {
-    QString keycolumnTag = ":SETKEY" + keycolumn.toUpper();
+    QString keycolumnTag = ":SETKEY" + m_keycolumn.toUpper();
     QString columnTag    = ":SETCOL" + GetColumnName().toUpper();
 
-    bindings.insert(keycolumnTag, keyvalue);
-    bindings.insert(columnTag,    user->GetDBValue());
+    bindings.insert(keycolumnTag, m_keyvalue);
+    bindings.insert(columnTag,    m_user->GetDBValue());
 
-    return keycolumn + " = " + keycolumnTag + ", " +
+    return m_keycolumn + " = " + keycolumnTag + ", " +
         GetColumnName() + " = " + columnTag;
 }
 
 //////////////////////////////////////////////////////////////////////
 
-HostDBStorage::HostDBStorage(StorageUser *_user, const QString &name) :
-    SimpleDBStorage(_user, "settings", "data"), settingname(name)
+HostDBStorage::HostDBStorage(StorageUser *_user, QString name) :
+    SimpleDBStorage(_user, "settings", "data"), m_settingname(std::move(name))
 {
 }
 
@@ -147,7 +144,7 @@ QString HostDBStorage::GetWhereClause(MSqlBindings &bindings) const
 
     QString clause("value = " + valueTag + " AND hostname = " + hostnameTag);
 
-    bindings.insert(valueTag, settingname);
+    bindings.insert(valueTag, m_settingname);
     bindings.insert(hostnameTag, MythDB::getMythDB()->GetHostName());
 
     return clause;
@@ -161,8 +158,8 @@ QString HostDBStorage::GetSetClause(MSqlBindings &bindings) const
     QString clause("value = " + valueTag + ", data = " + dataTag
                    + ", hostname = " + hostnameTag);
 
-    bindings.insert(valueTag, settingname);
-    bindings.insert(dataTag, user->GetDBValue());
+    bindings.insert(valueTag, m_settingname);
+    bindings.insert(dataTag, m_user->GetDBValue());
     bindings.insert(hostnameTag, MythDB::getMythDB()->GetHostName());
 
     return clause;
@@ -172,14 +169,14 @@ void HostDBStorage::Save(void)
 {
     SimpleDBStorage::Save();
     gCoreContext->ClearSettingsCache(
-        MythDB::getMythDB()->GetHostName() + ' ' + settingname);
+        MythDB::getMythDB()->GetHostName() + ' ' + m_settingname);
 }
 
 //////////////////////////////////////////////////////////////////////
 
 GlobalDBStorage::GlobalDBStorage(
-    StorageUser *_user, const QString &name) :
-    SimpleDBStorage(_user, "settings", "data"), settingname(name)
+    StorageUser *_user, QString name) :
+    SimpleDBStorage(_user, "settings", "data"), m_settingname(std::move(name))
 {
 }
 
@@ -188,7 +185,7 @@ QString GlobalDBStorage::GetWhereClause(MSqlBindings &bindings) const
     QString valueTag(":WHEREVALUE");
     QString clause("value = " + valueTag);
 
-    bindings.insert(valueTag, settingname);
+    bindings.insert(valueTag, m_settingname);
 
     return clause;
 }
@@ -200,8 +197,8 @@ QString GlobalDBStorage::GetSetClause(MSqlBindings &bindings) const
 
     QString clause("value = " + valueTag + ", data = " + dataTag);
 
-    bindings.insert(valueTag, settingname);
-    bindings.insert(dataTag, user->GetDBValue());
+    bindings.insert(valueTag, m_settingname);
+    bindings.insert(dataTag, m_user->GetDBValue());
 
     return clause;
 }
@@ -209,5 +206,5 @@ QString GlobalDBStorage::GetSetClause(MSqlBindings &bindings) const
 void GlobalDBStorage::Save(void)
 {
     SimpleDBStorage::Save();
-    gCoreContext->ClearSettingsCache(settingname);
+    gCoreContext->ClearSettingsCache(m_settingname);
 }

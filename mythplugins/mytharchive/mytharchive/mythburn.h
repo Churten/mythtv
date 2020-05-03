@@ -1,6 +1,8 @@
 #ifndef MYTHBURN_H_
 #define MYTHBURN_H_
 
+#include <utility>
+
 // mythtv
 #include <mythscreentype.h>
 
@@ -20,9 +22,11 @@ class ProfileDialog : public MythScreenType
 
   public:
     ProfileDialog(MythScreenStack *parent, ArchiveItem *archiveItem,
-                  QList<EncoderProfile *> profileList);
-
-    bool Create();
+                  QList<EncoderProfile *> profileList)
+         : MythScreenType(parent, "functionpopup"),
+           m_archiveItem(archiveItem),
+           m_profileList(std::move(profileList)) {}
+    bool Create() override; // MythScreenType
 
   signals:
     void haveResult(int profile);
@@ -32,17 +36,17 @@ class ProfileDialog : public MythScreenType
     void profileChanged(MythUIButtonListItem *item);
 
   private:
-    ArchiveItem            *m_archiveItem;
+    ArchiveItem            *m_archiveItem     {nullptr};
     QList<EncoderProfile *> m_profileList;
 
-    MythUIText       *m_captionText;
-    MythUIText       *m_descriptionText;
-    MythUIText       *m_oldSizeText;
-    MythUIText       *m_newSizeText;
+    MythUIText             *m_captionText     {nullptr};
+    MythUIText             *m_descriptionText {nullptr};
+    MythUIText             *m_oldSizeText     {nullptr};
+    MythUIText             *m_newSizeText     {nullptr};
 
-    MythUIButtonList *m_profile_list;
-    MythUICheckBox   *m_enabledCheck;
-    MythUIButton     *m_okButton;
+    MythUIButtonList       *m_profileBtnList  {nullptr};
+    MythUICheckBox         *m_enabledCheck    {nullptr};
+    MythUIButton           *m_okButton        {nullptr};
 };
 
 class MythBurn : public MythScreenType
@@ -53,12 +57,12 @@ class MythBurn : public MythScreenType
   public:
     MythBurn(MythScreenStack *parent, 
              MythScreenType *destinationScreen, MythScreenType *themeScreen,
-             ArchiveDestination archiveDestination, QString name);
+             ArchiveDestination archiveDestination, const QString& name);
 
-    ~MythBurn(void);
+    ~MythBurn(void) override;
 
-    bool Create(void);
-    bool keyPressEvent(QKeyEvent *);
+    bool Create(void) override; // MythScreenType
+    bool keyPressEvent(QKeyEvent *event) override; // MythScreenType
 
     void createConfigFile(const QString &filename);
 
@@ -71,7 +75,7 @@ class MythBurn : public MythScreenType
     void handleAddFile(void);
 
     void toggleUseCutlist(void);
-    void showMenu(void);
+    void ShowMenu(void) override; // MythScreenType
     void editDetails(void);
     void editThumbnails(void);
     void changeProfile(void);
@@ -87,44 +91,44 @@ class MythBurn : public MythScreenType
     void loadConfiguration(void);
     void saveConfiguration(void);
     EncoderProfile *getProfileFromName(const QString &profileName);
-    QString loadFile(const QString &filename);
-    bool isArchiveItemValid(const QString &type, const QString &filename);
+    static QString loadFile(const QString &filename);
+    static bool isArchiveItemValid(const QString &type, const QString &filename);
     void loadEncoderProfiles(void);
     EncoderProfile *getDefaultProfile(ArchiveItem *item);
     void setProfile(EncoderProfile *profile, ArchiveItem *item);
     void runScript();
 
-    MythScreenType         *m_destinationScreen;
-    MythScreenType         *m_themeScreen;
+    MythScreenType         *m_destinationScreen {nullptr};
+    MythScreenType         *m_themeScreen       {nullptr};
     ArchiveDestination      m_archiveDestination;
 
     QList<ArchiveItem *>    m_archiveList;
     QList<EncoderProfile *> m_profileList;
 
-    bool              m_bCreateISO;
-    bool              m_bDoBurn;
-    bool              m_bEraseDvdRw;
+    bool              m_bCreateISO              {false};
+    bool              m_bDoBurn                 {false};
+    bool              m_bEraseDvdRw             {false};
     QString           m_saveFilename;
     QString           m_theme;
 
-    bool              m_moveMode;
+    bool              m_moveMode                {false};
 
-    MythUIButton     *m_nextButton;
-    MythUIButton     *m_prevButton;
-    MythUIButton     *m_cancelButton;
+    MythUIButton     *m_nextButton              {nullptr};
+    MythUIButton     *m_prevButton              {nullptr};
+    MythUIButton     *m_cancelButton            {nullptr};
 
-    MythUIButtonList *m_archiveButtonList;
-    MythUIText       *m_nofilesText;
-    MythUIButton     *m_addrecordingButton;
-    MythUIButton     *m_addvideoButton;
-    MythUIButton     *m_addfileButton;
+    MythUIButtonList *m_archiveButtonList       {nullptr};
+    MythUIText       *m_nofilesText             {nullptr};
+    MythUIButton     *m_addrecordingButton      {nullptr};
+    MythUIButton     *m_addvideoButton          {nullptr};
+    MythUIButton     *m_addfileButton           {nullptr};
 
     // size bar
-    MythUIProgressBar *m_sizeBar;
-    MythUIText        *m_maxsizeText;
-    MythUIText        *m_minsizeText;
-    MythUIText        *m_currentsizeErrorText;
-    MythUIText        *m_currentsizeText;
+    MythUIProgressBar *m_sizeBar                {nullptr};
+    MythUIText        *m_maxsizeText            {nullptr};
+    MythUIText        *m_minsizeText            {nullptr};
+    MythUIText        *m_currentsizeErrorText   {nullptr};
+    MythUIText        *m_currentsizeText        {nullptr};
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -135,13 +139,13 @@ class BurnMenu : public QObject
 
   public:
     BurnMenu(void);
-    ~BurnMenu(void);
+    ~BurnMenu(void) override = default;
 
     void start(void);
 
   private:
-    void customEvent(QEvent *event);
-    void doBurn(int mode);
+    void customEvent(QEvent *event) override; // QObject
+    static void doBurn(int mode);
 };
 
 #endif

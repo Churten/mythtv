@@ -18,6 +18,9 @@
  *   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
+// C/C++ includes
+#include <utility>
+
 // Qt includes
 #include <QString>
 
@@ -28,12 +31,11 @@
 #define LOC QString("ExternalRec[%1](%2): ").arg(m_cardid).arg(m_command)
 
 ExternalRecChannelFetcher::ExternalRecChannelFetcher(int cardid,
-                                                     const QString & cmd)
+                                                     QString cmd)
     : m_cardid(cardid)
-    , m_command(cmd)
-    , m_stream_handler(nullptr)
+    , m_command(std::move(cmd))
 {
-    m_stream_handler = ExternalStreamHandler::Get(m_command, m_cardid);
+    m_streamHandler = ExternalStreamHandler::Get(m_command, m_cardid, m_cardid);
 }
 
 ExternalRecChannelFetcher::~ExternalRecChannelFetcher(void)
@@ -43,19 +45,19 @@ ExternalRecChannelFetcher::~ExternalRecChannelFetcher(void)
 
 void ExternalRecChannelFetcher::Close(void)
 {
-    if (m_stream_handler)
-        ExternalStreamHandler::Return(m_stream_handler, m_cardid);
+    if (m_streamHandler)
+        ExternalStreamHandler::Return(m_streamHandler, m_cardid);
 }
 
 bool ExternalRecChannelFetcher::Valid(void) const
 {
-    if (!m_stream_handler)
+    if (!m_streamHandler)
     {
         LOG(VB_CHANNEL, LOG_ERR, LOC + "Failed to open external app.");
         return false;
     }
 
-    if (!m_stream_handler->HasTuner())
+    if (!m_streamHandler->HasTuner())
     {
         LOG(VB_CHANNEL, LOG_ERR, LOC + "External app does not have a tuner.");
         return false;
@@ -68,14 +70,15 @@ bool ExternalRecChannelFetcher::FetchChannel(const QString & cmd,
                                              QString & channum,
                                              QString & name,
                                              QString & callsign,
-                                             QString & xmltvid)
+                                             QString & xmltvid,
+                                             QString & icon)
 {
     if (!Valid())
         return false;
 
     QString result;
 
-    if (!m_stream_handler->ProcessCommand(cmd, result))
+    if (!m_streamHandler->ProcessCommand(cmd, result))
     {
         LOG(VB_CHANNEL, LOG_ERR, LOC + QString("%1 command failed.").arg(cmd));
         return false;
@@ -93,13 +96,14 @@ bool ExternalRecChannelFetcher::FetchChannel(const QString & cmd,
         return false;
     }
 
-    // Expect csv:  channum, name, callsign, xmltvid
+    // Expect csv:  channum, name, callsign, xmltvid, icon
     QStringList fields = result.mid(3).split(",");
 
-    if (fields.size() != 4)
+    if (fields.size() != 4 && fields.size() != 5)
     {
         LOG(VB_CHANNEL, LOG_ERR, LOC +
-            QString("Expecting channum, name, callsign, xmltvid; "
+            QString("Expecting channum, name, callsign, xmltvid and "
+                    "optionally icon; "
                     "Received '%1").arg(result));
         return false;
     }
@@ -108,6 +112,8 @@ bool ExternalRecChannelFetcher::FetchChannel(const QString & cmd,
     name     = fields[1];
     callsign = fields[2];
     xmltvid  = fields[3];
+    if (fields.size() == 5)
+        icon     = fields[4];
 
     return true;
 }
@@ -115,12 +121,12 @@ bool ExternalRecChannelFetcher::FetchChannel(const QString & cmd,
 int ExternalRecChannelFetcher::LoadChannels(void)
 {
     if (!Valid())
-        return false;
+        return 0;
 
     QString result;
     int     cnt = -1;
 
-    if (!m_stream_handler->ProcessCommand("LoadChannels", result, 50000))
+    if (!m_streamHandler->ProcessCommand("LoadChannels", result, 50000))
     {
         LOG(VB_CHANNEL, LOG_ERR, LOC + "LoadChannels command failed.");
         return -1;

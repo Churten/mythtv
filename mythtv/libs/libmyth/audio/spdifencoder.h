@@ -9,13 +9,12 @@
 extern "C" {
 #include "libavcodec/avcodec.h"
 #include "libavformat/avformat.h"
-#include "libavcodec/audioconvert.h"
 }
 
 class MPUBLIC SPDIFEncoder
 {
   public:
-    SPDIFEncoder(QString muxer, int codec_id);
+    SPDIFEncoder(const QString& muxer, AVCodecID codec_id);
     ~SPDIFEncoder();
     void WriteFrame(unsigned char *data, int size);
     int  GetData(unsigned char *buffer, int &dest_size);
@@ -30,10 +29,10 @@ class MPUBLIC SPDIFEncoder
     void Destroy();
 
   private:
-    bool                m_complete;
-    AVFormatContext    *m_oc;
-    unsigned char       m_buffer[AudioOutput::MAX_SIZE_BUFFER];
-    long                m_size;
+    bool                m_complete {false};
+    AVFormatContext    *m_oc       {nullptr};
+    unsigned char       m_buffer[AudioOutput::kMaxSizeBuffer] {0};
+    long                m_size     {0};
 };
 
 #endif

@@ -6,22 +6,6 @@
 
 #include "visualizationsettings.h"
 
-VisualizationSettings::VisualizationSettings(MythScreenStack *parent, const char *name)
-    : MythScreenType(parent, name),
-    m_changeOnSongChange(NULL),
-    m_randomizeOrder(NULL),
-    m_scaleWidth(NULL),
-    m_scaleHeight(NULL),
-    m_saveButton(NULL),
-    m_cancelButton(NULL)
-{
-}
-
-VisualizationSettings::~VisualizationSettings()
-{
-
-}
-
 bool VisualizationSettings::Create()
 {
     bool err = false;

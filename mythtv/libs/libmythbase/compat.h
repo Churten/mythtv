@@ -5,7 +5,11 @@
 #ifndef __COMPAT_H__
 #define __COMPAT_H__
 
+#ifdef __cplusplus
+#    include <cstdio>         // for snprintf(), used by inline dlerror()
+#else
 #    include <stdio.h>        // for snprintf(), used by inline dlerror()
+#endif
 
 #ifdef _WIN32
 #    ifndef _MSC_VER
@@ -46,8 +50,8 @@
 #endif
 
 #ifdef _WIN32
-#    include <stdlib.h>       // for rand()
-#    include <time.h>
+#    include <cstdlib>       // for rand()
+#    include <ctime>
 #    include <sys/time.h>
 #    include <sys/types.h>    // suseconds_t
 #endif
@@ -60,7 +64,7 @@
     #undef restrict
     #endif
 
-    #include <inttypes.h>
+    #include <cinttypes>
     #include <direct.h>
     #include <process.h>
 
@@ -69,9 +73,9 @@
     #define snprintf            _snprintf
 
     #ifdef  _WIN64
-        typedef __int64    ssize_t;
+        using ssize_t = __int64;
     #else
-        typedef int   ssize_t;
+        using ssize_t = int;
     #endif
 
     // Check for execute, only checking existance in MSVC
@@ -116,7 +120,7 @@
     #   endif
     #endif
 
-    typedef uint32_t   mode_t;
+    using mode_t = uint32_t;
 
     #if !defined(__cplusplus) && !defined( inline )
     #   define inline __inline
@@ -133,14 +137,21 @@
 //used in videodevice only - that code is not windows-compatible anyway
 #    define minor(X) 0
 
-    typedef unsigned int uint;
+    using uint = unsigned int;
 #endif
 
 #if defined(__cplusplus) && defined(_WIN32)
 #   include <QtGlobal>
 
+#if QT_VERSION >= QT_VERSION_CHECK(5,10,0)
+    #include <QRandomGenerator>
+    static inline void srandom(unsigned int /*seed*/) { }
+    static inline long int random(void)
+        { return QRandomGenerator::global()->generate64(); }
+#else
     static inline void srandom(unsigned int seed) { qsrand(seed); }
     static inline long int random(void) { return qrand(); }
+#endif
 
 #   define setenv(x, y, z) ::SetEnvironmentVariableA(x, y)
 #   define unsetenv(x) 0
@@ -216,7 +227,7 @@
     #define mkfifo(path, mode) \
         (int)CreateNamedPipeA(path, PIPE_ACCESS_DUPLEX | WRITE_DAC, \
                           PIPE_WAIT, PIPE_UNLIMITED_INSTANCES, \
-                          1024, 1024, 10000, NULL)
+                          1024, 1024, 10000, nullptr)
 
 #    define RTLD_LAZY 0
 #    define dlopen(x, y) LoadLibraryA((x))
@@ -233,9 +244,9 @@
             if (!FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM |
                                 FORMAT_MESSAGE_IGNORE_INSERTS |
                                 FORMAT_MESSAGE_MAX_WIDTH_MASK,
-                                NULL, errCode,
+                                nullptr, errCode,
                                 MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-                                errStr, DLERR_MAX - 1, NULL))
+                                errStr, DLERR_MAX - 1, nullptr))
                 snprintf(errStr, DLERR_MAX - 1,
                          "dlopen()/dlsym() caused error %d", (int)errCode);
 
@@ -265,7 +276,7 @@ static __inline struct tm *gmtime_r(const time_t *timep, struct tm *result)
         *result = *tmp;
         return result;
     }
-    return NULL;
+    return nullptr;
 }
 #endif
 
@@ -281,7 +292,7 @@ static __inline struct tm *localtime_r(const time_t *timep, struct tm *result)
         memcpy(result, win_tmp, sizeof(struct tm));
         return result;
     }
-    return NULL;
+    return nullptr;
 }
 #endif
 
@@ -317,7 +328,7 @@ static __inline struct tm *localtime_r(const time_t *timep, struct tm *result)
 #    define WEXITSTATUS(w) (((w) >> 8) & 0xff)
 #    define WTERMSIG(w)    ((w) & 0x7f)
 
-    typedef long suseconds_t;
+    using suseconds_t = long;
 
 #endif // _WIN32
 
@@ -326,13 +337,13 @@ static __inline struct tm *localtime_r(const time_t *timep, struct tm *result)
 #include "mythconfig.h"
 
 #if CONFIG_DARWIN && ! defined (_SUSECONDS_T)
-    typedef int32_t suseconds_t;   // 10.3 or earlier don't have this
+    using suseconds_t = int32_t;   // 10.3 or earlier don't have this
 #endif
 
 // Libdvdnav now uses off64_t lseek64(), which BSD/Darwin doesn't have.
 // Luckily, its lseek() is already 64bit compatible
 #ifdef BSD
-    typedef off_t off64_t;
+    typedef off_t off64_t; //NOLINT(modernize-use-using)included from C code
     #define lseek64(f,o,w) lseek(f,o,w)
 #endif
 
@@ -350,10 +361,10 @@ static __inline struct tm *localtime_r(const time_t *timep, struct tm *result)
 #endif
 
 #if defined(USING_MINGW) && defined(FILENAME_MAX)
-#    include <errno.h>
+#    include <cerrno>
+#    include <cstddef>
+#    include <cstring>
 #    include <dirent.h>
-#    include <string.h>
-#    include <stddef.h>
     static inline int readdir_r(
         DIR *dirp, struct dirent *entry, struct dirent **result)
     {
@@ -372,7 +383,7 @@ static __inline struct tm *localtime_r(const time_t *timep, struct tm *result)
         else
         {
             if (result)
-                *result = NULL;
+                *result = nullptr;
             return errno;
         }
     }

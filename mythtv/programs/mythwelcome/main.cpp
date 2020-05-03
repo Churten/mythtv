@@ -1,28 +1,18 @@
-#include <cstdlib>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <chrono> // for milliseconds
-#include <thread> // for sleep_for
-
 // Qt
 #include <QApplication>
-#include <QFileInfo>
-#include <QDir>
 
 // MythTV
 #include "mythcontext.h"
 #include "mythversion.h"
 #include "mythtranslation.h"
-#include "mythdbcon.h"
 #include "exitcodes.h"
 #include "compat.h"
 #include "lcddevice.h"
 #include "commandlineparser.h"
-#include "tv.h"
 #include "loggingserver.h"
 #include "mythlogging.h"
 #include "signalhandling.h"
+#include "mythdisplay.h"
 
 // libmythui
 #include "mythmainwindow.h"
@@ -32,6 +22,13 @@
 #include "welcomedialog.h"
 #include "welcomesettings.h"
 
+#if CONFIG_SYSTEMD_NOTIFY
+#include <systemd/sd-daemon.h>
+#define mw_sd_notify(x) \
+    (void)sd_notify(0, x);
+#else
+#define mw_sd_notify(x)
+#endif
 
 static void initKeys(void)
 {
@@ -46,10 +43,6 @@ static void initKeys(void)
 int main(int argc, char **argv)
 {
     bool bShowSettings = false;
-
-#if CONFIG_OMX_RPI
-    setenv("QT_XCB_GL_INTEGRATION","none",0);
-#endif
 
     MythWelcomeCommandLineParser cmdline;
     if (!cmdline.Parse(argc, argv))
@@ -66,15 +59,16 @@ int main(int argc, char **argv)
 
     if (cmdline.toBool("showversion"))
     {
-        cmdline.PrintVersion();
+        MythWelcomeCommandLineParser::PrintVersion();
         return GENERIC_EXIT_OK;
     }
 
+    MythDisplay::ConfigureQtGUI();
     QApplication a(argc, argv);
     QCoreApplication::setApplicationName(MYTH_APPNAME_MYTHWELCOME);
 
-    int retval;
-    if ((retval = cmdline.ConfigureLogging()) != GENERIC_EXIT_OK)
+    int retval = cmdline.ConfigureLogging();
+    if (retval != GENERIC_EXIT_OK)
         return retval;
 
     if (cmdline.toBool("setup"))
@@ -92,6 +86,8 @@ int main(int argc, char **argv)
 #endif
 
     gContext = new MythContext(MYTH_BINARY_VERSION, true);
+
+    cmdline.ApplySettingsOverride();
     if (!gContext->Init())
     {
         LOG(VB_GENERAL, LOG_ERR,
@@ -99,6 +95,8 @@ int main(int argc, char **argv)
         SignalHandler::Done();
         return GENERIC_EXIT_NO_MYTHCONTEXT;
     }
+
+    cmdline.ApplySettingsOverride();
 
     if (!MSqlQuery::testDBConnection())
     {
@@ -122,40 +120,41 @@ int main(int argc, char **argv)
     mainWindow->DisableIdleTimer();
 
     initKeys();
+    // Provide systemd ready notification (for type=notify units)
+    mw_sd_notify("READY=1");
 
+    MythScreenStack *mainStack = mainWindow->GetMainStack();
+
+    MythScreenType *screen = nullptr;
     if (bShowSettings)
     {
-        MythShutdownSettings settings;
-        settings.exec();
+        screen = new StandardSettingDialog(mainStack, "shutdown",
+                                           new MythShutdownSettings());
     }
     else
     {
-        MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
-
-        WelcomeDialog *welcome = new WelcomeDialog(mainStack, "mythwelcome");
-
-        if (welcome->Create())
-            mainStack->AddScreen(welcome, false);
-        else
-        {
-            DestroyMythMainWindow();
-            delete gContext;
-            SignalHandler::Done();
-            return -1;
-        }
-
-        do
-        {
-            qApp->processEvents();
-            std::this_thread::sleep_for(std::chrono::milliseconds(5));
-        } while (mainStack->TotalScreens() > 0);
+        screen = new WelcomeDialog(mainStack, "mythwelcome");
     }
 
+    bool ok = screen->Create();
+    if (ok)
+    {
+        mainStack->AddScreen(screen, false);
+
+        // Block by running an event loop until last screen is removed
+        QEventLoop block;
+        QObject::connect(mainStack, &MythScreenStack::topScreenChanged,
+                         &block, [&](MythScreenType* _screen)
+        { if (!_screen) block.quit(); });
+        block.exec();
+    }
+
+    mw_sd_notify("STOPPING=1\nSTATUS=Exiting");
     DestroyMythMainWindow();
 
     delete gContext;
 
     SignalHandler::Done();
 
-    return 0;
+    return ok ? 0 : -1;
 }

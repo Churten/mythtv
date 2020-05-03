@@ -11,7 +11,9 @@
 //////////////////////////////////////////////////////////////////////////////
 
 #include "upnptaskevent.h"
+
 #include "mythlogging.h"
+#include <utility>
 
 /////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////
@@ -30,7 +32,7 @@ UPnpEventTask::UPnpEventTask( QHostAddress peerAddress,
                               QByteArray  *pPayload ) :
     Task("UPnpEventTask")
 {
-    m_PeerAddress = peerAddress;
+    m_PeerAddress = std::move(peerAddress);
     m_nPeerPort   = nPeerPort;
     m_pPayload    = pPayload;  // We take ownership of this pointer.
 } 
@@ -41,8 +43,7 @@ UPnpEventTask::UPnpEventTask( QHostAddress peerAddress,
 
 UPnpEventTask::~UPnpEventTask()  
 { 
-    if (m_pPayload != NULL)
-        delete m_pPayload;
+    delete m_pPayload;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -51,7 +52,7 @@ UPnpEventTask::~UPnpEventTask()
 
 void UPnpEventTask::Execute( TaskQueue * /*pQueue*/ )
 {
-    if (m_pPayload == NULL)
+    if (m_pPayload == nullptr)
         return;
 
     MSocketDevice        sockDev( MSocketDevice::Stream );
@@ -98,9 +99,11 @@ void UPnpEventTask::Execute( TaskQueue * /*pQueue*/ )
             }
         }
         else
+        {
             LOG(VB_UPNP, LOG_ERR,
                 QString("UPnpEventTask::Execute - Error sending to %1:%2.")
                     .arg(m_PeerAddress.toString()) .arg(m_nPeerPort));
+        }
 
         sock.Close();
     }

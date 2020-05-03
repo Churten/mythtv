@@ -1,13 +1,14 @@
 // -*- Mode: c++ -*-
 
+#include <cstdint>   // for uint64_t
+#include <utility>
+
 #include <QStringList>
 #include <QDateTime>
 #include <QSize>
 #include <QMap>
 #include <QString>
 #include <QVariant>
-
-#include <stdint.h>   // for uint64_t
 
 #include "mythbaseexp.h"
 #include "mythlogging.h"
@@ -18,52 +19,52 @@ class MythCommandLineParser;
 class MBASE_PUBLIC CommandLineArg : public ReferenceCounter
 {
   public:
-    CommandLineArg(QString name, QVariant::Type type, QVariant def,
+    CommandLineArg(const QString& name, QVariant::Type type, QVariant def,
                    QString help, QString longhelp);
-    CommandLineArg(QString name, QVariant::Type type, QVariant def);
-    explicit CommandLineArg(QString name);
-   ~CommandLineArg() {};
+    CommandLineArg(const QString& name, QVariant::Type type, QVariant def);
+    explicit CommandLineArg(const QString& name);
+   ~CommandLineArg() override = default;
 
-    CommandLineArg* SetGroup(QString group)         { m_group = group;
+    CommandLineArg* SetGroup(const QString &group)    { m_group = group;
                                                       return this; }
-    void            AddKeyword(QString keyword)     { m_keywords << keyword; }
+    void            AddKeyword(const QString &keyword) { m_keywords << keyword; }
 
     QString         GetName(void) const             { return m_name; }
     QString         GetUsedKeyword(void) const      { return m_usedKeyword; }
     int             GetKeywordLength(void) const;
-    QString         GetHelpString(int off, QString group = "",
+    QString         GetHelpString(int off, const QString& group = "",
                                   bool force = false) const;
     QString         GetLongHelpString(QString keyword) const;
 
-    bool            Set(QString opt);
-    bool            Set(QString opt, QByteArray val);
-    void            Set(QVariant val)               { m_stored = val;
+    bool            Set(const QString& opt);
+    bool            Set(const QString& opt, const QByteArray& val);
+    void            Set(QVariant val)               { m_stored = std::move(val);
                                                       m_given = true; }
 
-    CommandLineArg* SetParent(QString opt);
-    CommandLineArg* SetParent(QStringList opts);
-    CommandLineArg* SetParentOf(QString opt);
-    CommandLineArg* SetParentOf(QStringList opts);
+    CommandLineArg* SetParent(const QString &opt);
+    CommandLineArg* SetParent(const QStringList& opts);
+    CommandLineArg* SetParentOf(const QString &opt);
+    CommandLineArg* SetParentOf(const QStringList& opts);
 
-    CommandLineArg* SetChild(QString opt);
-    CommandLineArg* SetChild(QStringList opt);
-    CommandLineArg* SetChildOf(QString opt);
-    CommandLineArg* SetChildOf(QStringList opts);
+    CommandLineArg* SetChild(const QString& opt);
+    CommandLineArg* SetChild(const QStringList& opt);
+    CommandLineArg* SetChildOf(const QString& opt);
+    CommandLineArg* SetChildOf(const QStringList& opts);
 
-    CommandLineArg* SetRequiredChild(QString opt);
-    CommandLineArg* SetRequiredChild(QStringList opt);
-    CommandLineArg* SetRequiredChildOf(QString opt);
-    CommandLineArg* SetRequiredChildOf(QStringList opt);
+    CommandLineArg* SetRequiredChild(const QString& opt);
+    CommandLineArg* SetRequiredChild(const QStringList& opt);
+    CommandLineArg* SetRequiredChildOf(const QString& opt);
+    CommandLineArg* SetRequiredChildOf(const QStringList& opt);
 
-    CommandLineArg* SetRequires(QString opt);
-    CommandLineArg* SetRequires(QStringList opts);
-    CommandLineArg* SetBlocks(QString opt);
-    CommandLineArg* SetBlocks(QStringList opts);
+    CommandLineArg* SetRequires(const QString &opt);
+    CommandLineArg* SetRequires(const QStringList& opts);
+    CommandLineArg* SetBlocks(const QString &opt);
+    CommandLineArg* SetBlocks(const QStringList& opts);
 
     CommandLineArg* SetDeprecated(QString depstr = "");
     CommandLineArg* SetRemoved(QString remstr = "", QString remver = "");
 
-    static void     AllowOneOf(QList<CommandLineArg*> args);
+    static void     AllowOneOf(const QList<CommandLineArg*>& args);
 
     void            PrintVerbose(void) const;
 
@@ -86,14 +87,14 @@ class MBASE_PUBLIC CommandLineArg : public ReferenceCounter
     void            PrintRemovedWarning(QString &keyword) const;
     void            PrintDeprecatedWarning(QString &keyword) const;
 
-    bool                    m_given;
-    bool                    m_converted;
+    bool                    m_given     {false};
+    bool                    m_converted {false};
     QString                 m_name;
     QString                 m_group;
     QString                 m_deprecated;
     QString                 m_removed;
     QString                 m_removedversion;
-    QVariant::Type          m_type;
+    QVariant::Type          m_type      {QVariant::Invalid};
     QVariant                m_default;
     QVariant                m_stored;
 
@@ -113,11 +114,11 @@ class MBASE_PUBLIC CommandLineArg : public ReferenceCounter
 class MBASE_PUBLIC MythCommandLineParser
 {
   public:
-    explicit MythCommandLineParser(QString);
+    explicit MythCommandLineParser(QString appname);
    ~MythCommandLineParser();
 
     virtual void LoadArguments(void) {};
-    void PrintVersion(void) const;
+    static void PrintVersion(void) ;
     void PrintHelp(void) const;
     QString GetHelpString(void) const;
     virtual QString GetHelpHeader(void) const { return ""; }
@@ -126,114 +127,114 @@ class MBASE_PUBLIC MythCommandLineParser
 
 // overloaded add constructors for single string options
     // bool with default
-    CommandLineArg* add(QString arg, QString name, bool def,
+    CommandLineArg* add(const QString& arg, const QString& name, bool def,
                         QString help, QString longhelp)
           { return add(QStringList(arg), name, QVariant::Bool,
-                       QVariant(def), help, longhelp); }
+                       QVariant(def), std::move(help), std::move(longhelp)); }
     // int
-    CommandLineArg* add(QString arg, QString name, int def,
+    CommandLineArg* add(const QString& arg, const QString& name, int def,
                         QString help, QString longhelp)
           { return add(QStringList(arg), name, QVariant::Int,
-                       QVariant(def), help, longhelp); }
+                       QVariant(def), std::move(help), std::move(longhelp)); }
     // uint
-    CommandLineArg* add(QString arg, QString name, uint def,
+    CommandLineArg* add(const QString& arg, const QString& name, uint def,
              QString help, QString longhelp)
           { return add(QStringList(arg), name, QVariant::UInt,
-                       QVariant(def), help, longhelp); }
+                       QVariant(def), std::move(help), std::move(longhelp)); }
     // long long
-    CommandLineArg* add(QString arg, QString name, long long def,
+    CommandLineArg* add(const QString& arg, const QString& name, long long def,
              QString help, QString longhelp)
           { return add(QStringList(arg), name, QVariant::LongLong,
-                       QVariant(def), help, longhelp); }
+                       QVariant(def), std::move(help), std::move(longhelp)); }
     // double
-    CommandLineArg* add(QString arg, QString name, double def,
+    CommandLineArg* add(const QString& arg, const QString& name, double def,
              QString help, QString longhelp)
           { return add(QStringList(arg), name, QVariant::Double,
-                       QVariant(def), help, longhelp); }
+                       QVariant(def), std::move(help), std::move(longhelp)); }
     // const char *
-    CommandLineArg* add(QString arg, QString name, const char *def,
+    CommandLineArg* add(const QString& arg, const QString& name, const char *def,
              QString help, QString longhelp)
           { return add(QStringList(arg), name, QVariant::String,
-                       QVariant(def), help, longhelp); }
+                       QVariant(def), std::move(help), std::move(longhelp)); }
     // QString
-    CommandLineArg* add(QString arg, QString name, QString def,
+    CommandLineArg* add(const QString& arg, const QString& name, const QString& def,
              QString help, QString longhelp)
           { return add(QStringList(arg), name, QVariant::String,
-                       QVariant(def), help, longhelp); }
+                       QVariant(def), std::move(help), std::move(longhelp)); }
     // QSize
-    CommandLineArg* add(QString arg, QString name, QSize def,
+    CommandLineArg* add(const QString& arg, const QString& name, QSize def,
              QString help, QString longhelp)
           { return add(QStringList(arg), name, QVariant::Size,
-                       QVariant(def), help, longhelp); }
+                       QVariant(def), std::move(help), std::move(longhelp)); }
     // QDateTime
-    CommandLineArg* add(QString arg, QString name, QDateTime def,
+    CommandLineArg* add(const QString& arg, const QString& name, const QDateTime& def,
              QString help, QString longhelp)
           { return add(QStringList(arg), name, QVariant::DateTime,
-                       QVariant(def), help, longhelp); }
+                       QVariant(def), std::move(help), std::move(longhelp)); }
     // anything else
-    CommandLineArg* add(QString arg, QString name, QVariant::Type type,
+    CommandLineArg* add(const QString& arg, const QString& name, QVariant::Type type,
              QString help, QString longhelp)
           { return add(QStringList(arg), name, type,
-                       QVariant(type), help, longhelp); }
+                       QVariant(type), std::move(help), std::move(longhelp)); }
     // anything else with default
-    CommandLineArg* add(QString arg, QString name, QVariant::Type type,
+    CommandLineArg* add(const QString& arg, const QString& name, QVariant::Type type,
              QVariant def, QString help, QString longhelp)
           { return add(QStringList(arg), name, type,
-                       def, help, longhelp); }
+                       std::move(def), std::move(help), std::move(longhelp)); }
 
 // overloaded add constructors for multi-string options
     // bool with default
-    CommandLineArg* add(QStringList arglist, QString name, bool def,
+    CommandLineArg* add(QStringList arglist, const QString& name, bool def,
              QString help, QString longhelp)
-          { return add(arglist, name, QVariant::Bool,
-                       QVariant(def), help, longhelp); }
+          { return add(std::move(arglist), name, QVariant::Bool,
+                       QVariant(def), std::move(help), std::move(longhelp)); }
     // int
-    CommandLineArg* add(QStringList arglist, QString name, int def,
+    CommandLineArg* add(QStringList arglist, const QString& name, int def,
              QString help, QString longhelp)
-          { return add(arglist, name, QVariant::Int,
-                       QVariant(def), help, longhelp); }
+          { return add(std::move(arglist), name, QVariant::Int,
+                       QVariant(def), std::move(help), std::move(longhelp)); }
     // uint
-    CommandLineArg* add(QStringList arglist, QString name, uint def,
+    CommandLineArg* add(QStringList arglist, const QString& name, uint def,
              QString help, QString longhelp)
-          { return add(arglist, name, QVariant::UInt,
-                       QVariant(def), help, longhelp); }
+          { return add(std::move(arglist), name, QVariant::UInt,
+                       QVariant(def), std::move(help), std::move(longhelp)); }
     // long long
-    CommandLineArg* add(QStringList arglist, QString name, long long def,
+    CommandLineArg* add(QStringList arglist, const QString& name, long long def,
              QString help, QString longhelp)
-          { return add(arglist, name, QVariant::LongLong,
-                       QVariant(def), help, longhelp); }
+          { return add(std::move(arglist), name, QVariant::LongLong,
+                       QVariant(def), std::move(help), std::move(longhelp)); }
     // float
-    CommandLineArg* add(QStringList arglist, QString name, double def,
+    CommandLineArg* add(QStringList arglist, const QString& name, double def,
              QString help, QString longhelp)
-          { return add(arglist, name, QVariant::Double,
-                       QVariant(def), help, longhelp); }
+          { return add(std::move(arglist), name, QVariant::Double,
+                       QVariant(def), std::move(help), std::move(longhelp)); }
     // const char *
-    CommandLineArg* add(QStringList arglist, QString name, const char *def,
+    CommandLineArg* add(QStringList arglist, const QString& name, const char *def,
              QString help, QString longhelp)
-          { return add(arglist, name, QVariant::String,
-                       QVariant(def), help, longhelp); }
+          { return add(std::move(arglist), name, QVariant::String,
+                       QVariant(def), std::move(help), std::move(longhelp)); }
     // QString
-    CommandLineArg* add(QStringList arglist, QString name, QString def,
+    CommandLineArg* add(QStringList arglist, const QString& name, const QString& def,
              QString help, QString longhelp)
-          { return add(arglist, name, QVariant::String,
-                       QVariant(def), help, longhelp); }
+          { return add(std::move(arglist), name, QVariant::String,
+                       QVariant(def), std::move(help), std::move(longhelp)); }
     // QSize
-    CommandLineArg* add(QStringList arglist, QString name, QSize def,
+    CommandLineArg* add(QStringList arglist, const QString& name, QSize def,
              QString help, QString longhelp)
-          { return add(arglist, name, QVariant::Size,
-                       QVariant(def), help, longhelp); }
+          { return add(std::move(arglist), name, QVariant::Size,
+                       QVariant(def), std::move(help), std::move(longhelp)); }
     // QDateTime
-    CommandLineArg* add(QStringList arglist, QString name, QDateTime def,
+    CommandLineArg* add(QStringList arglist, const QString& name, const QDateTime& def,
              QString help, QString longhelp)
-          { return add(arglist, name, QVariant::DateTime,
-                       QVariant(def), help, longhelp); }
+          { return add(std::move(arglist), name, QVariant::DateTime,
+                       QVariant(def), std::move(help), std::move(longhelp)); }
     // anything else
-    CommandLineArg* add(QStringList arglist, QString name, QVariant::Type type,
+    CommandLineArg* add(QStringList arglist, const QString& name, QVariant::Type type,
              QString help, QString longhelp)
-          { return add(arglist, name, type,
-                       QVariant(type), help, longhelp); }
+          { return add(std::move(arglist), name, type,
+                       QVariant(type), std::move(help), std::move(longhelp)); }
     // anything else with default
-    CommandLineArg* add(QStringList arglist, QString name, QVariant::Type type,
+    CommandLineArg* add(QStringList arglist, const QString& name, QVariant::Type type,
              QVariant def, QString help, QString longhelp);
 
     QVariant                operator[](const QString &name);
@@ -246,19 +247,19 @@ class MBASE_PUBLIC MythCommandLineParser
     LogLevel_t              GetLogLevel(void);
     QString                 GetAppName(void) const { return m_appname; }
 
-    bool                    toBool(QString key) const;
-    int                     toInt(QString key) const;
-    uint                    toUInt(QString key) const;
-    long long               toLongLong(QString key) const;
-    double                  toDouble(QString key) const;
-    QSize                   toSize(QString key) const;
-    QString                 toString(QString key) const;
-    QStringList             toStringList(QString key, QString sep = "") const;
-    QMap<QString,QString>   toMap(QString key) const;
-    QDateTime               toDateTime(QString key) const;
+    bool                    toBool(const QString& key) const;
+    int                     toInt(const QString& key) const;
+    uint                    toUInt(const QString& key) const;
+    long long               toLongLong(const QString& key) const;
+    double                  toDouble(const QString& key) const;
+    QSize                   toSize(const QString& key) const;
+    QString                 toString(const QString& key) const;
+    QStringList             toStringList(const QString& key, const QString& sep = "") const;
+    QMap<QString,QString>   toMap(const QString& key) const;
+    QDateTime               toDateTime(const QString& key) const;
 
-    bool                    SetValue(const QString &key, QVariant value);
-    int                     ConfigureLogging(QString mask = "general",
+    bool                    SetValue(const QString &key, const QVariant& value);
+    int                     ConfigureLogging(const QString& mask = "general",
                                              unsigned int progress = 0);
     void                    ApplySettingsOverride(void);
     int                     Daemonize(void);
@@ -292,7 +293,7 @@ class MBASE_PUBLIC MythCommandLineParser
     QString                         m_appname;
     QMap<QString,CommandLineArg*>   m_optionedArgs;
     QMap<QString,CommandLineArg*>   m_namedArgs;
-    bool                            m_passthroughActive;
-    bool                            m_overridesImported;
-    bool                            m_verbose;
+    bool                            m_passthroughActive {false};
+    bool                            m_overridesImported {false};
+    bool                            m_verbose           {false};
 };

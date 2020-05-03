@@ -43,9 +43,9 @@ class UPnpSearchTask : public Task
 
         QList<QHostAddress>     m_addressList;
         int                     m_nServicePort;
-        int                     m_nMaxAge;
+        int                     m_nMaxAge      {3600};
 
-        QHostAddress    m_PeerAddress;
+        QHostAddress    m_peerAddress;
         int             m_nPeerPort;
         QString         m_sST; 
         QString         m_sUDN;
@@ -55,12 +55,12 @@ class UPnpSearchTask : public Task
 
         // Destructor protected to force use of Release Method
 
-        virtual ~UPnpSearchTask();
+        ~UPnpSearchTask() override = default;
 
         void     ProcessDevice ( MSocketDevice *pSocket, UPnpDevice *pDevice );
         void     SendMsg       ( MSocketDevice  *pSocket,
-                                 QString         sST,
-                                 QString         sUDN );
+                                 const QString&  sST,
+                                 const QString&  sUDN );
 
     public:
 
@@ -70,8 +70,8 @@ class UPnpSearchTask : public Task
                         QString      sST, 
                         QString      sUDN );
 
-        virtual QString Name   ()               { return( "Search" );   }
-        virtual void    Execute( TaskQueue * );
+        QString Name() override { return( "Search" ); } // Task
+        void Execute( TaskQueue *pQueue ) override; // Task
 
 };
 

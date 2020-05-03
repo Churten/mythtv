@@ -12,28 +12,24 @@ using ChannelList = QMultiHash<QString, ChannelInfo>;
 class ChannelData
 {
   public:
-    ChannelData() :
-        m_interactive(false),         m_guideDataOnly(false),
-        m_channelPreset(false),       m_channelUpdates(false),
-        m_removeNewChannels(false),   m_filterNewChannels(true) {}
+    ChannelData() = default;
 
     bool insert_chan(uint sourceid);
     void handleChannels(int id, ChannelInfoList *chanlist);
     unsigned int promptForChannelUpdates(ChannelInfoList::iterator chaninfo,
                                          unsigned int chanid);
 
-    ChannelInfo FindMatchingChannel(const ChannelInfo &chanInfo,
-                            ChannelList existingChannels) const;
-    ChannelList channelList(int sourceId);
-    QString normalizeChannelKey(const QString &chanName) const;
+    static ChannelInfo FindMatchingChannel(const ChannelInfo &chanInfo,
+                            ChannelList existingChannels);
+    static ChannelList channelList(int sourceId);
+    static QString normalizeChannelKey(const QString &chanName);
 
   public:
-    bool    m_interactive;
-    bool    m_guideDataOnly;
-    bool    m_channelPreset;
-    bool    m_channelUpdates;
-    bool    m_removeNewChannels;
-    bool    m_filterNewChannels;
+    bool    m_interactive       {false};
+    bool    m_guideDataOnly     {false};
+    bool    m_channelPreset     {false};
+    bool    m_channelUpdates    {false};
+    bool    m_filterNewChannels {false};
     QString m_cardType;
 };
 

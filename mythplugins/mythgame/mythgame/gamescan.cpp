@@ -1,8 +1,9 @@
-#include <QImageReader>
 #include <QApplication>
-#include <QThread>
+#include <QImageReader>
 #include <QStringList>
+#include <QThread>
 #include <QUrl>
+#include <utility>
 
 #include <mythcontext.h>
 #include <mythmainwindow.h>
@@ -19,14 +20,9 @@
 
 class MythUIProgressDialog;
 
-GameScannerThread::GameScannerThread(QObject *parent) :
-    MThread("GameScanner"), m_parent(parent),
-    m_HasGUI(gCoreContext->HasGUI()),
-    m_dialog(NULL), m_DBDataChanged(false)
-{
-}
-
-GameScannerThread::~GameScannerThread()
+GameScannerThread::GameScannerThread(void) :
+    MThread("GameScanner"),
+    m_hasGUI(gCoreContext->HasGUI())
 {
 }
 
@@ -55,7 +51,7 @@ void GameScannerThread::removeOrphan(const int id)
     {
         info->DeleteFromDatabase();
         delete info;
-        info = NULL;
+        info = nullptr;
     }
 }
 
@@ -63,29 +59,27 @@ void GameScannerThread::verifyFiles()
 {
     int counter = 0;
 
-    if (m_HasGUI)
+    if (m_hasGUI)
         SendProgressEvent(counter, (uint)m_dbgames.count(),
                           GameScanner::tr("Verifying game files..."));
 
     // For every file we know about, check to see if it still exists.
-    for (QList<RomInfo*>::iterator p = m_dbgames.begin();
-             p != m_dbgames.end(); ++p)
+    foreach (auto info, m_dbgames)
     {
-        RomInfo *info = *p;
         QString romfile = info->Romname();
         QString system = info->System();
         QString gametype = info->GameType();
         if (!romfile.isEmpty())
         {
             bool found = false;
-            for (QList<RomFileInfo>::iterator p = m_files.begin();
-                                     p != m_files.end(); ++p)
+            // NOLINTNEXTLINE(modernize-loop-convert)
+            for (auto p2 = m_files.begin(); p2 != m_files.end(); ++p2)
             {
-                if ((*p).romfile == romfile &&
-                    (*p).gametype == gametype)
+                if ((*p2).romfile == romfile &&
+                    (*p2).gametype == gametype)
                 {
                     // We're done here, this file matches one in the DB
-                    (*p).indb = true;
+                    (*p2).indb = true;
                     found = true;
                     continue;
                 }
@@ -95,53 +89,51 @@ void GameScannerThread::verifyFiles()
                 m_remove.append(info->Id());
             }
         }
-        if (m_HasGUI)
+        if (m_hasGUI)
             SendProgressEvent(++counter);
 
         delete info;
-        info = NULL;
+        info = nullptr;
     }
 }
 
 void GameScannerThread::updateDB()
 {
     uint counter = 0;
-    if (m_HasGUI)
+    if (m_hasGUI)
         SendProgressEvent(counter, (uint)(m_files.size() + m_remove.size()),
                           GameScanner::tr("Updating game database..."));
 
-    for (QList<RomFileInfo>::iterator p = m_files.begin();
-                                 p != m_files.end(); ++p)
+    foreach (auto & file, m_files)
     {
-        if (!(*p).indb)
+        if (!file.indb)
         {
-            RomInfo add(0, (*p).romfile, (*p).system,
-                        (*p).romname, "", "", false, (*p).rompath,
-                        "", "", 0, (*p).gametype, 0, "", "", "",
+            RomInfo add(0, file.romfile, file.system,
+                        file.romname, "", "", false, file.rompath,
+                        "", "", 0, file.gametype, 0, "", "", "",
                         "", "", "", "", "");
             add.SaveToDatabase();
-            m_DBDataChanged = true;
+            m_dbDataChanged = true;
         }
-        if (m_HasGUI)
+        if (m_hasGUI)
             SendProgressEvent(++counter);
     }
 
-    for (QList<uint>::iterator p = m_remove.begin();
-                                 p != m_remove.end(); ++p)
+    foreach (const uint & p, m_remove)
     {
-        removeOrphan(*p);
-        m_DBDataChanged = true;
+        removeOrphan(p);
+        m_dbDataChanged = true;
     }
 }
 
 bool GameScannerThread::buildFileList()
 {
-    if (m_handlers.size() == 0)
+    if (m_handlers.empty())
         return false;
 
     int counter = 0;
 
-    if (m_HasGUI)
+    if (m_hasGUI)
         SendProgressEvent(counter, (uint)m_handlers.size(),
                           GameScanner::tr("Searching for games..."));
 
@@ -151,30 +143,28 @@ bool GameScannerThread::buildFileList()
         QDir dir((*iter)->SystemRomPath());
         QStringList extensions = (*iter)->ValidExtensions();
         QStringList filters;
-        for (QStringList::iterator i = extensions.begin();
-             i != extensions.end(); ++i)
+        foreach (auto & ext, extensions)
         {
-            filters.append(QString("*.%1").arg(*i));
+            filters.append(QString("*.%1").arg(ext));
         }
 
         dir.setNameFilters(filters);
         dir.setFilter(QDir::Files | QDir::Readable | QDir::NoDotAndDotDot);
 
         QStringList files = dir.entryList();
-        for (QStringList::iterator i = files.begin();
-             i != files.end(); ++i)
+        foreach (auto & file, files)
         {
             RomFileInfo info;
             info.system = (*iter)->SystemName();
             info.gametype = (*iter)->GameType();
-            info.romfile = *i;
+            info.romfile = file;
             info.rompath = (*iter)->SystemRomPath();
-            info.romname = QFileInfo(*i).baseName();
+            info.romname = QFileInfo(file).baseName();
             info.indb = false;
             m_files.append(info);
         }
 
-        if (m_HasGUI)
+        if (m_hasGUI)
             SendProgressEvent(++counter);
     }
 
@@ -182,19 +172,18 @@ bool GameScannerThread::buildFileList()
 }
 
 void GameScannerThread::SendProgressEvent(uint progress, uint total,
-                                           QString messsage)
+                                          QString message)
 {
     if (!m_dialog)
         return;
 
-    ProgressUpdateEvent *pue = new ProgressUpdateEvent(progress, total,
-                                                       messsage);
+    auto *pue = new ProgressUpdateEvent(progress, total, std::move(message));
     QApplication::postEvent(m_dialog, pue);
 }
 
 GameScanner::GameScanner()
 {
-    m_scanThread = new GameScannerThread(this);
+    m_scanThread = new GameScannerThread();
 }
 
 GameScanner::~GameScanner()
@@ -212,7 +201,7 @@ void GameScanner::doScan(QList<GameHandler*> handlers)
     {
         MythScreenStack *popupStack = GetMythMainWindow()->GetStack("popup stack");
 
-        MythUIProgressDialog *progressDlg = new MythUIProgressDialog("",
+        auto *progressDlg = new MythUIProgressDialog("",
                 popupStack, "gamescanprogressdialog");
 
         if (progressDlg->Create())
@@ -226,12 +215,12 @@ void GameScanner::doScan(QList<GameHandler*> handlers)
         else
         {
             delete progressDlg;
-            progressDlg = NULL;
+            progressDlg = nullptr;
         }
         m_scanThread->SetProgressDialog(progressDlg);
     }
 
-    m_scanThread->SetHandlers(handlers);
+    m_scanThread->SetHandlers(std::move(handlers));
     m_scanThread->start();
 }
 

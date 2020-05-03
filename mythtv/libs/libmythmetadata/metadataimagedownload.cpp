@@ -1,9 +1,10 @@
 // qt
 #include <QCoreApplication>
-#include <QImage>
-#include <QFileInfo>
 #include <QDir>
 #include <QEvent>
+#include <QFileInfo>
+#include <QImage>
+#include <utility>
 
 // myth
 #include "mythcorecontext.h"
@@ -25,12 +26,6 @@ QEvent::Type ImageDLFailureEvent::kEventType =
 QEvent::Type ThumbnailDLEvent::kEventType =
     (QEvent::Type) QEvent::registerEventType();
 
-MetadataImageDownload::MetadataImageDownload(QObject *parent) :
-    MThread("MetadataImageDownload")
-{
-    m_parent = parent;
-}
-
 MetadataImageDownload::~MetadataImageDownload()
 {
     cancel();
@@ -42,10 +37,10 @@ void MetadataImageDownload::addThumb(QString title,
 {
     QMutexLocker lock(&m_mutex);
 
-    ThumbnailData *id = new ThumbnailData();
-    id->title = title;
-    id->data = data;
-    id->url = url;
+    auto *id = new ThumbnailData();
+    id->title = std::move(title);
+    id->data = std::move(data);
+    id->url = std::move(url);
     m_thumbnailList.append(id);
     if (!isRunning())
         start();
@@ -80,8 +75,8 @@ void MetadataImageDownload::run()
     RunProlog();
 
     // Always handle thumbnails first, they're higher priority.
-    ThumbnailData *thumb;
-    while ((thumb = moreThumbs()) != NULL)
+    ThumbnailData *thumb = nullptr;
+    while ((thumb = moreThumbs()) != nullptr)
     {
         QString sFilename = getDownloadFilename(thumb->title, thumb->url);
 
@@ -318,7 +313,6 @@ void MetadataImageDownload::run()
         {
             QCoreApplication::postEvent(m_parent,
                     new ImageDLFailureEvent(lookup));
-            errored = false;
         }
         lookup->SetDownloads(downloaded);
         QCoreApplication::postEvent(m_parent, new ImageDLEvent(lookup));
@@ -330,14 +324,14 @@ void MetadataImageDownload::run()
 ThumbnailData* MetadataImageDownload::moreThumbs()
 {
     QMutexLocker lock(&m_mutex);
-    ThumbnailData *ret = NULL;
+    ThumbnailData *ret = nullptr;
 
     if (!m_thumbnailList.isEmpty())
         ret = m_thumbnailList.takeFirst();
     return ret;
 }
 
-QString getDownloadFilename(QString title, QString url)
+QString getDownloadFilename(const QString& title, const QString& url)
 {
     QString fileprefix = GetConfDir();
 
@@ -367,7 +361,7 @@ QString getDownloadFilename(QString title, QString url)
 }
 
 QString getDownloadFilename(VideoArtworkType type, MetadataLookup *lookup,
-                            QString url)
+                            const QString& url)
 {
     QString basefilename;
     QString title;
@@ -458,15 +452,15 @@ QString getLocalWritePath(MetadataType metadatatype, VideoArtworkType type)
     return ret;
 }
 
-QString getStorageGroupURL(VideoArtworkType type, QString host)
+QString getStorageGroupURL(VideoArtworkType type, const QString& host)
 {
     QString sgroup = getStorageGroupName(type);
     uint port = gCoreContext->GetBackendServerPort(host);
 
-    return gCoreContext->GenMythURL(host, port, "", sgroup);
+    return MythCoreContext::GenMythURL(host, port, "", sgroup);
 }
 
-QString getLocalStorageGroupPath(VideoArtworkType type, QString host)
+QString getLocalStorageGroupPath(VideoArtworkType type, const QString& host)
 {
     QString path;
 

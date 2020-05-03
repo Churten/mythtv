@@ -24,16 +24,8 @@
 #define BUFFER_SIZE  (2048*1536*3)
 
 ZMClient::ZMClient()
-    : QObject(NULL),
-      m_listLock(QMutex::Recursive),
-      m_socket(NULL),
-      m_socketLock(QMutex::Recursive),
-      m_hostname("localhost"),
-      m_port(6548),
-      m_bConnected(false),
-      m_retryTimer(new QTimer(this)),
-      m_zmclientReady(false),
-      m_isMiniPlayerEnabled(true)
+    : QObject(nullptr),
+      m_retryTimer(new QTimer(this))
 {
     setObjectName("ZMClient");
     connect(m_retryTimer, SIGNAL(timeout()),   this, SLOT(restartConnection()));
@@ -41,7 +33,7 @@ ZMClient::ZMClient()
     gCoreContext->addListener(this);
 }
 
-ZMClient *ZMClient::m_zmclient = NULL;
+ZMClient *ZMClient::m_zmclient = nullptr;
 
 ZMClient *ZMClient::get(void)
 {
@@ -53,10 +45,9 @@ ZMClient *ZMClient::get(void)
 bool ZMClient::setupZMClient(void)
 {
     QString zmserver_host;
-    int zmserver_port;
 
     zmserver_host = gCoreContext->GetSetting("ZoneMinderServerIP", "");
-    zmserver_port = gCoreContext->GetNumSetting("ZoneMinderServerPort", -1);
+    int zmserver_port = gCoreContext->GetNumSetting("ZoneMinderServerPort", -1);
 
     // don't try to connect if we don't have a valid host or port
     if (zmserver_host.isEmpty() || zmserver_port == -1)
@@ -65,10 +56,7 @@ bool ZMClient::setupZMClient(void)
         return false;
     }
 
-    if (!ZMClient::get()->connectToHost(zmserver_host, zmserver_port))
-        return false;
-
-    return true;
+    return ZMClient::get()->connectToHost(zmserver_host, zmserver_port);
 }
 
 bool ZMClient::connectToHost(const QString &lhostname, unsigned int lport)
@@ -90,7 +78,7 @@ bool ZMClient::connectToHost(const QString &lhostname, unsigned int lport)
         if (m_socket)
         {
             m_socket->DecrRef();
-            m_socket = NULL;
+            m_socket = nullptr;
         }
 
         m_socket = new MythSocket();
@@ -98,7 +86,7 @@ bool ZMClient::connectToHost(const QString &lhostname, unsigned int lport)
         if (!m_socket->ConnectToHost(m_hostname, m_port))
         {
             m_socket->DecrRef();
-            m_socket = NULL;
+            m_socket = nullptr;
         }
         else
         {
@@ -135,8 +123,6 @@ bool ZMClient::connectToHost(const QString &lhostname, unsigned int lport)
 
 bool ZMClient::sendReceiveStringList(QStringList &strList)
 {
-    QMutexLocker locker(&m_socketLock);
-
     QStringList origStrList = strList;
 
     bool ok = false;
@@ -164,7 +150,7 @@ bool ZMClient::sendReceiveStringList(QStringList &strList)
     }
 
     // sanity check
-    if (strList.size() < 1)
+    if (strList.empty())
     {
         LOG(VB_GENERAL, LOG_ERR, "ZMClient response too short");
         return false;
@@ -188,14 +174,13 @@ bool ZMClient::sendReceiveStringList(QStringList &strList)
     }
 
     // we should get "OK" from the server if everything is OK
-    if (strList[0] != "OK")
-        return false;
-
-    return true;
+    return strList[0] == "OK";
 }
 
 bool ZMClient::checkProtoVersion(void)
 {
+    QMutexLocker locker(&m_commandLock);
+
     QStringList strList("HELLO");
     if (!sendReceiveStringList(strList))
     {
@@ -257,21 +242,22 @@ ZMClient::~ZMClient()
 {
     gCoreContext->removeListener(this);
 
-    m_zmclient = NULL;
+    m_zmclient = nullptr;
 
     if (m_socket)
     {
         m_socket->DecrRef();
-        m_socket = NULL;
+        m_socket = nullptr;
         m_zmclientReady = false;
     }
 
-    if (m_retryTimer)
-        delete m_retryTimer;
+    delete m_retryTimer;
 }
 
 void ZMClient::getServerStatus(QString &status, QString &cpuStat, QString &diskStat)
 {
+    QMutexLocker locker(&m_commandLock);
+
     QStringList strList("GET_SERVER_STATUS");
     if (!sendReceiveStringList(strList))
         return;
@@ -290,6 +276,8 @@ void ZMClient::getServerStatus(QString &status, QString &cpuStat, QString &diskS
 
 void ZMClient::updateMonitorStatus(void)
 {
+    QMutexLocker clocker(&m_commandLock);
+
     QStringList strList("GET_MONITOR_STATUS");
     if (!sendReceiveStringList(strList))
         return;
@@ -301,7 +289,7 @@ void ZMClient::updateMonitorStatus(void)
         return;
     }
 
-    bool bOK;
+    bool bOK = false;
     int monitorCount = strList[1].toInt(&bOK);
     if (!bOK)
     {
@@ -324,7 +312,7 @@ void ZMClient::updateMonitorStatus(void)
             mon->zmaStatus = strList[x * 7 + 5];
             mon->events = strList[x * 7 + 6].toInt();
             mon->function = strList[x * 7 + 7];
-            mon->enabled = strList[x * 7 + 8].toInt();
+            mon->enabled = (strList[x * 7 + 8].toInt() != 0);
         }
     }
 }
@@ -359,6 +347,8 @@ static QString stateToString(State state)
 
 bool ZMClient::updateAlarmStates(void)
 {
+    QMutexLocker clocker(&m_commandLock);
+
     QStringList strList("GET_ALARM_STATES");
     if (!sendReceiveStringList(strList))
         return false;
@@ -370,7 +360,7 @@ bool ZMClient::updateAlarmStates(void)
         return false;
     }
 
-    bool bOK;
+    bool bOK = false;
     int monitorCount = strList[1].toInt(&bOK);
     if (!bOK)
     {
@@ -385,7 +375,7 @@ bool ZMClient::updateAlarmStates(void)
     for (int x = 0; x < monitorCount; x++)
     {
         int monID = strList[x * 2 + 2].toInt();
-        State state = (State)strList[x * 2 + 3].toInt();
+        auto state = (State)strList[x * 2 + 3].toInt();
 
         if (m_monitorMap.contains(monID))
         {
@@ -397,7 +387,7 @@ bool ZMClient::updateAlarmStates(void)
                     QString("ZMClient monitor %1 changed state from %2 to %3")
                             .arg(mon->name).arg(stateToString(mon->state)).arg(stateToString(state)));
                 mon->previousState = mon->state;
-                mon->state = (State)state;
+                mon->state = state;
                 changed = true;
             }
         }
@@ -410,6 +400,8 @@ void ZMClient::getEventList(const QString &monitorName, bool oldestFirst,
                             const QString &date, bool includeContinuous,
                             vector<Event*> *eventList)
 {
+    QMutexLocker locker(&m_commandLock);
+
     eventList->clear();
 
     QStringList strList("GET_EVENT_LIST");
@@ -427,7 +419,7 @@ void ZMClient::getEventList(const QString &monitorName, bool oldestFirst,
         return;
     }
 
-    bool bOK;
+    bool bOK = false;
     int eventCount = strList[1].toInt(&bOK);
     if (!bOK)
     {
@@ -436,7 +428,7 @@ void ZMClient::getEventList(const QString &monitorName, bool oldestFirst,
     }
 
     // sanity check
-    if ((int)(strList.size() - 2) / 6 != eventCount)
+    if ((strList.size() - 2) / 6 != eventCount)
     {
         LOG(VB_GENERAL, LOG_ERR,
             "ZMClient got a mismatch between the number of events and "
@@ -462,6 +454,8 @@ void ZMClient::getEventList(const QString &monitorName, bool oldestFirst,
 void ZMClient::getEventDates(const QString &monitorName, bool oldestFirst,
                             QStringList &dateList)
 {
+    QMutexLocker locker(&m_commandLock);
+
     dateList.clear();
 
     QStringList strList("GET_EVENT_DATES");
@@ -477,7 +471,7 @@ void ZMClient::getEventDates(const QString &monitorName, bool oldestFirst,
         return;
     }
 
-    bool bOK;
+    bool bOK = false;
     int dateCount = strList[1].toInt(&bOK);
     if (!bOK)
     {
@@ -487,7 +481,7 @@ void ZMClient::getEventDates(const QString &monitorName, bool oldestFirst,
     }
 
     // sanity check
-    if ((int)(strList.size() - 3) != dateCount)
+    if ((strList.size() - 3) != dateCount)
     {
         LOG(VB_GENERAL, LOG_ERR,
             "ZMClient got a mismatch between the number of dates and "
@@ -505,6 +499,8 @@ void ZMClient::getEventDates(const QString &monitorName, bool oldestFirst,
 
 void ZMClient::getFrameList(int eventID, vector<Frame*> *frameList)
 {
+    QMutexLocker locker(&m_commandLock);
+
     frameList->clear();
 
     QStringList strList("GET_FRAME_LIST");
@@ -519,7 +515,7 @@ void ZMClient::getFrameList(int eventID, vector<Frame*> *frameList)
         return;
     }
 
-    bool bOK;
+    bool bOK = false;
     int frameCount = strList[1].toInt(&bOK);
     if (!bOK)
     {
@@ -528,7 +524,7 @@ void ZMClient::getFrameList(int eventID, vector<Frame*> *frameList)
     }
 
     // sanity check
-    if ((int)(strList.size() - 2) / 2 != frameCount)
+    if ((strList.size() - 2) / 2 != frameCount)
     {
         LOG(VB_GENERAL, LOG_ERR,
             "ZMClient got a mismatch between the number of frames and "
@@ -540,7 +536,7 @@ void ZMClient::getFrameList(int eventID, vector<Frame*> *frameList)
     it++; it++;
     for (int x = 0; x < frameCount; x++)
     {
-        Frame *item = new Frame;
+        auto *item = new Frame;
         item->type = *it++;
         item->delta = (*it++).toDouble();
         frameList->push_back(item);
@@ -549,6 +545,8 @@ void ZMClient::getFrameList(int eventID, vector<Frame*> *frameList)
 
 void ZMClient::deleteEvent(int eventID)
 {
+    QMutexLocker locker(&m_commandLock);
+
     QStringList strList("DELETE_EVENT");
     strList << QString::number(eventID);
     sendReceiveStringList(strList);
@@ -556,6 +554,8 @@ void ZMClient::deleteEvent(int eventID)
 
 void ZMClient::deleteEventList(vector<Event*> *eventList)
 {
+    QMutexLocker locker(&m_commandLock);
+
     // delete events in 100 event chunks
     QStringList strList("DELETE_EVENT_LIST");
     int count = 0;
@@ -586,7 +586,6 @@ bool ZMClient::readData(unsigned char *data, int dataSize)
     int errmsgtime = 0;
     MythTimer timer;
     timer.start();
-    int elapsed;
 
     while (dataSize > 0)
     {
@@ -616,7 +615,7 @@ bool ZMClient::readData(unsigned char *data, int dataSize)
         }
         else
         {
-            elapsed = timer.elapsed();
+            int elapsed = timer.elapsed();
             if (elapsed  > 10000)
             {
                 if ((elapsed - errmsgtime) > 10000)
@@ -641,10 +640,12 @@ bool ZMClient::readData(unsigned char *data, int dataSize)
 
 void ZMClient::getEventFrame(Event *event, int frameNo, MythImage **image)
 {
+    QMutexLocker locker(&m_commandLock);
+
     if (*image)
     {
         (*image)->DecrRef();
-        *image = NULL;
+        *image = nullptr;
     }
 
     QStringList strList("GET_EVENT_FRAME");
@@ -666,7 +667,7 @@ void ZMClient::getEventFrame(Event *event, int frameNo, MythImage **image)
     int imageSize = strList[1].toInt();
 
     // grab the image data
-    unsigned char *data = new unsigned char[imageSize];
+    auto *data = new unsigned char[imageSize];
     if (!readData(data, imageSize))
     {
         LOG(VB_GENERAL, LOG_ERR,
@@ -690,6 +691,8 @@ void ZMClient::getEventFrame(Event *event, int frameNo, MythImage **image)
 
 void ZMClient::getAnalyseFrame(Event *event, int frameNo, QImage &image)
 {
+    QMutexLocker locker(&m_commandLock);
+
     QStringList strList("GET_ANALYSE_FRAME");
     strList << QString::number(event->monitorID());
     strList << QString::number(event->eventID());
@@ -712,7 +715,7 @@ void ZMClient::getAnalyseFrame(Event *event, int frameNo, QImage &image)
     int imageSize = strList[1].toInt();
 
     // grab the image data
-    unsigned char *data = new unsigned char[imageSize];
+    auto *data = new unsigned char[imageSize];
     if (!readData(data, imageSize))
     {
         LOG(VB_GENERAL, LOG_ERR,
@@ -735,11 +738,13 @@ void ZMClient::getAnalyseFrame(Event *event, int frameNo, QImage &image)
 
 int ZMClient::getLiveFrame(int monitorID, QString &status, unsigned char* buffer, int bufferSize)
 {
+    QMutexLocker locker(&m_commandLock);
+
     QStringList strList("GET_LIVE_FRAME");
     strList << QString::number(monitorID);
     if (!sendReceiveStringList(strList))
     {
-        if (strList.size() < 1)
+        if (strList.empty())
         {
             LOG(VB_GENERAL, LOG_ERR, "ZMClient response too short");
             return 0;
@@ -751,11 +756,8 @@ int ZMClient::getLiveFrame(int monitorID, QString &status, unsigned char* buffer
         {
             return 0;
         }
-        else
-        {
-            status = strList[0];
-            return 0;
-        }
+        status = strList[0];
+        return 0;
     }
 
     // sanity check
@@ -794,6 +796,8 @@ int ZMClient::getLiveFrame(int monitorID, QString &status, unsigned char* buffer
 
 void ZMClient::getCameraList(QStringList &cameraList)
 {
+    QMutexLocker locker(&m_commandLock);
+
     cameraList.clear();
 
     QStringList strList("GET_CAMERA_LIST");
@@ -807,7 +811,7 @@ void ZMClient::getCameraList(QStringList &cameraList)
         return;
     }
 
-    bool bOK;
+    bool bOK = false;
     int cameraCount = strList[1].toInt(&bOK);
     if (!bOK)
     {
@@ -843,7 +847,7 @@ Monitor *ZMClient::getMonitorAt(int pos)
     QMutexLocker locker(&m_listLock);
 
     if (pos < 0 || pos > m_monitorList.count() - 1)
-        return NULL;
+        return nullptr;
 
     return m_monitorList.at(pos);
 }
@@ -855,11 +859,12 @@ Monitor* ZMClient::getMonitorByID(int monID)
     if (m_monitorMap.contains(monID))
         return m_monitorMap.find(monID).value();
 
-    return NULL;
+    return nullptr;
 }
 
 void ZMClient::doGetMonitorList(void)
 {
+    QMutexLocker clocker(&m_commandLock);
     QMutexLocker locker(&m_listLock);
 
     for (int x = 0; x < m_monitorList.count(); x++)
@@ -879,7 +884,7 @@ void ZMClient::doGetMonitorList(void)
         return;
     }
 
-    bool bOK;
+    bool bOK = false;
     int monitorCount = strList[1].toInt(&bOK);
     if (!bOK)
     {
@@ -889,7 +894,7 @@ void ZMClient::doGetMonitorList(void)
     }
 
     // sanity check
-    if ((int)(strList.size() - 2) / 5 != monitorCount)
+    if ((strList.size() - 2) / 5 != monitorCount)
     {
         LOG(VB_GENERAL, LOG_ERR,
             "ZMClient got a mismatch between the number of monitors and "
@@ -903,7 +908,7 @@ void ZMClient::doGetMonitorList(void)
 
     for (int x = 0; x < monitorCount; x++)
     {
-        Monitor *item = new Monitor;
+        auto *item = new Monitor;
         item->id = strList[x * 5 + 2].toInt();
         item->name = strList[x * 5 + 3];
         item->width = strList[x * 5 + 4].toInt();
@@ -924,12 +929,14 @@ void ZMClient::doGetMonitorList(void)
     }
 }
 
-void ZMClient::setMonitorFunction(const int monitorID, const QString &function, const int enabled)
+void ZMClient::setMonitorFunction(const int monitorID, const QString &function, const bool enabled)
 {
+    QMutexLocker locker(&m_commandLock);
+
     QStringList strList("SET_MONITOR_FUNCTION");
     strList << QString::number(monitorID);
     strList << function;
-    strList << QString::number(enabled);
+    strList << QString::number(static_cast<int>(enabled));
 
     if (!sendReceiveStringList(strList))
         return;
@@ -942,10 +949,13 @@ void ZMClient::saveNotificationMonitors(void)
     for (int x = 0; x < m_monitorList.count(); x++)
     {
         Monitor *mon = m_monitorList.at(x);
-        if (!s.isEmpty())
-            s += QString(",%1").arg(mon->id);
-        else
-            s = QString("%1").arg(mon->id);
+        if (mon->showNotifications)
+        {
+            if (!s.isEmpty())
+                s += QString(",%1").arg(mon->id);
+            else
+                s = QString("%1").arg(mon->id);
+        }
     }
 
     gCoreContext->SaveSetting("ZoneMinderNotificationMonitors", s);
@@ -955,8 +965,7 @@ void ZMClient::customEvent (QEvent* event)
 {
     if (event->type() == MythEvent::MythEventMessage)
     {
-        MythEvent *me = dynamic_cast<MythEvent*>(event);
-
+        auto *me = dynamic_cast<MythEvent*>(event);
         if (!me)
             return;
 
@@ -982,7 +991,7 @@ void ZMClient::showMiniPlayer(int monitorID)
 
     MythScreenStack *popupStack = GetMythMainWindow()->GetStack("popup stack");
 
-    ZMMiniPlayer *miniPlayer = new ZMMiniPlayer(popupStack);
+    auto *miniPlayer = new ZMMiniPlayer(popupStack);
 
     miniPlayer->setAlarmMonitor(monitorID);
 

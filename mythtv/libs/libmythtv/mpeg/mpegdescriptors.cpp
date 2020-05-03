@@ -1,11 +1,7 @@
 // -*- Mode: c++ -*-
 // Copyright (c) 2005, Daniel Thor Kristjansson
 
-#include <limits.h>
-
-#if QT_VERSION < 0x050000
-#include <QTextDocument> // for escape (note escape misses &apos; TODO fix upstream)
-#endif
+#include <climits>
 
 #include "sctedescriptors.h"
 #include "atscdescriptors.h"
@@ -82,23 +78,21 @@ desc_list_t MPEGDescriptor::ParseOnlyInclude(
 const unsigned char *MPEGDescriptor::Find(const desc_list_t &parsed,
                                           uint desc_tag)
 {
-    desc_list_t::const_iterator it = parsed.begin();
-    for (; it != parsed.end(); ++it)
+    for (const auto *item : parsed)
     {
-        if ((*it)[0] == desc_tag)
-            return *it;
+        if (item[0] == desc_tag)
+            return item;
     }
-    return NULL;
+    return nullptr;
 }
 
 desc_list_t MPEGDescriptor::FindAll(const desc_list_t &parsed, uint desc_tag)
 {
     desc_list_t tmp;
-    desc_list_t::const_iterator it = parsed.begin();
-    for (; it != parsed.end(); ++it)
+    for (const auto *item : parsed)
     {
-        if ((*it)[0] == desc_tag)
-            tmp.push_back(*it);
+        if (item[0] == desc_tag)
+            tmp.push_back(item);
     }
     return tmp;
 }
@@ -106,9 +100,8 @@ desc_list_t MPEGDescriptor::FindAll(const desc_list_t &parsed, uint desc_tag)
 static uint maxPriority(const QMap<uint,uint> &langPrefs)
 {
     uint max_pri = 0;
-    QMap<uint,uint>::const_iterator it = langPrefs.begin();
-    for (; it != langPrefs.end(); ++it)
-        max_pri = max(max_pri, *it);
+    for (uint pref : langPrefs)
+        max_pri = max(max_pri, pref);
     return max_pri;
 }
 
@@ -119,12 +112,14 @@ const unsigned char *MPEGDescriptor::FindBestMatch(
     uint match_pri = UINT_MAX;
     int  unmatched_idx = -1;
 
-    uint i = (desc_tag == DescriptorID::short_event) ? 0 : parsed.size();
+    size_t i = (desc_tag == DescriptorID::short_event) ? 0 : parsed.size();
     for (; i < parsed.size(); i++)
     {
         if (DescriptorID::short_event == parsed[i][0])
         {
             ShortEventDescriptor sed(parsed[i]);
+            if (!sed.IsValid())
+                continue;
             QMap<uint,uint>::const_iterator it =
                 langPrefs.find(sed.CanonicalLanguageKey());
 
@@ -145,11 +140,14 @@ const unsigned char *MPEGDescriptor::FindBestMatch(
     if ((desc_tag == DescriptorID::short_event) && (unmatched_idx >= 0))
     {
         ShortEventDescriptor sed(parsed[unmatched_idx]);
-        langPrefs[sed.CanonicalLanguageKey()] = maxPriority(langPrefs) + 1;
-        return parsed[unmatched_idx];
+        if (sed.IsValid())
+        {
+            langPrefs[sed.CanonicalLanguageKey()] = maxPriority(langPrefs) + 1;
+            return parsed[unmatched_idx];
+        }
     }
 
-    return NULL;
+    return nullptr;
 }
 
 desc_list_t MPEGDescriptor::FindBestMatches(
@@ -159,12 +157,14 @@ desc_list_t MPEGDescriptor::FindBestMatches(
     int  match_key = 0;
     int  unmatched_idx = -1;
 
-    uint i = (desc_tag == DescriptorID::extended_event) ? 0 : parsed.size();
+    size_t i = (desc_tag == DescriptorID::extended_event) ? 0 : parsed.size();
     for (; i < parsed.size(); i++)
     {
         if (DescriptorID::extended_event == parsed[i][0])
         {
             ExtendedEventDescriptor eed(parsed[i]);
+            if (!eed.IsValid())
+                continue;
             QMap<uint,uint>::const_iterator it =
                 langPrefs.find(eed.CanonicalLanguageKey());
 
@@ -183,22 +183,25 @@ desc_list_t MPEGDescriptor::FindBestMatches(
         (match_key == 0) && (unmatched_idx >= 0))
     {
         ExtendedEventDescriptor eed(parsed[unmatched_idx]);
-        langPrefs[eed.CanonicalLanguageKey()] = maxPriority(langPrefs) + 1;
-        match_key = eed.LanguageKey();
+        if (eed.IsValid())
+        {
+            langPrefs[eed.CanonicalLanguageKey()] = maxPriority(langPrefs) + 1;
+            match_key = eed.LanguageKey();
+        }
     }
 
     desc_list_t tmp;
     if (match_pri == UINT_MAX)
         return tmp;
 
-    for (uint i = 0; i < parsed.size(); i++)
+    for (const auto *j : parsed)
     {
         if ((DescriptorID::extended_event == desc_tag) &&
-            (DescriptorID::extended_event == parsed[i][0]))
+            (DescriptorID::extended_event == j[0]))
         {
-            ExtendedEventDescriptor eed(parsed[i]);
-            if (eed.LanguageKey() == match_key)
-                tmp.push_back(parsed[i]);
+            ExtendedEventDescriptor eed(j);
+            if (eed.IsValid() && (eed.LanguageKey() == match_key))
+                tmp.push_back(j);
         }
     }
 
@@ -218,7 +221,7 @@ const char *descriptor_tag_strings[256] =
     /* 0x0C */ "Multiplex Buffer Utilization", /* 0x0D */ "Copyright",
     /* 0x0E */ "Maximum Bitrate",       /* 0x0F */ "Private Data Indicator",
 
-    /* 0x10 */ "Smooting Buffer",       /* 0x11 */ "STD",
+    /* 0x10 */ "Smoothing Buffer",      /* 0x11 */ "STD",
     /* 0x12 */ "IBP",                   /* 0x13 */ "DSM-CC Carousel Identifier",
     /* 0x14 */ "DSM-CC Association Tag",
     /* 0x15 */ "DSM-CC Deferred Association Tag",
@@ -322,7 +325,7 @@ const char *descriptor_tag_strings[256] =
     /* 0xF0-0xFF */ EMPTY_STR_16
 };
 
-static void comma_list_append(QString &str, QString extra)
+static void comma_list_append(QString &str, const QString& extra)
 {
     if (str.isEmpty())
         str = extra;
@@ -360,6 +363,9 @@ QString MPEGDescriptor::DescriptorTagString(void) const
         case PrivateDescriptorID::dish_event_tags: /* 0x96 */
             comma_list_append(str, "Possibly Dishnet Tag");
             break;
+        case PrivateDescriptorID::opentv_channel_list: /* 0xB1 */
+            comma_list_append(str, "Possibly DVB Sky/OpenTV Channel List");
+            break;
         case PrivateDescriptorID::premiere_content_order: /* 0xF0 */
             comma_list_append(str, "Possibly Premiere DE Content Order");
             break;
@@ -378,70 +384,188 @@ QString MPEGDescriptor::DescriptorTagString(void) const
 }
 
 #define SET_STRING(DESC_NAME) do { \
-    if (IsValid()) { DESC_NAME d(_data, DescriptorLength()+2); \
-    if (d.IsValid()) str = d.toString(); } } while (0)
+    if (IsValid()) { DESC_NAME d(m_data, DescriptorLength()+2); \
+    if (d.IsValid()) str = d.toString(); } } while (false)
 
-QString MPEGDescriptor::toString() const
+QString MPEGDescriptor::descrDump(const QString &name) const
+{
+    QString str;
+    str = QString("%1 Descriptor (0x%2) length(%3). Dumping\n")
+            .arg(name)
+            .arg(DescriptorTag(),2,16,QChar('0'))
+            .arg(DescriptorLength());
+    str.append(hexdump());
+    return str;
+}
+
+QString MPEGDescriptor::toString(void) const
+{
+    return toStringPD(0);
+}
+
+QString MPEGDescriptor::toStringPD(uint priv_dsid) const
 {
     QString str;
 
-    if (DescriptorID::registration == DescriptorTag())
+    if (!IsValid())
+    {
+        str = "Invalid Descriptor";
+    }
+    else if (DescriptorID::registration == DescriptorTag())
+    {
         SET_STRING(RegistrationDescriptor);
-    else if (DescriptorID::iso_639_language == DescriptorTag())
-        SET_STRING(ISO639LanguageDescriptor);
-    else if (DescriptorID::avc_video == DescriptorTag())
-        SET_STRING(AVCVideoDescriptor);
-    else if (DescriptorID::ac3_audio_stream == DescriptorTag())
-        SET_STRING(AudioStreamDescriptor);
-    else if (DescriptorID::caption_service == DescriptorTag())
-        SET_STRING(CaptionServiceDescriptor);
-    else if (DescriptorID::extended_channel_name == DescriptorTag())
-        SET_STRING(ExtendedChannelNameDescriptor);
-    else if (DescriptorID::component_name == DescriptorTag())
-        SET_STRING(ComponentNameDescriptor);
+    }
     else if (DescriptorID::conditional_access == DescriptorTag())
+    {
         SET_STRING(ConditionalAccessDescriptor);
-    else if (DescriptorID::network_name == DescriptorTag())
-        SET_STRING(NetworkNameDescriptor);
-    //else if (DescriptorID::linkage == DescriptorTag())
-    //    SET_STRING(LinkageDescriptor);
-    else if (DescriptorID::adaptation_field_data == DescriptorTag())
-        SET_STRING(AdaptationFieldDataDescriptor);
-    //else if (DescriptorID::ancillary_data == DescriptorTag())
-    //    SET_STRING(AncillaryDataDescriptor);
-    else if (DescriptorID::cable_delivery_system == DescriptorTag())
-        SET_STRING(CableDeliverySystemDescriptor);
-    else if (DescriptorID::satellite_delivery_system == DescriptorTag())
-        SET_STRING(SatelliteDeliverySystemDescriptor);
-    else if (DescriptorID::terrestrial_delivery_system == DescriptorTag())
-        SET_STRING(TerrestrialDeliverySystemDescriptor);
-    else if (DescriptorID::frequency_list == DescriptorTag())
-        SET_STRING(FrequencyListDescriptor);
-    else if (DescriptorID::service == DescriptorTag())
-        SET_STRING(ServiceDescriptor);
-    else if (DescriptorID::stream_identifier == DescriptorTag())
-        SET_STRING(StreamIdentifierDescriptor);
-    else if (DescriptorID::default_authority == DescriptorTag())
-        SET_STRING(DefaultAuthorityDescriptor);
-    else if (DescriptorID::bouquet_name == DescriptorTag())
-        SET_STRING(BouquetNameDescriptor);
-    else if (DescriptorID::country_availability == DescriptorTag())
-        SET_STRING(CountryAvailabilityDescriptor);
-    else if (DescriptorID::service_list == DescriptorTag())
-        SET_STRING(ServiceListDescriptor);
-    else if (DescriptorID::scte_cue_identifier == DescriptorTag())
-        SET_STRING(CueIdentifierDescriptor);
-    else if (DescriptorID::scte_revision_detection == DescriptorTag())
-        SET_STRING(RevisionDetectionDescriptor);
-    else if (DescriptorID::teletext == DescriptorTag())
-        SET_STRING(TeletextDescriptor);
+    }
+    else if (DescriptorID::iso_639_language == DescriptorTag())
+    {
+        SET_STRING(ISO639LanguageDescriptor);
+    }
+    else if (DescriptorID::avc_video == DescriptorTag())
+    {
+        SET_STRING(AVCVideoDescriptor);
+    }
     else if (DescriptorID::hevc_video == DescriptorTag())
+    {
         SET_STRING(HEVCVideoDescriptor);
-    /// POSSIBLY UNSAFE ! -- begin
-    else if (PrivateDescriptorID::dvb_logical_channel_descriptor == DescriptorTag())
+    }
+    else if (DescriptorID::network_name == DescriptorTag())
+    {
+        SET_STRING(NetworkNameDescriptor);
+    }
+    else if (DescriptorID::service_list == DescriptorTag())
+    {
+        SET_STRING(ServiceListDescriptor);
+    }
+    else if (DescriptorID::satellite_delivery_system == DescriptorTag())
+    {
+        SET_STRING(SatelliteDeliverySystemDescriptor);
+    }
+    else if (DescriptorID::cable_delivery_system == DescriptorTag())
+    {
+        SET_STRING(CableDeliverySystemDescriptor);
+    }
+    else if (DescriptorID::bouquet_name == DescriptorTag())
+    {
+        SET_STRING(BouquetNameDescriptor);
+    }
+    else if (DescriptorID::service == DescriptorTag())
+    {
+        SET_STRING(ServiceDescriptor);
+    }
+    else if (DescriptorID::country_availability == DescriptorTag())
+    {
+        SET_STRING(CountryAvailabilityDescriptor);
+    }
+    //else if (DescriptorID::linkage == DescriptorTag())
+    //{
+    //    SET_STRING(LinkageDescriptor);
+    //}
+    else if (DescriptorID::stream_identifier == DescriptorTag())
+    {
+        SET_STRING(StreamIdentifierDescriptor);
+    }
+    else if (DescriptorID::teletext == DescriptorTag())
+    {
+        SET_STRING(TeletextDescriptor);
+    }
+    else if (DescriptorID::terrestrial_delivery_system == DescriptorTag())
+    {
+        SET_STRING(TerrestrialDeliverySystemDescriptor);
+    }
+    else if (DescriptorID::frequency_list == DescriptorTag())
+    {
+        SET_STRING(FrequencyListDescriptor);
+    }
+    //else if (DescriptorID::ancillary_data == DescriptorTag())
+    //{
+    //    SET_STRING(AncillaryDataDescriptor);
+    //}
+    else if (DescriptorID::adaptation_field_data == DescriptorTag())
+    {
+        SET_STRING(AdaptationFieldDataDescriptor);
+    }
+    else if (DescriptorID::default_authority == DescriptorTag())
+    {
+        SET_STRING(DefaultAuthorityDescriptor);
+    }
+    else if (DescriptorID::t2_terrestrial_delivery_system == DescriptorTag())
+    {
+        SET_STRING(T2TerrestrialDeliverySystemDescriptor);
+    }
+    //
+    // User Defined DVB descriptors, range 0x80-0xFE
+    else if (priv_dsid == PrivateDataSpecifierID::BSB1 &&
+             PrivateDescriptorID::sky_lcn_table== DescriptorTag())
+    {
+        SET_STRING(SkyLCNDescriptor);
+    }
+    else if (priv_dsid == PrivateDataSpecifierID::FSAT &&
+             PrivateDescriptorID::freesat_region_table == DescriptorTag())
+    {
+        SET_STRING(FreesatRegionDescriptor);
+    }
+    else if (priv_dsid == PrivateDataSpecifierID::FSAT &&
+             PrivateDescriptorID::freesat_lcn_table== DescriptorTag())
+    {
+        SET_STRING(FreesatLCNDescriptor);
+    }
+    else if (priv_dsid == PrivateDataSpecifierID::FSAT &&
+             PrivateDescriptorID::freesat_callsign== DescriptorTag())
+    {
+        SET_STRING(FreesatCallsignDescriptor);
+    }
+    else if (priv_dsid == PrivateDataSpecifierID::CASEMA &&
+             PrivateDescriptorID::casema_video_on_demand== DescriptorTag())
+    {
+        descrDump("Video on Demand");
+    }
+    else if ((priv_dsid == PrivateDataSpecifierID::EACEM  ||
+              priv_dsid == PrivateDataSpecifierID::NORDIG ||
+              priv_dsid == PrivateDataSpecifierID::ITC     ) &&
+             PrivateDescriptorID::dvb_simulcast_channel_descriptor == DescriptorTag())
+    {
+        SET_STRING(DVBSimulcastChannelDescriptor);
+    }
+    else if ((priv_dsid == PrivateDataSpecifierID::EACEM  ||
+              priv_dsid == PrivateDataSpecifierID::NORDIG ||
+              priv_dsid == PrivateDataSpecifierID::ITC    ) &&
+             PrivateDescriptorID::dvb_logical_channel_descriptor == DescriptorTag())
+    {
         SET_STRING(DVBLogicalChannelDescriptor);
-    /// POSSIBLY UNSAFE ! -- end
-    else if (IsValid())
+    }
+    //
+    // POSSIBLY UNSAFE ! -- begin
+    // ATSC/SCTE descriptors, range 0x80-0xFE
+    else if (DescriptorID::ac3_audio_stream == DescriptorTag())
+    {
+        SET_STRING(AudioStreamDescriptor);
+    }
+    else if (DescriptorID::caption_service == DescriptorTag())
+    {
+        SET_STRING(CaptionServiceDescriptor);
+    }
+    else if (DescriptorID::scte_cue_identifier == DescriptorTag())
+    {
+        SET_STRING(CueIdentifierDescriptor);
+    }
+    else if (DescriptorID::scte_revision_detection == DescriptorTag())
+    {
+        SET_STRING(RevisionDetectionDescriptor);
+    }
+    else if (DescriptorID::extended_channel_name == DescriptorTag())
+    {
+        SET_STRING(ExtendedChannelNameDescriptor);
+    }
+    else if (priv_dsid == 0 &&
+             DescriptorID::component_name == DescriptorTag())
+    {
+        SET_STRING(ComponentNameDescriptor);
+    }
+    // POSSIBLY UNSAFE ! -- end
+    else
     {
         str = QString("%1 Descriptor (0x%2) length(%3). Dumping\n")
             .arg(DescriptorTagString())
@@ -450,10 +574,6 @@ QString MPEGDescriptor::toString() const
         //for (uint i=0; i<DescriptorLength(); i++)
         //    str.append(QString(" 0x%1").arg(int(_data[i+2]), 0, 16));
         str.append(hexdump());
-    }
-    else
-    {
-        str = "Invalid Descriptor";
     }
     return str;
 }
@@ -477,17 +597,11 @@ QString MPEGDescriptor::toStringXML(uint level) const
     {
         if (((i%8) == 0) && i)
             str += "\n" + indent_1 + "      ";
-        str += QString("0x%1 ").arg(_data[i+2],2,16,QChar('0'));
+        str += QString("0x%1 ").arg(m_data[i+2],2,16,QChar('0'));
     }
 
     str += "\n" + indent_1 + "</Data>\n";
-
-#if QT_VERSION >= 0x050000
     str += indent_1 + "<Decoded>" + toString().toHtmlEscaped() + "</Decoded>\n";
-#else
-    str += indent_1 + "<Decoded>" + Qt::escape (toString()) + "</Decoded>\n";
-#endif
-
     str += indent_0 + "</Descriptor>";
 
     return str;
@@ -496,13 +610,15 @@ QString MPEGDescriptor::toStringXML(uint level) const
 // Dump the descriptor in the same format as hexdump -C
 QString MPEGDescriptor::hexdump(void) const
 {
-    QString str, hex, prt;
-    uint i, ch;
+    uint i = 0;
+    QString str;
+    QString hex;
+    QString prt;
     for (i=0; i<DescriptorLength(); i++)
     {
-        ch = _data[i+2];
+        uint ch = m_data[i+2];
         hex.append(QString(" %1").arg(ch, 2, 16, QChar('0')));
-        prt.append(QString("%1").arg(isalnum(ch) ? QChar(ch) : '.'));
+        prt.append(QString("%1").arg(isprint(ch) ? QChar(ch) : '.'));
         if (((i+1) % 8) == 0)
             hex.append(" ");
         if (((i+1) % 16) == 0)
@@ -580,16 +696,13 @@ QString RegistrationDescriptor::GetDescription(const QString &fmt)
 {
     InitializeDescriptionMap();
 
-    QString ret = QString::null;
+    QString ret;
     {
         QMutexLocker locker(&description_map_lock);
         QMap<QString,QString>::const_iterator it = description_map.find(fmt);
         if (it != description_map.end())
             ret = *it;
     }
-
-    if (!ret.isNull())
-        ret.detach();
 
     return ret;
 }

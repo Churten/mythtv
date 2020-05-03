@@ -1,15 +1,18 @@
 #ifndef VIDEO_SCANNER_H
 #define VIDEO_SCANNER_H
 
-#include <set>
 #include <map>
+#include <set>
+#include <utility>
 #include <vector>
 
+// Qt headers
 #include <QObject> // for moc
 #include <QStringList>
 #include <QEvent>
 #include <QCoreApplication>
 
+// MythTV headers
 #include "mythmetaexp.h"
 #include "mthread.h"
 #include "mythprogressdialog.h"
@@ -22,7 +25,7 @@ class META_PUBLIC VideoScanner : public QObject
 
   public:
     VideoScanner();
-    ~VideoScanner();
+    ~VideoScanner() override;
 
     void doScan(const QStringList &dirs);
     void doScanAll(void);
@@ -34,8 +37,8 @@ class META_PUBLIC VideoScanner : public QObject
     void finishedScan();
 
   private:
-    class VideoScannerThread *m_scanThread;
-    bool                      m_cancel;
+    class VideoScannerThread *m_scanThread {nullptr};
+    bool                      m_cancel     {false};
 };
 
 class META_PUBLIC VideoScanChanges : public QEvent
@@ -43,31 +46,31 @@ class META_PUBLIC VideoScanChanges : public QEvent
   public:
     VideoScanChanges(QList<int> adds, QList<int> movs,
                      QList<int>dels) : QEvent(kEventType),
-                     additions(adds), moved(movs),
-                     deleted(dels) {}
-    ~VideoScanChanges() {}
+                     m_additions(std::move(adds)), m_moved(std::move(movs)),
+                     m_deleted(std::move(dels)) {}
+    ~VideoScanChanges() override = default;
 
-    QList<int> additions; // newly added intids
-    QList<int> moved; // intids moved to new filename
-    QList<int> deleted; // orphaned/deleted intids
+    QList<int> m_additions; // newly added intids
+    QList<int> m_moved; // intids moved to new filename
+    QList<int> m_deleted; // orphaned/deleted intids
 
     static Type kEventType;
 };
 
 class META_PUBLIC VideoScannerThread : public MThread
 {
-    Q_DECLARE_TR_FUNCTIONS(VideoScannerThread)
+    Q_DECLARE_TR_FUNCTIONS(VideoScannerThread);
 
   public:
     explicit VideoScannerThread(QObject *parent);
-    ~VideoScannerThread();
+    ~VideoScannerThread() override;
 
-    void run();
+    void run() override; // MThread
     void SetDirs(QStringList dirs);
     void SetHosts(const QStringList &hosts);
     void SetProgressDialog(MythUIProgressDialog *dialog) { m_dialog = dialog; };
     QStringList GetOfflineSGHosts(void) { return m_offlineSGHosts; };
-    bool getDataChanged() { return m_DBDataChanged; };
+    bool getDataChanged() { return m_dbDataChanged; };
 
     void ResetCounts() { m_addList.clear(); m_movList.clear(); m_delList.clear(); };
 
@@ -75,12 +78,12 @@ class META_PUBLIC VideoScannerThread : public MThread
 
     struct CheckStruct
     {
-        bool check;
+        bool check {false};
         QString host;
     };
 
-    typedef std::vector<std::pair<unsigned int, QString> > PurgeList;
-    typedef std::map<QString, CheckStruct> FileCheckList;
+    using PurgeList = std::vector<std::pair<unsigned int, QString> >;
+    using FileCheckList = std::map<QString, CheckStruct>;
 
     void removeOrphans(unsigned int id, const QString &filename);
 
@@ -93,23 +96,23 @@ class META_PUBLIC VideoScannerThread : public MThread
     void SendProgressEvent(uint progress, uint total = 0,
             QString messsage = QString());
 
-    QObject *m_parent;
+    QObject *m_parent    {nullptr};
 
-    bool m_ListUnknown;
-    bool m_RemoveAll;
-    bool m_KeepAll;
-    bool m_HasGUI;
+    bool m_listUnknown   {false};
+    bool m_removeAll     {false};
+    bool m_keepAll       {false};
+    bool m_hasGUI        {false};
     QStringList m_directories;
     QStringList m_liveSGHosts;
     QStringList m_offlineSGHosts;
 
-    VideoMetadataListManager *m_dbmetadata;
-    MythUIProgressDialog *m_dialog;
+    VideoMetadataListManager *m_dbMetadata {nullptr};
+    MythUIProgressDialog     *m_dialog     {nullptr};
 
     QList<int> m_addList; // newly added intids
     QList<int> m_movList; // intids moved to new filename
     QList<int> m_delList; // orphaned/deleted intids
-    bool m_DBDataChanged;
+    bool m_dbDataChanged {false};
 };
 
 #endif

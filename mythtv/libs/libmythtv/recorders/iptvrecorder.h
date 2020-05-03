@@ -18,21 +18,21 @@ class IPTVChannel;
 class IPTVRecorder : public DTVRecorder
 {
   public:
-    IPTVRecorder(TVRec*, IPTVChannel*);
-    ~IPTVRecorder();
+    IPTVRecorder(TVRec *rec, IPTVChannel *channel);
+    ~IPTVRecorder() override;
 
-    virtual bool Open(void); // RecorderBase
-    virtual void Close(void); // RecorderBase
+    bool Open(void);
+    void Close(void);
     bool IsOpen(void) const;
-    void StartNewFile(void);
+    void StartNewFile(void) override; // RecorderBase
 
-    virtual void SetStreamData(MPEGStreamData*); // DTVRecorder
-    virtual bool PauseAndWait(int timeout = 100); // RecorderBase
+    void SetStreamData(MPEGStreamData *data) override; // DTVRecorder
+    bool PauseAndWait(int timeout = 100) override; // RecorderBase
 
-    virtual void run(void); // QRunnable
+    void run(void) override; // RecorderBase
 
   private:
-    IPTVChannel *m_channel;
+    IPTVChannel *m_channel {nullptr};
 };
 
 #endif // _IPTV_RECORDER_H_

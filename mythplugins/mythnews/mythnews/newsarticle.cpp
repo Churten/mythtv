@@ -1,46 +1,26 @@
 // MythNews headers
 #include "newsarticle.h"
 
-NewsArticle::NewsArticle(const QString &title,
-                         const QString &desc, const QString &articleURL,
-                         const QString &thumbnail, const QString &mediaURL,
-                         const QString &enclosure) :
-    m_title(title),
-    m_desc(desc),
-    m_articleURL(articleURL),
-    m_thumbnail(thumbnail),
-    m_mediaURL(mediaURL),
-    m_enclosure(enclosure)
+NewsArticle::NewsArticle(QString title, QString desc, QString articleURL,
+                         QString thumbnail, QString mediaURL, QString enclosure) :
+    m_title(std::move(title)),
+    m_desc(std::move(desc)),
+    m_articleURL(std::move(articleURL)),
+    m_thumbnail(std::move(thumbnail)),
+    m_mediaURL(std::move(mediaURL)),
+    m_enclosure(std::move(enclosure))
 {
 }
 
-NewsArticle::NewsArticle(const QString &title, const QString &desc,
-                         const QString &articleURL) :
-    m_title(title),
-    m_desc(desc),
-    m_articleURL(articleURL),
-    m_thumbnail(QString::null),
-    m_mediaURL(QString::null),
-    m_enclosure(QString::null)
+NewsArticle::NewsArticle(QString title, QString desc,
+                         QString articleURL) :
+    m_title(std::move(title)),
+    m_desc(std::move(desc)),
+    m_articleURL(std::move(articleURL))
 {
 }
 
-NewsArticle::NewsArticle(const QString &title) :
-    m_title(title),
-    m_desc(QString::null),
-    m_articleURL(QString::null),
-    m_thumbnail(QString::null),
-    m_mediaURL(QString::null),
-    m_enclosure(QString::null)
-{
-}
-
-NewsArticle::NewsArticle() :
-    m_title(QString::null),
-    m_desc(QString::null),
-    m_articleURL(QString::null),
-    m_thumbnail(QString::null),
-    m_mediaURL(QString::null),
-    m_enclosure(QString::null)
+NewsArticle::NewsArticle(QString title) :
+    m_title(std::move(title))
 {
 }

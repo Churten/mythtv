@@ -45,8 +45,8 @@ class MBASE_PUBLIC PortChecker : public QObject
     Q_OBJECT
 
   public:
-    PortChecker();
-    ~PortChecker();
+    PortChecker() = default;
+    ~PortChecker() override = default;
     bool checkPort(QString &host, int port, int timeLimit=30000,
       bool linkLocalOnly=false);
 
@@ -57,8 +57,8 @@ class MBASE_PUBLIC PortChecker : public QObject
     void cancelPortCheck(void);
 
   private:
-    bool cancelCheck;
-    void processEvents(void);
+    bool m_cancelCheck {false};
+    static void processEvents(void);
 };
 
 #endif

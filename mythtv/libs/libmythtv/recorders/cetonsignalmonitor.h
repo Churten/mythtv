@@ -20,20 +20,20 @@ class CetonSignalMonitor: public DTVSignalMonitor
   public:
     CetonSignalMonitor(int db_cardnum, CetonChannel* _channel,
                        bool _release_stream, uint64_t _flags = 0);
-    virtual ~CetonSignalMonitor();
+    ~CetonSignalMonitor() override;
 
-    void Stop(void);
+    void Stop(void) override; // SignalMonitor
 
   protected:
     CetonSignalMonitor(void);
     CetonSignalMonitor(const CetonSignalMonitor&);
 
-    virtual void UpdateValues(void);
+    void UpdateValues(void) override; // SignalMonitor
     CetonChannel *GetCetonChannel(void);
 
   protected:
-    bool                streamHandlerStarted;
-    CetonStreamHandler *streamHandler;
+    bool                m_streamHandlerStarted {false};
+    CetonStreamHandler *m_streamHandler        {nullptr};
 };
 
 #endif // CETONSIGNALMONITOR_H

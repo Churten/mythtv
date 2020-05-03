@@ -31,6 +31,7 @@
 #include <QIODevice>
 #include <QRunnable>
 #include <QUrl>
+#include <utility>
 
 #include "mythcorecontext.h"
 #include "mythdate.h"
@@ -59,10 +60,8 @@ class HTTPLiveStreamThread : public QRunnable
   public:
     /** \fn HTTPLiveStreamThread::HTTPLiveStreamThread(int)
      *  \brief Constructor for creating a SystemEventThread
-     *  \param cmd       Command line to run for this System Event
-     *  \param eventName Optional System Event name for this command
+     *  \param streamid The stream identifier.
      */
-
     explicit HTTPLiveStreamThread(int streamid)
       : m_streamID(streamid) {}
 
@@ -71,7 +70,7 @@ class HTTPLiveStreamThread : public QRunnable
      *
      *  Overrides QRunnable::run()
      */
-    void run(void)
+    void run(void) override // QRunnable
     {
         uint flags = kMSDontBlockInputDevs;
 
@@ -82,9 +81,11 @@ class HTTPLiveStreamThread : public QRunnable
         uint result = myth_system(command, flags);
 
         if (result != GENERIC_EXIT_OK)
+        {
             LOG(VB_GENERAL, LOG_WARNING, SLOC +
                 QString("Command '%1' returned %2")
                     .arg(command).arg(result));
+        }
     }
 
   private:
@@ -96,20 +97,14 @@ HTTPLiveStream::HTTPLiveStream(QString srcFile, uint16_t width, uint16_t height,
                                uint32_t bitrate, uint32_t abitrate,
                                uint16_t maxSegments, uint16_t segmentSize,
                                uint32_t aobitrate, int32_t srate)
-  : m_writing(false),
-    m_streamid(-1),              m_sourceFile(srcFile),
-    m_sourceWidth(0),            m_sourceHeight(0),
+  : m_sourceFile(std::move(srcFile)),
     m_segmentSize(segmentSize),  m_maxSegments(maxSegments),
-    m_segmentCount(0),           m_startSegment(0),
-    m_curSegment(0),
     m_height(height),            m_width(width),
     m_bitrate(bitrate),
     m_audioBitrate(abitrate),    m_audioOnlyBitrate(aobitrate),
     m_sampleRate(srate),
     m_created(MythDate::current()),
-    m_lastModified(MythDate::current()),
-    m_percentComplete(0),
-    m_status(kHLSStatusUndefined)
+    m_lastModified(MythDate::current())
 {
     if ((m_width == 0) && (m_height == 0))
         m_width = 640;
@@ -153,8 +148,7 @@ HTTPLiveStream::HTTPLiveStream(QString srcFile, uint16_t width, uint16_t height,
 }
 
 HTTPLiveStream::HTTPLiveStream(int streamid)
-  : m_writing(false),
-    m_streamid(streamid)
+  : m_streamid(streamid)
 {
     LoadFromDB();
 }
@@ -589,12 +583,17 @@ bool HTTPLiveStream::UpdateStatus(HTTPLiveStreamStatus status)
     if ((m_status == kHLSStatusStopping) &&
         (status == kHLSStatusRunning))
     {
-        LOG(VB_RECORD, LOG_DEBUG, LOC + "Attempted to switch from "
-            "Stopping to Running State");
+        LOG(VB_RECORD, LOG_DEBUG, LOC +
+            QString("Attempted to switch streamid %1 from "
+                    "Stopping to Running State").arg(m_streamid));
         return false;
     }
 
+    QString mStatusStr = StatusToString(m_status);
     QString statusStr = StatusToString(status);
+    LOG(VB_RECORD, LOG_DEBUG, LOC +
+        QString("Switch streamid %1 from %2 to %3")
+        .arg(m_streamid).arg(mStatusStr).arg(statusStr));
 
     m_status = status;
 
@@ -614,7 +613,7 @@ bool HTTPLiveStream::UpdateStatus(HTTPLiveStreamStatus status)
     return false;
 }
 
-bool HTTPLiveStream::UpdateStatusMessage(QString message)
+bool HTTPLiveStream::UpdateStatusMessage(const QString& message)
 {
     if (m_streamid == -1)
         return false;
@@ -666,7 +665,7 @@ bool HTTPLiveStream::UpdatePercentComplete(int percent)
 
 QString HTTPLiveStream::StatusToString(HTTPLiveStreamStatus status)
 {
-    switch (m_status) {
+    switch (status) {
         case kHLSStatusUndefined : return QString("Undefined");
         case kHLSStatusQueued    : return QString("Queued");
         case kHLSStatusStarting  : return QString("Starting");
@@ -811,10 +810,7 @@ bool HTTPLiveStream::CheckStop(void)
         return false;
     }
 
-    if (query.value(0).toInt() == (int)kHLSStatusStopping)
-        return true;
-
-    return false;
+    return query.value(0).toInt() == (int)kHLSStatusStopping;
 }
 
 DTC::LiveStreamInfo *HTTPLiveStream::StartStream(void)
@@ -822,8 +818,7 @@ DTC::LiveStreamInfo *HTTPLiveStream::StartStream(void)
     if (GetDBStatus() != kHLSStatusQueued)
         return GetLiveStreamInfo();
 
-    HTTPLiveStreamThread *streamThread =
-        new HTTPLiveStreamThread(GetStreamID());
+    auto *streamThread = new HTTPLiveStreamThread(GetStreamID());
     MThreadPool::globalInstance()->startReserved(streamThread,
                                                  "HTTPLiveStream");
     MythTimer statusTimer;
@@ -858,7 +853,7 @@ bool HTTPLiveStream::RemoveStream(int id)
         return false;
     }
 
-    HTTPLiveStream *hls = new HTTPLiveStream(id);
+    auto *hls = new HTTPLiveStream(id);
 
     if (hls->GetDBStatus() == kHLSStatusRunning) {
         HTTPLiveStream::StopStream(id);
@@ -930,12 +925,12 @@ DTC::LiveStreamInfo *HTTPLiveStream::StopStream(int id)
         LOG(VB_GENERAL, LOG_ERR, SLOC +
             QString("Unable to remove mark stream stopped for stream %1.")
                     .arg(id));
-        return NULL;
+        return nullptr;
     }
 
-    HTTPLiveStream *hls = new HTTPLiveStream(id);
+    auto *hls = new HTTPLiveStream(id);
     if (!hls)
-        return NULL;
+        return nullptr;
 
     MythTimer statusTimer;
     int       delay = 250000;
@@ -970,7 +965,7 @@ DTC::LiveStreamInfo *HTTPLiveStream::GetLiveStreamInfo(
     if (!info)
         info = new DTC::LiveStreamInfo();
 
-    info->setId((int)m_streamid);
+    info->setId(m_streamid);
     info->setWidth((int)m_width);
     info->setHeight((int)m_height);
     info->setBitrate((int)m_bitrate);
@@ -1002,7 +997,7 @@ DTC::LiveStreamInfo *HTTPLiveStream::GetLiveStreamInfo(
 
 DTC::LiveStreamInfoList *HTTPLiveStream::GetLiveStreamInfoList(const QString &FileName)
 {
-    DTC::LiveStreamInfoList *infoList = new DTC::LiveStreamInfoList();
+    auto *infoList = new DTC::LiveStreamInfoList();
 
     QString sql = "SELECT id FROM livestream ";
 
@@ -1022,8 +1017,8 @@ DTC::LiveStreamInfoList *HTTPLiveStream::GetLiveStreamInfoList(const QString &Fi
         return infoList;
     }
 
-    DTC::LiveStreamInfo *info = NULL;
-    HTTPLiveStream *hls = NULL;
+    DTC::LiveStreamInfo *info = nullptr;
+    HTTPLiveStream *hls = nullptr;
     while (query.next())
     {
         hls = new HTTPLiveStream(query.value(0).toUInt());

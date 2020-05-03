@@ -17,12 +17,8 @@
 #include "rominfo.h"
 
 EditRomInfoDialog::EditRomInfoDialog(MythScreenStack *parent,
-        QString name, RomInfo *romInfo) : MythScreenType(parent, name),
-    m_id(""), m_retObject(NULL), m_gamenameEdit(NULL), m_genreEdit(NULL),
-    m_yearEdit(NULL), m_countryEdit(NULL), m_plotEdit(NULL),
-    m_publisherEdit(NULL), m_favoriteCheck(NULL), m_screenshotButton(NULL),
-    m_screenshotText(NULL), m_fanartButton(NULL), m_fanartText(NULL),
-    m_boxartButton(NULL), m_boxartText(NULL), m_doneButton(NULL)
+                                     const QString& name, RomInfo *romInfo)
+    : MythScreenType(parent, name)
 {
     m_workingRomInfo = new RomInfo(*romInfo);
 }
@@ -91,10 +87,8 @@ namespace
         QStringList ret;
 
         QList<QByteArray> exts = QImageReader::supportedImageFormats();
-        for (QList<QByteArray>::iterator p = exts.begin(); p != exts.end(); ++p)
-        {
-            ret.append(QString("*.").append(*p));
-        }
+        foreach (auto & ext, exts)
+            ret.append(QString("*.").append(ext));
 
         return ret;
     }
@@ -107,7 +101,7 @@ namespace
         MythScreenStack *popupStack =
                 GetMythMainWindow()->GetStack("popup stack");
 
-        MythUIFileBrowser *fb = new MythUIFileBrowser(popupStack, fp);
+        auto *fb = new MythUIFileBrowser(popupStack, fp);
         fb->SetNameFilter(GetSupportedImageExtensionFilter());
         if (fb->Create())
         {
@@ -125,9 +119,8 @@ namespace
 
 void EditRomInfoDialog::customEvent(QEvent *event)
 {
-    if (event->type() == DialogCompletionEvent::kEventType)
+    if (auto *dce = dynamic_cast<DialogCompletionEvent*>(event))
     {
-        DialogCompletionEvent *dce = (DialogCompletionEvent*)(event);
         const QString resultid = dce->GetId();
 
         if (resultid == CEID_FANARTFILE)
@@ -167,10 +160,9 @@ void EditRomInfoDialog::SaveAndExit()
 {
     if (m_retObject)
     {
-        RomInfo *romInfo = new RomInfo(*m_workingRomInfo);
-        DialogCompletionEvent *dce =
-            new DialogCompletionEvent(m_id, 0, "",
-                                      qVariantFromValue(romInfo));
+        auto *romInfo = new RomInfo(*m_workingRomInfo);
+        auto *dce = new DialogCompletionEvent(m_id, 0, "",
+                                              QVariant::fromValue(romInfo));
 
         QApplication::postEvent(m_retObject, dce);
     }
@@ -233,7 +225,7 @@ void EditRomInfoDialog::FindBoxart()
             *this, CEID_BOXARTFILE);
 }
 
-void EditRomInfoDialog::SetScreenshot(QString file)
+void EditRomInfoDialog::SetScreenshot(const QString& file)
 {
     if (file.isEmpty())
         return;
@@ -242,7 +234,7 @@ void EditRomInfoDialog::SetScreenshot(QString file)
     m_screenshotText->SetText(file);
 }
 
-void EditRomInfoDialog::SetFanart(QString file)
+void EditRomInfoDialog::SetFanart(const QString& file)
 {
     if (file.isEmpty())
         return;
@@ -251,7 +243,7 @@ void EditRomInfoDialog::SetFanart(QString file)
     m_fanartText->SetText(file);
 }
 
-void EditRomInfoDialog::SetBoxart(QString file)
+void EditRomInfoDialog::SetBoxart(const QString& file)
 {
     if (file.isEmpty())
         return;

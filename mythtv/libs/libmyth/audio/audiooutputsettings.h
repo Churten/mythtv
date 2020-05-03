@@ -21,7 +21,7 @@ extern "C" {
 }
 #include "eldutils.h"
 
-typedef enum {
+enum AudioFormat {
     FORMAT_NONE = 0,
     FORMAT_U8,
     FORMAT_S16,
@@ -29,9 +29,9 @@ typedef enum {
     FORMAT_S24,
     FORMAT_S32,
     FORMAT_FLT
-} AudioFormat;
+};
 
-typedef enum {
+enum DigitalFeature {
     FEATURE_NONE   = 0,
     FEATURE_AC3    = 1 << 0,
     FEATURE_DTS    = 1 << 1,
@@ -40,7 +40,7 @@ typedef enum {
     FEATURE_TRUEHD = 1 << 4,
     FEATURE_DTSHD  = 1 << 5,
     FEATURE_AAC    = 1 << 6,
-} DigitalFeature;
+};
 
 static const int srs[] = { 5512, 8000,  11025, 16000, 22050, 32000,  44100,
                            48000, 88200, 96000, 176400, 192000 };
@@ -52,8 +52,9 @@ class MPUBLIC AudioOutputSettings
 {
     public:
         explicit AudioOutputSettings(bool invalid = false);
+        AudioOutputSettings(const AudioOutputSettings&) = default;
         ~AudioOutputSettings();
-        AudioOutputSettings& operator=(const AudioOutputSettings&);
+        AudioOutputSettings& operator=(const AudioOutputSettings& /*rhs*/);
         AudioOutputSettings *GetCleaned(bool newcopy = false);
         AudioOutputSettings *GetUsers(bool newcopy = false);
 
@@ -88,25 +89,25 @@ class MPUBLIC AudioOutputSettings
              * - FEATURE_DTSHD
              */
         bool canFeature(DigitalFeature arg)
-        { return m_features & arg; };
+        { return (m_features & arg) != 0U; };
         bool canFeature(unsigned int arg)
-        { return m_features & arg; };
+        { return (m_features & arg) != 0U; };
 
             /**
              * return true if device can or may support AC3
              * (deprecated, see canFeature())
              */
-        bool canAC3()                   { return m_features & FEATURE_AC3; };
+        bool canAC3()                   { return canFeature(FEATURE_AC3); };
             /**
              * return true if device can or may support DTS
              * (deprecated, see canFeature())
              */
-        bool canDTS()                   { return m_features & FEATURE_DTS; };
+        bool canDTS()                   { return canFeature(FEATURE_DTS); };
             /**
              * return true if device supports multichannels PCM
              * (deprecated, see canFeature())
              */
-        bool canLPCM()                  { return m_features & FEATURE_LPCM; };
+        bool canLPCM()                  { return canFeature(FEATURE_LPCM); };
             /**
              * return true if class instance is marked invalid.
              * if true, you can not assume any of the other method returned
@@ -149,7 +150,7 @@ class MPUBLIC AudioOutputSettings
              * Display in human readable form the digital features
              * supported by the output device
              */
-        QString FeaturesToString(DigitalFeature arg);
+        static QString FeaturesToString(DigitalFeature arg);
         QString FeaturesToString(void)
         { return FeaturesToString((DigitalFeature)m_features); };
 
@@ -192,24 +193,24 @@ class MPUBLIC AudioOutputSettings
          * 0: unknown
          * 1: yes
          */
-        int  m_passthrough;
+        int          m_passthrough {-1};
 
-        unsigned int m_features;
+        unsigned int m_features    {FEATURE_NONE};
 
-        bool m_invalid;
+        bool         m_invalid     {false};
             /**
              * will be set to true if we were able to retrieve the device ELD
              * (EDID like Data). ELD contains information about the audio
              * processing capabilities of the device connected to the audio card
              * ELD is usually retrieved from EDID CEA-861-E extension.
              */
-        bool m_has_eld;
-        ELD  m_eld;
+        bool         m_hasEld      {false};
+        ELD          m_eld;
 
         std::vector<int> m_sr, m_rates, m_channels;
         std::vector<AudioFormat> m_sf, m_formats;
-        std::vector<int>::iterator m_sr_it;
-        std::vector<AudioFormat>::iterator m_sf_it;
+        std::vector<int>::iterator m_srIt;
+        std::vector<AudioFormat>::iterator m_sfIt;
 };
 
 #endif // _AUDIO_OUTPUT_SETTINGS_H_

@@ -33,9 +33,7 @@ using namespace std;
 // MainVisual
 
 MainVisual::MainVisual(MythUIVideo *visualizer)
-    : QObject(NULL), MythTV::Visual(), m_visualizerVideo(visualizer),
-      m_vis(NULL), m_playing(false), m_fps(20), m_samples(SAMPLES_DEFAULT_SIZE),
-      m_updateTimer(NULL)
+    : QObject(nullptr), m_visualizerVideo(visualizer)
 {
     setObjectName("MainVisual");
 
@@ -61,8 +59,7 @@ MainVisual::~MainVisual()
     m_updateTimer->stop();
     delete m_updateTimer;
 
-    if (m_vis)
-        delete m_vis;
+    delete m_vis;
 
     while (!m_nodes.empty())
         delete m_nodes.takeLast();
@@ -77,7 +74,7 @@ void MainVisual::stop(void)
     if (m_vis)
     {
         delete m_vis;
-        m_vis = NULL;
+        m_vis = nullptr;
     }
 }
 
@@ -97,7 +94,8 @@ void MainVisual::setVisual(const QString &name)
 
     m_pixmap.fill(m_visualizerVideo->GetBackgroundColor());
 
-    QString visName, pluginName;
+    QString visName;
+    QString pluginName;
 
     if (name.contains("-"))
     {
@@ -113,7 +111,7 @@ void MainVisual::setVisual(const QString &name)
     if (m_vis)
     {
         delete m_vis;
-        m_vis = NULL;
+        m_vis = nullptr;
     }
 
     for (const VisFactory* pVisFactory = VisFactory::VisFactories();
@@ -149,8 +147,9 @@ void MainVisual::prepare()
 // Caller holds mutex() lock
 void MainVisual::add(const void *buffer, unsigned long b_len, unsigned long timecode, int source_channels, int bits_per_sample)
 {
-    unsigned long len = b_len, cnt;
-    short *l = 0, *r = 0;
+    unsigned long len = b_len;
+    short *l = nullptr;
+    short *r = nullptr;
     bool s32le = false;
 
     // 24 bit samples are stored as s32le in the buffer.
@@ -168,7 +167,7 @@ void MainVisual::add(const void *buffer, unsigned long b_len, unsigned long time
     if (len > m_samples)
         len = m_samples;
 
-    cnt = len;
+    int cnt = len;
 
     if (source_channels == 2)
     {
@@ -209,14 +208,14 @@ void MainVisual::add(const void *buffer, unsigned long b_len, unsigned long time
 
 void MainVisual::timeout()
 {
-    VisualNode *node = NULL;
+    VisualNode *node = nullptr;
     if (m_playing && gPlayer->getOutput())
     {
         QMutexLocker locker(mutex());
         int64_t timestamp = gPlayer->getOutput()->GetAudiotime();
         while (m_nodes.size() > 1)
         {
-            if ((int64_t)m_nodes.first()->offset > timestamp)
+            if ((int64_t)m_nodes.first()->m_offset > timestamp)
                 break;
 
             if (m_vis)

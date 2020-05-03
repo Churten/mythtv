@@ -34,11 +34,6 @@
 // Application local headers
 #include "mpegutils.h"
 
-extern "C" {
-#include "libavcodec/mpegvideo.h"
-}
-
-
 static QHash<uint,bool> extract_pids(const QString &pidsStr, bool required)
 {
     QHash<uint,bool> use_pid;
@@ -52,7 +47,7 @@ static QHash<uint,bool> extract_pids(const QString &pidsStr, bool required)
         QStringList pidsList = pidsStr.split(",");
         for (uint i = 0; i < (uint) pidsList.size(); i++)
         {
-            bool ok;
+            bool ok = false;
             uint tmp = pidsList[i].toUInt(&ok, 0);
             if (ok && (tmp < 0x2000))
                 use_pid[tmp] = true;
@@ -138,7 +133,6 @@ static int pid_counter(const MythUtilCommandLineParser &cmdline)
                 pos = resync_stream(buffer, pos+1, len, packet_size);
                 if (pos < 0)
                 {
-                    offset = 0;
                     break;
                 }
             }
@@ -251,7 +245,6 @@ static int pid_filter(const MythUtilCommandLineParser &cmdline)
                 pos = resync_stream(buffer, pos+1, len, packet_size);
                 if (pos < 0)
                 {
-                    offset = 0;
                     break;
                 }
             }
@@ -296,45 +289,43 @@ class PTSListener :
     public TSPacketListenerAV
 {
   public:
-    PTSListener() : m_start_code(0xFFFFFFFF)
+    PTSListener()
     {
-        for (int i = 0; i < 256; i++)
-            m_pts_count[i] = 0;
-        for (int i = 0; i < 256; i++)
-            m_pts_first[i] = -1LL;
-        for (int i = 0; i < 256; i++)
-            m_pts_last[i] = -1LL;
+        for (uint & i : m_ptsCount)
+            i = 0;
+        for (int64_t & i : m_ptsFirst)
+            i = -1LL;
+        for (int64_t & i : m_ptsLast)
+            i = -1LL;
 
     }
-    bool ProcessTSPacket(const TSPacket &tspacket);
-    bool ProcessVideoTSPacket(const TSPacket &tspacket)
+    bool ProcessTSPacket(const TSPacket &tspacket) override; // TSPacketListener
+    bool ProcessVideoTSPacket(const TSPacket &tspacket) override // TSPacketListenerAV
     { return ProcessTSPacket(tspacket); }
-    bool ProcessAudioTSPacket(const TSPacket &tspacket)
+    bool ProcessAudioTSPacket(const TSPacket &tspacket) override // TSPacketListenerAV
     { return ProcessTSPacket(tspacket); }
     int64_t GetFirstPTS(void) const
     {
-        QMap<uint,uint>::const_iterator it = m_pts_streams.begin();
         int64_t pts = -1LL;
         uint32_t pts_count = 0;
-        for (; it != m_pts_streams.end(); ++it)
+        foreach (uint stream, m_ptsStreams)
         {
-            if(m_pts_count[*it] > pts_count){
-                pts = m_pts_first[*it];
-                pts_count = m_pts_count[*it];
+            if(m_ptsCount[stream] > pts_count){
+                pts = m_ptsFirst[stream];
+                pts_count = m_ptsCount[stream];
             }
         }
         return pts;
     }
     int64_t GetLastPTS(void) const
     {
-        QMap<uint,uint>::const_iterator it = m_pts_streams.begin();
         int64_t pts = -1LL;
         uint32_t pts_count = 0;
-        for (; it != m_pts_streams.end(); ++it)
+        foreach (uint stream, m_ptsStreams)
         {
-            if(m_pts_count[*it] > pts_count){
-                pts = m_pts_last[*it];
-                pts_count = m_pts_count[*it];
+            if(m_ptsCount[stream] > pts_count){
+                pts = m_ptsLast[stream];
+                pts_count = m_ptsCount[stream];
             }
         }
         return pts;
@@ -346,11 +337,11 @@ class PTSListener :
     }
 
   public:
-    uint32_t m_start_code;
-    QMap<uint,uint> m_pts_streams;
-    uint32_t m_pts_count[256];
-    int64_t  m_pts_first[256];
-    int64_t  m_pts_last[256];
+    uint32_t        m_startCode     {0xFFFFFFFF};
+    QMap<uint,uint> m_ptsStreams;
+    uint32_t        m_ptsCount[256] {};
+    int64_t         m_ptsFirst[256] {};
+    int64_t         m_ptsLast[256]  {};
 };
 
 
@@ -360,7 +351,7 @@ bool PTSListener::ProcessTSPacket(const TSPacket &tspacket)
     // looking for first byte of MPEG start code (3 bytes 0 0 1)
     // otherwise, pick up search where we left off.
     const bool payloadStart = tspacket.PayloadStart();
-    m_start_code = (payloadStart) ? 0xffffffff : m_start_code;
+    m_startCode = (payloadStart) ? 0xffffffff : m_startCode;
 
     // Scan for PES header codes; specifically picture_start
     // sequence_start (SEQ) and group_start (GOP).
@@ -372,19 +363,19 @@ bool PTSListener::ProcessTSPacket(const TSPacket &tspacket)
 
     while (bufptr < bufend)
     {
-        bufptr = avpriv_find_start_code(bufptr, bufend, &m_start_code);
+        bufptr = avpriv_find_start_code(bufptr, bufend, &m_startCode);
         int bytes_left = bufend - bufptr;
-        if ((m_start_code & 0xffffff00) == 0x00000100)
+        if ((m_startCode & 0xffffff00) == 0x00000100)
         {
             // At this point we have seen the start code 0 0 1
             // the next byte will be the PES packet stream id.
-            const int stream_id = m_start_code & 0x000000ff;
+            const int stream_id = m_startCode & 0x000000ff;
             if ((stream_id < 0xc0) || (stream_id > 0xef) ||
                 (bytes_left < 10))
             {
                 continue;
             }
-            bool has_pts = bufptr[3] & 0x80;
+            bool has_pts = (bufptr[3] & 0x80) != 0;
             if (has_pts && (bytes_left > 5+5))
             {
                 int i = 5;
@@ -394,16 +385,15 @@ bool PTSListener::ProcessTSPacket(const TSPacket &tspacket)
                     (uint64_t(bufptr[i+2] & 0xfe) << 14) |
                     (uint64_t(bufptr[i+3]       ) <<  7) |
                     (uint64_t(bufptr[i+4] & 0xfe) >> 1);
-                m_pts_streams[stream_id] = stream_id;
-                m_pts_last[stream_id] = pts;
-                if (m_pts_count[stream_id] < 30)
+                m_ptsStreams[stream_id] = stream_id;
+                m_ptsLast[stream_id] = pts;
+                if (m_ptsCount[stream_id] < 30)
                 {
-                    if (!m_pts_count[stream_id])
-                        m_pts_first[stream_id] = pts;
-                    else if (pts < m_pts_first[stream_id])
-                        m_pts_first[stream_id] = pts;
+                    if ((!m_ptsCount[stream_id]) ||
+                        (pts < m_ptsFirst[stream_id]))
+                        m_ptsFirst[stream_id] = pts;
                 }
-                m_pts_count[stream_id]++;
+                m_ptsCount[stream_id]++;
             }
         }
     }
@@ -415,7 +405,7 @@ class PrintOutput
 {
   public:
     PrintOutput(RingBuffer *out, bool use_xml) :
-        m_out(out), m_use_xml(use_xml)
+        m_out(out), m_useXml(use_xml)
     {
     }
 
@@ -436,12 +426,12 @@ class PrintOutput
     {
         if (!psip)
             return;
-        Output(((m_use_xml) ? psip->toStringXML(0) : psip->toString()) + "\n");
+        Output(((m_useXml) ? psip->toStringXML(0) : psip->toString()) + "\n");
     }
 
   protected:
     RingBuffer *m_out;
-    bool m_use_xml;
+    bool m_useXml;
 };
 
 class PrintMPEGStreamListener : public MPEGStreamListener, public PrintOutput
@@ -451,15 +441,15 @@ class PrintMPEGStreamListener : public MPEGStreamListener, public PrintOutput
         RingBuffer *out, PTSListener &ptsl, bool autopts,
         MPEGStreamData *sd, const QHash<uint,bool> &use_pid, bool use_xml) :
         PrintOutput(out, use_xml), m_ptsl(ptsl),
-        m_autopts(autopts), m_sd(sd), m_use_pid(use_pid)
+        m_autopts(autopts), m_sd(sd), m_usePid(use_pid)
     {
         if (m_autopts)
             m_sd->AddListeningPID(MPEG_PAT_PID);
     }
 
-    void HandlePAT(const ProgramAssociationTable *pat)
+    void HandlePAT(const ProgramAssociationTable *pat) override // MPEGStreamListener
     {
-        if (pat && (!m_autopts || m_use_pid[MPEG_PAT_PID]))
+        if (pat && (!m_autopts || m_usePid[MPEG_PAT_PID]))
             Output(pat);
         if (pat && m_autopts)
         {
@@ -468,19 +458,20 @@ class PrintMPEGStreamListener : public MPEGStreamListener, public PrintOutput
         }
     }
 
-    void HandleCAT(const ConditionalAccessTable *cat)
+    void HandleCAT(const ConditionalAccessTable *cat) override // MPEGStreamListener
     {
         if (cat)
             Output(cat);
     }
 
-    void HandlePMT(uint program_num, const ProgramMapTable *pmt)
+    void HandlePMT(uint /*program_num*/, const ProgramMapTable *pmt) override // MPEGStreamListener
     {
-        if (pmt && (!m_autopts || m_use_pid[pmt->tsheader()->PID()]))
+        if (pmt && (!m_autopts || m_usePid[pmt->tsheader()->PID()]))
             Output(pmt);
         if (pmt && m_autopts)
         {
-            uint video_pid = 0, audio_pid = 0;
+            uint video_pid = 0;
+            uint audio_pid = 0;
             for (uint i = 0; i < pmt->StreamCount(); i++)
             {
                 if (pmt->IsVideo(i, "mpeg"))
@@ -500,13 +491,13 @@ class PrintMPEGStreamListener : public MPEGStreamListener, public PrintOutput
         }
     }
 
-    void HandleEncryptionStatus(uint /*program_number*/, bool /*encrypted*/)
+    void HandleEncryptionStatus(uint /*program_number*/, bool /*encrypted*/) override // MPEGStreamListener
     {
     }
 
-    void HandleSplice(const SpliceInformationTable *sit)
+    void HandleSplice(const SpliceInformationTable *sit) override // MPEGStreamListener
     {
-        if (sit && m_use_xml)
+        if (sit && m_useXml)
         {
             Output(sit->toStringXML(
                        0, m_ptsl.GetFirstPTS(), m_ptsl.GetLastPTS()) + "\n");
@@ -525,7 +516,7 @@ class PrintMPEGStreamListener : public MPEGStreamListener, public PrintOutput
     const PTSListener &m_ptsl;
     bool m_autopts;
     MPEGStreamData *m_sd;
-    const QHash<uint,bool> &m_use_pid;
+    const QHash<uint,bool> &m_usePid;
 };
 
 class PrintATSCMainStreamListener :
@@ -535,17 +526,17 @@ class PrintATSCMainStreamListener :
     PrintATSCMainStreamListener(RingBuffer *out, bool use_xml) :
         PrintOutput(out, use_xml) { }
 
-    void HandleSTT(const SystemTimeTable *stt)
+    void HandleSTT(const SystemTimeTable *stt) override // ATSCMainStreamListener
     {
         Output(stt);
     }
 
-    void HandleMGT(const MasterGuideTable *mgt)
+    void HandleMGT(const MasterGuideTable *mgt) override // ATSCMainStreamListener
     {
         Output(mgt);
     }
 
-    void HandleVCT(uint pid, const VirtualChannelTable *vct)
+    void HandleVCT(uint /*pid*/, const VirtualChannelTable *vct) override // ATSCMainStreamListener
     {
         Output(vct);
     }
@@ -558,37 +549,37 @@ class PrintSCTEMainStreamListener :
     PrintSCTEMainStreamListener(RingBuffer *out, bool use_xml) :
         PrintOutput(out, use_xml) { }
 
-    void HandleNIT(const SCTENetworkInformationTable *nit)
+    void HandleNIT(const SCTENetworkInformationTable *nit) override // SCTEMainStreamListener
     {
         Output(nit);
     }
 
-    void HandleSTT(const SCTESystemTimeTable *stt)
+    void HandleSTT(const SCTESystemTimeTable *stt) override // SCTEMainStreamListener
     {
         Output(stt);
     }
 
-    void HandleNTT(const NetworkTextTable *ntt)
+    void HandleNTT(const NetworkTextTable *ntt) override // SCTEMainStreamListener
     {
         Output(ntt);
     }
 
-    void HandleSVCT(const ShortVirtualChannelTable *svct)
+    void HandleSVCT(const ShortVirtualChannelTable *svct) override // SCTEMainStreamListener
     {
         Output(svct);
     }
 
-    void HandlePIM(const ProgramInformationMessageTable *pim)
+    void HandlePIM(const ProgramInformationMessageTable *pim) override // SCTEMainStreamListener
     {
         Output(pim);
     }
 
-    void HandlePNM(const ProgramNameMessageTable *pnm)
+    void HandlePNM(const ProgramNameMessageTable *pnm) override  // SCTEMainStreamListener
     {
         Output(pnm);
     }
 
-    void HandleADET(const AggregateDataEventTable *adet)
+    void HandleADET(const AggregateDataEventTable *adet) override // SCTEMainStreamListener
     {
         Output(adet);
     }
@@ -601,29 +592,30 @@ class PrintATSCAuxStreamListener :
     PrintATSCAuxStreamListener(RingBuffer *out, bool use_xml) :
         PrintOutput(out, use_xml) { }
 
-    virtual void HandleTVCT(
-        uint /*pid*/, const TerrestrialVirtualChannelTable */*tvct*/)
+    void HandleTVCT( uint /*pid*/,
+                     const TerrestrialVirtualChannelTable */*tvct*/) override // ATSCAuxStreamListener
     {
         // already handled in HandleVCT
     }
 
-    virtual void HandleCVCT(uint /*pid*/, const CableVirtualChannelTable */*cvct*/)
+    void HandleCVCT(uint /*pid*/,
+                    const CableVirtualChannelTable */*cvct*/) override // ATSCAuxStreamListener
     {
         // already handled in HandleVCT
     }
 
-    virtual void HandleRRT(const RatingRegionTable *rrt)
+    void HandleRRT(const RatingRegionTable *rrt) override // ATSCAuxStreamListener
     {
         Output(rrt);
     }
 
-    virtual void HandleDCCT(const DirectedChannelChangeTable *dcct)
+    void HandleDCCT(const DirectedChannelChangeTable *dcct) override // ATSCAuxStreamListener
     {
         Output(dcct);
     }
 
-    virtual void HandleDCCSCT(
-        const DirectedChannelChangeSelectionCodeTable *dccsct)
+    void HandleDCCSCT(
+        const DirectedChannelChangeSelectionCodeTable *dccsct) override // ATSCAuxStreamListener
     {
         Output(dccsct);
     }
@@ -636,13 +628,13 @@ class PrintATSCEITStreamListener :
     PrintATSCEITStreamListener(RingBuffer *out, bool use_xml) :
         PrintOutput(out, use_xml) { }
 
-    virtual void HandleEIT(uint pid, const EventInformationTable *eit)
+    void HandleEIT(uint pid, const EventInformationTable *eit) override // ATSCEITStreamListener
     {
         if (eit)
             Output(QString("EIT PID 0x%1\n").arg(pid,0,16) + eit->toString());
     }
 
-    virtual void HandleETT(uint pid, const ExtendedTextTable *ett)
+    void HandleETT(uint pid, const ExtendedTextTable *ett) override // ATSCEITStreamListener
     {
         if (ett)
             Output(QString("ETT PID 0x%1\n").arg(pid,0,16) + ett->toString());
@@ -656,17 +648,17 @@ class PrintDVBMainStreamListener :
     PrintDVBMainStreamListener(RingBuffer *out, bool use_xml) :
         PrintOutput(out, use_xml) { }
 
-    virtual void HandleTDT(const TimeDateTable *tdt)
+    void HandleTDT(const TimeDateTable *tdt) override // DVBMainStreamListener
     {
         Output(tdt);
     }
 
-    virtual void HandleNIT(const NetworkInformationTable *nit)
+    void HandleNIT(const NetworkInformationTable *nit) override // DVBMainStreamListener
     {
         Output(nit);
     }
 
-    virtual void HandleSDT(uint tsid, const ServiceDescriptionTable *sdt)
+    void HandleSDT(uint /*tsid*/, const ServiceDescriptionTable *sdt) override // DVBMainStreamListener
     {
         Output(sdt);
     }
@@ -680,17 +672,17 @@ class PrintDVBOtherStreamListener :
     PrintDVBOtherStreamListener(RingBuffer *out, bool use_xml) :
         PrintOutput(out, use_xml) { }
 
-    virtual void HandleNITo(const NetworkInformationTable *nit)
+    void HandleNITo(const NetworkInformationTable *nit) override // DVBOtherStreamListener
     {
         Output(nit);
     }
 
-    virtual void HandleSDTo(uint tsid, const ServiceDescriptionTable *sdt)
+    void HandleSDTo(uint /*tsid*/, const ServiceDescriptionTable *sdt) override // DVBOtherStreamListener
     {
         Output(sdt);
     }
 
-    virtual void HandleBAT(const BouquetAssociationTable *bat)
+    void HandleBAT(const BouquetAssociationTable *bat) override // DVBOtherStreamListener
     {
         Output(bat);
     }
@@ -704,12 +696,12 @@ class PrintDVBEITStreamListener :
     PrintDVBEITStreamListener(RingBuffer *out, bool use_xml) :
         PrintOutput(out, use_xml) { }
 
-    virtual void HandleEIT(const DVBEventInformationTable *eit)
+    void HandleEIT(const DVBEventInformationTable *eit) override // DVBEITStreamListener
     {
         Output(eit);
     }
 
-    virtual void HandleEIT(const PremiereContentInformationTable *pcit)
+    void HandleEIT(const PremiereContentInformationTable *pcit) override // DVBEITStreamListener
     {
         Output(pcit);
     }
@@ -739,7 +731,7 @@ static int pid_printer(const MythUtilCommandLineParser &cmdline)
         extract_pids(cmdline.toString("ptspids"), false);
 
     QString dest = cmdline.toString("outfile");
-    RingBuffer *out = NULL;
+    RingBuffer *out = nullptr;
     if (!dest.isEmpty())
     {
         out = RingBuffer::Create(dest, true);
@@ -754,7 +746,7 @@ static int pid_printer(const MythUtilCommandLineParser &cmdline)
     bool autopts = !cmdline.toBool("noautopts");
     bool use_xml = cmdline.toBool("xml");
 
-    ScanStreamData *sd = new ScanStreamData(true);
+    auto *sd = new ScanStreamData(true);
     for (QHash<uint,bool>::iterator it = use_pid.begin();
          it != use_pid.end(); ++it)
     {
@@ -767,23 +759,16 @@ static int pid_printer(const MythUtilCommandLineParser &cmdline)
         sd->AddWritingPID(it.key());
     }
 
-    PTSListener                 *ptsl = new PTSListener();
-    PrintMPEGStreamListener     *pmsl =
-        new PrintMPEGStreamListener(out, *ptsl, autopts, sd, use_pid, use_xml);
-    PrintATSCMainStreamListener *pasl =
-        new PrintATSCMainStreamListener(out, use_xml);
-    PrintSCTEMainStreamListener *pssl =
-        new PrintSCTEMainStreamListener(out, use_xml);
-    PrintATSCAuxStreamListener  *paasl =
-        new PrintATSCAuxStreamListener(out, use_xml);
-    PrintATSCEITStreamListener  *paesl =
-        new PrintATSCEITStreamListener(out, use_xml);
-    PrintDVBMainStreamListener  *pdmsl =
-        new PrintDVBMainStreamListener(out, use_xml);
-    PrintDVBOtherStreamListener *pdosl =
-        new PrintDVBOtherStreamListener(out, use_xml);
-    PrintDVBEITStreamListener   *pdesl =
-        new PrintDVBEITStreamListener(out, use_xml);
+    auto *ptsl  = new PTSListener();
+    auto *pmsl  = new PrintMPEGStreamListener(out, *ptsl, autopts, sd,
+                                              use_pid, use_xml);
+    auto *pasl  = new PrintATSCMainStreamListener(out, use_xml);
+    auto *pssl  = new PrintSCTEMainStreamListener(out, use_xml);
+    auto *paasl = new PrintATSCAuxStreamListener(out, use_xml);
+    auto *paesl = new PrintATSCEITStreamListener(out, use_xml);
+    auto *pdmsl = new PrintDVBMainStreamListener(out, use_xml);
+    auto *pdosl = new PrintDVBOtherStreamListener(out, use_xml);
+    auto *pdesl = new PrintDVBEITStreamListener(out, use_xml);
 
     sd->AddWritingListener(ptsl);
     sd->AddMPEGListener(pmsl);

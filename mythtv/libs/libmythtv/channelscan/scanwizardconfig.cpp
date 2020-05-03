@@ -3,6 +3,7 @@
 #include "videosource.h"
 #include "cardutil.h"
 #include "frequencytablesetting.h"
+#include "channelutil.h"
 
 #include "channelscanmiscsettings.h"
 #include "inputselectorsetting.h"
@@ -22,57 +23,173 @@
 
 void ScanWizard::SetupConfig(
     uint    default_sourceid,  uint default_cardid,
-    QString default_inputname)
+    const QString& default_inputname)
 {
-    videoSource = new VideoSourceSelector(
+    m_videoSource = new VideoSourceSelector(
                     default_sourceid, CardUtil::GetScanableInputTypes(), false);
-    input = new InputSelector(default_cardid, default_inputname);
-    scanType = new ScanTypeSetting(),
-    scanConfig = new ScanOptionalConfig(scanType);
-    services = new DesiredServices();
-    ftaOnly = new FreeToAirOnly();
-    trustEncSI = new TrustEncSISetting();
+    m_input = new InputSelector(default_cardid, default_inputname);
+    m_scanType = new ScanTypeSetting(),
+    m_scanConfig = new ScanOptionalConfig(m_scanType);
+    m_services = new DesiredServices();
+    m_ftaOnly = new FreeToAirOnly();
+    m_lcnOnly = new ChannelNumbersOnly();
+    m_completeOnly = new CompleteChannelsOnly();
+    m_fullSearch = new FullChannelSearch();
+    m_removeDuplicates = new RemoveDuplicates();
+    m_addFullTS = new AddFullTS();
+    m_trustEncSI = new TrustEncSISetting();
 
-    addChild(services);
-    addChild(ftaOnly);
-    addChild(trustEncSI);
+    setLabel(tr("Channel Scan"));
 
-    addChild(videoSource);
-    addChild(input);
-    addChild(scanType);
-    addChild(scanConfig);
+    addChild(m_services);
+    addChild(m_ftaOnly);
+    addChild(m_lcnOnly);
+    addChild(m_completeOnly);
+    addChild(m_fullSearch);
+    addChild(m_removeDuplicates);
+    addChild(m_addFullTS);
+    addChild(m_trustEncSI);
 
-    connect(videoSource, SIGNAL(valueChanged(const QString&)),
-            scanConfig,  SLOT(  SetSourceID( const QString&)));
+    addChild(m_videoSource);
+    addChild(m_input);
+    addChild(m_scanType);
+    addChild(m_scanConfig);
 
-    connect(videoSource, SIGNAL(valueChanged(const QString&)),
-            input,       SLOT(  SetSourceID( const QString&)));
+    connect(m_videoSource, SIGNAL(valueChanged(const QString&)),
+            m_scanConfig,  SLOT(  SetSourceID( const QString&)));
 
-    connect(input,       SIGNAL(valueChanged(const QString&)),
-            scanType,    SLOT(  SetInput(    const QString&)));
+    connect(m_videoSource, SIGNAL(valueChanged(const QString&)),
+            m_input,       SLOT(  SetSourceID( const QString&)));
 
-    connect(input,       SIGNAL(valueChanged(const QString&)),
-            this,     SLOT(  SetInput(    const QString&)));
+    connect(m_input,       SIGNAL(valueChanged(const QString&)),
+            m_scanType,    SLOT(  SetInput(    const QString&)));
+
+    connect(m_input,       SIGNAL(valueChanged(const QString&)),
+            this,          SLOT(  SetInput(    const QString&)));
+
+    connect(m_input,       SIGNAL(valueChanged(const QString&)),
+            this,          SLOT(  SetPaneDefaults(const QString)));
+
 }
 
 uint ScanWizard::GetSourceID(void) const
 {
-    return videoSource->getValue().toUInt();
+    return m_videoSource->getValue().toUInt();
 }
 
 ServiceRequirements ScanWizard::GetServiceRequirements(void) const
 {
-    return services->GetServiceRequirements();
+    return m_services->GetServiceRequirements();
 }
 
 bool ScanWizard::DoFreeToAirOnly(void) const
 {
-    return ftaOnly->getValue().toInt();
+    return m_ftaOnly->boolValue();
+}
+
+bool ScanWizard::DoChannelNumbersOnly(void) const
+{
+    return m_lcnOnly->boolValue();
+}
+
+bool ScanWizard::DoCompleteChannelsOnly(void) const
+{
+    return m_completeOnly->boolValue();
+}
+
+bool ScanWizard::DoFullChannelSearch(void) const
+{
+    return m_fullSearch->boolValue();
+}
+
+bool ScanWizard::DoRemoveDuplicates(void) const
+{
+    return m_removeDuplicates->boolValue();
+}
+
+bool ScanWizard::DoAddFullTS(void) const
+{
+    return m_addFullTS->boolValue();
 }
 
 bool ScanWizard::DoTestDecryption(void) const
 {
-    return trustEncSI->getValue().toInt();
+    return m_trustEncSI->boolValue();
+}
+
+void ScanWizard::SetPaneDefaults(const QString &cardid_inputname)
+{
+    const int sourceid = m_videoSource->getValue().toInt();
+    uint scanfrequency = 0;
+    QString freqtable;
+
+    MSqlQuery query(MSqlQuery::InitCon());
+    query.prepare(
+            "SELECT scanfrequency, freqtable "
+            "FROM videosource "
+            "WHERE videosource.sourceid = :SOURCEID ;");
+    query.bindValue(":SOURCEID", sourceid);
+    if (!query.exec() || !query.isActive())
+    {
+        MythDB::DBError("ScanOptionalConfig::SetPaneDefaults", query);
+        return;
+    }
+    else if (query.next())
+    {
+        scanfrequency = query.value(0).toUInt();
+        freqtable = query.value(1).toString();
+        LOG(VB_CHANSCAN, LOG_DEBUG,
+            QString("SetPaneDefaults cardid_inputname:%1 sourceid:%2 scanfrequency:%3 freqtable:%4")
+                .arg(cardid_inputname).arg(sourceid).arg(scanfrequency).arg(freqtable));
+    }
+
+    // Channel Frequency Table for ATSC
+    // Use general setting if not defined in the videosource
+    {
+        if (freqtable == "default")
+        {
+            freqtable = gCoreContext->GetSetting("FreqTable");
+        }
+        QString table;
+        table = (freqtable == "us-bcast"    ) ? "us"      : table;
+        table = (freqtable == "us-cable"    ) ? "uscable" : table;
+        table = (freqtable == "us-cable-hrc") ? "ushrc"   : table;
+        table = (freqtable == "us-cable-irc") ? "usirc"   : table;
+        if (!table.isEmpty())
+        {
+            LOG(VB_CHANSCAN, LOG_DEBUG,
+                QString("SetPaneDefaults ATSC frequency table:'%1'").arg(table));
+            m_scanConfig->SetTuningPaneValuesATSC(table);
+        }
+    }
+
+    // Set "Full Scan (Tuned)" defaults only when a frequency has been entered.
+    if (scanfrequency == 0)
+        return;
+
+    // If we have only a frequency set that as default; if there is a multiplex
+    // already at that frequency then use the values of that multiplex as
+    // default values for scanning.
+    int mplexid = 0;
+    mplexid = ChannelUtil::GetMplexID(sourceid, scanfrequency);
+    LOG(VB_CHANSCAN, LOG_DEBUG,
+        QString("SetPaneDefaults sourceid:%1 frequency:%2 mplexid:%3")
+            .arg(sourceid).arg(scanfrequency).arg(mplexid));
+
+    DTVMultiplex mpx;
+    if (mplexid > 0)
+    {
+        DTVTunerType tuner_type = CardUtil::GetTunerTypeFromMultiplex(mplexid);
+
+        mpx.FillFromDB(tuner_type, mplexid);
+
+        LOG(VB_CHANSCAN, LOG_DEBUG,
+            QString("SetPaneDefaults sourceid:%1 frequency:%2 mplexid:%3 tuner_type:%4 mpx:%5")
+                .arg(sourceid).arg(scanfrequency).arg(mplexid)
+                .arg(tuner_type.toString()).arg(mpx.toString()));
+    }
+
+    m_scanConfig->SetTuningPaneValues(scanfrequency, mpx);
 }
 
 ////////////////////////////////////////////////////////////////////////////
@@ -81,18 +198,18 @@ bool ScanWizard::DoTestDecryption(void) const
 void ScanTypeSetting::SetInput(const QString &cardids_inputname)
 {
     uint    cardid    = 0;
-    QString inputname = QString::null;
+    QString inputname;
     if (!InputSelector::Parse(cardids_inputname, cardid, inputname))
         return;
 
     // Only refresh if we really have to. If we do it too often
     // Then we end up fighting the scan routine when we want to
     // check the type of dvb card :/
-    if (cardid == hw_cardid)
+    if (cardid == m_hw_cardid)
         return;
 
-    hw_cardid       = cardid;
-    QString subtype = CardUtil::ProbeSubTypeName(hw_cardid);
+    m_hw_cardid     = cardid;
+    QString subtype = CardUtil::ProbeSubTypeName(m_hw_cardid);
     int nCardType   = CardUtil::toInputType(subtype);
     clearSelections();
 
@@ -160,7 +277,14 @@ void ScanTypeSetting::SetInput(const QString &cardids_inputname)
                          QString::number(ExistingScanImport));
             break;
         case CardUtil::HDHOMERUN:
-            if (CardUtil::HDHRdoesDVB(CardUtil::GetVideoDevice(cardid)))
+            if (CardUtil::HDHRdoesDVBC(CardUtil::GetVideoDevice(cardid)))
+            {
+                addSelection(tr("Full Scan (Tuned)"),
+                             QString::number(NITAddScan_DVBC));
+                addSelection(tr("Full Scan"),
+                             QString::number(FullScan_DVBC));
+            }
+            else if (CardUtil::HDHRdoesDVB(CardUtil::GetVideoDevice(cardid)))
             {
                 addSelection(tr("Full Scan"),
                              QString::number(FullScan_DVBT), true);
@@ -215,49 +339,48 @@ void ScanTypeSetting::SetInput(const QString &cardids_inputname)
 ////////////////////////////////////////////////////////////////////////////
 
 ScanOptionalConfig::ScanOptionalConfig(ScanTypeSetting *_scan_type) :
-    scanType(_scan_type),
-    dvbTCountry(new ScanCountry()),
-    dvbT2Country(new ScanCountry()),
-    network(new ScanNetwork()),
-    paneDVBT(new PaneDVBT(QString::number(ScanTypeSetting::NITAddScan_DVBT), scanType)),
-    paneDVBT2(new PaneDVBT2(QString::number(ScanTypeSetting::NITAddScan_DVBT2), scanType)),
-    paneDVBS(new PaneDVBS(QString::number(ScanTypeSetting::NITAddScan_DVBS), scanType)),
-    paneDVBS2(new PaneDVBS2(QString::number(ScanTypeSetting::NITAddScan_DVBS2), scanType)),
-    paneATSC(new PaneATSC(QString::number(ScanTypeSetting::FullScan_ATSC), scanType)),
-    paneDVBC(new PaneDVBC(QString::number(ScanTypeSetting::NITAddScan_DVBC), scanType)),
-    paneAnalog(new PaneAnalog(QString::number(ScanTypeSetting::FullScan_Analog), scanType)),
-    paneSingle(new PaneSingle(QString::number(ScanTypeSetting::TransportScan), scanType)),
-    paneAll(new PaneAll(QString::number(ScanTypeSetting::FullTransportScan), scanType)),
-    paneDVBUtilsImport(new PaneDVBUtilsImport()),
-    paneExistingScanImport(new PaneExistingScanImport(QString::number(ScanTypeSetting::ExistingScanImport), scanType))
-
+    m_scanType(_scan_type),
+    m_dvbTCountry(new ScanCountry()),
+    m_dvbT2Country(new ScanCountry()),
+    m_network(new ScanNetwork()),
+    m_paneDVBT(new PaneDVBT(QString::number(ScanTypeSetting::NITAddScan_DVBT), m_scanType)),
+    m_paneDVBT2(new PaneDVBT2(QString::number(ScanTypeSetting::NITAddScan_DVBT2), m_scanType)),
+    m_paneDVBS(new PaneDVBS(QString::number(ScanTypeSetting::NITAddScan_DVBS), m_scanType)),
+    m_paneDVBS2(new PaneDVBS2(QString::number(ScanTypeSetting::NITAddScan_DVBS2), m_scanType)),
+    m_paneATSC(new PaneATSC(QString::number(ScanTypeSetting::FullScan_ATSC), m_scanType)),
+    m_paneDVBC(new PaneDVBC(QString::number(ScanTypeSetting::NITAddScan_DVBC), m_scanType)),
+    m_paneAnalog(new PaneAnalog(QString::number(ScanTypeSetting::FullScan_Analog), m_scanType)),
+    m_paneSingle(new PaneSingle(QString::number(ScanTypeSetting::TransportScan), m_scanType)),
+    m_paneAll(new PaneAll(QString::number(ScanTypeSetting::FullTransportScan), m_scanType)),
+    m_paneDVBUtilsImport(new PaneDVBUtilsImport()),
+    m_paneExistingScanImport(new PaneExistingScanImport(QString::number(ScanTypeSetting::ExistingScanImport), m_scanType))
 {
     setVisible(false);
 
-    scanType->addTargetedChild(QString::number(ScanTypeSetting::Error_Open),
+    m_scanType->addTargetedChild(QString::number(ScanTypeSetting::Error_Open),
               new PaneError(tr("Failed to open the card")));
-    scanType->addTargetedChild(QString::number(ScanTypeSetting::Error_Probe),
+    m_scanType->addTargetedChild(QString::number(ScanTypeSetting::Error_Probe),
               new PaneError(tr("Failed to probe the card")));
-    scanType->addTargetedChild(QString::number(ScanTypeSetting::FullScan_DVBC),
-              network);
-    scanType->addTargetedChild(QString::number(ScanTypeSetting::FullScan_DVBT),
-              dvbTCountry);
-    scanType->addTargetedChild(QString::number(ScanTypeSetting::FullScan_DVBT2),
-              dvbT2Country);
-//     scanType->addTargetedChild(QString::number(ScanTypeSetting::DVBUtilsImport),
+    m_scanType->addTargetedChild(QString::number(ScanTypeSetting::FullScan_DVBC),
+              m_network);
+    m_scanType->addTargetedChild(QString::number(ScanTypeSetting::FullScan_DVBT),
+              m_dvbTCountry);
+    m_scanType->addTargetedChild(QString::number(ScanTypeSetting::FullScan_DVBT2),
+              m_dvbT2Country);
+//   m_scanType->addTargetedChild(QString::number(ScanTypeSetting::DVBUtilsImport),
 //               paneDVBUtilsImport);
 }
 
 void ScanOptionalConfig::SetSourceID(const QString &sourceid)
 {
-    paneAnalog->SetSourceID(sourceid.toUInt());
-    paneSingle->SetSourceID(sourceid.toUInt());
-    paneExistingScanImport->SetSourceID(sourceid.toUInt());
+    m_paneAnalog->SetSourceID(sourceid.toUInt());
+    m_paneSingle->SetSourceID(sourceid.toUInt());
+    m_paneExistingScanImport->SetSourceID(sourceid.toUInt());
 }
 
 QString ScanOptionalConfig::GetFrequencyStandard(void) const
 {
-    int     st =  scanType->getValue().toInt();
+    int     st =  m_scanType->getValue().toInt();
 
     switch (st)
     {
@@ -277,12 +400,12 @@ QString ScanOptionalConfig::GetFrequencyStandard(void) const
 
 QString ScanOptionalConfig::GetModulation(void) const
 {
-    int     st =  scanType->getValue().toInt();
+    int     st =  m_scanType->getValue().toInt();
 
     switch (st)
     {
         case ScanTypeSetting::FullScan_ATSC:
-            return paneATSC->GetModulation();
+            return m_paneATSC->GetModulation();
         case ScanTypeSetting::FullScan_DVBC:
             return "qam";
         case ScanTypeSetting::FullScan_DVBT:
@@ -297,20 +420,20 @@ QString ScanOptionalConfig::GetModulation(void) const
 
 QString ScanOptionalConfig::GetFrequencyTable(void) const
 {
-    int st =  scanType->getValue().toInt();
+    int st =  m_scanType->getValue().toInt();
 
     switch (st)
     {
         case ScanTypeSetting::FullScan_ATSC:
-            return paneATSC->GetFrequencyTable();
+            return m_paneATSC->GetFrequencyTable();
         case ScanTypeSetting::FullScan_DVBC:
-            return network->getValue();
+            return m_network->getValue();
         case ScanTypeSetting::FullScan_DVBT:
-            return dvbTCountry->getValue();
+            return m_dvbTCountry->getValue();
         case ScanTypeSetting::FullScan_DVBT2:
-            return dvbT2Country->getValue();
+            return m_dvbT2Country->getValue();
         case ScanTypeSetting::FullScan_Analog:
-            return paneAnalog->GetFrequencyTable();
+            return m_paneAnalog->GetFrequencyTable();
         default:
             return "unknown";
     }
@@ -319,27 +442,28 @@ QString ScanOptionalConfig::GetFrequencyTable(void) const
 bool ScanOptionalConfig::GetFrequencyTableRange(
     QString &start, QString &end) const
 {
-    start = end  = QString::null;
+    start.clear();
+    end.clear();
 
-    int st = scanType->getValue().toInt();
+    int st = m_scanType->getValue().toInt();
     if (ScanTypeSetting::FullScan_ATSC == st)
-        return paneATSC->GetFrequencyTableRange(start, end);
+        return m_paneATSC->GetFrequencyTableRange(start, end);
 
     return false;
 }
 
 bool ScanOptionalConfig::DoIgnoreSignalTimeout(void) const
 {
-    int  st  = scanType->getValue().toInt();
+    int  st  = m_scanType->getValue().toInt();
 
     switch (st)
     {
     case ScanTypeSetting::TransportScan:
-        return paneSingle->ignoreSignalTimeout();
+        return m_paneSingle->ignoreSignalTimeout();
     case ScanTypeSetting::FullTransportScan:
-        return paneAll->ignoreSignalTimeout();
+        return m_paneAll->ignoreSignalTimeout();
     case ScanTypeSetting::DVBUtilsImport:
-        return paneDVBUtilsImport->DoIgnoreSignalTimeout();
+        return m_paneDVBUtilsImport->DoIgnoreSignalTimeout();
     default:
         return false;
     }
@@ -347,13 +471,13 @@ bool ScanOptionalConfig::DoIgnoreSignalTimeout(void) const
 
 bool ScanOptionalConfig::DoFollowNIT(void) const
 {
-    int  st  = scanType->getValue().toInt();
+    int  st  = m_scanType->getValue().toInt();
     switch (st)
     {
     case ScanTypeSetting::TransportScan:
-        return paneSingle->GetFollowNIT();
+        return m_paneSingle->GetFollowNIT();
     case ScanTypeSetting::FullTransportScan:
-        return paneAll->GetFollowNIT();
+        return m_paneAll->GetFollowNIT();
     default:
         return false;
     }
@@ -361,28 +485,28 @@ bool ScanOptionalConfig::DoFollowNIT(void) const
 
 QString ScanOptionalConfig::GetFilename(void) const
 {
-    return paneDVBUtilsImport->GetFilename();
+    return m_paneDVBUtilsImport->GetFilename();
 }
 
 uint ScanOptionalConfig::GetMultiplex(void) const
 {
-    int mplexid = paneSingle->GetMultiplex();
+    int mplexid = m_paneSingle->GetMultiplex();
     return (mplexid <= 0) ? 0 : mplexid;
 }
 
 uint ScanOptionalConfig::GetScanID(void) const
 {
-    return paneExistingScanImport->GetScanID();
+    return m_paneExistingScanImport->GetScanID();
 }
 
 QMap<QString,QString> ScanOptionalConfig::GetStartChan(void) const
 {
     QMap<QString,QString> startChan;
 
-    int st = scanType->getValue().toInt();
+    int st = m_scanType->getValue().toInt();
     if (ScanTypeSetting::NITAddScan_DVBT == st)
     {
-        const PaneDVBT *pane = paneDVBT;
+        const PaneDVBT *pane = m_paneDVBT;
 
         startChan["std"]            = "dvb";
         startChan["type"]           = "OFDM";
@@ -398,7 +522,7 @@ QMap<QString,QString> ScanOptionalConfig::GetStartChan(void) const
     }
     else if (ScanTypeSetting::NITAddScan_DVBT2 == st)
     {
-        const PaneDVBT2 *pane = paneDVBT2;
+        const PaneDVBT2 *pane = m_paneDVBT2;
 
         startChan["std"]            = "dvb";
         startChan["type"]           = "DVB_T2";
@@ -415,7 +539,7 @@ QMap<QString,QString> ScanOptionalConfig::GetStartChan(void) const
     }
     else if (ScanTypeSetting::NITAddScan_DVBS == st)
     {
-        const PaneDVBS *pane = paneDVBS;
+        const PaneDVBS *pane = m_paneDVBS;
 
         startChan["std"]        = "dvb";
         startChan["type"]       = "QPSK";
@@ -428,7 +552,7 @@ QMap<QString,QString> ScanOptionalConfig::GetStartChan(void) const
     }
     else if (ScanTypeSetting::NITAddScan_DVBC == st)
     {
-        const PaneDVBC *pane = paneDVBC;
+        const PaneDVBC *pane = m_paneDVBC;
 
         startChan["std"]        = "dvb";
         startChan["type"]       = "QAM";
@@ -440,7 +564,7 @@ QMap<QString,QString> ScanOptionalConfig::GetStartChan(void) const
     }
     else if (ScanTypeSetting::NITAddScan_DVBS2 == st)
     {
-        const PaneDVBS2 *pane = paneDVBS2;
+        const PaneDVBS2 *pane = m_paneDVBS2;
 
         startChan["std"]        = "dvb";
         startChan["type"]       = "DVB_S2";
@@ -455,4 +579,102 @@ QMap<QString,QString> ScanOptionalConfig::GetStartChan(void) const
     }
 
     return startChan;
+}
+
+void ScanOptionalConfig::SetTuningPaneValues(uint frequency, const DTVMultiplex &mpx)
+{
+    const int st =  m_scanType->getValue().toInt();
+
+    if (st == ScanTypeSetting::FullScan_DVBT  ||
+        st == ScanTypeSetting::NITAddScan_DVBT )
+    {
+        PaneDVBT *pane = m_paneDVBT;
+
+        pane->setFrequency(frequency);
+        if (frequency == mpx.m_frequency)
+        {
+            pane->setInversion(mpx.m_inversion.toString());
+            pane->setBandwidth(mpx.m_bandwidth.toString());
+            pane->setCodeRateHP(mpx.m_hpCodeRate.toString());
+            pane->setCodeRateLP(mpx.m_lpCodeRate.toString());
+            pane->setConstellation(mpx.m_modulation.toString());
+            pane->setTransmode(mpx.m_transMode.toString());
+            pane->setGuardInterval(mpx.m_guardInterval.toString());
+            pane->setHierarchy(mpx.m_hierarchy.toString());
+        }
+    }
+    else if (st == ScanTypeSetting::FullScan_DVBT2  ||
+             st == ScanTypeSetting::NITAddScan_DVBT2 )
+    {
+        PaneDVBT2 *pane = m_paneDVBT2;
+
+        pane->setFrequency(frequency);
+        if (frequency == mpx.m_frequency)
+        {
+            pane->setInversion(mpx.m_inversion.toString());
+            pane->setBandwidth(mpx.m_bandwidth.toString());
+            pane->setCodeRateHP(mpx.m_hpCodeRate.toString());
+            pane->setCodeRateLP(mpx.m_lpCodeRate.toString());
+            pane->setConstellation(mpx.m_modulation.toString());
+            pane->setTransmode(mpx.m_transMode.toString());
+            pane->setGuardInterval(mpx.m_guardInterval.toString());
+            pane->setHierarchy(mpx.m_hierarchy.toString());
+            pane->setModsys(mpx.m_modSys.toString());
+        }
+    }
+    else if (st == ScanTypeSetting::FullScan_DVBC  ||
+             st == ScanTypeSetting::NITAddScan_DVBC )
+    {
+        PaneDVBC *pane = m_paneDVBC;
+
+        pane->setFrequency(frequency);
+        if (frequency == mpx.m_frequency)
+        {
+            pane->setInversion(mpx.m_inversion.toString());
+            pane->setSymbolrate(QString("%1").arg(mpx.m_symbolRate));
+            pane->setFec(mpx.m_fec.toString());
+            pane->setModulation(mpx.m_modulation.toString());
+        }
+    }
+    else if (st == ScanTypeSetting::NITAddScan_DVBS)
+    {
+        PaneDVBS *pane = m_paneDVBS;
+
+        pane->setFrequency(frequency);
+        if (frequency == mpx.m_frequency)
+        {
+            pane->setSymbolrate(QString("%1").arg(mpx.m_symbolRate));
+            pane->setInversion(mpx.m_inversion.toString());
+            pane->setFec(mpx.m_fec.toString());
+            pane->setPolarity(mpx.m_polarity.toString());
+        }
+    }
+    else if (st == ScanTypeSetting::NITAddScan_DVBS2)
+    {
+        PaneDVBS2 *pane = m_paneDVBS2;
+
+        pane->setFrequency(frequency);
+        if (frequency == mpx.m_frequency)
+        {
+            pane->setSymbolrate(QString("%1").arg(mpx.m_symbolRate));
+            pane->setInversion(mpx.m_inversion.toString());
+            pane->setFec(mpx.m_fec.toString());
+            pane->setPolarity(mpx.m_polarity.toString());
+            pane->setModulation(mpx.m_modulation.toString());
+            pane->setModsys(mpx.m_modSys.toString());
+            pane->setRolloff(mpx.m_rolloff.toString());
+        }
+    }
+}
+
+void ScanOptionalConfig::SetTuningPaneValuesATSC(const QString &freqtable)
+{
+    const int st =  m_scanType->getValue().toInt();
+
+    if (st == ScanTypeSetting::FullScan_ATSC)
+    {
+        PaneATSC *pane = m_paneATSC;
+
+        pane->SetFrequencyTable(freqtable);
+    }
 }

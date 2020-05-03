@@ -45,7 +45,7 @@
 class SERVICE_PUBLIC DvrServices : public Service  //, public QScriptable ???
 {
     Q_OBJECT
-    Q_CLASSINFO( "version"    , "6.4" )
+    Q_CLASSINFO( "version"    , "6.6" )
     Q_CLASSINFO( "RemoveRecorded_Method",                       "POST" )
     Q_CLASSINFO( "DeleteRecording_Method",                      "POST" )
     Q_CLASSINFO( "UnDeleteRecording",                           "POST" )
@@ -57,6 +57,7 @@ class SERVICE_PUBLIC DvrServices : public Service  //, public QScriptable ???
     Q_CLASSINFO( "AddDontRecordSchedule",                       "POST" )
     Q_CLASSINFO( "EnableRecordSchedule_Method",                 "POST" )
     Q_CLASSINFO( "DisableRecordSchedule_Method",                "POST" )
+    Q_CLASSINFO( "ManageJobQueue_Method",                       "POST" )
 
 
     public:
@@ -64,7 +65,7 @@ class SERVICE_PUBLIC DvrServices : public Service  //, public QScriptable ???
         // Must call InitializeCustomTypes for each unique Custom Type used
         // in public slots below.
 
-        DvrServices( QObject *parent = 0 ) : Service( parent )
+        DvrServices( QObject *parent = nullptr ) : Service( parent )
         {
             DTC::ProgramList::InitializeCustomTypes();
             DTC::EncoderList::InitializeCustomTypes();
@@ -85,7 +86,9 @@ class SERVICE_PUBLIC DvrServices : public Service  //, public QScriptable ???
                                                            int              Count,
                                                            const QString   &TitleRegEx,
                                                            const QString   &RecGroup,
-                                                           const QString   &StorageGroup ) = 0;
+                                                           const QString   &StorageGroup,
+                                                           const QString   &Category,
+                                                           const QString   &Sort) = 0;
 
         virtual DTC::ProgramList* GetOldRecordedList     ( bool             Descending,
                                                            int              StartIndex,
@@ -119,7 +122,9 @@ class SERVICE_PUBLIC DvrServices : public Service  //, public QScriptable ???
 
         virtual bool               StopRecording         ( int              RecordedId ) = 0;
 
-        virtual bool               ReactivateRecording   ( int              RecordedId ) = 0;
+        virtual bool               ReactivateRecording   ( int              RecordedId,
+                                                           int              ChanId,
+                                                           const QDateTime &StartTime ) = 0;
 
         virtual bool               RescheduleRecordings  ( void ) = 0;
 
@@ -168,6 +173,8 @@ class SERVICE_PUBLIC DvrServices : public Service  //, public QScriptable ???
 
         virtual QStringList        GetRecGroupList       ( ) = 0;
 
+        virtual QStringList        GetProgramCategories  ( bool OnlyRecorded ) = 0;
+
         virtual QStringList        GetRecStorageGroupList ( ) = 0;
 
         virtual QStringList        GetPlayGroupList      ( ) = 0;
@@ -180,29 +187,30 @@ class SERVICE_PUBLIC DvrServices : public Service  //, public QScriptable ???
 
         // Recording Rules
 
-        virtual uint               AddRecordSchedule     ( QString   Title,
-                                                           QString   Subtitle,
-                                                           QString   Description,
-                                                           QString   Category,
+        virtual uint               AddRecordSchedule     ( const QString&   Title,
+                                                           const QString&   Subtitle,
+                                                           const QString&   Description,
+                                                           const QString&   Category,
                                                            QDateTime StartTime,
                                                            QDateTime EndTime,
-                                                           QString   SeriesId,
-                                                           QString   ProgramId,
+                                                           const QString&   SeriesId,
+                                                           const QString&   ProgramId,
                                                            int       ChanId,
-                                                           QString   Station,
+                                                           const QString&   Station,
                                                            int       FindDay,
                                                            QTime     FindTime,
                                                            int       ParentId,
                                                            bool      Inactive,
                                                            uint      Season,
                                                            uint      Episode,
-                                                           QString   Inetref,
+                                                           const QString&   Inetref,
                                                            QString   Type,
                                                            QString   SearchType,
                                                            int       RecPriority,
                                                            uint      PreferredInput,
                                                            int       StartOffset,
                                                            int       EndOffset,
+                                                           QDateTime LastRecorded,
                                                            QString   DupMethod,
                                                            QString   DupIn,
                                                            uint      Filter,
@@ -238,7 +246,7 @@ class SERVICE_PUBLIC DvrServices : public Service  //, public QScriptable ???
                                                            bool      Inactive,
                                                            uint      Season,
                                                            uint      Episode,
-                                                           QString   Inetref,
+                                                           const QString&   Inetref,
                                                            QString   Type,
                                                            QString   SearchType,
                                                            int       RecPriority,
@@ -286,6 +294,9 @@ class SERVICE_PUBLIC DvrServices : public Service  //, public QScriptable ???
 
         virtual bool               DisableRecordSchedule ( uint             RecordId   ) = 0;
 
+        virtual int                RecordedIdForKey      ( int              ChanId,
+                                                           const QDateTime &StartTime ) = 0;
+
         virtual int                RecordedIdForPathname ( const QString   &Pathname   ) = 0;
 
         // The following are all temporary, pending implementation of a
@@ -307,6 +318,15 @@ class SERVICE_PUBLIC DvrServices : public Service  //, public QScriptable ???
         virtual QString            DupInToString         ( QString          DupIn     ) = 0;
 
         virtual QString            DupInToDescription    ( QString          DupIn     ) = 0;
+
+        virtual int                ManageJobQueue        ( const QString   &Action,
+                                                           const QString   &JobName,
+                                                           int              JobId,
+                                                           int              RecordedId,
+                                                                 QDateTime  JobStartTime,
+                                                                 QString    RemoteHost,
+                                                                 QString    JobArgs   ) = 0;
+
 };
 
 #endif

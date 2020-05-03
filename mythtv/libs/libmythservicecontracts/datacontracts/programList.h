@@ -50,37 +50,30 @@ class SERVICE_PUBLIC ProgramList : public QObject
     PROPERTYIMP       ( QString     , Version         )
     PROPERTYIMP       ( QString     , ProtoVer        )
 
-    PROPERTYIMP_RO_REF( QVariantList, Programs      )
+    PROPERTYIMP_RO_REF( QVariantList, Programs      );
 
     public:
 
         static inline void InitializeCustomTypes();
 
-    public:
-
-        ProgramList(QObject *parent = 0) 
+        Q_INVOKABLE explicit ProgramList(QObject *parent = nullptr)
             : QObject         ( parent ),
               m_StartIndex    ( 0      ),
               m_Count         ( 0      ),
               m_TotalAvailable( 0      )   
         {
         }
-        
-        ProgramList( const ProgramList &src ) 
-        {
-            Copy( src );
-        }
 
-        void Copy( const ProgramList &src )
+        void Copy( const ProgramList *src )
         {
-            m_StartIndex    = src.m_StartIndex     ;
-            m_Count         = src.m_Count          ;
-            m_TotalAvailable= src.m_TotalAvailable ;
-            m_AsOf          = src.m_AsOf           ;
-            m_Version       = src.m_Version        ;
-            m_ProtoVer      = src.m_ProtoVer       ;
+            m_StartIndex    = src->m_StartIndex     ;
+            m_Count         = src->m_Count          ;
+            m_TotalAvailable= src->m_TotalAvailable ;
+            m_AsOf          = src->m_AsOf           ;
+            m_Version       = src->m_Version        ;
+            m_ProtoVer      = src->m_ProtoVer       ;
         
-            CopyListContents< Program >( this, m_Programs, src.m_Programs );
+            CopyListContents< Program >( this, m_Programs, src->m_Programs );
         }
 
         Program *AddNewProgram()
@@ -88,28 +81,23 @@ class SERVICE_PUBLIC ProgramList : public QObject
             // We must make sure the object added to the QVariantList has
             // a parent of 'this'
 
-            Program *pObject = new Program( this );
+            auto *pObject = new Program( this );
             m_Programs.append( QVariant::fromValue<QObject *>( pObject ));
 
             return pObject;
         }
 
+    private:
+        Q_DISABLE_COPY(ProgramList);
 };
 
-} // namespace DTC
-
-Q_DECLARE_METATYPE( DTC::ProgramList  )
-Q_DECLARE_METATYPE( DTC::ProgramList* )
-
-namespace DTC
-{
 inline void ProgramList::InitializeCustomTypes()
 {
-    qRegisterMetaType< ProgramList  >();
     qRegisterMetaType< ProgramList* >();
 
     Program::InitializeCustomTypes();
 }
-}
+
+} // namespace DTC
 
 #endif

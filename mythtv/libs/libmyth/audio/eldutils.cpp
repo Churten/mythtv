@@ -23,13 +23,15 @@
  *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
  */
 
+#include <cinttypes>
+#include <sys/types.h>
+
+#include <QString>
+
 #include "mythconfig.h"
 #include "eldutils.h"
-#include <sys/types.h>
-#include <inttypes.h>
 #include "bswap.h"
 #include "audiooutputbase.h"
-#include <QString>
 
 #define LOC QString("ELDUTILS: ")
 
@@ -38,12 +40,12 @@
 #define LE_INT(v)        bswap_32(*((uint32_t *)v))
 #define LE_INT64(v)      bswap_64(*((uint64_t *)v))
 #else
-#define LE_SHORT(v)      (*((uint16_t *)v))
-#define LE_INT(v)        (*((uint32_t *)v))
-#define LE_INT64(v)      (*((uint64_t *)v))
+#define LE_SHORT(v)      (*((uint16_t *)(v)))
+#define LE_INT(v)        (*((uint32_t *)(v)))
+#define LE_INT64(v)      (*((uint64_t *)(v)))
 #endif
 
-#define SIZE_ARRAY(x) (sizeof(x) / sizeof(x[0]))
+#define SIZE_ARRAY(x) (sizeof(x) / sizeof((x)[0]))
 
 enum eld_versions
 {
@@ -147,7 +149,7 @@ static int cea_sampling_frequencies[8] = {
 
 #define GRAB_BITS(buf, byte, lowbit, bits)            \
 (                                                    \
-    (buf[byte] >> (lowbit)) & ((1 << (bits)) - 1)    \
+    ((buf)[byte] >> (lowbit)) & ((1 << (bits)) - 1)  \
 )
 
 ELD::ELD(const char *buf, int size)
@@ -162,10 +164,6 @@ ELD::ELD()
     m_e.eld_valid = false;
 }
 
-ELD::~ELD()
-{
-}
-
 ELD& ELD::operator=(const ELD &rhs)
 {
     if (this == &rhs)
@@ -177,11 +175,9 @@ ELD& ELD::operator=(const ELD &rhs)
 void ELD::update_sad(int index,
                      const char *buf)
 {
-    int val;
-
     cea_sad *a = m_e.sad + index;
 
-    val = GRAB_BITS(buf, 1, 0, 7);
+    int val = GRAB_BITS(buf, 1, 0, 7);
     a->rates = 0;
     for (int i = 0; i < 7; i++)
         if ((val & (1 << i)) != 0)
@@ -217,17 +213,9 @@ void ELD::update_sad(int index,
             break;
 
         case TYPE_SACD:
-            break;
-
         case TYPE_EAC3:
-            break;
-
         case TYPE_DTS_HD:
-            break;
-
         case TYPE_MLP:
-            break;
-
         case TYPE_DST:
             break;
 
@@ -254,8 +242,7 @@ void ELD::update_sad(int index,
 
 int ELD::update_eld(const char *buf, int size)
 {
-    int mnl;
-    int i;
+    int mnl = 0;
 
     m_e.eld_ver = GRAB_BITS(buf, 0, 3, 5);
     if (m_e.eld_ver != ELD_VER_CEA_861D &&
@@ -300,7 +287,7 @@ int ELD::update_eld(const char *buf, int size)
         m_e.monitor_name[mnl] = '\0';
     }
 
-    for (i = 0; i < m_e.sad_count; i++)
+    for (int i = 0; i < m_e.sad_count; i++)
     {
         if (ELD_FIXED_BYTES + mnl + 3 * (i + 1) > size)
         {
@@ -335,7 +322,7 @@ QString ELD::print_pcm_rates(int pcm)
         96000, 176400, 192000 };
     QString result = QString();
 
-    for (unsigned int i = 0; i < SIZE_ARRAY(rates); i++)
+    for (size_t i = 0; i < SIZE_ARRAY(rates); i++)
     {
         if ((pcm & (1 << i)) != 0)
         {
@@ -346,16 +333,15 @@ QString ELD::print_pcm_rates(int pcm)
 }
 
 /**
- * print_pcm_bits - Print the supported PCM fmt bits to the string buffer
- * @pcm: PCM caps bits
+ * Print the supported PCM fmt bits to the string buffer
+ * \param pcm PCM caps bits
  */
 QString ELD::print_pcm_bits(int pcm)
 {
     unsigned int bits[] = { 16, 20, 24 };
-    unsigned int i;
     QString result = QString();
 
-    for (i = 0; i < SIZE_ARRAY(bits); i++)
+    for (size_t i = 0; i < SIZE_ARRAY(bits); i++)
     {
         if ((pcm & (1 << i)) != 0)
         {
@@ -392,9 +378,8 @@ QString ELD::sad_desc(int index)
 QString ELD::channel_allocation_desc()
 {
     QString result = QString();
-    unsigned int i;
 
-    for (i = 0; i < sizeof(cea_speaker_allocation_names) / sizeof(char *); i++)
+    for (size_t i = 0; i < sizeof(cea_speaker_allocation_names) / sizeof(char *); i++)
     {
         if ((m_e.spk_alloc & (1 << i)) != 0)
         {
@@ -446,8 +431,6 @@ bool ELD::isValid()
 
 void ELD::show()
 {
-    int i;
-
     if (!isValid())
     {
         VBAUDIO("Invalid ELD");
@@ -465,7 +448,7 @@ void ELD::show()
     VBAUDIO(QString("max LPCM channels = %1").arg(maxLPCMChannels()));
     VBAUDIO(QString("max channels = %1").arg(maxChannels()));
     VBAUDIO(QString("supported codecs = %1").arg(codecs_desc()));
-    for (i = 0; i < m_e.sad_count; i++)
+    for (int i = 0; i < m_e.sad_count; i++)
     {
         VBAUDIO(sad_desc(i));
     }
@@ -512,7 +495,7 @@ QString ELD::codecs_desc()
 {
     QString result = QString();
     bool found_one = false;
-    for (unsigned int i = 0; i < SIZE_ARRAY(audiotype_names); i++)
+    for (size_t i = 0; i < SIZE_ARRAY(audiotype_names); i++)
     {
         if ((m_e.formats & (1 << i)) != 0)
         {

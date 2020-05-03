@@ -74,23 +74,23 @@ public:
      * Return when the given screen is going to expire
      * will return an invalid QDateTime if screen isn't a MythNotificationScreen
      */
-    QDateTime ScreenExpiryTime(const MythScreenType *screen);
+    static QDateTime ScreenExpiryTime(const MythScreenType *screen);
     /**
-     * Return true if ::Create() has been called on screen.
+     * Return true if \::Create() has been called on screen.
      * will always return true should screen not be a MythNotificationScreen
      */
-    bool ScreenCreated(const MythScreenType *screen);
+    static bool ScreenCreated(const MythScreenType *screen);
     /**
      * Return the list of notification screens being currently displayed.
-     * The list contains pointer of existing screen's copies, with ::Create()
+     * The list contains pointer of existing screen's copies, with \::Create()
      * not called yet.
      */
     void GetNotificationScreens(QList<MythScreenType*> &screens);
     /**
-     * Will call ::doInit() if the screen is a MythNotificationScreen and
-     * ::Create() has been called for it already
+     * Will call \::doInit() if the screen is a MythNotificationScreen and
+     * \::Create() has been called for it already
      */
-    void UpdateScreen(MythScreenType *screen);
+    static void UpdateScreen(MythScreenType *screen);
     /**
      * Returns number of notifications currently displayed
      */
@@ -112,7 +112,7 @@ public:
     void ProcessQueue(void);
 
 private:
-    NCPrivate *d;
+    NCPrivate *d {nullptr}; // NOLINT(readability-identifier-naming)
 };
 
 /**
@@ -121,14 +121,14 @@ private:
 MUI_PUBLIC void ShowNotificationError(const QString &msg,
                                       const QString &from = QString(),
                                       const QString &detail = QString(),
-                                      const VNMask visibility = MythNotification::kAll,
-                                      const MythNotification::Priority priority = MythNotification::kDefault);
+                                      VNMask visibility = MythNotification::kAll,
+                                      MythNotification::Priority priority = MythNotification::kDefault);
 
 MUI_PUBLIC void ShowNotification(const QString &msg,
                                  const QString &from = QString(),
                                  const QString &detail = QString(),
-                                 const VNMask visibility = MythNotification::kAll,
-                                 const MythNotification::Priority priority = MythNotification::kDefault);
+                                 VNMask visibility = MythNotification::kAll,
+                                 MythNotification::Priority priority = MythNotification::kDefault);
 
 MUI_PUBLIC void ShowNotification(bool  error,
                                  const QString &msg,
@@ -137,11 +137,11 @@ MUI_PUBLIC void ShowNotification(bool  error,
                                  const QString &image = QString(),
                                  const QString &extra = QString(),
                                  const QString &progress_text = QString(),
-                                 float progress = -1.0f,
+                                 float progress = -1.0F,
                                  int   duration = -1,
                                  bool  fullscreen = false,
-                                 const VNMask visibility = MythNotification::kAll,
-                                 const MythNotification::Priority priority = MythNotification::kDefault,
+                                 VNMask visibility = MythNotification::kAll,
+                                 MythNotification::Priority priority = MythNotification::kDefault,
                                  const QString &style = QString());
 
 MUI_PUBLIC void ShowNotification(MythNotification::Type type,
@@ -151,11 +151,11 @@ MUI_PUBLIC void ShowNotification(MythNotification::Type type,
                                  const QString &image = QString(),
                                  const QString &extra = QString(),
                                  const QString &progress_text = QString(),
-                                 float progress = -1.0f,
+                                 float progress = -1.0F,
                                  int   duration = -1,
                                  bool  fullscreen = false,
-                                 const VNMask visibility = MythNotification::kAll,
-                                 const MythNotification::Priority priority = MythNotification::kDefault,
+                                 VNMask visibility = MythNotification::kAll,
+                                 MythNotification::Priority priority = MythNotification::kDefault,
                                  const QString &style = QString());
 
 #endif /* defined(__MythTV__mythnotifications__) */

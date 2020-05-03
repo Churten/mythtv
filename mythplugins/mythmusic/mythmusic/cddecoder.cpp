@@ -14,7 +14,7 @@
 #include <QString>
 
 // libcdio
-#include <cdio/cdda.h>
+// cdda already included via cddecoder.h
 #include <cdio/logging.h>
 
 // MythTV
@@ -87,27 +87,12 @@ public:
     explicit StCdioDevice(const QString& dev) : m_cdio(openCdio(dev)) { }
     ~StCdioDevice() { if (m_cdio) cdio_destroy(m_cdio); }
 
-    operator CdIo_t*() const { return m_cdio; }
+    operator CdIo_t*() const { return m_cdio; } // NOLINT(google-explicit-constructor)
 };
 
 
 CdDecoder::CdDecoder(const QString &file, DecoderFactory *d, AudioOutput *o) :
-    Decoder(d, o),
-    m_inited(false),   m_user_stop(false),
-    m_devicename(""),
-    m_stat(DecoderEvent::Error),
-    m_output_buf(NULL),
-    m_output_at(0),    m_bks(0),
-    m_bksFrames(0),    m_decodeBytes(0),
-    m_finish(false),
-    m_freq(0),         m_bitrate(0),
-    m_chan(0),
-    m_seekTime(-1.),
-    m_settracknum(-1), m_tracknum(0),
-    m_cdio(0),        m_device(0), m_paranoia( 0),
-    m_start(CDIO_INVALID_LSN),
-    m_end(CDIO_INVALID_LSN),
-    m_curpos(CDIO_INVALID_LSN)
+    Decoder(d, o)
 {
     setURL(file);
 }
@@ -121,18 +106,18 @@ CdDecoder::~CdDecoder()
 
 void CdDecoder::setDevice(const QString &dev)
 {
-    m_devicename = dev;
+    m_deviceName = dev;
 #ifdef WIN32
     // libcdio needs the drive letter with no path
-    if (m_devicename.endsWith('\\'))
-        m_devicename.chop(1);
+    if (m_deviceName.endsWith('\\'))
+        m_deviceName.chop(1);
 #endif
 }
 
 // pure virtual
 void CdDecoder::stop()
 {
-    m_user_stop = true;
+    m_userStop = true;
 }
 
 // private
@@ -140,26 +125,24 @@ void CdDecoder::writeBlock()
 {
     while (m_seekTime <= +0.)
     {
-        if(output()->AddFrames(m_output_buf, m_bksFrames, -1))
+        if(output()->AddFrames(m_outputBuf, m_bksFrames, -1))
         {
-            if (m_output_at >= m_bks)
+            if (m_outputAt >= m_bks)
             {
-                m_output_at -= m_bks;
-                std::memmove(m_output_buf, m_output_buf + m_bks,
-                    m_output_at);
+                m_outputAt -= m_bks;
+                std::memmove(m_outputBuf, m_outputBuf + m_bks, m_outputAt);
             }
             break;
         }
-        else
-            ::usleep(output()->GetAudioBufferedTime()<<9);
+        ::usleep(output()->GetAudioBufferedTime()<<9);
     }
 }
 
 //static
 QMutex& CdDecoder::getCdioMutex()
 {
-    static QMutex mtx(QMutex::Recursive);
-    return mtx;
+    static QMutex s_mtx(QMutex::Recursive);
+    return s_mtx;
 }
 
 // pure virtual
@@ -168,7 +151,7 @@ bool CdDecoder::initialize()
     if (m_inited)
         return true;
 
-    m_inited = m_user_stop = m_finish = false;
+    m_inited = m_userStop = m_finish = false;
     m_freq = m_bitrate = 0L;
     m_stat = DecoderEvent::Error;
     m_chan = 0;
@@ -177,35 +160,35 @@ bool CdDecoder::initialize()
     if (output())
         output()->PauseUntilBuffered();
 
-    m_tracknum = getURL().section('.', 0, 0).toUInt();
+    m_trackNum = getURL().section('.', 0, 0).toUInt();
 
     QMutexLocker lock(&getCdioMutex());
 
-    m_cdio = openCdio(m_devicename);
+    m_cdio = openCdio(m_deviceName);
     if (!m_cdio)
         return false;
 
-    m_start = cdio_get_track_lsn(m_cdio, m_tracknum);
-    m_end = cdio_get_track_last_lsn(m_cdio, m_tracknum);
+    m_start = cdio_get_track_lsn(m_cdio, m_trackNum);
+    m_end = cdio_get_track_last_lsn(m_cdio, m_trackNum);
     if (CDIO_INVALID_LSN  == m_start ||
         CDIO_INVALID_LSN  == m_end)
     {
-        LOG(VB_MEDIA, LOG_INFO, "CdDecoder: No tracks on " + m_devicename);
-        cdio_destroy(m_cdio), m_cdio = 0;
+        LOG(VB_MEDIA, LOG_INFO, "CdDecoder: No tracks on " + m_deviceName);
+        cdio_destroy(m_cdio), m_cdio = nullptr;
         return false;
     }
 
     LOG(VB_MEDIA, LOG_DEBUG, QString("CdDecoder track=%1 lsn start=%2 end=%3")
-            .arg(m_tracknum).arg(m_start).arg(m_end));
-    m_curpos = m_start;
+            .arg(m_trackNum).arg(m_start).arg(m_end));
+    m_curPos = m_start;
 
-    m_device = cdio_cddap_identify_cdio(m_cdio, 0, NULL);
-    if (NULL == m_device)
+    m_device = cdio_cddap_identify_cdio(m_cdio, 0, nullptr);
+    if (nullptr == m_device)
     {
         LOG(VB_GENERAL, LOG_ERR,
             QString("Error: CdDecoder: cdio_cddap_identify(%1) failed")
-                .arg(m_devicename));
-        cdio_destroy(m_cdio), m_cdio = 0;
+                .arg(m_deviceName));
+        cdio_destroy(m_cdio), m_cdio = nullptr;
         return false;
     }
 
@@ -218,7 +201,7 @@ bool CdDecoder::initialize()
     if (DRIVER_OP_SUCCESS == cdio_cddap_open(m_device))
     {
         // cdio_get_track_last_lsn is unreliable on discs with data at end
-        lsn_t end2 = cdio_cddap_track_lastsector(m_device, m_tracknum);
+        lsn_t end2 = cdio_cddap_track_lastsector(m_device, m_trackNum);
         if (end2 < m_end)
         {
             LOG(VB_MEDIA, LOG_INFO, QString("CdDecoder: trim last lsn from %1 to %2")
@@ -230,7 +213,7 @@ bool CdDecoder::initialize()
         // detect when the user has ejected a CD otherwise we enter a
         // recursive loop in cdio_paranoia_read_limited()
         //m_paranoia = cdio_paranoia_init(m_device);
-        if (NULL != m_paranoia)
+        if (nullptr != m_paranoia)
         {
             cdio_paranoia_modeset(m_paranoia, PARANOIA_MODE_DISABLE);
             (void)cdio_paranoia_seek(m_paranoia, m_start, SEEK_SET);
@@ -244,10 +227,10 @@ bool CdDecoder::initialize()
     {
         LOG(VB_GENERAL, LOG_ERR,
             QString("Warn: drive '%1' is not cdda capable").
-            arg(m_devicename));
+            arg(m_deviceName));
     }
 
-    int chnls = cdio_get_track_channels(m_cdio, m_tracknum);
+    int chnls = cdio_get_track_channels(m_cdio, m_trackNum);
     m_chan = chnls > 0 ? chnls : 2;
     m_freq = kSamplesPerSec;
 
@@ -265,9 +248,9 @@ bool CdDecoder::initialize()
     // decode 8 bks worth of samples each time we need more
     m_decodeBytes = m_bks << 3;
 
-    m_output_buf = reinterpret_cast< char* >(
+    m_outputBuf = reinterpret_cast< char* >(
         ::av_malloc(m_decodeBytes + CDIO_CD_FRAMESIZE_RAW * 2));
-    m_output_at = 0;
+    m_outputAt = 0;
 
     setCDSpeed(2);
 
@@ -292,20 +275,20 @@ void CdDecoder::deinit()
     QMutexLocker lock(&getCdioMutex());
 
     if (m_paranoia)
-        cdio_paranoia_free(m_paranoia), m_paranoia = 0;
+        cdio_paranoia_free(m_paranoia), m_paranoia = nullptr;
     if (m_device)
-        cdio_cddap_close(m_device), m_device = 0, m_cdio = 0;
+        cdio_cddap_close(m_device), m_device = nullptr, m_cdio = nullptr;
     if (m_cdio)
-        cdio_destroy(m_cdio), m_cdio = 0;
+        cdio_destroy(m_cdio), m_cdio = nullptr;
 
-    if (m_output_buf)
-        ::av_free(m_output_buf), m_output_buf = NULL;
+    if (m_outputBuf)
+        ::av_free(m_outputBuf), m_outputBuf = nullptr;
 
-    m_inited = m_user_stop = m_finish = false;
+    m_inited = m_userStop = m_finish = false;
     m_freq = m_bitrate = 0L;
     m_stat = DecoderEvent::Finished;
     m_chan = 0;
-    setOutput(0);
+    setOutput(nullptr);
 }
 
 // private virtual
@@ -329,58 +312,57 @@ void CdDecoder::run()
     // account for possible frame expansion in aobase (upmix, float conv)
     const std::size_t thresh = m_bks * 6;
 
-    while (!m_finish && !m_user_stop)
+    while (!m_finish && !m_userStop)
     {
         if (m_seekTime >= +0.)
         {
-            m_curpos = m_start + static_cast< lsn_t >(
+            m_curPos = m_start + static_cast< lsn_t >(
                 (m_seekTime * kSamplesPerSec) / CD_FRAMESAMPLES);
             if (m_paranoia)
             {
                 QMutexLocker lock(&getCdioMutex());
-                cdio_paranoia_seek(m_paranoia, m_curpos, SEEK_SET);
+                cdio_paranoia_seek(m_paranoia, m_curPos, SEEK_SET);
             }
 
-            m_output_at = 0;
+            m_outputAt = 0;
             m_seekTime = -1.;
         }
 
-        if (m_output_at < m_bks)
+        if (m_outputAt < m_bks)
         {
-            while (m_output_at < m_decodeBytes &&
-                   !m_finish && !m_user_stop && m_seekTime <= +0.)
+            while (m_outputAt < m_decodeBytes &&
+                   !m_finish && !m_userStop && m_seekTime <= +0.)
             {
-                if (m_curpos < m_end)
+                if (m_curPos < m_end)
                 {
                     QMutexLocker lock(&getCdioMutex());
                     if (m_paranoia)
                     {
                         int16_t *cdbuffer = cdio_paranoia_read_limited(
-                                                m_paranoia, 0, 10);
+                                                m_paranoia, nullptr, 10);
                         if (cdbuffer)
-                            memcpy(&m_output_buf[m_output_at],
+                            memcpy(&m_outputBuf[m_outputAt],
                                 cdbuffer, CDIO_CD_FRAMESIZE_RAW);
                     }
                     else
                     {
                         driver_return_code_t c = cdio_read_audio_sector(
-                            m_cdio, &m_output_buf[m_output_at],
-                            m_curpos);
+                            m_cdio, &m_outputBuf[m_outputAt], m_curPos);
                         if (DRIVER_OP_SUCCESS != c)
                         {
                             LOG(VB_MEDIA, LOG_DEBUG,
                                 QString("cdio_read_audio_sector(%1) error %2").
-                                arg(m_curpos).arg(c));
-                            memset( &m_output_buf[m_output_at],
+                                arg(m_curPos).arg(c));
+                            memset( &m_outputBuf[m_outputAt],
                                 0, CDIO_CD_FRAMESIZE_RAW);
 
                             // stop if we got an error
-                            m_user_stop = true;
+                            m_userStop = true;
                         }
                     }
 
-                    m_output_at += CDIO_CD_FRAMESIZE_RAW;
-                    ++(m_curpos);
+                    m_outputAt += CDIO_CD_FRAMESIZE_RAW;
+                    ++(m_curPos);
                 }
                 else
                 {
@@ -393,36 +375,34 @@ void CdDecoder::run()
             continue;
 
         // Wait until we need to decode or supply more samples
-        uint fill = 0, total = 0;
-        while (!m_finish && !m_user_stop && m_seekTime <= +0.)
+        uint fill = 0;
+        uint total = 0;
+        while (!m_finish && !m_userStop && m_seekTime <= +0.)
         {
             output()->GetBufferStatus(fill, total);
             // Make sure we have decoded samples ready and that the
             // audiobuffer is reasonably populated
             if (fill < (thresh << 6))
                 break;
-            else
-            {
-                // Wait for half of the buffer to drain
-                ::usleep(output()->GetAudioBufferedTime()<<9);
-            }
+            // Wait for half of the buffer to drain
+            ::usleep(output()->GetAudioBufferedTime()<<9);
         }
 
         // write a block if there's sufficient space for it
-        if (!m_user_stop &&
-            m_output_at >= m_bks &&
+        if (!m_userStop &&
+            m_outputAt >= m_bks &&
             fill <= total - thresh)
         {
             writeBlock();
         }
     }
 
-    if (m_user_stop)
+    if (m_userStop)
         m_inited = false;
     else if (output())
     {
         // Drain our buffer
-        while (m_output_at >= m_bks)
+        while (m_outputAt >= m_bks)
             writeBlock();
 
         // Drain ao buffer
@@ -431,7 +411,7 @@ void CdDecoder::run()
 
     if (m_finish)
         m_stat = DecoderEvent::Finished;
-    else if (m_user_stop)
+    else if (m_userStop)
         m_stat = DecoderEvent::Stopped;
     else
         m_stat = DecoderEvent::Error;
@@ -452,7 +432,7 @@ void CdDecoder::setCDSpeed(int speed)
 {
     QMutexLocker lock(&getCdioMutex());
 
-    StCdioDevice cdio(m_devicename);
+    StCdioDevice cdio(m_deviceName);
     if (cdio)
     {
         driver_return_code_t c = cdio_set_speed(cdio, speed >= 0 ? speed : 1);
@@ -460,7 +440,7 @@ void CdDecoder::setCDSpeed(int speed)
         {
             LOG(VB_MEDIA, LOG_INFO,
                 QString("Error: cdio_set_speed('%1',%2) failed").
-                arg(m_devicename).arg(speed));
+                arg(m_deviceName).arg(speed));
         }
     }
 }
@@ -470,7 +450,7 @@ int CdDecoder::getNumTracks()
 {
     QMutexLocker lock(&getCdioMutex());
 
-    StCdioDevice cdio(m_devicename);
+    StCdioDevice cdio(m_deviceName);
     if (!cdio)
         return 0;
 
@@ -488,7 +468,7 @@ int CdDecoder::getNumCDAudioTracks()
 {
     QMutexLocker lock(&getCdioMutex());
 
-    StCdioDevice cdio(m_devicename);
+    StCdioDevice cdio(m_deviceName);
     if (!cdio)
         return 0;
 
@@ -510,7 +490,7 @@ int CdDecoder::getNumCDAudioTracks()
 //public
 MusicMetadata* CdDecoder::getMetadata(int track)
 {
-    m_settracknum = track;
+    m_setTrackNum = track;
     return getMetadata();
 }
 
@@ -556,31 +536,35 @@ static Cddb::Toc& GetToc(CdIo_t *cdio, Cddb::Toc& toc)
 //virtual
 MusicMetadata *CdDecoder::getMetadata()
 {
-    QString artist, album, compilation_artist, title, genre;
+    QString artist;
+    QString album;
+    QString compilation_artist;
+    QString title;
+    QString genre;
     int year = 0;
     unsigned long length = 0;
     track_t tracknum = 0;
 
-    if (-1 == m_settracknum)
+    if (-1 == m_setTrackNum)
         tracknum = getURL().toUInt();
     else
     {
-        tracknum = m_settracknum;
+        tracknum = m_setTrackNum;
         setURL(QString("%1" CDEXT).arg(tracknum));
     }
 
     QMutexLocker lock(&getCdioMutex());
 
-    StCdioDevice cdio(m_devicename);
+    StCdioDevice cdio(m_deviceName);
     if (!cdio)
-        return NULL;
+        return nullptr;
 
     const track_t lastTrack = cdio_get_last_track_num(cdio);
     if (CDIO_INVALID_TRACK == lastTrack)
-        return NULL;
+        return nullptr;
 
     if (TRACK_FORMAT_AUDIO != cdio_get_track_format(cdio, tracknum))
-        return NULL;
+        return nullptr;
 
     // Assume disc changed if max LSN different
     bool isDiscChanged = false;
@@ -602,8 +586,8 @@ MusicMetadata *CdDecoder::getMetadata()
 
         if (audioTracks < lastTrack)
         {
-            cdrom_drive_t *dev = cdio_cddap_identify_cdio(cdio, 0, NULL);
-            if (NULL != dev)
+            cdrom_drive_t *dev = cdio_cddap_identify_cdio(cdio, 0, nullptr);
+            if (nullptr != dev)
             {
                 if (DRIVER_OP_SUCCESS == cdio_cddap_open(dev))
                 {
@@ -643,7 +627,7 @@ MusicMetadata *CdDecoder::getMetadata()
             LOG(VB_MEDIA, LOG_INFO,
                 QString("Getting cdtext for track %1...").arg(tracknum));
         cdtext_t * cdtext = cdio_get_cdtext(m_cdio, tracknum);
-        if (NULL != cdtext)
+        if (nullptr != cdtext)
         {
             genre = cdtext_get_const(CDTEXT_GENRE, cdtext);
             artist = cdtext_get_const(CDTEXT_PERFORMER, cdtext);
@@ -671,7 +655,7 @@ MusicMetadata *CdDecoder::getMetadata()
 
                 // Get disc info
                 cdtext = cdio_get_cdtext(cdio, 0);
-                if (NULL != cdtext)
+                if (nullptr != cdtext)
                 {
                     compilation_artist = cdtext_get_const(
                         CDTEXT_PERFORMER, cdtext);
@@ -768,8 +752,8 @@ MusicMetadata *CdDecoder::getMetadata()
     if (title.isEmpty())
         title = tr("Track %1").arg(tracknum);
 
-    MusicMetadata *m = new MusicMetadata(getURL(), artist, compilation_artist,
-        album, title, genre, year, tracknum, length);
+    auto *m = new MusicMetadata(getURL(), artist, compilation_artist, album,
+                                title, genre, year, tracknum, length);
     if (m)
         m->setCompilation(isCompilation);
 
@@ -785,15 +769,15 @@ bool CdDecoderFactory::supports(const QString &source) const
 // pure virtual
 const QString &CdDecoderFactory::extension() const
 {
-    static QString ext(CDEXT);
-    return ext;
+    static QString s_ext(CDEXT);
+    return s_ext;
 }
 
 // pure virtual
 const QString &CdDecoderFactory::description() const
 {
-    static QString desc(tr("Audio CD parser"));
-    return desc;
+    static QString s_desc(tr("Audio CD parser"));
+    return s_desc;
 }
 
 // pure virtual
@@ -802,17 +786,17 @@ Decoder *CdDecoderFactory::create(const QString &file, AudioOutput *output, bool
    if (deletable)
         return new CdDecoder(file, this, output);
 
-    static CdDecoder *decoder;
-    if (! decoder)
+    static CdDecoder *s_decoder;
+    if (! s_decoder)
     {
-        decoder = new CdDecoder(file, this, output);
+        s_decoder = new CdDecoder(file, this, output);
     }
     else
     {
-        decoder->setURL(file);
-        decoder->setOutput(output);
+        s_decoder->setURL(file);
+        s_decoder->setOutput(output);
     }
 
-    return decoder;
+    return s_decoder;
 }
 

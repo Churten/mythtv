@@ -37,14 +37,6 @@
 
 #define LOC QString("PortChecker::%1(): ").arg(__func__)
 
-PortChecker::PortChecker()
-{
-}
-
-PortChecker::~PortChecker()
-{
-}
-
 /**
  * Check if a port is open and sort out the link-local scope.
  *
@@ -82,7 +74,7 @@ bool PortChecker::checkPort(QString &host, int port, int timeLimit, bool linkLoc
 {
     LOG(VB_GENERAL, LOG_DEBUG, LOC + QString("host %1 port %2 timeLimit %3 linkLocalOnly %4")
         .arg(host).arg(port).arg(timeLimit).arg(linkLocalOnly));
-    cancelCheck = false;
+    m_cancelCheck = false;
     QHostAddress addr;
     bool isIPAddress = addr.setAddress(host);
     bool islinkLocal = false;
@@ -96,6 +88,7 @@ bool PortChecker::checkPort(QString &host, int port, int timeLimit, bool linkLoc
 #endif
     if (linkLocalOnly)
     {
+        // cppcheck-suppress knownConditionTrueFalse
         if (islinkLocal)
         {
             // If we already know the scope, set it here and return
@@ -108,8 +101,11 @@ bool PortChecker::checkPort(QString &host, int port, int timeLimit, bool linkLoc
         else
             return false;
     }
+    // cppcheck-suppress unreadVariable
     QList<QNetworkInterface> cards = QNetworkInterface::allInterfaces();
+#ifndef _WIN32
     QListIterator<QNetworkInterface> iCard = cards;
+#endif
     MythTimer timer(MythTimer::kStartRunning);
     QTcpSocket socket(this);
     QAbstractSocket::SocketState state = QAbstractSocket::UnconnectedState;
@@ -128,10 +124,10 @@ bool PortChecker::checkPort(QString &host, int port, int timeLimit, bool linkLoc
             if (islinkLocal && !gCoreContext->GetScopeForAddress(addr))
             {
                 addr.setScopeId(QString());
-                while (addr.scopeId().isEmpty())
+                while (addr.scopeId().isEmpty() && iCardsEnd<2)
                 {
                     // search for the next available IPV6 interface.
-                    if (iCard.hasNext() && iCardsEnd<2)
+                    if (iCard.hasNext())
                     {
                         QNetworkInterface card = iCard.next();
                         LOG(VB_GENERAL, LOG_DEBUG, QString("Trying interface %1").arg(card.name()));
@@ -192,7 +188,7 @@ bool PortChecker::checkPort(QString &host, int port, int timeLimit, bool linkLoc
             socket.abort();
         processEvents();
         // Check if user got impatient and canceled
-        if (cancelCheck)
+        if (m_cancelCheck)
             break;
         std::this_thread::sleep_for(std::chrono::milliseconds(500));
         state = socket.state();
@@ -250,7 +246,7 @@ void PortChecker::processEvents(void)
 */
 void PortChecker::cancelPortCheck(void)
 {
-    cancelCheck = true;
+    m_cancelCheck = true;
 }
 
 

@@ -3,8 +3,8 @@
 #ifndef _MYTHSYSTEM_UNIX_H_
 #define _MYTHSYSTEM_UNIX_H_
 
+#include <csignal>
 #include <sys/select.h>
-#include <signal.h>
 
 #include <QObject>
 #include <QString>
@@ -23,16 +23,18 @@
 
 class MythSystemLegacyUnix;
 
-typedef QMap<pid_t, QPointer<MythSystemLegacyUnix> > MSMap_t;
-typedef QMap<int, QBuffer *> PMap_t;
-typedef QList<QPointer<MythSystemLegacyUnix> > MSList_t;
+using MSMap_t  = QMap<pid_t, QPointer<MythSystemLegacyUnix> >;
+using PMap_t   = QMap<int, QBuffer *>;
+using MSList_t = QList<QPointer<MythSystemLegacyUnix> >;
 
 class MythSystemLegacyIOHandler: public MThread
 {
     public:
-        explicit MythSystemLegacyIOHandler(bool read);
-        ~MythSystemLegacyIOHandler() { wait(); }
-        void   run(void);
+        explicit MythSystemLegacyIOHandler(bool read)
+            : MThread(QString("SystemIOHandler%1").arg(read ? "R" : "W")),
+              m_pMap(PMap_t()), m_read(read) {};
+        ~MythSystemLegacyIOHandler() override { wait(); }
+        void   run(void) override; // MThread
 
         void   insert(int fd, QBuffer *buff);
         void   Wait(int fd);
@@ -49,24 +51,27 @@ class MythSystemLegacyIOHandler: public MThread
         QMutex          m_pLock;
         PMap_t          m_pMap;
 
-        fd_set m_fds;
-        int    m_maxfd;
-        bool   m_read;
-        char   m_readbuf[65536];
+        fd_set m_fds   {};
+        int    m_maxfd {-1};
+        bool   m_read  {true};
+        char   m_readbuf[65536] {0};
 };
 
+// spawn separate thread for signals to prevent manager
+// thread from blocking in some slot
 class MythSystemLegacyManager : public MThread
 {
     public:
-        MythSystemLegacyManager();
-        ~MythSystemLegacyManager() { wait(); }
-        void run(void);
-        void append(MythSystemLegacyUnix *);
+        MythSystemLegacyManager()
+            : MThread("SystemManager") {}
+        ~MythSystemLegacyManager() override { wait(); }
+        void run(void) override; // MThread
+        void append(MythSystemLegacyUnix *ms);
         void jumpAbort(void);
     private:
         MSMap_t    m_pMap;
         QMutex     m_mapLock;
-        bool       m_jumpAbort;
+        bool       m_jumpAbort {false};
         QMutex     m_jumpLock;
         QWaitCondition m_wait;
 };
@@ -74,9 +79,10 @@ class MythSystemLegacyManager : public MThread
 class MythSystemLegacySignalManager : public MThread
 {
     public:
-        MythSystemLegacySignalManager();
-        ~MythSystemLegacySignalManager() { wait(); }
-        void run(void);
+        MythSystemLegacySignalManager()
+            : MThread("SystemSignalManager") {}
+        ~MythSystemLegacySignalManager() override { wait(); }
+        void run(void) override; // MThread
     private:
 };
 
@@ -87,27 +93,27 @@ class MBASE_PUBLIC MythSystemLegacyUnix : public MythSystemLegacyPrivate
 
     public:
         explicit MythSystemLegacyUnix(MythSystemLegacy *parent);
-        ~MythSystemLegacyUnix();
+        ~MythSystemLegacyUnix() override = default;
 
-        virtual void Fork(time_t timeout) MOVERRIDE;
-        virtual void Manage(void) MOVERRIDE;
+        void Fork(time_t timeout) override; // MythSystemLegacyPrivate
+        void Manage(void) override; // MythSystemLegacyPrivate
 
-        virtual void Term(bool force=false) MOVERRIDE;
-        virtual void Signal(int sig) MOVERRIDE;
-        virtual void JumpAbort(void) MOVERRIDE;
+        void Term(bool force=false) override; // MythSystemLegacyPrivate
+        void Signal(int sig) override; // MythSystemLegacyPrivate
+        void JumpAbort(void) override; // MythSystemLegacyPrivate
 
-        virtual bool ParseShell(const QString &cmd, QString &abscmd,
-                                QStringList &args) MOVERRIDE;
+        bool ParseShell(const QString &cmd, QString &abscmd,
+                        QStringList &args) override; // MythSystemLegacyPrivate
 
         friend class MythSystemLegacyManager;
         friend class MythSystemLegacySignalManager;
         friend class MythSystemLegacyIOHandler;
 
     private:
-        pid_t       m_pid;
-        time_t      m_timeout;
+        pid_t       m_pid     {0};
+        time_t      m_timeout {0};
 
-        int         m_stdpipe[3];
+        int         m_stdpipe[3] {-1,-1, -1};
 };
 
 #endif // _MYTHSYSTEM_UNIX_H_

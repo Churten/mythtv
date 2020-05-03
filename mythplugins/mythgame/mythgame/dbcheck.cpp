@@ -10,12 +10,12 @@ using namespace std;
 #include "dbcheck.h"
 #include "gamesettings.h"
 
-const QString currentDatabaseVersion = "1018";
+const QString currentDatabaseVersion = "1019";
 
 static bool UpdateDBVersionNumber(const QString &newnumber)
 {
 
-    if (!gCoreContext->SaveSettingOnHost("GameDBSchemaVer",newnumber,NULL))
+    if (!gCoreContext->SaveSettingOnHost("GameDBSchemaVer",newnumber,nullptr))
     {
         LOG(VB_GENERAL, LOG_ERR,
             QString("DB Error (Setting new DB version number): %1\n")
@@ -27,7 +27,7 @@ static bool UpdateDBVersionNumber(const QString &newnumber)
     return true;
 }
 
-static bool performActualUpdate(const QString updates[], QString version,
+static bool performActualUpdate(const QString updates[], const QString& version,
                                 QString &dbver)
 {
     MSqlQuery query(MSqlQuery::InitCon());
@@ -70,7 +70,7 @@ static bool InitializeDatabase(void)
 
     const QString updates[] = {
 "CREATE TABLE gamemetadata ("
-"  system varchar(128) NOT NULL default '',"
+"  `system` varchar(128) NOT NULL default '',"
 "  romname varchar(128) NOT NULL default '',"
 "  gamename varchar(128) NOT NULL default '',"
 "  genre varchar(128) NOT NULL default '',"
@@ -84,7 +84,7 @@ static bool InitializeDatabase(void)
 "  crc_value varchar(64) NOT NULL default '',"
 "  display tinyint(1) NOT NULL default '1',"
 "  version varchar(64) NOT NULL default '',"
-"  KEY system (system),"
+"  KEY `system` (`system`),"
 "  KEY year (year),"
 "  KEY romname (romname),"
 "  KEY gamename (gamename),"
@@ -126,10 +126,7 @@ static bool InitializeDatabase(void)
 ""
 };
     QString dbver = "";
-    if (!performActualUpdate(updates, "1011", dbver))
-        return false;
-
-    return true;
+    return performActualUpdate(updates, "1011", dbver);
 }
 
 bool UpgradeGameDatabaseSchema(void)
@@ -199,9 +196,11 @@ bool UpgradeGameDatabaseSchema(void)
     {
 
         if (!gCoreContext->GetSetting("GameAllTreeLevels").isEmpty())
+        {
             if (!query.exec("UPDATE settings SET data = 'system gamename' "
                             "WHERE value = 'GameAllTreeLevels'; "))
                 MythDB::DBError("update GameAllTreeLevels", query);
+        }
 
         QString updates[] = {
 "ALTER TABLE gamemetadata ADD COLUMN country varchar(128) NOT NULL default ''; ",
@@ -296,9 +295,9 @@ bool UpgradeGameDatabaseSchema(void)
     {
         const QString updates[] = {
 QString("ALTER DATABASE %1 DEFAULT CHARACTER SET latin1;")
-        .arg(gContext->GetDatabaseParams().dbName),
+        .arg(gContext->GetDatabaseParams().m_dbName),
 "ALTER TABLE gamemetadata"
-"  MODIFY system varbinary(128) NOT NULL default '',"
+"  MODIFY `system` varbinary(128) NOT NULL default '',"
 "  MODIFY romname varbinary(128) NOT NULL default '',"
 "  MODIFY gamename varbinary(128) NOT NULL default '',"
 "  MODIFY genre varbinary(128) NOT NULL default '',"
@@ -342,10 +341,10 @@ QString("ALTER DATABASE %1 DEFAULT CHARACTER SET latin1;")
     {
         const QString updates[] = {
 QString("ALTER DATABASE %1 DEFAULT CHARACTER SET utf8 COLLATE utf8_general_ci;")
-        .arg(gContext->GetDatabaseParams().dbName),
+        .arg(gContext->GetDatabaseParams().m_dbName),
 "ALTER TABLE gamemetadata"
 "  DEFAULT CHARACTER SET default,"
-"  MODIFY system varchar(128) CHARACTER SET utf8 NOT NULL default '',"
+"  MODIFY `system` varchar(128) CHARACTER SET utf8 NOT NULL default '',"
 "  MODIFY romname varchar(128) CHARACTER SET utf8 NOT NULL default '',"
 "  MODIFY gamename varchar(128) CHARACTER SET utf8 NOT NULL default '',"
 "  MODIFY genre varchar(128) CHARACTER SET utf8 NOT NULL default '',"
@@ -434,6 +433,19 @@ QString("ALTER DATABASE %1 DEFAULT CHARACTER SET utf8 COLLATE utf8_general_ci;")
 };
 
         if (!performActualUpdate(updates, "1018", dbver))
+            return false;
+    }
+
+    if (dbver == "1018")
+    {
+        const QString updates[] = {
+"ALTER TABLE romdb MODIFY description varchar(192) CHARACTER SET utf8 NOT NULL default '';",
+"ALTER TABLE romdb MODIFY binfile     varchar(128) CHARACTER SET utf8 NOT NULL default '';",
+"ALTER TABLE romdb MODIFY filesize    int(12) unsigned default NULL;",
+""
+};
+
+        if (!performActualUpdate(updates, "1019", dbver))
             return false;
     }
 

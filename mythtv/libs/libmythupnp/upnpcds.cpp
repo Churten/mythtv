@@ -10,9 +10,9 @@
 //
 //////////////////////////////////////////////////////////////////////////////
 
-#include <cmath>
 #include <algorithm>
-#include <stdint.h>
+#include <cmath>
+#include <cstdint>
 using namespace std;
 
 #include "upnp.h"
@@ -41,13 +41,12 @@ void UPnpCDSExtensionResults::Add( CDSObject *pObject )
 //
 /////////////////////////////////////////////////////////////////////////////
 
-void UPnpCDSExtensionResults::Add( CDSObjects objects )
+void UPnpCDSExtensionResults::Add( const CDSObjects& objects )
 {
-    CDSObjects::iterator it;
-    for (it = objects.begin(); it != objects.end(); ++it)
+    foreach (auto & object, objects)
     {
-        (*it)->IncrRef();
-        m_List.append( *it );
+        object->IncrRef();
+        m_List.append( object );
     }
 }
 
@@ -60,9 +59,8 @@ QString UPnpCDSExtensionResults::GetResultXML(FilterMap &filter,
 {
     QString sXML;
 
-    CDSObjects::const_iterator it = m_List.begin();
-    for (; it != m_List.end(); ++it)
-        sXML += (*it)->toXml(filter, ignoreChildren);
+    foreach (auto item, m_List)
+        sXML += item->toXml(filter, ignoreChildren);
 
     return sXML;
 }
@@ -367,7 +365,7 @@ void UPnpCDS::DetermineClient( HTTPRequest *pRequest,
 
 void UPnpCDS::HandleBrowse( HTTPRequest *pRequest )
 {
-    UPnpCDSExtensionResults *pResult  = NULL;
+    UPnpCDSExtensionResults *pResult  = nullptr;
     UPnpCDSRequest           request;
 
     DetermineClient( pRequest, &request );
@@ -409,7 +407,7 @@ void UPnpCDS::HandleBrowse( HTTPRequest *pRequest )
     uint16_t       nTotalMatches   = 0;
     uint16_t       nUpdateID       = 0;
     QString        sResultXML;
-    FilterMap filter =  static_cast<FilterMap>(request.m_sFilter.split(','));
+    FilterMap filter =  request.m_sFilter.split(',');
 
     LOG(VB_UPNP, LOG_INFO,
         QString("UPnpCDS::HandleBrowse ObjectID=%1")
@@ -490,7 +488,7 @@ void UPnpCDS::HandleBrowse( HTTPRequest *pRequest )
             pResult = (*it)->Browse(&request);
         }
 
-        if (pResult != NULL)
+        if (pResult != nullptr)
         {
             eErrorCode  = pResult->m_eErrorCode;
             sErrorDesc  = pResult->m_sErrorDesc;
@@ -507,7 +505,7 @@ void UPnpCDS::HandleBrowse( HTTPRequest *pRequest )
             }
 
             delete pResult;
-            pResult = NULL;
+            pResult = nullptr;
         }
     }
 
@@ -541,7 +539,7 @@ void UPnpCDS::HandleBrowse( HTTPRequest *pRequest )
 
 void UPnpCDS::HandleSearch( HTTPRequest *pRequest )
 {
-    UPnpCDSExtensionResults *pResult  = NULL;
+    UPnpCDSExtensionResults *pResult  = nullptr;
     UPnpCDSRequest           request;
 
     UPnPResultCode eErrorCode      = UPnPResult_InvalidAction;
@@ -632,14 +630,14 @@ void UPnpCDS::HandleSearch( HTTPRequest *pRequest )
     for (; (it != m_extensions.end()) && !pResult; ++it)
         pResult = (*it)->Search(&request);
 
-    if (pResult != NULL)
+    if (pResult != nullptr)
     {
         eErrorCode  = pResult->m_eErrorCode;
         sErrorDesc  = pResult->m_sErrorDesc;
 
         if (eErrorCode == UPnPResult_Success)
         {
-            FilterMap filter =  (FilterMap) request.m_sFilter.split(',');
+            FilterMap filter = request.m_sFilter.split(',');
             nNumberReturned = pResult->m_List.count();
             nTotalMatches   = pResult->m_nTotalMatches;
             nUpdateID       = pResult->m_nUpdateID;
@@ -650,7 +648,7 @@ void UPnpCDS::HandleSearch( HTTPRequest *pRequest )
         }
 
         delete pResult;
-        pResult = NULL;
+        pResult = nullptr;
     }
 
 #if 0
@@ -740,7 +738,7 @@ void UPnpCDS::HandleGetSystemUpdateID( HTTPRequest *pRequest )
         QString("UPnpCDS::ProcessRequest : %1 : %2")
             .arg(pRequest->m_sBaseUrl) .arg(pRequest->m_sMethod));
 
-    uint16_t nId = GetValue<uint16_t>("SystemUpdateID");
+    auto nId = GetValue<uint16_t>("SystemUpdateID");
 
     list.push_back(NameValue("Id", nId));
 
@@ -793,7 +791,7 @@ UPnpCDSExtension::~UPnpCDSExtension()
     if (m_pRoot)
     {
         m_pRoot->DecrRef();
-        m_pRoot = NULL;
+        m_pRoot = nullptr;
     }
 }
 
@@ -820,7 +818,7 @@ UPnpCDSExtensionResults *UPnpCDSExtension::Browse( UPnpCDSRequest *pRequest )
     // -=>TODO: Need to add Filter & Sorting Support.
 
     if (!IsBrowseRequestForUs( pRequest ))
-        return( NULL );
+        return( nullptr );
 
     // ----------------------------------------------------------------------
     // Split the request ID into token key/value
@@ -838,9 +836,9 @@ UPnpCDSExtensionResults *UPnpCDSExtension::Browse( UPnpCDSRequest *pRequest )
     // Process based on location in hierarchy
     // ----------------------------------------------------------------------
 
-    UPnpCDSExtensionResults *pResults = new UPnpCDSExtensionResults();
+    auto *pResults = new UPnpCDSExtensionResults();
 
-    if (pResults != NULL)
+    if (pResults != nullptr)
     {
         switch( pRequest->m_eBrowseFlag )
         {
@@ -858,8 +856,7 @@ UPnpCDSExtensionResults *UPnpCDSExtension::Browse( UPnpCDSRequest *pRequest )
                 LOG(VB_UPNP, LOG_DEBUG, QString("UPnpCDS::Browse: BrowseMetadata (%1)").arg(pRequest->m_sObjectId));
                 if (LoadMetadata(pRequest, pResults, tokens, currentToken))
                     return pResults;
-                else
-                    pResults->m_eErrorCode = UPnPResult_CDS_NoSuchObject;
+                pResults->m_eErrorCode = UPnPResult_CDS_NoSuchObject;
                 break;
             }
 
@@ -869,8 +866,7 @@ UPnpCDSExtensionResults *UPnpCDSExtension::Browse( UPnpCDSRequest *pRequest )
                 LOG(VB_UPNP, LOG_DEBUG, QString("UPnpCDS::Browse: BrowseDirectChildren (%1)").arg(pRequest->m_sObjectId));
                 if (LoadChildren(pRequest, pResults, tokens, currentToken))
                     return pResults;
-                else
-                    pResults->m_eErrorCode = UPnPResult_CDS_NoSuchObject;
+                pResults->m_eErrorCode = UPnPResult_CDS_NoSuchObject;
                 break;
             }
 
@@ -892,10 +888,7 @@ UPnpCDSExtensionResults *UPnpCDSExtension::Browse( UPnpCDSRequest *pRequest )
 
 bool UPnpCDSExtension::IsSearchRequestForUs( UPnpCDSRequest *pRequest )
 {
-    if ( !m_sClass.startsWith( pRequest->m_sSearchClass ))
-        return false;
-
-    return true;
+    return m_sClass.startsWith( pRequest->m_sSearchClass );
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -919,10 +912,10 @@ UPnpCDSExtensionResults *UPnpCDSExtension::Search( UPnpCDSRequest *pRequest )
             QString("UPnpCDSExtension::Search - Not For Us : "
                     "m_sClass = %1 : m_sSearchClass = %2")
                 .arg(m_sClass).arg(pRequest->m_sSearchClass));
-        return NULL;
+        return nullptr;
     }
 
-    UPnpCDSExtensionResults *pResults = new UPnpCDSExtensionResults();
+    auto *pResults = new UPnpCDSExtensionResults();
 
 //    CreateItems( pRequest, pResults, 0, "", false );
 
@@ -965,8 +958,9 @@ QString UPnpCDSExtension::RemoveToken( const QString &sToken,
  *
  */
 bool UPnpCDSExtension::LoadMetadata(const UPnpCDSRequest* /*pRequest*/,
-                                     UPnpCDSExtensionResults* /*pResults*/,
-                                     IDTokenMap /*tokens*/, QString /*currentToken*/)
+                                    UPnpCDSExtensionResults* /*pResults*/,
+                                    const IDTokenMap& /*tokens*/,
+                                    const QString& /*currentToken*/)
 {
     return false;
 }
@@ -987,7 +981,8 @@ bool UPnpCDSExtension::LoadMetadata(const UPnpCDSRequest* /*pRequest*/,
  */
 bool UPnpCDSExtension::LoadChildren(const UPnpCDSRequest* /*pRequest*/,
                                     UPnpCDSExtensionResults* /*pResults*/,
-                                    IDTokenMap /*tokens*/, QString /*currentToken*/)
+                                    const IDTokenMap& /*tokens*/,
+                                    const QString& /*currentToken*/)
 {
     return false;
 }
@@ -1006,7 +1001,7 @@ bool UPnpCDSExtension::LoadChildren(const UPnpCDSRequest* /*pRequest*/,
  *
  *      Video/Directory=45/Directory=63/Directory=82
  */
-IDTokenMap UPnpCDSExtension::TokenizeIDString(const QString& Id) const
+IDTokenMap UPnpCDSExtension::TokenizeIDString(const QString& Id)
 {
     IDTokenMap tokenMap;
 
@@ -1042,7 +1037,7 @@ IDTokenMap UPnpCDSExtension::TokenizeIDString(const QString& Id) const
  *
  *      Video/Directory=45/Directory=63/Directory=82
  */
-IDToken UPnpCDSExtension::GetCurrentToken(const QString& Id) const
+IDToken UPnpCDSExtension::GetCurrentToken(const QString& Id)
 {
     QStringList tokens = Id.split('/');
     QString current = tokens.last();
@@ -1072,10 +1067,9 @@ QString UPnpCDSExtension::CreateIDString(const QString &requestId,
     if (currentName == name.toLower() && !currentValue.isEmpty() &&
         currentValue == value.toLower())
         return requestId;
-    else if (currentName == name.toLower() && currentValue.isEmpty())
+    if (currentName == name.toLower() && currentValue.isEmpty())
         return QString("%1=%2").arg(requestId).arg(value);
-    else
-        return QString("%1/%2=%3").arg(requestId).arg(name).arg(value);
+    return QString("%1/%2=%3").arg(requestId).arg(name).arg(value);
 }
 
 void UPnpCDSExtension::CreateRoot()
@@ -1126,9 +1120,11 @@ bool UPnPShortcutFeature::AddShortCut(ShortCutType type,
     if (!m_shortcuts.contains(type))
         m_shortcuts.insert(type, objectID);
     else
+    {
         LOG(VB_GENERAL, LOG_ERR, QString("UPnPCDSShortcuts::AddShortCut(): "
                                          "Attempted to register duplicate "
                                          "shortcut").arg(TypeToName(type)));
+    }
 
     return false;
 }
@@ -1229,9 +1225,6 @@ QString UPnPShortcutFeature::TypeToName(ShortCutType type)
           str = "VIDEOS_ALL";
           break;
        case VIDEOS_FOLDER_STRUCTURE :
-          str = "VIDEOS_FOLDER_STRUCTURE";
-          break;
-
        case FOLDER_STRUCTURE :
           str = "VIDEOS_FOLDER_STRUCTURE";
           break;

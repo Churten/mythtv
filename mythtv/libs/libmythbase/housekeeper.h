@@ -39,11 +39,11 @@ enum HouseKeeperStartup {
 class MBASE_PUBLIC HouseKeeperTask : public ReferenceCounter
 {
   public:
-    HouseKeeperTask(const QString &dbTag, HouseKeeperScope scope=kHKGlobal,
+    explicit HouseKeeperTask(const QString &dbTag, HouseKeeperScope scope=kHKGlobal,
                     HouseKeeperStartup startup=kHKNormal);
-   ~HouseKeeperTask() {}
+   ~HouseKeeperTask() override = default;
 
-    bool            CheckRun(QDateTime now);
+    bool            CheckRun(const QDateTime& now);
     bool            Run(void);
     bool            ConfirmRun(void)                { return m_confirm;     }
     bool            IsRunning(void)                 { return m_running;     }
@@ -59,10 +59,10 @@ class MBASE_PUBLIC HouseKeeperTask : public ReferenceCounter
     QDateTime       QueryLastSuccess(void);
     QDateTime       UpdateLastRun(bool successful=true)
                    { return UpdateLastRun(MythDate::current(), successful); }
-    virtual QDateTime UpdateLastRun(QDateTime last, bool successful=true);
-    virtual void    SetLastRun(QDateTime last, bool successful=true);
+    virtual QDateTime UpdateLastRun(const QDateTime& last, bool successful=true);
+    virtual void    SetLastRun(const QDateTime& last, bool successful=true);
 
-    virtual bool    DoCheckRun(QDateTime /*now*/)   { return false;         }
+    virtual bool    DoCheckRun(const QDateTime& /*now*/) { return false;         }
     virtual bool    DoRun(void)                     { return false;         }
 
     virtual void    Terminate(void)                 {}
@@ -71,10 +71,10 @@ class MBASE_PUBLIC HouseKeeperTask : public ReferenceCounter
     void            QueryLast(void);
 
     QString             m_dbTag;
-    bool                m_confirm;
+    bool                m_confirm {false};
     HouseKeeperScope    m_scope;
     HouseKeeperStartup  m_startup;
-    bool                m_running;
+    bool                m_running {false};
 
     QDateTime   m_lastRun;
     QDateTime   m_lastSuccess;
@@ -87,11 +87,11 @@ class MBASE_PUBLIC PeriodicHouseKeeperTask : public HouseKeeperTask
     PeriodicHouseKeeperTask(const QString &dbTag, int period, float min=0.5,
                             float max=1.1, int retry=0, HouseKeeperScope scope=kHKGlobal,
                             HouseKeeperStartup startup=kHKNormal);
-    virtual bool DoCheckRun(QDateTime now);
-    virtual bool InWindow(QDateTime now);
-    virtual bool PastWindow(QDateTime now);
-    virtual QDateTime UpdateLastRun(QDateTime last, bool successful=true);
-    virtual void SetLastRun(QDateTime last, bool successful=true);
+    bool DoCheckRun(const QDateTime& now) override; // HouseKeeperTask
+    virtual bool InWindow(const QDateTime& now);
+    virtual bool PastWindow(const QDateTime& now);
+    QDateTime UpdateLastRun(const QDateTime& last, bool successful=true) override; // HouseKeeperTask
+    void SetLastRun(const QDateTime& last, bool successful=true) override; // HouseKeeperTask
     virtual void SetWindow(float min, float max);
 
   protected:
@@ -107,17 +107,17 @@ class MBASE_PUBLIC PeriodicHouseKeeperTask : public HouseKeeperTask
 class MBASE_PUBLIC DailyHouseKeeperTask : public PeriodicHouseKeeperTask
 {
   public:
-    DailyHouseKeeperTask(const QString &dbTag,
+    explicit DailyHouseKeeperTask(const QString &dbTag,
                          HouseKeeperScope scope=kHKGlobal,
                          HouseKeeperStartup startup=kHKNormal);
     DailyHouseKeeperTask(const QString &dbTag, int minhour, int maxhour,
                          HouseKeeperScope scope=kHKGlobal,
                          HouseKeeperStartup startup=kHKNormal);
     virtual void SetHourWindow(int min, int max);
-    virtual bool InWindow(QDateTime now);
+    bool InWindow(const QDateTime& now) override; // PeriodicHouseKeeperTask
 
   protected:
-    virtual void CalculateWindow(void);
+    void CalculateWindow(void) override; // PeriodicHouseKeeperTask
 
   private:
     QPair<int, int> m_windowHour;
@@ -129,8 +129,8 @@ class HouseKeepingThread : public MThread
     explicit HouseKeepingThread(HouseKeeper *p) :
         MThread("HouseKeeping"), m_idle(true), m_keepRunning(true),
         m_parent(p) {}
-   ~HouseKeepingThread() {}
-    virtual void run(void);
+   ~HouseKeepingThread() override = default;
+    void run(void) override; // MThread
     void Discard(void)                  { m_keepRunning = false;        }
     bool isIdle(void)                   { return m_idle;                }
     void Wake(void)                     { m_waitCondition.wakeAll();    }
@@ -151,20 +151,20 @@ class MBASE_PUBLIC HouseKeeper : public QObject
 
   public:
     HouseKeeper(void);
-   ~HouseKeeper();
+   ~HouseKeeper() override;
 
     void RegisterTask(HouseKeeperTask *task);
     void Start(void);
     void StartThread(void);
     HouseKeeperTask* GetQueuedTask(void);
 
-    void customEvent(QEvent *e);
+    void customEvent(QEvent *e) override; // QObject
 
   public slots:
     void Run(void);
 
   private:
-    QTimer                         *m_timer;
+    QTimer                         *m_timer { nullptr };
 
     QQueue<HouseKeeperTask*>        m_taskQueue;
     QMutex                          m_queueLock;

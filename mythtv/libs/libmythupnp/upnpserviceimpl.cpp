@@ -4,9 +4,9 @@
 /// Creates a UPnpService and adds it to the UPnpDevice's list of services.
 void UPnpServiceImpl::RegisterService(UPnpDevice *pDevice)
 {
-    if (pDevice != NULL)
+    if (pDevice != nullptr)
     {
-        UPnpService *pService = new UPnpService();
+        auto *pService = new UPnpService();
             
         pService->m_sServiceType = GetServiceType();
         pService->m_sServiceId   = GetServiceId();
@@ -25,10 +25,6 @@ QString UPnPFeature::toXML()
     xml += CreateXML();
     xml += "</Feature>\r\n";
     return xml;
-}
-
-UPnPFeatureList::UPnPFeatureList()
-{
 }
 
 UPnPFeatureList::~UPnPFeatureList()
@@ -55,7 +51,7 @@ QString UPnPFeatureList::toXML()
     NameValues::iterator ait;
     for (ait = m_attributes.begin(); ait != m_attributes.end(); ++ait)
     {
-        xml += QString(" %1=\"%2\"").arg((*ait).sName).arg((*ait).sValue);
+        xml += QString(" %1=\"%2\"").arg((*ait).m_sName).arg((*ait).m_sValue);
     }
     xml += ">\r\n";
     QList<UPnPFeature*>::iterator fit;

@@ -23,18 +23,15 @@ static int RunNews(void)
 {
     MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
 
-    MythNews *mythnews = new MythNews(mainStack, "mythnews");
+    auto *mythnews = new MythNews(mainStack, "mythnews");
 
     if (mythnews->Create())
     {
         mainStack->AddScreen(mythnews);
         return 0;
     }
-    else
-    {
-        delete mythnews;
-        return -1;
-    }
+    delete mythnews;
+    return -1;
 }
 
 static void runNews(void)
@@ -57,9 +54,9 @@ static void setupKeys(void)
 
 int mythplugin_init(const char *libversion)
 {
-    if (!gCoreContext->TestPluginVersion("mythnews",
-                                    libversion,
-                                    MYTH_BINARY_VERSION))
+    if (!MythCoreContext::TestPluginVersion("mythnews",
+                                            libversion,
+                                            MYTH_BINARY_VERSION))
         return -1;
 
     gCoreContext->ActivateSettingsCache(false);
@@ -85,18 +82,15 @@ int mythplugin_config(void)
 {
     MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
 
-    MythNewsConfig *mythnewsconfig = new MythNewsConfig(mainStack, "mythnewsconfig");
+    auto *mythnewsconfig = new MythNewsConfig(mainStack, "mythnewsconfig");
 
     if (mythnewsconfig->Create())
     {
         mainStack->AddScreen(mythnewsconfig);
         return 0;
     }
-    else
-    {
-        delete mythnewsconfig;
-        return -1;
-    }
+    delete mythnewsconfig;
+    return -1;
 }
 
 

@@ -19,10 +19,10 @@ class MUI_PUBLIC MythScreenStack : public QObject
   public:
     MythScreenStack(MythMainWindow *parent, const QString &name,
                     bool main = false);
-    virtual ~MythScreenStack();
+    ~MythScreenStack() override;
 
     virtual void AddScreen(MythScreenType *screen, bool allowFade = true);
-    virtual void PopScreen(MythScreenType *screen = NULL, bool allowFade = true,
+    virtual void PopScreen(MythScreenType *screen = nullptr, bool allowFade = true,
                            bool deleteScreen = true);
 
     virtual MythScreenType *GetTopScreen(void) const;
@@ -38,7 +38,7 @@ class MUI_PUBLIC MythScreenStack : public QObject
 
     QString GetLocation(bool fullPath) const;
 
-    MythPainter *GetPainter(void);
+    static MythPainter *GetPainter(void);
 
   signals:
     void topScreenChanged(MythScreenType *screen);
@@ -55,13 +55,13 @@ class MUI_PUBLIC MythScreenStack : public QObject
     QVector<MythScreenType *> m_Children;
     QVector<MythScreenType *> m_DrawOrder;
 
-    MythScreenType *m_topScreen;
+    MythScreenType *m_topScreen {nullptr};
 
-    bool m_DoTransitions;
-    bool m_DoInit;
-    bool m_InitTimerStarted;
-    bool m_InNewTransition;
-    MythScreenType *m_newTop;
+    bool m_DoTransitions        {false};
+    bool m_DoInit               {false};
+    bool m_InitTimerStarted     {false};
+    bool m_InNewTransition      {false};
+    MythScreenType *m_newTop    {nullptr};
 
     QVector<MythScreenType *> m_ToDelete;
 };

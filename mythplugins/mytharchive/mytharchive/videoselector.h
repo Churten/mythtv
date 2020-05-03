@@ -23,17 +23,17 @@ class MythUIButton;
 class MythUIButtonList;
 class MythUIButtonListItem;
 
-typedef struct
+struct VideoInfo
 {
-    int     id;
+    int     id            { 0 };
     QString title;
     QString plot;
     QString category;
     QString filename;
     QString coverfile;
-    int     parentalLevel;
-    uint64_t size;
-} VideoInfo;
+    int     parentalLevel { ParentalLevel::plNone };
+    uint64_t size         { 0 };
+};
 
 class VideoSelector : public MythScreenType
 {
@@ -42,10 +42,10 @@ class VideoSelector : public MythScreenType
   public:
     VideoSelector(MythScreenStack *parent, QList<ArchiveItem *> *archiveList);
 
-    ~VideoSelector(void);
+    ~VideoSelector(void) override;
 
-    bool Create();
-    bool keyPressEvent(QKeyEvent *e);
+    bool Create() override; // MythScreenType
+    bool keyPressEvent(QKeyEvent *e) override; // MythScreenType
 
   signals:
     void haveResult(bool ok);
@@ -54,7 +54,7 @@ class VideoSelector : public MythScreenType
     void OKPressed(void);
     void cancelPressed(void);
 
-    void showMenu(void);
+    void ShowMenu(void) override; // MythScreenType
     void selectAll(void);
     void clearAll(void);
 
@@ -69,27 +69,27 @@ class VideoSelector : public MythScreenType
     void updateSelectedList(void);
     void getVideoList(void);
     void wireUpTheme(void);
-    std::vector<VideoInfo *> *getVideoListFromDB(void);
+    static std::vector<VideoInfo *> *getVideoListFromDB(void);
     void setParentalLevel(ParentalLevel::Level level);
 
-    ParentalLevelChangeChecker *m_parentalLevelChecker;
+    ParentalLevelChangeChecker *m_parentalLevelChecker {nullptr};
 
-    QList<ArchiveItem *>     *m_archiveList;
-    std::vector<VideoInfo *> *m_videoList;
+    QList<ArchiveItem *>     *m_archiveList            {nullptr};
+    std::vector<VideoInfo *> *m_videoList              {nullptr};
     QList<VideoInfo *>        m_selectedList;
 
-    ParentalLevel::Level      m_currentParentalLevel;
+    ParentalLevel::Level      m_currentParentalLevel   {ParentalLevel::plNone};
 
-    MythUIText       *m_plText;
-    MythUIButtonList *m_videoButtonList;
-    MythUIText       *m_warningText;
-    MythUIButton     *m_okButton;
-    MythUIButton     *m_cancelButton;
-    MythUIButtonList *m_categorySelector;
-    MythUIText       *m_titleText;
-    MythUIText       *m_filesizeText;
-    MythUIText       *m_plotText;
-    MythUIImage      *m_coverImage;
+    MythUIText       *m_plText                         {nullptr};
+    MythUIButtonList *m_videoButtonList                {nullptr};
+    MythUIText       *m_warningText                    {nullptr};
+    MythUIButton     *m_okButton                       {nullptr};
+    MythUIButton     *m_cancelButton                   {nullptr};
+    MythUIButtonList *m_categorySelector               {nullptr};
+    MythUIText       *m_titleText                      {nullptr};
+    MythUIText       *m_filesizeText                   {nullptr};
+    MythUIText       *m_plotText                       {nullptr};
+    MythUIImage      *m_coverImage                     {nullptr};
 };
 
 Q_DECLARE_METATYPE(VideoInfo*)

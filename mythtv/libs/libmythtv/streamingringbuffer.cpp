@@ -4,32 +4,30 @@
 
 #include "streamingringbuffer.h"
 
-#define LOC QString("StreamRingBuf(%1): ").arg(filename)
+#define LOC QString("StreamRingBuf(%1): ").arg(m_filename)
 
 StreamingRingBuffer::StreamingRingBuffer(const QString &lfilename)
-  : RingBuffer(kRingBuffer_HTTP), m_context(NULL), m_streamed(true),
-    m_allowSeeks(false)
+  : RingBuffer(kRingBuffer_HTTP)
 {
-    startreadahead = false;
-    OpenFile(lfilename);
+    m_startReadAhead = false;
+    StreamingRingBuffer::OpenFile(lfilename);
 }
 
 StreamingRingBuffer::~StreamingRingBuffer()
 {
     KillReadAheadThread();
 
-    rwlock.lockForWrite();
+    m_rwLock.lockForWrite();
     if (m_context)
         ffurl_close(m_context);
-    rwlock.unlock();
+    m_rwLock.unlock();
 }
 
 bool StreamingRingBuffer::IsOpen(void) const
 {
-    bool result;
-    rwlock.lockForRead();
-    result = (bool)m_context;
-    rwlock.unlock();
+    m_rwLock.lockForRead();
+    bool result = (bool)m_context;
+    m_rwLock.unlock();
     return result;
 }
 
@@ -38,28 +36,33 @@ long long StreamingRingBuffer::GetReadPosition(void) const
     return 0;
 }
 
-bool StreamingRingBuffer::OpenFile(const QString &lfilename, uint retry_ms)
+/** \fn StreamingRingBuffer::OpenFile(const QString &, uint)
+ *  \brief Opens a network stream for reading.
+ *
+ *  \param lfilename   Url of the stream to read.
+ *  \param retry_ms    Ignored. This value is part of the API
+ *                     inherited from the parent class.
+ *  \return Returns true if the stream was opened.
+ */
+bool StreamingRingBuffer::OpenFile(const QString &lfilename, uint /*retry_ms*/)
 {
-    avcodeclock->lock();
-    av_register_all();
-    avcodeclock->unlock();
     RingBuffer::AVFormatInitNetwork();
 
-    rwlock.lockForWrite();
+    m_rwLock.lockForWrite();
 
-    safefilename = lfilename;
-    filename = lfilename;
+    m_safeFilename = lfilename;
+    m_filename = lfilename;
 
     // TODO check whether local area file
 
-    QUrl url = filename;
+    QUrl url = m_filename;
     if (url.path().endsWith(QLatin1String("m3u8"), Qt::CaseInsensitive))
     {
         url.setScheme("hls+http");
     }
 
     int res = ffurl_open(&m_context, url.toString().toLatin1(), AVIO_FLAG_READ,
-                         NULL, NULL);
+                         nullptr, nullptr);
     if (res >=0 && m_context &&
         !m_context->is_streamed && ffurl_seek(m_context, 0, SEEK_SET) >= 0)
     {
@@ -68,18 +71,18 @@ bool StreamingRingBuffer::OpenFile(const QString &lfilename, uint retry_ms)
     }
 
     LOG(VB_GENERAL, LOG_INFO, LOC + QString("Trying %1 (allow seeks: %2")
-        .arg(filename).arg(m_allowSeeks));
+        .arg(m_filename).arg(m_allowSeeks));
 
     if (res < 0 || !m_context)
     {
         LOG(VB_GENERAL, LOG_ERR, LOC +
             QString("Failed to open stream (error %1)") .arg(res));
-        lastError = QObject::tr("Failed to open stream (%1)").arg(res);
-        rwlock.unlock();
+        m_lastError = QObject::tr("Failed to open stream (%1)").arg(res);
+        m_rwLock.unlock();
         return false;
     }
 
-    rwlock.unlock();
+    m_rwLock.unlock();
 
     return true;
 }
@@ -89,13 +92,13 @@ long long StreamingRingBuffer::SeekInternal(long long pos, int whence)
     if (!m_context)
         return 0;
 
-    poslock.lockForWrite();
+    m_posLock.lockForWrite();
     int seek = ffurl_seek(m_context, pos, whence);
-    poslock.unlock();
+    m_posLock.unlock();
 
     if (seek < 0)
     {
-        ateof = true;
+        m_ateof = true;
         return 0;
     }
     return pos;
@@ -114,7 +117,7 @@ int StreamingRingBuffer::safe_read(void *data, uint sz)
             {
                 if (ret == AVERROR_EOF)
                 {
-                    ateof = true;
+                    m_ateof = true;
                 }
                 errno = ret;
                 break;
@@ -130,9 +133,9 @@ int StreamingRingBuffer::safe_read(void *data, uint sz)
 long long StreamingRingBuffer::GetRealFileSizeInternal(void) const
 {
     long long result = -1;
-    rwlock.lockForRead();
+    m_rwLock.lockForRead();
     if (m_context)
         result = ffurl_size(m_context);
-    rwlock.unlock();
+    m_rwLock.unlock();
     return result;
 }

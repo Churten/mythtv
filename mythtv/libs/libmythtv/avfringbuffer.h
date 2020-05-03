@@ -13,8 +13,8 @@ extern URLProtocol AVF_RingBuffer_Protocol;
 class AVFRingBuffer
 {
 public:
-    explicit AVFRingBuffer(RingBuffer *rbuffer = NULL)
-        : m_rbuffer(rbuffer), m_initState(false) { }
+    explicit AVFRingBuffer(RingBuffer *rbuffer = nullptr)
+        : m_rbuffer(rbuffer) { }
     void                SetRingBuffer(RingBuffer *rbuffer)
     {
         m_rbuffer = rbuffer;
@@ -36,10 +36,10 @@ public:
     bool                IsInInit(void) { return m_initState; }
 
 private:
-    RingBuffer         *m_rbuffer;
-    bool                m_initState;
-    static bool         m_avrprotocol_initialised;
-    static URLProtocol  m_avfrURL;
+    RingBuffer         *m_rbuffer {nullptr};
+    bool                m_initState {true};
+    static bool         s_avfrProtocolInitialised;
+    static URLProtocol  s_avfrURL;
 };
 
 #endif

@@ -35,7 +35,6 @@ using namespace std;
 
 #include "transporteditor.h"
 #include "videosource.h"
-#include "cardutil.h"
 #include "mythcorecontext.h"
 #include "mythdb.h"
 
@@ -54,7 +53,7 @@ class MultiplexID : public AutoIncrementSetting
     QString GetColumnName(void) const { return m_column; }
 };
 
-static QString pp_modulation(QString mod)
+static QString pp_modulation(const QString& mod)
 {
     if (mod.endsWith("vsb"))
         return mod.left(mod.length() - 3) + "-VSB";
@@ -78,6 +77,7 @@ static CardUtil::INPUT_TYPES get_cardtype(uint sourceid)
         "SELECT capturecard.cardid "
         "FROM  capturecard "
         "WHERE capturecard.sourceid = :SOURCEID AND "
+        "      capturecard.parentid = 0         AND "
         "      capturecard.hostname = :HOSTNAME");
     query.bindValue(":SOURCEID", sourceid);
     query.bindValue(":HOSTNAME", gCoreContext->GetHostName());
@@ -87,30 +87,26 @@ static CardUtil::INPUT_TYPES get_cardtype(uint sourceid)
         MythDB::DBError("TransportWizard()", query);
         return CardUtil::ERROR_PROBE;
     }
-    else
-    {
-        while (query.next())
-            cardids.push_back(query.value(0).toUInt());
-    }
+    while (query.next())
+        cardids.push_back(query.value(0).toUInt());
 
     if (cardids.empty())
     {
         ShowOkPopup(QObject::tr(
-            "Sorry, the Transport Editor can only be used to "
-            "edit transports which are connected to a card input."));
+            "Sorry, the Transport Editor can only edit transports "
+            "of a video source that is connected to a capture card."));
 
         return CardUtil::ERROR_PROBE;
     }
 
     vector<CardUtil::INPUT_TYPES> cardtypes;
 
-    vector<uint>::const_iterator it = cardids.begin();
-    for (; it != cardids.end(); ++it)
+    for (uint cardid : cardids)
     {
         CardUtil::INPUT_TYPES nType = CardUtil::ERROR_PROBE;
-        QString cardtype = CardUtil::GetRawInputType(*it);
+        QString cardtype = CardUtil::GetRawInputType(cardid);
         if (cardtype == "DVB")
-            cardtype = CardUtil::ProbeSubTypeName(*it);
+            cardtype = CardUtil::ProbeSubTypeName(cardid);
         nType = CardUtil::toInputType(cardtype);
 
         if ((CardUtil::ERROR_OPEN    == nType) ||
@@ -133,24 +129,31 @@ static CardUtil::INPUT_TYPES get_cardtype(uint sourceid)
     if (cardtypes.empty())
         return CardUtil::ERROR_PROBE;
 
-    for (uint i = 1; i < cardtypes.size(); i++)
+    // If there are multiple cards connected to this video source
+    // check if they are the same type or compatible.
+    for (size_t i = 1; i < cardtypes.size(); i++)
     {
         CardUtil::INPUT_TYPES typeA = cardtypes[i - 1];
-        typeA = (CardUtil::HDHOMERUN == typeA) ? CardUtil::ATSC : typeA;
-        typeA = (CardUtil::MPEG      == typeA) ? CardUtil::V4L  : typeA;
-
         CardUtil::INPUT_TYPES typeB = cardtypes[i + 0];
-        typeB = (CardUtil::HDHOMERUN == typeB) ? CardUtil::ATSC : typeB;
-        typeB = (CardUtil::MPEG      == typeB) ? CardUtil::V4L  : typeB;
+
+        // MPEG devices are seen as V4L (historical)
+        typeA = (CardUtil::MPEG == typeA) ? CardUtil::V4L  : typeA;
+        typeB = (CardUtil::MPEG == typeB) ? CardUtil::V4L  : typeB;
+
+        // HDHOMERUN devices can be DVBC, DVBT/T2, ATSC or a combination of those.
+        // If there are other non-HDHR devices connected to this videosource that
+        // have an explicit type then assume that the HDHOMERUN is also of that type.
+        typeA = (CardUtil::HDHOMERUN == typeA) ? typeB : typeA;
+        typeB = (CardUtil::HDHOMERUN == typeB) ? typeA : typeB;
 
         if (typeA == typeB)
             continue;
 
         ShowOkPopup(
             QObject::tr(
-                "The Video Sources to which this Transport is connected "
-                "are incompatible, please create separate video sources "
-                "for these cards. "));
+                "The capture cards connected to this transport's video source "
+                "are incompatible. Please create separate video sources "
+                "per capture card type."));
 
         return CardUtil::ERROR_PROBE;
     }
@@ -160,7 +163,7 @@ static CardUtil::INPUT_TYPES get_cardtype(uint sourceid)
 
 void TransportListEditor::SetSourceID(uint _sourceid)
 {
-    for (auto setting : m_list)
+    for (auto *setting : m_list)
         removeChild(setting);
     m_list.clear();
 
@@ -183,12 +186,13 @@ void TransportListEditor::SetSourceID(uint _sourceid)
 }
 
 TransportListEditor::TransportListEditor(uint sourceid) :
-    m_videosource(new VideoSourceSelector(sourceid, QString::null, false)), isLoading(false)
+    m_videosource(new VideoSourceShow(sourceid))
 {
-    setLabel(tr("Multiplex Editor"));
+    setLabel(tr("Transport Editor"));
 
     addChild(m_videosource);
-    ButtonStandardSetting *newTransport =
+
+    auto *newTransport =
         new ButtonStandardSetting("(" + tr("New Transport") + ")");
     connect(newTransport, SIGNAL(clicked()), SLOT(NewTransport(void)));
 
@@ -202,7 +206,7 @@ TransportListEditor::TransportListEditor(uint sourceid) :
 
 void TransportListEditor::SetSourceID(const QString& sourceid)
 {
-    if (isLoading)
+    if (m_isLoading)
         return;
     SetSourceID(sourceid.toUInt());
     Load();
@@ -210,9 +214,9 @@ void TransportListEditor::SetSourceID(const QString& sourceid)
 
 void TransportListEditor::Load()
 {
-    if (isLoading)
+    if (m_isLoading)
         return;
-    isLoading = true;
+    m_isLoading = true;
     if (m_sourceid)
     {
         MSqlQuery query(MSqlQuery::InitCon());
@@ -229,7 +233,7 @@ void TransportListEditor::Load()
         if (!query.exec() || !query.isActive())
         {
             MythDB::DBError("TransportList::fillSelections", query);
-            isLoading = false;
+            m_isLoading = false;
             return;
         }
 
@@ -252,7 +256,10 @@ void TransportListEditor::Load()
             QString tid = query.value(5).toUInt() ?
                 QString("tid %1").arg(query.value(5).toUInt(), 5) : "";
 
-            QString hz = (CardUtil::QPSK == m_cardtype) ? "kHz" : "Hz";
+            QString hz = "Hz";
+            if (CardUtil::QPSK == m_cardtype ||
+                CardUtil::DVBS2 == m_cardtype)
+                hz = "kHz";
 
             QString type = "";
             if (CardUtil::OFDM == m_cardtype)
@@ -263,14 +270,15 @@ void TransportListEditor::Load()
                 type = "(DVB-S)";
             if (CardUtil::QAM == m_cardtype)
                 type = "(DVB-C)";
+            if (CardUtil::DVBS2 == m_cardtype)
+                type = "(DVB-S2)";
 
             QString txt = QString("%1 %2 %3 %4 %5 %6 %7")
                 .arg(mod).arg(query.value(2).toString())
                 .arg(hz).arg(rate).arg(netid).arg(tid).arg(type);
 
-            TransportSetting *transport =
-                new TransportSetting(txt, query.value(0).toUInt(), m_sourceid,
-                                    m_cardtype);
+            auto *transport = new TransportSetting(txt, query.value(0).toUInt(),
+                                                   m_sourceid, m_cardtype);
             connect(transport, &TransportSetting::deletePressed,
                     this, [transport, this] () { Delete(transport); });
             connect(transport, &TransportSetting::openMenu,
@@ -281,14 +289,13 @@ void TransportListEditor::Load()
     }
 
     GroupSetting::Load();
-    isLoading = false;
+    m_isLoading = false;
 }
 
 void TransportListEditor::NewTransport()
 {
-    TransportSetting *transport =
-        new TransportSetting(QString("New Transport"), 0,
-           m_sourceid, m_cardtype);
+    auto *transport = new TransportSetting(QString("New Transport"), 0,
+                                           m_sourceid, m_cardtype);
     addChild(transport);
     m_list.push_back(transport);
     emit settingsChanged(this);
@@ -297,7 +304,7 @@ void TransportListEditor::NewTransport()
 
 void TransportListEditor::Delete(TransportSetting *transport)
 {
-    if (isLoading)
+    if (m_isLoading)
         return;
 
     ShowOkPopup(
@@ -317,39 +324,30 @@ void TransportListEditor::Delete(TransportSetting *transport)
             if (!query.exec() || !query.isActive())
                 MythDB::DBError("TransportEditor -- delete multiplex", query);
 
-            query.prepare("DELETE FROM channel WHERE mplexid = :MPLEXID");
+            query.prepare("UPDATE channel SET deleted = NOW() "
+                          "WHERE deleted IS NULL AND mplexid = :MPLEXID");
             query.bindValue(":MPLEXID", mplexid);
 
             if (!query.exec() || !query.isActive())
                 MythDB::DBError("TransportEditor -- delete channels", query);
 
             removeChild(transport);
-            // m_list.removeAll(transport);
-            // Following for QT 5.3 which does not have the removeAll
-            // method in QVector
-            int ix;
-            do
-            {
-                ix = m_list.indexOf(transport);
-                if (ix != -1)
-                    m_list.remove(ix);
-            } while (ix != -1);
+            m_list.removeAll(transport);
         },
         true);
 }
 
 void TransportListEditor::Menu(TransportSetting *transport)
 {
-    if (isLoading)
+    if (m_isLoading)
         return;
 
-    MythMenu *menu = new MythMenu(tr("Transport Menu"), this, "transportmenu");
+    auto *menu = new MythMenu(tr("Transport Menu"), this, "transportmenu");
     menu->AddItem(tr("Delete..."), [transport, this] () { Delete(transport); });
 
     MythScreenStack *popupStack = GetMythMainWindow()->GetStack("popup stack");
 
-    MythDialogBox *menuPopup = new MythDialogBox(menu, popupStack,
-                                                 "menudialog");
+    auto *menuPopup = new MythDialogBox(menu, popupStack, "menudialog");
     menuPopup->SetReturnEvent(this, "transportmenu");
 
     if (menuPopup->Create())
@@ -361,37 +359,37 @@ void TransportListEditor::Menu(TransportSetting *transport)
 class MuxDBStorage : public SimpleDBStorage
 {
   protected:
-    MuxDBStorage(StorageUser *_setting, const MultiplexID *_id, QString _name) :
-        SimpleDBStorage(_setting, "dtv_multiplex", _name), mplexid(_id)
+    MuxDBStorage(StorageUser *_setting, const MultiplexID *_id, const QString& _name) :
+        SimpleDBStorage(_setting, "dtv_multiplex", _name), m_mplexId(_id)
     {
     }
 
-    virtual QString GetSetClause(MSqlBindings &bindings) const;
-    virtual QString GetWhereClause(MSqlBindings &bindings) const;
+    QString GetSetClause(MSqlBindings &bindings) const override; // SimpleDBStorage
+    QString GetWhereClause(MSqlBindings &bindings) const override; // SimpleDBStorage
 
-    const MultiplexID *mplexid;
+    const MultiplexID *m_mplexId;
 };
 
 QString MuxDBStorage::GetWhereClause(MSqlBindings &bindings) const
 {
-    QString muxTag = ":WHERE" + mplexid->GetColumnName().toUpper();
+    QString muxTag = ":WHERE" + m_mplexId->GetColumnName().toUpper();
 
-    bindings.insert(muxTag, mplexid->getValue());
+    bindings.insert(muxTag, m_mplexId->getValue());
 
     // return query
-    return mplexid->GetColumnName() + " = " + muxTag;
+    return m_mplexId->GetColumnName() + " = " + muxTag;
 }
 
 QString MuxDBStorage::GetSetClause(MSqlBindings &bindings) const
 {
-    QString muxTag  = ":SET" + mplexid->GetColumnName().toUpper();
+    QString muxTag  = ":SET" + m_mplexId->GetColumnName().toUpper();
     QString nameTag = ":SET" + GetColumnName().toUpper();
 
-    bindings.insert(muxTag,  mplexid->getValue());
-    bindings.insert(nameTag, user->GetDBValue());
+    bindings.insert(muxTag,  m_mplexId->getValue());
+    bindings.insert(nameTag, m_user->GetDBValue());
 
     // return query
-    return (mplexid->GetColumnName() + " = " + muxTag + ", " +
+    return (m_mplexId->GetColumnName() + " = " + muxTag + ", " +
             GetColumnName()   + " = " + nameTag);
 }
 
@@ -405,8 +403,8 @@ class VideoSourceID : public StandardSetting, public MuxDBStorage
         setVisible(false);
         setValue(_sourceid);
     }
-    virtual void edit(MythScreenType * /*screen*/) { }
-    virtual void resultEdit(DialogCompletionEvent * /*dce*/) { }
+    void edit(MythScreenType * /*screen*/) override { } // StandardSetting
+    void resultEdit(DialogCompletionEvent * /*dce*/) override { } // StandardSetting
 };
 
 class DTVStandard : public MythUIComboBoxSetting, public MuxDBStorage
@@ -438,21 +436,21 @@ class DTVStandard : public MythUIComboBoxSetting, public MuxDBStorage
 class Frequency : public MythUITextEditSetting, public MuxDBStorage
 {
   public:
-    Frequency(const MultiplexID *id, bool in_kHz = false) :
+    explicit Frequency(const MultiplexID *id, bool in_kHz = false) :
         MythUITextEditSetting(this), MuxDBStorage(this, id, "frequency")
     {
         QString hz = (in_kHz) ? "kHz" : "Hz";
         setLabel(QObject::tr("Frequency") + " (" + hz + ")");
         setHelpText(QObject::tr(
                         "Frequency (Option has no default).\n"
-                        "The frequency for this channel in") + " " + hz + ".");
+                        "The frequency for this transport (multiplex) in") + " " + hz + ".");
     };
 };
 
-class DVBSymbolRate : public MythUIComboBoxSetting, public MuxDBStorage
+class DVBSSymbolRate : public MythUIComboBoxSetting, public MuxDBStorage
 {
   public:
-    explicit DVBSymbolRate(const MultiplexID *id) :
+    explicit DVBSSymbolRate(const MultiplexID *id) :
         MythUIComboBoxSetting(this, true), MuxDBStorage(this, id, "symbolrate")
     {
         setLabel(QObject::tr("Symbol Rate"));
@@ -463,12 +461,35 @@ class DVBSymbolRate : public MythUIComboBoxSetting, public MuxDBStorage
                 "million symbols per second."));
         addSelection("3333000");
         addSelection("22000000");
+        addSelection("22500000");
         addSelection("23000000");
         addSelection("27500000", "27500000", true);
         addSelection("28000000");
         addSelection("28500000");
         addSelection("29500000");
+        addSelection("29700000");
         addSelection("29900000");
+    };
+};
+
+class DVBCSymbolRate : public MythUIComboBoxSetting, public MuxDBStorage
+{
+  public:
+    explicit DVBCSymbolRate(const MultiplexID *id) :
+        MythUIComboBoxSetting(this, true), MuxDBStorage(this, id, "symbolrate")
+    {
+        setLabel(QObject::tr("Symbol Rate"));
+        setHelpText(
+             QObject::tr(
+                "Symbol Rate (symbols/second).\n"
+                "Most DVB-C transports transmit at 6.9 or 6.875 "
+                "million symbols per second."));
+        addSelection("3450000");
+        addSelection("5000000");
+        addSelection("5900000");
+        addSelection("6875000");
+        addSelection("6900000", "6900000", true);
+        addSelection("6950000");
     };
 };
 
@@ -685,9 +706,9 @@ class DVBTModulationSystem : public MythUIComboBoxSetting, public MuxDBStorage
         MythUIComboBoxSetting(this), MuxDBStorage(this, id, "mod_sys")
     {
         setLabel(QObject::tr("Modulation System"));
-        setHelpText(QObject::tr("Modulation System (Default: DVB-T)"));
-        addSelection(QObject::tr("DVB-T"),  "DVB-T");
-        addSelection(QObject::tr("DVB-T2"), "DVB-T2");
+        setHelpText(QObject::tr("Modulation System (Default: DVB-T2)"));
+        addSelection("DVB-T",  "DVB-T");
+        addSelection("DVB-T2", "DVB-T2", true);
     };
 };
 
@@ -698,9 +719,23 @@ class DVBSModulationSystem : public MythUIComboBoxSetting, public MuxDBStorage
         MythUIComboBoxSetting(this), MuxDBStorage(this, id, "mod_sys")
     {
         setLabel(QObject::tr("Modulation System"));
-        setHelpText(QObject::tr("Modulation system (Default: DVB-S)"));
-        addSelection(QObject::tr("DVB-S"),  "DVB-S");
-        addSelection(QObject::tr("DVB-S2"), "DVB-S2");
+        setHelpText(QObject::tr("Modulation System (Default: DVB-S2)"));
+        addSelection("DVB-S",  "DVB-S");
+        addSelection("DVB-S2", "DVB-S2", true);
+    }
+};
+
+class DVBCModulationSystem : public MythUIComboBoxSetting, public MuxDBStorage
+{
+  public:
+    explicit DVBCModulationSystem(const MultiplexID *id) :
+        MythUIComboBoxSetting(this), MuxDBStorage(this, id, "mod_sys")
+    {
+        setLabel(QObject::tr("Modulation System"));
+        setHelpText(QObject::tr("Modulation System (Default: DVB-C/A)"));
+        addSelection("DVB-C/A", "DVB-C/A", true);
+        addSelection("DVB-C/B", "DVB-C/B");
+        addSelection("DVB-C/C", "DVB-C/C");
     }
 };
 
@@ -764,8 +799,7 @@ TransportSetting::TransportSetting(const QString &label, uint mplexid,
     {
         addChild(new DTVStandard(m_mplexid, true, false));
         addChild(new Frequency(m_mplexid, true));
-        addChild(new DVBSymbolRate(m_mplexid));
-
+        addChild(new DVBSSymbolRate(m_mplexid));
         addChild(new DVBInversion(m_mplexid));
         addChild(new Modulation(m_mplexid, cardtype));
         addChild(new DVBSModulationSystem(m_mplexid));
@@ -779,9 +813,9 @@ TransportSetting::TransportSetting(const QString &label, uint mplexid,
     {
         addChild(new DTVStandard(m_mplexid, true, false));
         addChild(new Frequency(m_mplexid));
-        addChild(new DVBSymbolRate(m_mplexid));
-
+        addChild(new DVBCSymbolRate(m_mplexid));
         addChild(new Modulation(m_mplexid, cardtype));
+        addChild(new DVBCModulationSystem(m_mplexid));
         addChild(new DVBInversion(m_mplexid));
         addChild(new DVBForwardErrorCorrection(m_mplexid));
     }

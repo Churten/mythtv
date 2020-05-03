@@ -18,7 +18,7 @@ class META_PUBLIC MetaIO
 {
   public:
     MetaIO(void);
-    virtual ~MetaIO(void);
+    virtual ~MetaIO(void) = default;
 
     /*!
     * \brief Writes all metadata back to a file
@@ -35,8 +35,12 @@ class META_PUBLIC MetaIO
     * \param mdata A pointer to a MusicMetadata object
     * \returns Boolean to indicate success/failure.
     */
-    virtual bool writeVolatileMetadata(const QString & /*filename*/, MusicMetadata* /*mdata*/)
+    virtual bool writeVolatileMetadata(const QString & filename, MusicMetadata* mdata)
     {
+        // These are here so that the parameters can be documented
+        // with doxygen.
+        (void) filename;
+        (void) mdata;
         return false;
     }
 
@@ -44,7 +48,7 @@ class META_PUBLIC MetaIO
     * \brief Reads MusicMetadata from a file.
     *
     * \param filename The filename to read metadata from.
-    * \returns MusicMetadata pointer or NULL on error
+    * \returns MusicMetadata pointer or nullptr on error
     */
     virtual MusicMetadata* read(const QString &filename) = 0;
 
@@ -100,14 +104,18 @@ class META_PUBLIC MetaIO
     {
         (void)filename;
         (void)type;
-        return NULL;
+        return nullptr;
     }
 
     /*!
     * \brief Reads MusicMetadata based on the folder/filename.
     *
-    * \param filename The filename to try and determine metadata for.
-    * \returns artist, album, title, genre & tracknum in parameters.
+    * \param[in]  filename The filename to try and determine metadata for.
+    * \param[out] artist
+    * \param[out] album
+    * \param[out] title
+    * \param[out] genre
+    * \param[out] tracknum
     */
     void readFromFilename(const QString &filename, QString &artist,
                           QString &album, QString &title, QString &genre,
@@ -117,7 +125,8 @@ class META_PUBLIC MetaIO
     * \brief Reads MusicMetadata based on the folder/filename.
     *
     * \param filename The filename to try and determine metadata for.
-    * \returns MusicMetadata Pointer, or NULL on error.
+    * \param blnLength If true, read the file length as well.
+    * \returns MusicMetadata Pointer, or nullptr on error.
     */
     MusicMetadata* readFromFilename(const QString &filename, bool blnLength = false);
 
@@ -133,9 +142,9 @@ class META_PUBLIC MetaIO
     * \brief Finds an appropriate tagger for the given file
     *
     * \param filename The filename to find a tagger for.
-    * \returns MetaIO Pointer, or NULL if non found.
+    * \returns MetaIO Pointer, or nullptr if non found.
     *
-    * \Note The caller is responsible for freeing it when no longer required
+    * \note The caller is responsible for freeing it when no longer required
     */
 
     static MetaIO *createTagger(const QString &filename);
@@ -161,7 +170,7 @@ class META_PUBLIC MetaIO
     */
     static MusicMetadata *getMetadata(const QString &filename);
 
-    static const QString ValidFileExtensions;
+    static const QString kValidFileExtensions;
 
   protected:
     void saveTimeStamps(void);
@@ -172,7 +181,7 @@ class META_PUBLIC MetaIO
     QString m_filename;
     QString m_filenameFormat;
 
-    struct stat m_fileinfo;
+    struct stat m_fileinfo {};
 };
 
 #endif

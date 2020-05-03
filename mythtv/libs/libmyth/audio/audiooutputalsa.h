@@ -12,48 +12,50 @@
 class AudioOutputALSA : public AudioOutputBase
 {
   public:
-    AudioOutputALSA(const AudioSettings &settings);
-    virtual ~AudioOutputALSA();
+    explicit AudioOutputALSA(const AudioSettings &settings);
+    ~AudioOutputALSA() override;
 
     // Volume control
-    virtual int GetVolumeChannel(int channel) const; // Returns 0-100
-    virtual void SetVolumeChannel(int channel, int volume); // range 0-100 for vol
+    int GetVolumeChannel(int channel) const override; // VolumeBase
+    void SetVolumeChannel(int channel, int volume) override; // VolumeBase
     static QMap<QString, QString> *GetDevices(const char *type);
 
   protected:
     // You need to implement the following functions
-    virtual bool OpenDevice(void);
-    virtual void CloseDevice(void);
-    virtual void WriteAudio(uchar *aubuf, int size);
-    virtual int  GetBufferedOnSoundcard(void) const;
-    AudioOutputSettings* GetOutputSettings(bool passthrough);
+    bool OpenDevice(void) override; // AudioOutputBase
+    void CloseDevice(void) override; // AudioOutputBase
+    void WriteAudio(unsigned char *aubuf, int size) override; // AudioOutputBase
+    int  GetBufferedOnSoundcard(void) const override; // AudioOutputBase
+    AudioOutputSettings* GetOutputSettings(bool passthrough) override; // AudioOutputBase
 
   private:
-    int TryOpenDevice(int open_mode, int try_ac3);
+    int TryOpenDevice(int open_mode, bool try_ac3);
     int GetPCMInfo(int &card, int &device, int &subdevice);
     bool IncPreallocBufferSize(int requested, int buffer_time);
     inline int SetParameters(snd_pcm_t *handle, snd_pcm_format_t format,
                              uint channels, uint rate, uint buffer_time,
                              uint period_time);
-    QByteArray *GetELD(int card, int device, int subdevice);
+    static QByteArray *GetELD(int card, int device, int subdevice);
     // Volume related
     bool OpenMixer(void);
 
   private:
-    snd_pcm_t   *pcm_handle;
-    int          m_pbufsize;
-    int          m_card, m_device, m_subdevice;
-    QMutex       killAudioLock;
-    QString      m_lastdevice;
+    snd_pcm_t   *m_pcmHandle  {nullptr};
+    int          m_pbufSize   {-1};
+    int          m_card       {-1};
+    int          m_device     {-1};
+    int          m_subdevice  {-1};
+    QMutex       m_killAudioLock;
+    QString      m_lastDevice;
 
     struct {
         QString            device;
         QString            control;
-        snd_mixer_t*       handle;
-        snd_mixer_elem_t*  elem;
-        long               volmin;
-        long               volmax;
-        long               volrange;
+        snd_mixer_t*       handle   { nullptr };
+        snd_mixer_elem_t*  elem     { nullptr };
+        long               volmin   { 0L };
+        long               volmax   { 0L };
+        long               volrange { 0L };
     } m_mixer;
 
 };

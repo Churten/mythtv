@@ -13,16 +13,9 @@
 template <class DBFS>
 ImageScanThread<DBFS>::ImageScanThread(DBFS *const dbfs, ImageThumb<DBFS> *thumbGen)
     : MThread("ImageScanner"),
-      m_scanning(false), m_mutexState(),
-      m_clearQueue(),    m_mutexQueue(),
       m_dbfs(*dbfs),
       m_thumb(*thumbGen),
-      m_dbDirMap(), m_dbFileMap(), m_seenDir(), m_seenFile(),
-      m_changedImages(),
-      m_bcastTimer(),
-      m_progressCount(0), m_progressTotalCount(0), m_mutexProgress(),
-      m_dir(m_dbfs.GetImageFilters()),
-      m_exclusions()
+      m_dir(m_dbfs.GetImageFilters())
 { }
 
 
@@ -97,6 +90,7 @@ void ImageScanThread<DBFS>::ChangeState(bool scan)
  \details If scanner is already running, any scan will be aborted to process the
 clear.
  \param devId Device id
+ \param action [DEVICE] (CLOSE | CLEAR)
 */
 template <class DBFS>
 void ImageScanThread<DBFS>::EnqueueClear(int devId, const QString &action)
@@ -111,7 +105,7 @@ void ImageScanThread<DBFS>::EnqueueClear(int devId, const QString &action)
 
 /*!
  \brief Returns number of images scanned & total number to scan
- \return QStringList (scanner id, #done, #total)
+ \return QStringList (scanner id, \#done, \#total)
 */
 template <class DBFS>
 QStringList ImageScanThread<DBFS>::GetProgress()
@@ -121,7 +115,6 @@ QStringList ImageScanThread<DBFS>::GetProgress()
                          << QString::number(m_progressCount)
                          << QString::number(m_progressTotalCount);
 }
-
 
 /*!
  \brief Synchronises database to the storage group
@@ -405,8 +398,14 @@ template <class DBFS>
   \param[out] orientation Exif orientation code
  */
 template <class DBFS>
-void ImageScanThread<DBFS>::PopulateMetadata
-(const QString &path, int type, QString &comment, uint &time, int &orientation)
+void ImageScanThread<DBFS>::PopulateMetadata(
+    const QString &path, int type, QString &comment,
+#if QT_VERSION < QT_VERSION_CHECK(5,8,0)
+    uint &time,
+#else
+    qint64 &time,
+#endif
+    int &orientation)
 {
     // Set orientation, date, comment from file meta data
     ImageMetaData *metadata = (type == kImageFile)
@@ -416,7 +415,11 @@ void ImageScanThread<DBFS>::PopulateMetadata
     orientation  = metadata->GetOrientation();
     comment      = metadata->GetComment().simplified();
     QDateTime dt = metadata->GetOriginalDateTime();
+#if QT_VERSION < QT_VERSION_CHECK(5,8,0)
     time         = (dt.isValid()) ? dt.toTime_t() : 0;
+#else
+    time         = (dt.isValid()) ? dt.toSecsSinceEpoch() : 0;
+#endif
 
     delete metadata;
 }
@@ -477,7 +480,7 @@ void ImageScanThread<DBFS>::SyncFile(const QFileInfo &fileInfo, int devId,
         im->m_isHidden = dbIm->m_isHidden;
 
         // Set date, comment from file meta data
-        int fileOrient;
+        int fileOrient = 0;
         PopulateMetadata(absFilePath, im->m_type,
                          im->m_comment, im->m_date, fileOrient);
 
@@ -505,7 +508,7 @@ void ImageScanThread<DBFS>::SyncFile(const QFileInfo &fileInfo, int devId,
         LOG(VB_FILE, LOG_INFO,  QString("New file %1").arg(absFilePath));
 
         // Set date, comment from file meta data
-        int fileOrient;
+        int fileOrient = 0;
         PopulateMetadata(absFilePath, im->m_type,
                          im->m_comment, im->m_date, fileOrient);
 
@@ -544,7 +547,9 @@ void ImageScanThread<DBFS>::CountTree(QDir &dir)
             continue;
 
         if (fileInfo.isFile())
+        {
             ++m_progressTotalCount;
+        }
         // Ignore missing dirs
         else if (dir.cd(fileInfo.fileName()))
         {

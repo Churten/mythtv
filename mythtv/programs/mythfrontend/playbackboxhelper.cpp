@@ -35,7 +35,7 @@ class PBHEventHandler : public QObject
     {
         StorageGroup::ClearGroupToUseCache();
     }
-    ~PBHEventHandler()
+    ~PBHEventHandler() override
     {
         if (m_freeSpaceTimerId)
             killTimer(m_freeSpaceTimerId);
@@ -43,7 +43,7 @@ class PBHEventHandler : public QObject
             killTimer(m_checkAvailabilityTimerId);
     }
 
-    virtual bool event(QEvent*); // QObject
+    bool event(QEvent* /*e*/) override; // QObject
     void UpdateFreeSpaceEvent(void);
     AvailableStatusType CheckAvailability(const QStringList &slist);
     PlaybackBoxHelper &m_pbh;
@@ -60,18 +60,18 @@ AvailableStatusType PBHEventHandler::CheckAvailability(const QStringList &slist)
 {
     QTime tm = QTime::currentTime();
 
-    QStringList::const_iterator it = slist.begin();
-    ProgramInfo evinfo(it, slist.end());
+    QStringList::const_iterator it2 = slist.begin();
+    ProgramInfo evinfo(it2, slist.end());
     QSet<CheckAvailabilityType> cats;
-    for (; it != slist.end(); ++it)
-        cats.insert((CheckAvailabilityType)(*it).toUInt());
+    for (; it2 != slist.end(); ++it2)
+        cats.insert((CheckAvailabilityType)(*it2).toUInt());
 
     {
         QMutexLocker locker(&m_pbh.m_lock);
-        QHash<uint, QStringList>::iterator it =
+        QHash<uint, QStringList>::iterator cit =
             m_checkAvailability.find(evinfo.GetRecordingID());
-        if (it != m_checkAvailability.end())
-            m_checkAvailability.erase(it);
+        if (cit != m_checkAvailability.end())
+            m_checkAvailability.erase(cit);
         if (m_checkAvailability.empty() && m_checkAvailabilityTimerId)
         {
             killTimer(m_checkAvailabilityTimerId);
@@ -112,7 +112,7 @@ AvailableStatusType PBHEventHandler::CheckAvailability(const QStringList &slist)
     QStringList list;
     list.push_back(QString::number(evinfo.GetRecordingID()));
     list.push_back(evinfo.GetPathname());
-    MythEvent *e0 = new MythEvent("SET_PLAYBACK_URL", list);
+    auto *e0 = new MythEvent("SET_PLAYBACK_URL", list);
     QCoreApplication::postEvent(m_pbh.m_listener, e0);
 
     list.clear();
@@ -125,13 +125,12 @@ AvailableStatusType PBHEventHandler::CheckAvailability(const QStringList &slist)
     list.push_back(QString::number(tm.second()));
     list.push_back(QString::number(tm.msec()));
 
-    QSet<CheckAvailabilityType>::iterator cit = cats.begin();
-    for (; cit != cats.end(); ++cit)
+    foreach (auto type, cats)
     {
-        if (*cit == kCheckForCache && cats.size() > 1)
+        if (type == kCheckForCache && cats.size() > 1)
             continue;
-        list[1] = QString::number((int)*cit);
-        MythEvent *e = new MythEvent("AVAILABILITY", list);
+        list[1] = QString::number((int)type);
+        auto *e = new MythEvent("AVAILABILITY", list);
         QCoreApplication::postEvent(m_pbh.m_listener, e);
     }
 
@@ -142,7 +141,7 @@ bool PBHEventHandler::event(QEvent *e)
 {
     if (e->type() == QEvent::Timer)
     {
-        QTimerEvent *te = (QTimerEvent*)e;
+        auto *te = (QTimerEvent*)e;
         const int timer_id = te->timerId();
         if (timer_id == m_freeSpaceTimerId)
             UpdateFreeSpaceEvent();
@@ -162,22 +161,25 @@ bool PBHEventHandler::event(QEvent *e)
         }
         return true;
     }
-    else if (e->type() == (QEvent::Type) MythEvent::MythEventMessage)
+    if (e->type() == MythEvent::MythEventMessage)
     {
-        MythEvent *me = (MythEvent*)e;
+        auto *me = dynamic_cast<MythEvent*>(e);
+        if (me == nullptr)
+            return false;
+
         if (me->Message() == "UPDATE_FREE_SPACE")
         {
             UpdateFreeSpaceEvent();
             return true;
         }
-        else if (me->Message() == "STOP_RECORDING")
+        if (me->Message() == "STOP_RECORDING")
         {
             ProgramInfo pginfo(me->ExtraDataList());
             if (pginfo.GetChanID())
                 RemoteStopRecording(&pginfo);
             return true;
         }
-        else if (me->Message() == "DELETE_RECORDINGS")
+        if (me->Message() == "DELETE_RECORDINGS")
         {
             QStringList successes;
             QStringList failures;
@@ -185,8 +187,8 @@ bool PBHEventHandler::event(QEvent *e)
             while (list.size() >= 3)
             {
                 uint      recordingID   = list[0].toUInt();
-                bool      forceDelete   = list[1].toUInt();
-                bool      forgetHistory = list[2].toUInt();
+                bool      forceDelete   = list[1].toUInt() != 0U;
+                bool      forgetHistory = list[2].toUInt() != 0U;
 
                 bool ok = RemoteDeleteRecording( recordingID, forceDelete,
                                                  forgetHistory);
@@ -200,23 +202,23 @@ bool PBHEventHandler::event(QEvent *e)
             }
             if (!successes.empty())
             {
-                MythEvent *e = new MythEvent("DELETE_SUCCESSES", successes);
-                QCoreApplication::postEvent(m_pbh.m_listener, e);
+                auto *oe = new MythEvent("DELETE_SUCCESSES", successes);
+                QCoreApplication::postEvent(m_pbh.m_listener, oe);
             }
             if (!failures.empty())
             {
-                MythEvent *e = new MythEvent("DELETE_FAILURES", failures);
-                QCoreApplication::postEvent(m_pbh.m_listener, e);
+                auto *oe = new MythEvent("DELETE_FAILURES", failures);
+                QCoreApplication::postEvent(m_pbh.m_listener, oe);
             }
 
             return true;
         }
-        else if (me->Message() == "UNDELETE_RECORDINGS")
+        if (me->Message() == "UNDELETE_RECORDINGS")
         {
             QStringList successes;
             QStringList failures;
             QStringList list = me->ExtraDataList();
-            while (list.size() >= 1)
+            while (!list.empty())
             {
                 uint recordingID = list[0].toUInt();
 
@@ -229,20 +231,20 @@ bool PBHEventHandler::event(QEvent *e)
             }
             if (!successes.empty())
             {
-                MythEvent *e = new MythEvent("UNDELETE_SUCCESSES", successes);
-                QCoreApplication::postEvent(m_pbh.m_listener, e);
+                auto *oe = new MythEvent("UNDELETE_SUCCESSES", successes);
+                QCoreApplication::postEvent(m_pbh.m_listener, oe);
             }
             if (!failures.empty())
             {
-                MythEvent *e = new MythEvent("UNDELETE_FAILURES", failures);
-                QCoreApplication::postEvent(m_pbh.m_listener, e);
+                auto *oe = new MythEvent("UNDELETE_FAILURES", failures);
+                QCoreApplication::postEvent(m_pbh.m_listener, oe);
             }
 
             return true;
         }
-        else if (me->Message() == "GET_PREVIEW")
+        if (me->Message() == "GET_PREVIEW")
         {
-            QString token = me->ExtraData(0);
+            const QString& token = me->ExtraData(0);
             bool check_avail = (bool) me->ExtraData(1).toInt();
             QStringList list = me->ExtraDataList();
             QStringList::const_iterator it = list.begin()+2;
@@ -255,7 +257,7 @@ bool PBHEventHandler::event(QEvent *e)
             list += QString::number(kCheckForCache);
             if (check_avail && (asAvailable != CheckAvailability(list)))
                 return true;
-            else if (asAvailable != evinfo.GetAvailableStatus())
+            if (asAvailable != evinfo.GetAvailableStatus())
                 return true;
 
             // Now we can actually request the preview...
@@ -263,7 +265,7 @@ bool PBHEventHandler::event(QEvent *e)
 
             return true;
         }
-        else if (me->Message() == "CHECK_AVAILABILITY")
+        if (me->Message() == "CHECK_AVAILABILITY")
         {
             if (me->ExtraData(0) != QString::number(kCheckForCache))
             {
@@ -276,9 +278,9 @@ bool PBHEventHandler::event(QEvent *e)
         }
         else if (me->Message() == "LOCATE_ARTWORK")
         {
-            QString                inetref    = me->ExtraData(0);
+            const QString&         inetref    = me->ExtraData(0);
             uint                   season     = me->ExtraData(1).toUInt();
-            const VideoArtworkType type       = (VideoArtworkType)me->ExtraData(2).toInt();
+            const auto             type       = (VideoArtworkType)me->ExtraData(2).toInt();
 #if 0 /* const ref for an unused variable doesn't make much sense either */
             uint                   recordingID = me->ExtraData(3).toUInt();
             const QString          &group     = me->ExtraData(4);
@@ -303,8 +305,8 @@ bool PBHEventHandler::event(QEvent *e)
             {
                 QStringList list = me->ExtraDataList();
                 list.push_back(foundFile);
-                MythEvent *e = new MythEvent("FOUND_ARTWORK", list);
-                QCoreApplication::postEvent(m_pbh.m_listener, e);
+                auto *oe = new MythEvent("FOUND_ARTWORK", list);
+                QCoreApplication::postEvent(m_pbh.m_listener, oe);
             }
 
             return true;
@@ -326,9 +328,7 @@ void PBHEventHandler::UpdateFreeSpaceEvent(void)
 
 PlaybackBoxHelper::PlaybackBoxHelper(QObject *listener) :
     MThread("PlaybackBoxHelper"),
-    m_listener(listener), m_eventHandler(new PBHEventHandler(*this)),
-    // Free Space Tracking Variables
-    m_freeSpaceTotalMB(0ULL), m_freeSpaceUsedMB(0ULL)
+    m_listener(listener), m_eventHandler(new PBHEventHandler(*this))
 {
     start();
     m_eventHandler->moveToThread(qthread());
@@ -340,7 +340,7 @@ PlaybackBoxHelper::~PlaybackBoxHelper()
 {
     // delete the event handler
     m_eventHandler->deleteLater();
-    m_eventHandler = NULL;
+    m_eventHandler = nullptr;
 
     MThread::exit();
     wait();
@@ -356,7 +356,7 @@ void PlaybackBoxHelper::StopRecording(const ProgramInfo &pginfo)
 {
     QStringList list;
     pginfo.ToStringList(list);
-    MythEvent *e = new MythEvent("STOP_RECORDING", list);
+    auto *e = new MythEvent("STOP_RECORDING", list);
     QCoreApplication::postEvent(m_eventHandler, e);
 }
 
@@ -372,7 +372,7 @@ void PlaybackBoxHelper::DeleteRecording( uint recordingID, bool forceDelete,
 
 void PlaybackBoxHelper::DeleteRecordings(const QStringList &list)
 {
-    MythEvent *e = new MythEvent("DELETE_RECORDINGS", list);
+    auto *e = new MythEvent("DELETE_RECORDINGS", list);
     QCoreApplication::postEvent(m_eventHandler, e);
 }
 
@@ -380,7 +380,7 @@ void PlaybackBoxHelper::UndeleteRecording(uint recordingID)
 {
     QStringList list;
     list.push_back(QString::number(recordingID));
-    MythEvent *e = new MythEvent("UNDELETE_RECORDINGS", list);
+    auto *e = new MythEvent("UNDELETE_RECORDINGS", list);
     QCoreApplication::postEvent(m_eventHandler, e);
 }
 
@@ -389,15 +389,15 @@ void PlaybackBoxHelper::UpdateFreeSpace(void)
     QList<FileSystemInfo> fsInfos = FileSystemInfo::RemoteGetInfo();
 
     QMutexLocker locker(&m_lock);
-    for (int i = 0; i < fsInfos.size(); i++)
+    foreach (auto & fsInfo, fsInfos)
     {
-        if (fsInfos[i].getPath() == "TotalDiskSpace")
+        if (fsInfo.getPath() == "TotalDiskSpace")
         {
-            m_freeSpaceTotalMB = (uint64_t) (fsInfos[i].getTotalSpace() >> 10);
-            m_freeSpaceUsedMB  = (uint64_t) (fsInfos[i].getUsedSpace()  >> 10);
+            m_freeSpaceTotalMB = (uint64_t) (fsInfo.getTotalSpace() >> 10);
+            m_freeSpaceUsedMB  = (uint64_t) (fsInfo.getUsedSpace()  >> 10);
         }
     }
-    MythEvent *e = new MythEvent("UPDATE_USAGE_UI");
+    auto *e = new MythEvent("UPDATE_USAGE_UI");
     QCoreApplication::postEvent(m_listener, e);
 }
 
@@ -431,7 +431,7 @@ void PlaybackBoxHelper::CheckAvailability(
     {
         (*it).push_back(catstr);
     }
-    MythEvent *e = new MythEvent("CHECK_AVAILABILITY", QStringList(catstr));
+    auto *e = new MythEvent("CHECK_AVAILABILITY", QStringList(catstr));
     QCoreApplication::postEvent(m_eventHandler, e);
 }
 
@@ -457,7 +457,7 @@ QString PlaybackBoxHelper::LocateArtwork(
     list.push_back(QString::number(type));
     list.push_back((pginfo)?QString::number(pginfo->GetRecordingID()):"");
     list.push_back(groupname);
-    MythEvent *e = new MythEvent("LOCATE_ARTWORK", list);
+    auto *e = new MythEvent("LOCATE_ARTWORK", list);
     QCoreApplication::postEvent(m_eventHandler, e);
 
     return QString();
@@ -478,7 +478,7 @@ QString PlaybackBoxHelper::GetPreviewImage(
     QStringList extra(token);
     extra.push_back(check_availability?"1":"0");
     pginfo.ToStringList(extra);
-    MythEvent *e = new MythEvent("GET_PREVIEW", extra);
+    auto *e = new MythEvent("GET_PREVIEW", extra);
     QCoreApplication::postEvent(m_eventHandler, e);
 
     return token;

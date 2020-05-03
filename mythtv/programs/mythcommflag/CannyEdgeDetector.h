@@ -8,37 +8,42 @@
 #define __CANNYEDGEDETECTOR_H__
 
 extern "C" {
-#include "libavcodec/avcodec.h"    /* AVPicture */
+#include "libavcodec/avcodec.h"    /* AVFrame */
 }
 #include "EdgeDetector.h"
 
-typedef struct VideoFrame_ VideoFrame;
 class MythPlayer;
 
 class CannyEdgeDetector : public EdgeDetector
 {
 public:
     CannyEdgeDetector(void);
-    ~CannyEdgeDetector(void);
+    ~CannyEdgeDetector(void) override;
+    CannyEdgeDetector(const CannyEdgeDetector &) = delete;            // not copyable
+    CannyEdgeDetector &operator=(const CannyEdgeDetector &) = delete; // not copyable
     int MythPlayerInited(const MythPlayer *player, int width, int height);
-    virtual int setExcludeArea(int row, int col, int width, int height);
-    virtual const AVPicture *detectEdges(const AVPicture *pgm, int pgmheight,
-            int percentile);
+    int setExcludeArea(int row, int col, int width, int height) override; // EdgeDetector
+    const AVFrame *detectEdges(const AVFrame *pgm, int pgmheight,
+            int percentile) override; // EdgeDetector
 
 private:
-    int resetBuffers(int pgmwidth, int pgmheight);
+    int resetBuffers(int newwidth, int newheight);
 
-    double          *mask;                  /* pre-computed Gaussian mask */
-    int             mask_radius;            /* radius of mask */
+    double         *m_mask        {nullptr}; /* pre-computed Gaussian mask */
+    int             m_maskRadius  {2};       /* radius of mask */
 
-    unsigned int    *sgm, *sgmsorted;       /* squared-gradient magnitude */
-    AVPicture       s1, s2, convolved;      /* smoothed grayscale frame */
-    int             ewidth, eheight;        /* dimensions */
-    AVPicture       edges;                  /* detected edges */
+    unsigned int   *m_sgm         {nullptr}; /* squared-gradient magnitude */
+    unsigned int   *m_sgmSorted   {nullptr}; /* squared-gradient magnitude */
+    AVFrame         m_s1          {};        /* smoothed grayscale frame */
+    AVFrame         m_s2          {};        /* smoothed grayscale frame */
+    AVFrame         m_convolved   {};        /* smoothed grayscale frame */
+    int             m_ewidth      {-1};      /* dimensions */
+    int             m_eheight     {-1};      /* dimensions */
+    AVFrame         m_edges       {};        /* detected edges */
 
     struct {
         int         row, col, width, height;
-    }               exclude;
+    }               m_exclude {};
 };
 
 #endif  /* !__CANNYEDGEDETECTOR_H__ */

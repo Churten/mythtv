@@ -8,9 +8,9 @@
 //
 //////////////////////////////////////////////////////////////////////////////
 
-// POSIX headers
-#include <limits.h>
-#include <stdint.h>
+// C++ headers
+#include <climits>
+#include <cstdint>
 
 // Qt headers
 #include <QSize>
@@ -136,9 +136,9 @@ UPnpCDSTv::UPnpCDSTv()
 {
     QString sServerIp   = gCoreContext->GetBackendServerIP();
     int sPort           = gCoreContext->GetBackendStatusPort();
-    m_URIBase.setScheme("http");
-    m_URIBase.setHost(sServerIp);
-    m_URIBase.setPort(sPort);
+    m_uriBase.setScheme("http");
+    m_uriBase.setHost(sServerIp);
+    m_uriBase.setPort(sPort);
 
     // ShortCuts
     m_shortcuts.insert(UPnPShortcutFeature::VIDEOS_RECORDINGS, "Recordings");
@@ -153,25 +153,24 @@ void UPnpCDSTv::CreateRoot()
                                          m_sName,
                                          "0");
 
-    CDSObject* pContainer;
     QString containerId = m_sExtensionId + "/%1";
 
     // HACK: I'm not entirely happy with this solution, but it's at least
     // tidier than passing through half a dozen extra args to Load[Foo]
     // or having yet more methods just to load the counts
-    UPnpCDSRequest *pRequest = new UPnpCDSRequest();
+    auto *pRequest = new UPnpCDSRequest();
     pRequest->m_nRequestedCount = 0; // We don't want to load any results, we just want the TotalCount
-    UPnpCDSExtensionResults *pResult = new UPnpCDSExtensionResults();
+    auto *pResult = new UPnpCDSExtensionResults();
     IDTokenMap tokens;
     // END HACK
 
     // -----------------------------------------------------------------------
     // All Recordings
     // -----------------------------------------------------------------------
-    pContainer = CDSObject::CreateContainer ( containerId.arg("Recording"),
+    CDSObject* pContainer = CDSObject::CreateContainer ( containerId.arg("Recording"),
                                               QObject::tr("All Recordings"),
                                               m_sExtensionId, // Parent Id
-                                              NULL );
+                                              nullptr );
     // HACK
     LoadRecordings(pRequest, pResult, tokens);
     pContainer->SetChildCount(pResult->m_nTotalMatches);
@@ -185,7 +184,7 @@ void UPnpCDSTv::CreateRoot()
     pContainer = CDSObject::CreateContainer ( containerId.arg("Movie"),
                                               QObject::tr("Movies"),
                                               m_sExtensionId, // Parent Id
-                                              NULL );
+                                              nullptr );
     // HACK
     LoadMovies(pRequest, pResult, tokens);
     pContainer->SetChildCount(pResult->m_nTotalMatches);
@@ -199,7 +198,7 @@ void UPnpCDSTv::CreateRoot()
     pContainer = CDSObject::CreateContainer ( containerId.arg("Title"),
                                               QObject::tr("Title"),
                                               m_sExtensionId, // Parent Id
-                                              NULL );
+                                              nullptr );
     // HACK
     LoadTitles(pRequest, pResult, tokens);
     pContainer->SetChildCount(pResult->m_nTotalMatches);
@@ -215,7 +214,7 @@ void UPnpCDSTv::CreateRoot()
     pContainer = CDSObject::CreateContainer ( containerId.arg("Date"),
                                               QObject::tr("Date"),
                                               m_sExtensionId, // Parent Id
-                                              NULL );
+                                              nullptr );
     // HACK
     LoadDates(pRequest, pResult, tokens);
     pContainer->SetChildCount(pResult->m_nTotalMatches);
@@ -229,7 +228,7 @@ void UPnpCDSTv::CreateRoot()
     pContainer = CDSObject::CreateContainer ( containerId.arg("Genre"),
                                               QObject::tr("Genre"),
                                               m_sExtensionId, // Parent Id
-                                              NULL );
+                                              nullptr );
     // HACK
     LoadGenres(pRequest, pResult, tokens);
     pContainer->SetChildCount(pResult->m_nTotalMatches);
@@ -243,7 +242,7 @@ void UPnpCDSTv::CreateRoot()
     pContainer = CDSObject::CreateContainer ( containerId.arg("Channel"),
                                               QObject::tr("Channel"),
                                               m_sExtensionId, // Parent Id
-                                              NULL );
+                                              nullptr );
     // HACK
     LoadChannels(pRequest, pResult, tokens);
     pContainer->SetChildCount(pResult->m_nTotalMatches);
@@ -257,7 +256,7 @@ void UPnpCDSTv::CreateRoot()
     pContainer = CDSObject::CreateContainer ( containerId.arg("Recgroup"),
                                               QObject::tr("Recording Group"),
                                               m_sExtensionId, // Parent Id
-                                              NULL );
+                                              nullptr );
     // HACK
     LoadRecGroups(pRequest, pResult, tokens);
     pContainer->SetChildCount(pResult->m_nTotalMatches);
@@ -279,7 +278,7 @@ void UPnpCDSTv::CreateRoot()
 
 bool UPnpCDSTv::LoadMetadata(const UPnpCDSRequest* pRequest,
                               UPnpCDSExtensionResults* pResults,
-                              IDTokenMap tokens, QString currentToken)
+                              const IDTokenMap& tokens, const QString& currentToken)
 {
     if (currentToken.isEmpty())
     {
@@ -292,7 +291,7 @@ bool UPnpCDSTv::LoadMetadata(const UPnpCDSRequest* pRequest,
     // Root or Root + 1
     if (tokens[currentToken].isEmpty())
     {
-        CDSObject *container = NULL;
+        CDSObject *container = nullptr;
 
         if (pRequest->m_sObjectId == m_sExtensionId)
             container = GetRoot();
@@ -305,10 +304,9 @@ bool UPnpCDSTv::LoadMetadata(const UPnpCDSRequest* pRequest,
             pResults->m_nTotalMatches = 1;
             return true;
         }
-        else
-            LOG(VB_GENERAL, LOG_ERR, QString("UPnpCDSTV::LoadMetadata: Requested "
-                                             "object cannot be found: %1")
-                                               .arg(pRequest->m_sObjectId));
+        LOG(VB_GENERAL, LOG_ERR, QString("UPnpCDSTV::LoadMetadata: Requested "
+                                         "object cannot be found: %1")
+                                           .arg(pRequest->m_sObjectId));
     }
     else if (currentToken == "recording")
     {
@@ -339,9 +337,11 @@ bool UPnpCDSTv::LoadMetadata(const UPnpCDSRequest* pRequest,
         return LoadMovies(pRequest, pResults, tokens);
     }
     else
+    {
         LOG(VB_GENERAL, LOG_ERR,
             QString("UPnpCDSTV::LoadMetadata(): "
                     "Unhandled metadata request for '%1'.").arg(currentToken));
+    }
 
     return false;
 }
@@ -352,7 +352,7 @@ bool UPnpCDSTv::LoadMetadata(const UPnpCDSRequest* pRequest,
 
 bool UPnpCDSTv::LoadChildren(const UPnpCDSRequest* pRequest,
                              UPnpCDSExtensionResults* pResults,
-                             IDTokenMap tokens, QString currentToken)
+                             const IDTokenMap& tokens, const QString& currentToken)
 {
     if (currentToken.isEmpty() || currentToken == m_sExtensionId.toLower())
     {
@@ -361,53 +361,47 @@ bool UPnpCDSTv::LoadChildren(const UPnpCDSRequest* pRequest,
         pResults->m_nTotalMatches = GetRoot()->GetChildCount();
         return true;
     }
-    else if (currentToken == "title")
+    if (currentToken == "title")
     {
         if (!tokens["title"].isEmpty())
             return LoadRecordings(pRequest, pResults, tokens);
-        else
-            return LoadTitles(pRequest, pResults, tokens);
+        return LoadTitles(pRequest, pResults, tokens);
     }
-    else if (currentToken == "date")
+    if (currentToken == "date")
     {
         if (!tokens["date"].isEmpty())
             return LoadRecordings(pRequest, pResults, tokens);
-        else
-            return LoadDates(pRequest, pResults, tokens);
+        return LoadDates(pRequest, pResults, tokens);
     }
-    else if (currentToken == "genre")
+    if (currentToken == "genre")
     {
         if (!tokens["genre"].isEmpty())
             return LoadRecordings(pRequest, pResults, tokens);
-        else
-            return LoadGenres(pRequest, pResults, tokens);
+        return LoadGenres(pRequest, pResults, tokens);
     }
-    else if (currentToken == "recgroup")
+    if (currentToken == "recgroup")
     {
         if (!tokens["recgroup"].isEmpty())
             return LoadRecordings(pRequest, pResults, tokens);
-        else
-            return LoadRecGroups(pRequest, pResults, tokens);
+        return LoadRecGroups(pRequest, pResults, tokens);
     }
-    else if (currentToken == "channel")
+    if (currentToken == "channel")
     {
         if (tokens["channel"].toInt() > 0)
             return LoadRecordings(pRequest, pResults, tokens);
-        else
-            return LoadChannels(pRequest, pResults, tokens);
+        return LoadChannels(pRequest, pResults, tokens);
     }
-    else if (currentToken == "movie")
+    if (currentToken == "movie")
     {
         return LoadMovies(pRequest, pResults, tokens);
     }
-    else if (currentToken == "recording")
+    if (currentToken == "recording")
     {
         return LoadRecordings(pRequest, pResults, tokens);
     }
-    else
-        LOG(VB_GENERAL, LOG_ERR,
-            QString("UPnpCDSTV::LoadChildren(): "
-                    "Unhandled metadata request for '%1'.").arg(currentToken));
+    LOG(VB_GENERAL, LOG_ERR,
+        QString("UPnpCDSTV::LoadChildren(): "
+                "Unhandled metadata request for '%1'.").arg(currentToken));
 
     return false;
 }
@@ -525,7 +519,7 @@ bool UPnpCDSTv::IsSearchRequestForUs( UPnpCDSRequest *pRequest )
  //      somehow do so with the minimum number of queries and code duplication
 bool UPnpCDSTv::LoadTitles(const UPnpCDSRequest* pRequest,
                            UPnpCDSExtensionResults* pResults,
-                           IDTokenMap tokens)
+                           const IDTokenMap& tokens)
 {
     QString sRequestId = pRequest->m_sObjectId;
 
@@ -563,13 +557,13 @@ bool UPnpCDSTv::LoadTitles(const UPnpCDSRequest* pRequest,
         int nRecordingID = query.value(2).toInt();
         int nTitleCount = query.value(3).toInt();
 
-         if (nTitleCount > 1)
-         {
+        if (nTitleCount > 1)
+        {
             // TODO Album or plain old container?
             CDSObject* pContainer = CDSObject::CreateAlbum( CreateIDString(sRequestId, "Title", sTitle),
                                                             sTitle,
                                                             pRequest->m_sParentId,
-                                                            NULL );
+                                                            nullptr );
 
 
             pContainer->SetPropValue("description", QObject::tr("%n Episode(s)", "", nTitleCount));
@@ -580,7 +574,7 @@ bool UPnpCDSTv::LoadTitles(const UPnpCDSRequest* pRequest,
             pContainer->SetPropValue("storageMedium", "HDD");
 
             // Artwork
-            PopulateArtworkURIS(pContainer, sInetRef, 0, m_URIBase); // No particular season
+            PopulateArtworkURIS(pContainer, sInetRef, 0, m_uriBase); // No particular season
 
             pResults->Add(pContainer);
             pContainer->DecrRef();
@@ -612,7 +606,7 @@ bool UPnpCDSTv::LoadTitles(const UPnpCDSRequest* pRequest,
 
 bool UPnpCDSTv::LoadDates(const UPnpCDSRequest* pRequest,
                               UPnpCDSExtensionResults* pResults,
-                              IDTokenMap tokens)
+                              const IDTokenMap& tokens)
 {
     QString sRequestId = pRequest->m_sObjectId;
 
@@ -652,7 +646,7 @@ bool UPnpCDSTv::LoadDates(const UPnpCDSRequest* pRequest,
         CDSObject* pContainer = CDSObject::CreateContainer( CreateIDString(sRequestId, "Date", dtDate.toString(Qt::ISODate)),
                                                             MythDate::toString(dtDate, MythDate::kDateFull | MythDate::kAutoYear | MythDate::kSimplify),
                                                             pRequest->m_sParentId,
-                                                            NULL );
+                                                            nullptr );
         pContainer->SetChildCount(nRecCount);
         pContainer->SetChildContainerCount(nRecCount);
 
@@ -679,7 +673,7 @@ bool UPnpCDSTv::LoadDates(const UPnpCDSRequest* pRequest,
 
 bool UPnpCDSTv::LoadGenres( const UPnpCDSRequest* pRequest,
                             UPnpCDSExtensionResults* pResults,
-                            IDTokenMap tokens)
+                            const IDTokenMap& tokens)
 {
     QString sRequestId = pRequest->m_sObjectId;
 
@@ -723,7 +717,7 @@ bool UPnpCDSTv::LoadGenres( const UPnpCDSRequest* pRequest,
         CDSObject* pContainer = CDSObject::CreateMovieGenre( CreateIDString(sRequestId, "Genre", sGenre),
                                                              sDisplayGenre,
                                                              pRequest->m_sParentId,
-                                                             NULL );
+                                                             nullptr );
         pContainer->SetChildCount(nRecCount);
         pContainer->SetChildContainerCount(nRecCount);
 
@@ -750,7 +744,7 @@ bool UPnpCDSTv::LoadGenres( const UPnpCDSRequest* pRequest,
 
 bool UPnpCDSTv::LoadRecGroups(const UPnpCDSRequest* pRequest,
                               UPnpCDSExtensionResults* pResults,
-                              IDTokenMap tokens)
+                              const IDTokenMap& tokens)
 {
     QString sRequestId = pRequest->m_sObjectId;
 
@@ -795,7 +789,7 @@ bool UPnpCDSTv::LoadRecGroups(const UPnpCDSRequest* pRequest,
         CDSObject* pContainer = CDSObject::CreateContainer( CreateIDString(sRequestId, "RecGroup", sName),
                                                         sDisplayName.isEmpty() ? sName : sDisplayName,
                                                         pRequest->m_sParentId,
-                                                        NULL );
+                                                        nullptr );
         pContainer->SetChildCount(nRecCount);
         pContainer->SetChildContainerCount(nRecCount);
 
@@ -822,7 +816,7 @@ bool UPnpCDSTv::LoadRecGroups(const UPnpCDSRequest* pRequest,
 
 bool UPnpCDSTv::LoadChannels(const UPnpCDSRequest* pRequest,
                              UPnpCDSExtensionResults* pResults,
-                             IDTokenMap tokens)
+                             const IDTokenMap& tokens)
 {
     QString sRequestId = pRequest->m_sObjectId;
 
@@ -870,7 +864,7 @@ bool UPnpCDSTv::LoadChannels(const UPnpCDSRequest* pRequest,
         CDSObject* pContainer = CDSObject::CreateContainer( CreateIDString(sRequestId, "Channel", nChanID),
                                                         sFullName,
                                                         pRequest->m_sParentId,
-                                                        NULL );
+                                                        nullptr );
         pContainer->SetChildCount(nRecCount);
         pContainer->SetChildContainerCount(nRecCount);
 
@@ -1207,9 +1201,15 @@ bool UPnpCDSTv::LoadRecordings(const UPnpCDSRequest* pRequest,
         // recordedmarkup
         if (nDurationMS == 0)
         {
+#if QT_VERSION < QT_VERSION_CHECK(5,8,0)
             uint uiStart = dtStartTime.toTime_t();
             uint uiEnd   = dtEndTime.toTime_t();
             nDurationMS  = (uiEnd - uiStart) * 1000; // To milliseconds
+#else
+            qint64 uiStart = dtStartTime.toMSecsSinceEpoch();
+            qint64 uiEnd   = dtEndTime.toMSecsSinceEpoch();
+            nDurationMS  = (uiEnd - uiStart);
+#endif
             nDurationMS  = (nDurationMS > 0) ? nDurationMS : 0;
         }
 
@@ -1232,7 +1232,7 @@ bool UPnpCDSTv::LoadRecordings(const UPnpCDSRequest* pRequest,
             }
             else if (sMimeType == "video/mp2t")
             {
-                sMimeType == "video/mp2p";
+                sMimeType = "video/mp2p";
                 sContainer = "MPEG2-TS";
             }
         }

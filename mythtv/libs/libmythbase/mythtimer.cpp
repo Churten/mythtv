@@ -19,7 +19,7 @@
  *   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
  */
 
-#include <stdint.h>
+#include <cstdint>
 
 // MythTV includes
 #include "mythtimer.h"
@@ -35,7 +35,7 @@
  *  If a start state of kStartRunning is passed in the timer is
  *  started immediately as if start() had been called.
  */
-MythTimer::MythTimer(StartState state) : m_offset(0)
+MythTimer::MythTimer(StartState state)
 {
     if (kStartRunning == state)
         start();
@@ -87,7 +87,7 @@ void MythTimer::stop(void)
  * \note If addMSecs() has been called and the total offset applied
  *       is negative then this can return a negative number.
  */
-int MythTimer::elapsed(void) const
+int MythTimer::elapsed(void)
 {
     if (!m_timer.isValid())
     {
@@ -98,9 +98,9 @@ int MythTimer::elapsed(void) const
     }
 
     qint64 e = m_timer.elapsed();
-    if (!m_timer.isMonotonic() && (e > 86300000))
+    if (!QElapsedTimer::isMonotonic() && (e > 86300000))
     {
-        const_cast<MythTimer*>(this)->start();
+        start();
         e = 0;
     }
 

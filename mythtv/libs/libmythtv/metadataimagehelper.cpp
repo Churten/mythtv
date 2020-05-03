@@ -15,12 +15,12 @@ namespace {
     {
         uint port = gCoreContext->GetBackendServerPort(host);
 
-        return gCoreContext->GenMythURL(host, port, path,
+        return MythCoreContext::GenMythURL(host, port, path,
                                         StorageGroup::GetGroupToUse(host, storage_group));
     }
 }
 
-ArtworkMap GetArtwork(QString inetref,
+ArtworkMap GetArtwork(const QString& inetref,
                       uint season,
                       bool strict)
 {
@@ -129,12 +129,14 @@ bool SetArtwork(const QString &inetref,
 bool SetArtwork(const QString &inetref,
                        uint season,
                        const QString &host,
-                       const ArtworkMap map)
+                       const ArtworkMap& map)
 {
     if (inetref.isEmpty())
         return false;
 
-    QString coverart, fanart, banner;
+    QString coverart;
+    QString fanart;
+    QString banner;
 
     QUrl coverurl(map.value(kArtworkCoverart).url);
     if (!coverurl.path().isEmpty())

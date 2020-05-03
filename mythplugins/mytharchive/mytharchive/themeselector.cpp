@@ -1,7 +1,6 @@
-// c
-#include <stdlib.h>
-#include <unistd.h>
+// c++
 #include <cstdlib>
+#include <unistd.h>
 
 // qt
 #include <QDir>
@@ -27,22 +26,11 @@
 
 DVDThemeSelector::DVDThemeSelector(
     MythScreenStack *parent, MythScreenType *destinationScreen,
-    ArchiveDestination archiveDestination, QString name) :
+    ArchiveDestination archiveDestination, const QString& name) :
     MythScreenType(parent, name, true),
     m_destinationScreen(destinationScreen),
     m_archiveDestination(archiveDestination),
-    themeDir(GetShareDir() + "mytharchive/themes/"),
-    theme_selector(NULL),
-    theme_image(NULL),
-    theme_no(0),
-    intro_image(NULL),
-    mainmenu_image(NULL),
-    chapter_image(NULL),
-    details_image(NULL),
-    themedesc_text(NULL),
-    m_nextButton(NULL),
-    m_prevButton(NULL),
-    m_cancelButton(NULL)
+    m_themeDir(GetShareDir() + "mytharchive/themes/")
 {
 }
 
@@ -53,11 +41,8 @@ DVDThemeSelector::~DVDThemeSelector(void)
 
 bool DVDThemeSelector::Create(void)
 {
-    bool foundtheme = false;
-
     // Load the theme for this screen
-    foundtheme = LoadWindowFromXML("mythburn-ui.xml", "themeselector", this);
-
+    bool foundtheme = LoadWindowFromXML("mythburn-ui.xml", "themeselector", this);
     if (!foundtheme)
         return false;
 
@@ -67,15 +52,15 @@ bool DVDThemeSelector::Create(void)
     UIUtilE::Assign(this, m_cancelButton, "cancel_button", &err);
 
         // theme preview images
-    UIUtilE::Assign(this, intro_image, "intro_image", &err);
-    UIUtilE::Assign(this, mainmenu_image, "mainmenu_image", &err);
-    UIUtilE::Assign(this, chapter_image, "chapter_image", &err);
-    UIUtilE::Assign(this, details_image, "details_image", &err);
+    UIUtilE::Assign(this, m_introImage, "intro_image", &err);
+    UIUtilE::Assign(this, m_mainmenuImage, "mainmenu_image", &err);
+    UIUtilE::Assign(this, m_chapterImage, "chapter_image", &err);
+    UIUtilE::Assign(this, m_detailsImage, "details_image", &err);
 
         // menu theme
-    UIUtilE::Assign(this, themedesc_text, "themedescription", &err);
-    UIUtilE::Assign(this, theme_image, "theme_image", &err);
-    UIUtilE::Assign(this, theme_selector, "theme_selector", &err);
+    UIUtilE::Assign(this, m_themedescText, "themedescription", &err);
+    UIUtilE::Assign(this, m_themeImage, "theme_image", &err);
+    UIUtilE::Assign(this, m_themeSelector, "theme_selector", &err);
 
     if (err)
     {
@@ -89,7 +74,7 @@ bool DVDThemeSelector::Create(void)
 
     getThemeList();
 
-    connect(theme_selector, SIGNAL(itemSelected(MythUIButtonListItem*)),
+    connect(m_themeSelector, SIGNAL(itemSelected(MythUIButtonListItem*)),
             this, SLOT(themeChanged(MythUIButtonListItem*)));
 
     BuildFocusList();
@@ -119,8 +104,8 @@ void DVDThemeSelector::handleNextPage()
     // show next page
     MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
 
-    MythBurn *burn = new MythBurn(mainStack, m_destinationScreen, this,
-                                  m_archiveDestination, "MythBurn");
+    auto *burn = new MythBurn(mainStack, m_destinationScreen, this,
+                              m_archiveDestination, "MythBurn");
 
     if (burn->Create())
         mainStack->AddScreen(burn);
@@ -139,26 +124,23 @@ void DVDThemeSelector::handleCancel()
 
 void DVDThemeSelector::getThemeList(void)
 {
-    theme_list.clear();
+    m_themeList.clear();
     QDir d;
 
-    d.setPath(themeDir);
+    d.setPath(m_themeDir);
     if (d.exists())
     {
         QStringList filters;
         filters << "*";
         QFileInfoList list = d.entryInfoList(filters, QDir::Dirs, QDir::Name);
 
-        int count = 0;
-        for (int x = 0; x < list.size(); x++)
+        foreach (const auto & fi, list)
         {
-            QFileInfo fi = list.at(x);
-            if (QFile::exists(themeDir + fi.fileName() + "/preview.png"))
+            if (QFile::exists(m_themeDir + fi.fileName() + "/preview.png"))
             {
-                theme_list.append(fi.fileName());
+                m_themeList.append(fi.fileName());
                 QString filename = fi.fileName().replace(QString("_"), QString(" "));
-                new MythUIButtonListItem(theme_selector, filename);
-                ++count;
+                new MythUIButtonListItem(m_themeSelector, filename);
             }
         }
     }
@@ -172,51 +154,51 @@ void DVDThemeSelector::themeChanged(MythUIButtonListItem *item)
     if (!item)
         return;
 
-    int itemNo = theme_selector->GetCurrentPos();
+    int itemNo = m_themeSelector->GetCurrentPos();
 
-    if (itemNo < 0 || itemNo > theme_list.size() - 1)
+    if (itemNo < 0 || itemNo > m_themeList.size() - 1)
         itemNo = 0;
 
-    theme_no = itemNo;
+    m_themeNo = itemNo;
 
-    if (QFile::exists(themeDir + theme_list[itemNo] + "/preview.png"))
-        theme_image->SetFilename(themeDir + theme_list[itemNo] + "/preview.png");
+    if (QFile::exists(m_themeDir + m_themeList[itemNo] + "/preview.png"))
+        m_themeImage->SetFilename(m_themeDir + m_themeList[itemNo] + "/preview.png");
     else
-        theme_image->SetFilename("blank.png");
-    theme_image->Load();
+        m_themeImage->SetFilename("blank.png");
+    m_themeImage->Load();
 
-    if (QFile::exists(themeDir + theme_list[itemNo] + "/intro_preview.png"))
-        intro_image->SetFilename(themeDir + theme_list[itemNo] + "/intro_preview.png");
+    if (QFile::exists(m_themeDir + m_themeList[itemNo] + "/intro_preview.png"))
+        m_introImage->SetFilename(m_themeDir + m_themeList[itemNo] + "/intro_preview.png");
     else
-        intro_image->SetFilename("blank.png");
-    intro_image->Load();
+        m_introImage->SetFilename("blank.png");
+    m_introImage->Load();
 
-    if (QFile::exists(themeDir + theme_list[itemNo] + "/mainmenu_preview.png"))
-        mainmenu_image->SetFilename(themeDir + theme_list[itemNo] + "/mainmenu_preview.png");
+    if (QFile::exists(m_themeDir + m_themeList[itemNo] + "/mainmenu_preview.png"))
+        m_mainmenuImage->SetFilename(m_themeDir + m_themeList[itemNo] + "/mainmenu_preview.png");
     else
-        mainmenu_image->SetFilename("blank.png");
-    mainmenu_image->Load();
+        m_mainmenuImage->SetFilename("blank.png");
+    m_mainmenuImage->Load();
 
-    if (QFile::exists(themeDir + theme_list[itemNo] + "/chaptermenu_preview.png"))
-        chapter_image->SetFilename(themeDir + theme_list[itemNo] + "/chaptermenu_preview.png");
+    if (QFile::exists(m_themeDir + m_themeList[itemNo] + "/chaptermenu_preview.png"))
+        m_chapterImage->SetFilename(m_themeDir + m_themeList[itemNo] + "/chaptermenu_preview.png");
     else
-        chapter_image->SetFilename("blank.png");
-    chapter_image->Load();
+        m_chapterImage->SetFilename("blank.png");
+    m_chapterImage->Load();
 
-    if (QFile::exists(themeDir + theme_list[itemNo] + "/details_preview.png"))
-        details_image->SetFilename(themeDir + theme_list[itemNo] + "/details_preview.png");
+    if (QFile::exists(m_themeDir + m_themeList[itemNo] + "/details_preview.png"))
+        m_detailsImage->SetFilename(m_themeDir + m_themeList[itemNo] + "/details_preview.png");
     else
-        details_image->SetFilename("blank.png");
-    details_image->Load();
+        m_detailsImage->SetFilename("blank.png");
+    m_detailsImage->Load();
 
-    if (QFile::exists(themeDir + theme_list[itemNo] + "/description.txt"))
+    if (QFile::exists(m_themeDir + m_themeList[itemNo] + "/description.txt"))
     {
-        QString desc = loadFile(themeDir + theme_list[itemNo] + "/description.txt");
-        themedesc_text->SetText(QCoreApplication::translate("BurnThemeUI", 
+        QString desc = loadFile(m_themeDir + m_themeList[itemNo] + "/description.txt");
+        m_themedescText->SetText(QCoreApplication::translate("BurnThemeUI", 
                                 desc.toUtf8().constData()));
     }
     else
-        themedesc_text->SetText(tr("No theme description file found!"));
+        m_themedescText->SetText(tr("No theme description file found!"));
 }
 
 QString DVDThemeSelector::loadFile(const QString &filename)
@@ -256,12 +238,12 @@ void DVDThemeSelector::loadConfiguration(void)
 {
     QString theme = gCoreContext->GetSetting("MythBurnMenuTheme", "");
     theme = theme.replace(QString("_"), QString(" "));
-    theme_selector->MoveToNamedPosition(theme);
+    m_themeSelector->MoveToNamedPosition(theme);
 }
 
 void DVDThemeSelector::saveConfiguration(void)
 {
-    QString theme = theme_selector->GetValue();
+    QString theme = m_themeSelector->GetValue();
     theme = theme.replace(QString(" "), QString("_"));
     gCoreContext->SaveSetting("MythBurnMenuTheme", theme);
 }

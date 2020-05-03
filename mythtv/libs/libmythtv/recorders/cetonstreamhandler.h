@@ -20,21 +20,16 @@
 
 class CetonStreamHandler;
 class CetonChannel;
-#if QT_VERSION < QT_VERSION_CHECK(5, 0, 0)
-class QUrl;
-#else
 class QUrlQuery;
-#endif
 
 class CetonStreamHandler : public IPTVStreamHandler
 {
   public:
-    static CetonStreamHandler *Get(const QString &devicename,
-                                   int recorder_id = -1);
-    static void Return(CetonStreamHandler * & ref, int recorder_id = -1);
+    static CetonStreamHandler *Get(const QString &devname, int inputid);
+    static void Return(CetonStreamHandler * & ref, int inputid);
 
     bool IsConnected(void) const;
-    bool IsCableCardInstalled() const { return _using_cablecard; };
+    bool IsCableCardInstalled() const { return m_usingCablecard; };
 
     // Commands
     bool EnterPowerSavingMode(void);
@@ -45,7 +40,7 @@ class CetonStreamHandler : public IPTVStreamHandler
     uint GetProgramNumber(void) const;
 
   private:
-    explicit CetonStreamHandler(const QString &);
+    explicit CetonStreamHandler(const QString &device, int inputid);
 
     bool Connect(void);
 
@@ -62,34 +57,28 @@ class CetonStreamHandler : public IPTVStreamHandler
     QString GetVar(const QString &section, const QString &variable) const;
     QStringList GetProgramList();
     bool HttpRequest(const QString &method, const QString &script,
-#if QT_VERSION < QT_VERSION_CHECK(5, 0, 0)
-                     const QUrl &params,
-#else
                      const QUrlQuery &params,
-#endif
                      QString &response, uint &status_code) const;
 
 
   private:
-    QString     _ip_address;
-    uint        _card;
-    uint        _tuner;
-    QString     _device_path;
-    bool        _using_cablecard;
-    bool        _connected;
-    bool               _valid;
+    QString     m_ipAddress;
+    uint        m_card            {0};
+    uint        m_tuner           {0};
+    bool        m_usingCablecard  {false};
+    bool        m_connected       {false};
+    bool        m_valid           {false};
 
-    uint        _last_frequency;
-    QString     _last_modulation;
-    uint        _last_program;
-    QString     _last_vchannel;
-    QTime       _read_timer;
+    uint        m_lastFrequency   {0};
+    QString     m_lastModulation;
+    uint        m_lastProgram     {0};
+    QString     m_lastVchannel;
 
     // for implementing Get & Return
-    static QMutex                               _handlers_lock;
-    static QMap<QString, CetonStreamHandler*>   _handlers;
-    static QMap<QString, uint>                  _handlers_refcnt;
-    static QMap<QString, bool>                  _info_queried;
+    static QMutex                               s_handlersLock;
+    static QMap<QString, CetonStreamHandler*>   s_handlers;
+    static QMap<QString, uint>                  s_handlersRefCnt;
+    static QMap<QString, bool>                  s_infoQueried;
 };
 
 #endif // _CETONSTREAMHANDLER_H_

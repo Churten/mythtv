@@ -32,11 +32,13 @@
 
 // C++ includes
 #include <algorithm>
+#include <utility>
+
 using namespace std;
 
 // Qt includes
-#include <QObject>
 #include <QMutexLocker>
+#include <QObject>
 
 // MythTV includes - General
 #include "channelscan_sm.h"
@@ -74,6 +76,9 @@ const uint ChannelScanSM::kATSCTableTimeout = 10 * 1000;
 /// No logic here, lets just wait at least 15 seconds.
 const uint ChannelScanSM::kMPEGTableTimeout = 15 * 1000;
 
+// Freesat and Sky
+static const uint kRegionUndefined = 0xFFFF;        // Not regional
+
 QString ChannelScanSM::loc(const ChannelScanSM *siscan)
 {
     if (siscan && siscan->m_channel)
@@ -88,29 +93,31 @@ QString ChannelScanSM::loc(const ChannelScanSM *siscan)
 class ScannedChannelInfo
 {
   public:
-    ScannedChannelInfo() : mgt(NULL) {}
+    ScannedChannelInfo() = default;
 
     bool IsEmpty() const
     {
-        return pats.empty() && pmts.empty()        &&
-               program_encryption_status.isEmpty() &&
-               !mgt         && cvcts.empty()       && tvcts.empty() &&
-               nits.empty() && sdts.empty();
+        return m_pats.empty()  && m_pmts.empty()     &&
+               m_programEncryptionStatus.isEmpty()   &&
+               !m_mgt          && m_cvcts.empty()    &&
+               m_tvcts.empty() && m_nits.empty()     &&
+               m_sdts.empty()  && m_bats.empty();
     }
 
     // MPEG
-    pat_map_t         pats;
-    pmt_vec_t         pmts;
-    QMap<uint,uint>   program_encryption_status; // pnum->enc_status
+    pat_map_t               m_pats;
+    pmt_vec_t               m_pmts;
+    QMap<uint,uint>         m_programEncryptionStatus; // pnum->enc_status
 
     // ATSC
-    const MasterGuideTable *mgt;
-    cvct_vec_t        cvcts;
-    tvct_vec_t        tvcts;
+    const MasterGuideTable *m_mgt {nullptr};
+    cvct_vec_t              m_cvcts;
+    tvct_vec_t              m_tvcts;
 
     // DVB
-    nit_vec_t         nits;
-    sdt_map_t         sdts;
+    nit_vec_t               m_nits;
+    sdt_map_t               m_sdts;
+    bat_vec_t               m_bats;
 };
 
 /** \class ChannelScanSM
@@ -139,38 +146,21 @@ class ScannedChannelInfo
 ChannelScanSM::ChannelScanSM(ScanMonitor *_scan_monitor,
                              const QString &_cardtype, ChannelBase *_channel,
                              int _sourceID, uint signal_timeout,
-                             uint channel_timeout, const QString &_inputname,
+                             uint channel_timeout, QString _inputname,
                              bool test_decryption)
     : // Set in constructor
       m_scanMonitor(_scan_monitor),
       m_channel(_channel),
-      m_signalMonitor(SignalMonitor::Init(_cardtype, -1, _channel, true)),
+      m_signalMonitor(SignalMonitor::Init(_cardtype, m_channel->GetInputID(),
+                                          _channel, true)),
       m_sourceID(_sourceID),
       m_signalTimeout(signal_timeout),
       m_channelTimeout(channel_timeout),
-      m_otherTableTimeout(0),
-      m_otherTableTime(0),
-      m_setOtherTables(false),
-      m_inputName(_inputname),
+      m_inputName(std::move(_inputname)),
       m_testDecryption(test_decryption),
-      m_extendScanList(false),
-      // Optional state
-      m_scanDTVTunerType(DTVTunerType::kTunerTypeUnknown),
-      // State
-      m_scanning(false),
-      m_threadExit(false),
-      m_waitingForTables(false),
-      // Transports List
-      m_transportsScanned(0),
-      m_currentTestingDecryption(false),
       // Misc
-      m_channelsFound(999),
-      m_currentInfo(NULL),
-      m_analogSignalHandler(new AnalogSignalHandler(this)),
-      m_scannerThread(NULL)
+      m_analogSignalHandler(new AnalogSignalHandler(this))
 {
-    m_inputName.detach();
-
     m_current = m_scanTransports.end();
 
     // Create a stream data for digital signal monitors
@@ -178,11 +168,11 @@ ChannelScanSM::ChannelScanSM(ScanMonitor *_scan_monitor,
     if (dtvSigMon)
     {
         LOG(VB_CHANSCAN, LOG_INFO, LOC + "Connecting up DTVSignalMonitor");
-        ScanStreamData *data = new ScanStreamData();
+        auto *data = new ScanStreamData();
 
         MSqlQuery query(MSqlQuery::InitCon());
         query.prepare(
-                "SELECT dvb_nit_id "
+                "SELECT dvb_nit_id, bouquet_id, region_id "
                 "FROM videosource "
                 "WHERE videosource.sourceid = :SOURCEID");
         query.bindValue(":SOURCEID", _sourceID);
@@ -192,11 +182,19 @@ ChannelScanSM::ChannelScanSM(ScanMonitor *_scan_monitor,
         }
         else if (query.next())
         {
-            uint nitid = query.value(0).toInt();
+            int nitid = query.value(0).toInt();
             data->SetRealNetworkID(nitid);
             LOG(VB_CHANSCAN, LOG_INFO, LOC +
                 QString("Setting NIT-ID to %1").arg(nitid));
+
+            m_bouquetId = query.value(1).toUInt();
+            m_regionId  = query.value(2).toUInt();
+            m_nitId     = nitid > 0 ? nitid : 0;
         }
+
+        LOG(VB_CHANSCAN, LOG_INFO, LOC +
+            QString("Freesat/Sky bouquet_id:%1 region_id:%2")
+                .arg(m_bouquetId).arg(m_regionId));
 
         dtvSigMon->SetStreamData(data);
         dtvSigMon->AddFlags(SignalMonitor::kDTVSigMon_WaitForMGT |
@@ -205,7 +203,7 @@ ChannelScanSM::ChannelScanSM(ScanMonitor *_scan_monitor,
                             SignalMonitor::kDTVSigMon_WaitForSDT);
 
 #ifdef USING_DVB
-        DVBChannel *dvbchannel = dynamic_cast<DVBChannel*>(m_channel);
+        auto *dvbchannel = dynamic_cast<DVBChannel*>(m_channel);
         if (dvbchannel && dvbchannel->GetRotor())
             dtvSigMon->AddFlags(SignalMonitor::kDVBSigMon_WaitForPos);
 #endif
@@ -222,7 +220,7 @@ ChannelScanSM::~ChannelScanSM(void)
     StopScanner();
     LOG(VB_CHANSCAN, LOG_INFO, LOC + "ChannelScanSM Stopped");
 
-    ScanStreamData *sd = NULL;
+    ScanStreamData *sd = nullptr;
     if (GetDTVSignalMonitor())
     {
         sd = GetDTVSignalMonitor()->GetScanStreamData();
@@ -232,7 +230,7 @@ ChannelScanSM::~ChannelScanSM(void)
     {
         m_signalMonitor->RemoveListener(m_analogSignalHandler);
         delete m_signalMonitor;
-        m_signalMonitor = NULL;
+        m_signalMonitor = nullptr;
     }
 
     delete sd;
@@ -240,7 +238,7 @@ ChannelScanSM::~ChannelScanSM(void)
     if (m_analogSignalHandler)
     {
         delete m_analogSignalHandler;
-        m_analogSignalHandler = NULL;
+        m_analogSignalHandler = nullptr;
     }
 
     teardown_frequency_tables();
@@ -258,11 +256,9 @@ void ChannelScanSM::HandleAllGood(void)
 {
     QMutexLocker locker(&m_lock);
 
-    QString cur_chan = (*m_current).FriendlyName;
+    QString cur_chan = (*m_current).m_friendlyName;
     QStringList list = cur_chan.split(" ", QString::SkipEmptyParts);
     QString freqid = (list.size() >= 2) ? list[1] : cur_chan;
-
-    bool ok = false;
 
     QString msg = QObject::tr("Updated Channel %1").arg(cur_chan);
 
@@ -273,7 +269,7 @@ void ChannelScanSM::HandleAllGood(void)
         QString callsign = QString("%1-%2")
             .arg(ChannelUtil::GetUnknownCallsign()).arg(chanid);
 
-        ok = ChannelUtil::CreateChannel(
+        bool ok = ChannelUtil::CreateChannel(
             0      /* mplexid */,
             m_sourceID,
             chanid,
@@ -284,8 +280,7 @@ void ChannelScanSM::HandleAllGood(void)
             0      /* ATSC major channel */,
             0      /* ATSC minor channel */,
             false  /* use on air guide   */,
-            false  /* hidden             */,
-            false  /* hidden in guide    */,
+            kChannelVisible /* visible   */,
             freqid);
 
         msg = (ok) ?
@@ -294,7 +289,7 @@ void ChannelScanSM::HandleAllGood(void)
     }
     else
     {
-        // nothing to do here, XMLTV & DataDirect have better info
+        // nothing to do here, XMLTV has better info
     }
 
     m_scanMonitor->ScanAppendTextToLog(msg);
@@ -338,8 +333,8 @@ bool ChannelScanSM::ScanExistingTransports(uint sourceid, bool follow_nit)
         return false;
     }
 
-    for (uint i = 0; i < multiplexes.size(); ++i)
-        AddToList(multiplexes[i]);
+    for (uint multiplex : multiplexes)
+        AddToList(multiplex);
 
     m_extendScanList = follow_nit;
     m_waitingForTables  = false;
@@ -358,8 +353,17 @@ bool ChannelScanSM::ScanExistingTransports(uint sourceid, bool follow_nit)
         return false;
     }
 
-
     return m_scanning;
+}
+
+void ChannelScanSM::LogLines(const QString& string)
+{
+    if (VERBOSE_LEVEL_CHECK(VB_CHANSCAN, LOG_DEBUG))
+    {
+        QStringList lines = string.split('\n');
+        for (int i = 0; i < lines.size(); ++i)
+            LOG(VB_CHANSCAN, LOG_DEBUG, lines[i]);
+    }
 }
 
 void ChannelScanSM::HandlePAT(const ProgramAssociationTable *pat)
@@ -368,7 +372,8 @@ void ChannelScanSM::HandlePAT(const ProgramAssociationTable *pat)
 
     LOG(VB_CHANSCAN, LOG_INFO, LOC +
         QString("Got a Program Association Table for %1")
-            .arg((*m_current).FriendlyName) + "\n" + pat->toString());
+            .arg((*m_current).m_friendlyName));
+    LogLines(pat->toString());
 
     // Add pmts to list, so we can do MPEG scan properly.
     ScanStreamData *sd = GetDTVSignalMonitor()->GetScanStreamData();
@@ -379,25 +384,28 @@ void ChannelScanSM::HandlePAT(const ProgramAssociationTable *pat)
     }
 }
 
-void ChannelScanSM::HandlePMT(uint, const ProgramMapTable *pmt)
+void ChannelScanSM::HandlePMT(uint /*program_num*/, const ProgramMapTable *pmt)
 {
     QMutexLocker locker(&m_lock);
 
-    LOG(VB_CHANSCAN, LOG_INFO, LOC + QString("Got a Program Map Table for %1")
-            .arg((*m_current).FriendlyName) + "\n" + pmt->toString());
+    LOG(VB_CHANSCAN, LOG_INFO, LOC + QString("Got a Program Map Table for %1 program %2 (0x%3)")
+            .arg((*m_current).m_friendlyName).arg(pmt->ProgramNumber())
+            .arg(pmt->ProgramNumber(),4,16,QChar('0')));
+    LogLines(pmt->toString());
 
     if (!m_currentTestingDecryption &&
         pmt->IsEncrypted(GetDTVChannel()->GetSIStandard()))
         m_currentEncryptionStatus[pmt->ProgramNumber()] = kEncUnknown;
 }
 
-void ChannelScanSM::HandleVCT(uint, const VirtualChannelTable *vct)
+void ChannelScanSM::HandleVCT(uint /*pid*/, const VirtualChannelTable *vct)
 {
     QMutexLocker locker(&m_lock);
 
     LOG(VB_CHANSCAN, LOG_INFO, LOC +
         QString("Got a Virtual Channel Table for %1")
-            .arg((*m_current).FriendlyName) + "\n" + vct->toString());
+            .arg((*m_current).m_friendlyName));
+    LogLines(vct->toString());
 
     for (uint i = 0; !m_currentTestingDecryption && i < vct->ChannelCount(); ++i)
     {
@@ -415,22 +423,33 @@ void ChannelScanSM::HandleMGT(const MasterGuideTable *mgt)
     QMutexLocker locker(&m_lock);
 
     LOG(VB_CHANSCAN, LOG_INFO, LOC + QString("Got the Master Guide for %1")
-            .arg((*m_current).FriendlyName) + "\n" + mgt->toString());
+            .arg((*m_current).m_friendlyName));
+    LogLines(mgt->toString());
 
     UpdateChannelInfo(true);
 }
 
-void ChannelScanSM::HandleSDT(uint tsid, const ServiceDescriptionTable *sdt)
+/**
+ * \fn ChannelScanSM::HandleSDT
+ *
+ * \param tsid Unused. Present so that the HandleSDT and HandleSDTo
+ *             functions have the same type signature.
+ * \param sdt  A pointer to the service description table.
+ */
+void ChannelScanSM::HandleSDT(uint /*tsid*/, const ServiceDescriptionTable *sdt)
 {
     QMutexLocker locker(&m_lock);
 
     LOG(VB_CHANSCAN, LOG_INFO, LOC +
-        QString("Got a Service Description Table for %1")
-            .arg((*m_current).FriendlyName) + "\n" + sdt->toString());
+        QString("Got a Service Description Table for %1 section %2/%3")
+            .arg((*m_current).m_friendlyName)
+            .arg(sdt->Section()).arg(sdt->LastSection()));
+    LogLines(sdt->toString());
 
     // If this is Astra 28.2 add start listening for Freesat BAT and SDTo
-    if (!m_setOtherTables && (sdt->OriginalNetworkID() == 2 ||
-        sdt->OriginalNetworkID() == 59))
+    if (!m_setOtherTables && (
+        sdt->OriginalNetworkID() == OriginalNetworkID::SES2 ||
+        sdt->OriginalNetworkID() == OriginalNetworkID::BBC))
     {
         GetDTVSignalMonitor()->GetScanStreamData()->
                                SetFreesatAdditionalSI(true);
@@ -445,7 +464,7 @@ void ChannelScanSM::HandleSDT(uint tsid, const ServiceDescriptionTable *sdt)
                     "additional Freesat SI").arg(sdt->OriginalNetworkID()));
     }
 
-    if ((uint)m_timer.elapsed() < m_otherTableTime)
+    if (!m_timer.hasExpired(m_otherTableTime))
     {
         // Set the version for the SDT so we see it again.
         GetDTVSignalMonitor()->GetDVBStreamData()->
@@ -471,8 +490,10 @@ void ChannelScanSM::HandleNIT(const NetworkInformationTable *nit)
     QMutexLocker locker(&m_lock);
 
     LOG(VB_CHANSCAN, LOG_INFO, LOC +
-        QString("Got a Network Information Table for %1")
-            .arg((*m_current).FriendlyName) + "\n" + nit->toString());
+        QString("Got a Network Information Table id %1 for %2 section %3/%4")
+            .arg(nit->NetworkID()).arg((*m_current).m_friendlyName)
+            .arg(nit->Section()).arg(nit->LastSection()));
+    LogLines(nit->toString());
 
     UpdateChannelInfo(true);
 }
@@ -481,8 +502,11 @@ void ChannelScanSM::HandleBAT(const BouquetAssociationTable *bat)
 {
     QMutexLocker locker(&m_lock);
 
-    LOG(VB_CHANSCAN, LOG_INFO, LOC + "Got a Bouquet Association Table\n" +
-        bat->toString());
+    LOG(VB_CHANSCAN, LOG_INFO, LOC +
+        QString("Got a Bouquet Association Table id %1 for %2 section %3/%4")
+            .arg(bat->BouquetID()).arg((*m_current).m_friendlyName)
+            .arg(bat->Section()).arg(bat->LastSection()));
+    LogLines(bat->toString());
 
     m_otherTableTime = m_timer.elapsed() + m_otherTableTimeout;
 
@@ -503,13 +527,21 @@ void ChannelScanSM::HandleBAT(const BouquetAssociationTable *bat)
         {
             DefaultAuthorityDescriptor authority(def_auth);
             ServiceListDescriptor services(serv_list);
+            if (!authority.IsValid() || !services.IsValid())
+                continue;
+
+            LOG(VB_CHANSCAN, LOG_INFO, LOC +
+                QString("Found default authority '%1' in BAT for services in %2 %3")
+                    .arg(authority.DefaultAuthority())
+                    .arg(netid).arg(tsid));
 
             for (uint j = 0; j < services.ServiceCount(); ++j)
             {
                 // If the default authority is given in the SDT this
                 // overrides any definition in the BAT (or in the NIT)
-                LOG(VB_CHANSCAN, LOG_INFO, LOC +
-                    QString("found default authority(BAT) for service %1 %2 %3")
+                LOG(VB_CHANSCAN, LOG_DEBUG, LOC +
+                    QString("Found default authority '%1' in BAT for service %2 %3 %4")
+                        .arg(authority.DefaultAuthority())
                         .arg(netid).arg(tsid).arg(services.ServiceID(j)));
                uint64_t index = ((uint64_t)netid << 32) | (tsid << 16) |
                                  services.ServiceID(j);
@@ -518,6 +550,7 @@ void ChannelScanSM::HandleBAT(const BouquetAssociationTable *bat)
             }
         }
     }
+    UpdateChannelInfo(true);
 }
 
 void ChannelScanSM::HandleSDTo(uint tsid, const ServiceDescriptionTable *sdt)
@@ -525,7 +558,9 @@ void ChannelScanSM::HandleSDTo(uint tsid, const ServiceDescriptionTable *sdt)
     QMutexLocker locker(&m_lock);
 
     LOG(VB_CHANSCAN, LOG_INFO, LOC +
-        "Got a Service Description Table (other)\n" + sdt->toString());
+        QString("Got a Service Description Table (other) for Transport ID %1 section %2/%3")
+            .arg(tsid).arg(sdt->Section()).arg(sdt->LastSection()));
+    LogLines(sdt->toString());
 
     m_otherTableTime = m_timer.elapsed() + m_otherTableTimeout;
 
@@ -543,8 +578,11 @@ void ChannelScanSM::HandleSDTo(uint tsid, const ServiceDescriptionTable *sdt)
         if (def_auth)
         {
             DefaultAuthorityDescriptor authority(def_auth);
+            if (!authority.IsValid())
+                continue;
             LOG(VB_CHANSCAN, LOG_INFO, LOC +
-                QString("found default authority(SDTo) for service %1 %2 %3")
+                QString("Found default authority '%1' in SDTo for service %2 %3 %4")
+                    .arg(authority.DefaultAuthority())
                     .arg(netid).arg(tsid).arg(serviceId));
             m_defAuthorities[((uint64_t)netid << 32) | (tsid << 16) | serviceId] =
                 authority.DefaultAuthority();
@@ -566,7 +604,7 @@ void ChannelScanSM::HandleEncryptionStatus(uint pnum, bool encrypted)
 
 bool ChannelScanSM::TestNextProgramEncryption(void)
 {
-    if (!m_currentInfo || m_currentInfo->pmts.empty())
+    if (!m_currentInfo || m_currentInfo->m_pmts.empty())
     {
         LOG(VB_GENERAL, LOG_ERR, LOC + "Can't monitor decryption -- no pmts");
         m_currentTestingDecryption = false;
@@ -603,16 +641,17 @@ bool ChannelScanSM::TestNextProgramEncryption(void)
             continue;
         }
 
-        const ProgramMapTable *pmt = NULL;
-        for (uint i = 0; !pmt && (i < m_currentInfo->pmts.size()); ++i)
+        const ProgramMapTable *pmt = nullptr;
+        for (uint i = 0; !pmt && (i < m_currentInfo->m_pmts.size()); ++i)
         {
-            pmt = (m_currentInfo->pmts[i]->ProgramNumber() == pnum) ?
-                m_currentInfo->pmts[i] : NULL;
+            pmt = (m_currentInfo->m_pmts[i]->ProgramNumber() == pnum) ?
+                m_currentInfo->m_pmts[i] : nullptr;
         }
 
         if (pmt)
         {
-            QString cur_chan, cur_chan_tr;
+            QString cur_chan;
+            QString cur_chan_tr;
             GetCurrentTransportInfo(cur_chan, cur_chan_tr);
 
             QString msg_tr =
@@ -659,9 +698,9 @@ DTVTunerType ChannelScanSM::GuessDTVTunerType(DTVTunerType type) const
 
     vector<DTVTunerType> tts = chan->GetTunerTypes();
 
-    for (uint i = 0; i < tts.size(); ++i)
+    for (auto & tt : tts)
     {
-        if (tts[i] == type)
+        if (tt == type)
             return type;
     }
 
@@ -686,13 +725,19 @@ void ChannelScanSM::UpdateScanTransports(const NetworkInformationTable *nit)
             MPEGDescriptor::Parse(nit->TransportDescriptors(i),
                                   nit->TransportDescriptorsLength(i));
 
-        for (uint j = 0; j < list.size(); ++j)
+        for (size_t j = 0; j < list.size(); ++j)
         {
             int mplexid = -1;
             uint64_t frequency = 0;
             const MPEGDescriptor desc(list[j]);
             uint tag = desc.DescriptorTag();
-            DTVTunerType tt = DTVTunerType::kTunerTypeUnknown;
+            uint length = desc.DescriptorLength();
+            QString tagString = desc.DescriptorTagString();
+
+            DTVTunerType tt(DTVTunerType::kTunerTypeUnknown);
+
+            LOG(VB_CHANSCAN, LOG_DEBUG, LOC + QString("NIT ts-loop j:%1 tag:%2 (0x%3) '%4' length:%5")
+                .arg(j).arg(tag).arg(tag,0,16).arg(tagString).arg(length));
 
             switch (tag)
             {
@@ -703,12 +748,22 @@ void ChannelScanSM::UpdateScanTransports(const NetworkInformationTable *nit)
                     tt = DTVTunerType::kTunerTypeDVBT;
                     break;
                 }
+                case DescriptorID::t2_terrestrial_delivery_system:
+                {
+                    // Additional info in the T2 descriptor not yet used
+                    continue;
+                }
                 case DescriptorID::satellite_delivery_system:
                 {
                     const SatelliteDeliverySystemDescriptor cd(desc);
-                    frequency = cd.FrequencyHz()/1000;
+                    frequency = cd.FrequencykHz();
                     tt = DTVTunerType::kTunerTypeDVBS1;
                     break;
+                }
+                case DescriptorID::s2_satellite_delivery_system:
+                {
+                    // Additional info in the S2 descriptor not yet used
+                    continue;
                 }
                 case DescriptorID::cable_delivery_system:
                 {
@@ -718,8 +773,9 @@ void ChannelScanSM::UpdateScanTransports(const NetworkInformationTable *nit)
                     break;
                 }
                 default:
-                    LOG(VB_CHANSCAN, LOG_ERR, LOC +
-                        "unknown delivery system descriptor");
+                    LOG(VB_CHANSCAN, LOG_DEBUG, LOC +
+                        QString("Descriptor %1 (0x%2) '%3' ignored")
+                            .arg(tag).arg(tag,0,16).arg(tagString));
                     continue;
             }
 
@@ -752,6 +808,9 @@ bool ChannelScanSM::UpdateChannelInfo(bool wait_until_complete)
     if (m_current == m_scanTransports.end())
         return true;
 
+    if (wait_until_complete && !m_waitingForTables)
+        return true;
+
     if (wait_until_complete && m_currentTestingDecryption)
         return false;
 
@@ -771,22 +830,22 @@ bool ChannelScanSM::UpdateChannelInfo(bool wait_until_complete)
     // Grab PAT tables
     pat_vec_t pattmp = sd->GetCachedPATs();
     QMap<uint,bool> tsid_checked;
-    for (uint i = 0; i < pattmp.size(); ++i)
+    for (auto & pat : pattmp)
     {
-        uint tsid = pattmp[i]->TransportStreamID();
+        uint tsid = pat->TransportStreamID();
         if (tsid_checked[tsid])
             continue;
         tsid_checked[tsid] = true;
-        if (m_currentInfo->pats.contains(tsid))
+        if (m_currentInfo->m_pats.contains(tsid))
             continue;
 
         if (!wait_until_complete || sd->HasCachedAllPAT(tsid))
         {
-            m_currentInfo->pats[tsid] = sd->GetCachedPATs(tsid);
-            if (!m_currentInfo->pmts.empty())
+            m_currentInfo->m_pats[tsid] = sd->GetCachedPATs(tsid);
+            if (!m_currentInfo->m_pmts.empty())
             {
-                sd->ReturnCachedPMTTables(m_currentInfo->pmts);
-                m_currentInfo->pmts.clear();
+                sd->ReturnCachedPMTTables(m_currentInfo->m_pmts);
+                m_currentInfo->m_pmts.clear();
             }
         }
         else
@@ -797,90 +856,114 @@ bool ChannelScanSM::UpdateChannelInfo(bool wait_until_complete)
 
     // Grab PMT tables
     if ((!wait_until_complete || sd->HasCachedAllPMTs()) &&
-        m_currentInfo->pmts.empty())
-        m_currentInfo->pmts = sd->GetCachedPMTs();
+        m_currentInfo->m_pmts.empty())
+        m_currentInfo->m_pmts = sd->GetCachedPMTs();
 
     // ATSC
-    if (!m_currentInfo->mgt && sd->HasCachedMGT())
-        m_currentInfo->mgt = sd->GetCachedMGT();
+    if (!m_currentInfo->m_mgt && sd->HasCachedMGT())
+        m_currentInfo->m_mgt = sd->GetCachedMGT();
 
     if ((!wait_until_complete || sd->HasCachedAllCVCTs()) &&
-        m_currentInfo->cvcts.empty())
+        m_currentInfo->m_cvcts.empty())
     {
-        m_currentInfo->cvcts = sd->GetCachedCVCTs();
+        m_currentInfo->m_cvcts = sd->GetCachedCVCTs();
     }
 
     if ((!wait_until_complete || sd->HasCachedAllTVCTs()) &&
-        m_currentInfo->tvcts.empty())
+        m_currentInfo->m_tvcts.empty())
     {
-        m_currentInfo->tvcts = sd->GetCachedTVCTs();
+        m_currentInfo->m_tvcts = sd->GetCachedTVCTs();
     }
 
     // DVB
     if ((!wait_until_complete || sd->HasCachedAllNIT()) &&
-        (m_currentInfo->nits.empty() ||
-        m_timer.elapsed() > (int)m_otherTableTime))
+        (m_currentInfo->m_nits.empty() ||
+         m_timer.hasExpired(m_otherTableTime)))
     {
-        m_currentInfo->nits = sd->GetCachedNIT();
+        m_currentInfo->m_nits = sd->GetCachedNIT();
     }
 
     sdt_vec_t sdttmp = sd->GetCachedSDTs();
     tsid_checked.clear();
-    for (uint i = 0; i < sdttmp.size(); ++i)
+    for (auto & sdt : sdttmp)
     {
-        uint tsid = sdttmp[i]->TSID();
+        uint tsid = sdt->TSID();
         if (tsid_checked[tsid])
             continue;
         tsid_checked[tsid] = true;
-        if (m_currentInfo->sdts.contains(tsid))
+        if (m_currentInfo->m_sdts.contains(tsid))
             continue;
 
         if (!wait_until_complete || sd->HasCachedAllSDT(tsid))
-            m_currentInfo->sdts[tsid] = sd->GetCachedSDTs(tsid);
+            m_currentInfo->m_sdts[tsid] = sd->GetCachedSDTSections(tsid);
     }
     sd->ReturnCachedSDTTables(sdttmp);
+
+    if ((!wait_until_complete || sd->HasCachedAllBATs()) &&
+        (m_currentInfo->m_bats.empty() ||
+         m_timer.hasExpired(m_otherTableTime)))
+    {
+        m_currentInfo->m_bats = sd->GetCachedBATs();
+    }
 
     // Check if transport tuning is complete
     if (transport_tune_complete)
     {
-        transport_tune_complete &= !m_currentInfo->pmts.empty();
+        transport_tune_complete &= !m_currentInfo->m_pmts.empty();
+
+        if (!(sd->HasCachedMGT() || sd->HasCachedAnyNIT()))
+        {
+            transport_tune_complete = false;
+        }
+
         if (sd->HasCachedMGT() || sd->HasCachedAnyVCTs())
         {
             transport_tune_complete &= sd->HasCachedMGT();
             transport_tune_complete &=
-                (!m_currentInfo->tvcts.empty() || !m_currentInfo->cvcts.empty());
+                (!m_currentInfo->m_tvcts.empty() || !m_currentInfo->m_cvcts.empty());
         }
-        if (sd->HasCachedAnyNIT() || sd->HasCachedAnySDTs())
+        else if (sd->HasCachedAnyNIT() || sd->HasCachedAnySDTs())
         {
-            transport_tune_complete &= !m_currentInfo->nits.empty();
-            transport_tune_complete &= !m_currentInfo->sdts.empty();
+            transport_tune_complete &= !m_currentInfo->m_nits.empty();
+            transport_tune_complete &= !m_currentInfo->m_sdts.empty();
+        }
+        if (sd->HasCachedAnyBATs())
+        {
+            transport_tune_complete &= !m_currentInfo->m_bats.empty();
         }
         if (transport_tune_complete)
         {
+            uint tsid = dtv_sm->GetTransportID();
             LOG(VB_CHANSCAN, LOG_INFO, LOC +
-                QString("transport_tune_complete: "
-                        "\n\t\t\tcurrentInfo->pmts.empty():     %1"
-                        "\n\t\t\tsd->HasCachedAnyNIT():         %2"
-                        "\n\t\t\tsd->HasCachedAnySDTs():        %3"
-                        "\n\t\t\tcurrentInfo->nits.empty():     %4"
-                        "\n\t\t\tcurrentInfo->sdts.empty():     %5")
-                    .arg(m_currentInfo->pmts.empty())
-                    .arg(sd->HasCachedAnyNIT())
-                    .arg(sd->HasCachedAnySDTs())
-                    .arg(m_currentInfo->nits.empty())
-                    .arg(m_currentInfo->sdts.empty()));
+                QString("\n\t\t\tsd->HasCachedAnyNIT():         %1").arg(sd->HasCachedAnyNIT()) +
+                QString("\n\t\t\tsd->HasCachedAnySDTs():        %1").arg(sd->HasCachedAnySDTs()) +
+                QString("\n\t\t\tsd->HasCachedAnyBATs():        %1").arg(sd->HasCachedAnyBATs()) +
+                QString("\n\t\t\tsd->HasCachedAllPMTs():        %1").arg(sd->HasCachedAllPMTs()) +
+                QString("\n\t\t\tsd->HasCachedAllNIT():         %1").arg(sd->HasCachedAllNIT()) +
+                QString("\n\t\t\tsd->HasCachedAllSDT(%1):    %2").arg(tsid,5).arg(sd->HasCachedAllSDT(tsid)) +
+                QString("\n\t\t\tsd->HasCachedAllBATs():        %1").arg(sd->HasCachedAllBATs()) +
+                QString("\n\t\t\tsd->HasCachedMGT():            %1").arg(sd->HasCachedMGT()) +
+                QString("\n\t\t\tsd->HasCachedAnyVCTs():        %1").arg(sd->HasCachedAnyVCTs()) +
+                QString("\n\t\t\tsd->HasCachedAllCVCTs():       %1").arg(sd->HasCachedAllCVCTs()) +
+                QString("\n\t\t\tsd->HasCachedAllTVCTs():       %1").arg(sd->HasCachedAllTVCTs()) +
+                QString("\n\t\t\tcurrentInfo->m_pmts.empty():   %1").arg(m_currentInfo->m_pmts.empty()) +
+                QString("\n\t\t\tcurrentInfo->m_nits.empty():   %1").arg(m_currentInfo->m_nits.empty()) +
+                QString("\n\t\t\tcurrentInfo->m_sdts.empty():   %1").arg(m_currentInfo->m_sdts.empty()) +
+                QString("\n\t\t\tcurrentInfo->m_bats.empty():   %1").arg(m_currentInfo->m_bats.empty()) +
+                QString("\n\t\t\tcurrentInfo->m_cvtcs.empty():  %1").arg(m_currentInfo->m_cvcts.empty()) +
+                QString("\n\t\t\tcurrentInfo->m_tvtcs.empty():  %1").arg(m_currentInfo->m_tvcts.empty()));
         }
     }
-    transport_tune_complete |= !wait_until_complete;
+    if (!wait_until_complete)
+        transport_tune_complete = true;
     if (transport_tune_complete)
     {
         LOG(VB_CHANSCAN, LOG_INFO, LOC +
-            QString("transport_tune_complete: wait_until_complete %1")
-                .arg(wait_until_complete));
+            QString("transport_tune_complete: wait_until_complete %1").arg(wait_until_complete));
     }
 
     if (transport_tune_complete &&
-        /*!ignoreEncryptedServices &&*/ m_currentEncryptionStatus.size())
+        /*!ignoreEncryptedServices &&*/ !m_currentEncryptionStatus.empty())
     {
         //GetDTVSignalMonitor()->GetStreamData()->StopTestingDecryption();
 
@@ -890,17 +973,21 @@ bool ChannelScanSM::UpdateChannelInfo(bool wait_until_complete)
         QMap<uint, uint>::const_iterator it = m_currentEncryptionStatus.begin();
         for (; it != m_currentEncryptionStatus.end(); ++it)
         {
-            m_currentInfo->program_encryption_status[it.key()] = *it;
+            m_currentInfo->m_programEncryptionStatus[it.key()] = *it;
 
-            QString msg_tr1 = QObject::tr("Program %1").arg(it.key());
-            QString msg_tr2 = QObject::tr("Unknown decryption status");
-            if (kEncEncrypted == *it)
-                msg_tr2 = QObject::tr("Encrypted");
-            else if (kEncDecrypted == *it)
-                msg_tr2 = QObject::tr("Decrypted");
-            QString msg_tr =QString("%1, %2").arg(msg_tr1).arg(msg_tr2);
+            if (m_testDecryption)
+            {
+                QString msg_tr1 = QObject::tr("Program %1").arg(it.key());
+                QString msg_tr2 = QObject::tr("Unknown decryption status");
+                if (kEncEncrypted == *it)
+                    msg_tr2 = QObject::tr("Encrypted");
+                else if (kEncDecrypted == *it)
+                    msg_tr2 = QObject::tr("Decrypted");
+                QString msg_tr =QString("%1, %2").arg(msg_tr1).arg(msg_tr2);
+                m_scanMonitor->ScanAppendTextToLog(msg_tr);
+            }
 
-            QString msg = LOC + QString("Program %1").arg(it.key());
+            QString msg = QString("Program %1").arg(it.key());
             if (kEncEncrypted == *it)
                 msg = msg + " -- Encrypted";
             else if (kEncDecrypted == *it)
@@ -908,18 +995,17 @@ bool ChannelScanSM::UpdateChannelInfo(bool wait_until_complete)
             else if (kEncUnknown == *it)
                 msg = msg + " -- Unknown decryption status";
 
-            m_scanMonitor->ScanAppendTextToLog(msg_tr);
             LOG(VB_CHANSCAN, LOG_INFO, LOC + msg);
         }
     }
 
-    // append transports from the NIT to the scan list
+    // Append transports from the NIT to the scan list
     if (transport_tune_complete && m_extendScanList &&
-        !m_currentInfo->nits.empty())
+        !m_currentInfo->m_nits.empty())
     {
-        // append delivery system descriptos to scan list
-        nit_vec_t::const_iterator it = m_currentInfo->nits.begin();
-        while (it != m_currentInfo->nits.end())
+        // Update transport with delivery system descriptors from the NIT
+        nit_vec_t::const_iterator it = m_currentInfo->m_nits.begin();
+        while (it != m_currentInfo->m_nits.end())
         {
             UpdateScanTransports(*it);
             ++it;
@@ -929,7 +1015,8 @@ bool ChannelScanSM::UpdateChannelInfo(bool wait_until_complete)
     // Start scanning next transport if we are done with this one..
     if (transport_tune_complete)
     {
-        QString cchan, cchan_tr;
+        QString cchan;
+        QString cchan_tr;
         uint cchan_cnt = GetCurrentTransportInfo(cchan, cchan_tr);
         m_channelsFound += cchan_cnt;
         QString chan_tr = QObject::tr("%1 -- Timed out").arg(cchan_tr);
@@ -939,32 +1026,46 @@ bool ChannelScanSM::UpdateChannelInfo(bool wait_until_complete)
 
         if (!m_currentInfo->IsEmpty())
         {
-            LOG(VB_CHANSCAN, LOG_INFO, LOC +
-                QString("Adding %1, offset %2 to channelList.")
-                    .arg((*m_current).tuning.toString()).arg(m_current.offset()));
-
             TransportScanItem &item = *m_current;
-            item.tuning.frequency = item.freq_offset(m_current.offset());
+            item.m_tuning.m_frequency = item.freq_offset(m_current.offset());
+            item.m_signalStrength = m_signalMonitor->GetSignalStrength();
+            item.m_networkID = dtv_sm->GetNetworkID();
+            item.m_transportID = dtv_sm->GetTransportID();
 
+            if (m_scanDTVTunerType == DTVTunerType::kTunerTypeDVBT)
+            {
+                item.m_tuning.m_modSys = DTVModulationSystem::kModulationSystem_DVBT;
+            }
             if (m_scanDTVTunerType == DTVTunerType::kTunerTypeDVBT2)
             {
                 if (m_dvbt2Tried)
-                    item.tuning.mod_sys = DTVModulationSystem::kModulationSystem_DVBT2;
+                    item.m_tuning.m_modSys = DTVModulationSystem::kModulationSystem_DVBT2;
                 else
-                    item.tuning.mod_sys = DTVModulationSystem::kModulationSystem_DVBT;
+                    item.m_tuning.m_modSys = DTVModulationSystem::kModulationSystem_DVBT;
             }
 
+            LOG(VB_CHANSCAN, LOG_INFO, LOC +
+                QString("Adding %1 offset %2 ss %3 to m_channelList.")
+                    .arg(item.m_tuning.toString()).arg(m_current.offset())
+                    .arg(item.m_signalStrength));
+
+            LOG(VB_CHANSCAN, LOG_DEBUG, LOC +
+                QString("%1(%2) m_inputName: %3 ").arg(__FUNCTION__).arg(__LINE__).arg(m_inputName) +
+                QString("tunerType:%1 %2 ").arg(m_scanDTVTunerType).arg(m_scanDTVTunerType.toString()) +
+                QString("m_modSys:%1 %2 ").arg(item.m_tuning.m_modSys).arg(item.m_tuning.m_modSys.toString()) +
+                QString("m_dvbt2Tried:%1").arg(m_dvbt2Tried));
+
             m_channelList << ChannelListItem(m_current, m_currentInfo);
-            m_currentInfo = NULL;
+            m_currentInfo = nullptr;
         }
         else
         {
             delete m_currentInfo;
-            m_currentInfo = NULL;
+            m_currentInfo = nullptr;
         }
 
         SignalMonitor *sm = GetSignalMonitor();
-        if ((m_timer.elapsed() > (int)m_channelTimeout))
+        if (HasTimedOut())
         {
             msg_tr = (cchan_cnt) ?
                 QObject::tr("%1 possible channels").arg(cchan_cnt) :
@@ -976,7 +1077,7 @@ bool ChannelScanSM::UpdateChannelInfo(bool wait_until_complete)
             msg = QString("%1, %2").arg(chan_tr).arg(msg);
         }
         else if ((m_current != m_scanTransports.end()) &&
-                 (m_timer.elapsed() > (int)(*m_current).timeoutTune) &&
+                 m_timer.hasExpired((*m_current).m_timeoutTune) &&
                  sm && !sm->HasSignalLock())
         {
             msg_tr = QObject::tr("%1, no signal").arg(chan_tr);
@@ -1022,9 +1123,9 @@ bool ChannelScanSM::UpdateChannelInfo(bool wait_until_complete)
 
 #define PCM_INFO_INIT(SISTD) \
     ChannelInsertInfo &info = pnum_to_dbchan[pnum]; \
-    info.db_mplexid   = mplexid;   info.source_id    = m_sourceID;  \
-    info.service_id   = pnum;      info.freqid       = freqidStr; \
-    info.si_standard  = SISTD;
+    info.m_dbMplexId    = mplexid; info.m_sourceId   = m_sourceID;  \
+    info.m_serviceId    = pnum;    info.m_freqId     = freqidStr; \
+    info.m_siStandard   = SISTD;
 
 static void update_info(ChannelInsertInfo &info,
                         const VirtualChannelTable *vct, uint i)
@@ -1032,35 +1133,34 @@ static void update_info(ChannelInsertInfo &info,
     if (vct->ModulationMode(i) == 0x01 /* NTSC Modulation */ ||
         vct->ServiceType(i)    == 0x01 /* Analog TV */)
     {
-        info.si_standard = "ntsc";
-        info.format      = "ntsc";
+        info.m_siStandard = "ntsc";
+        info.m_format     = "ntsc";
     }
 
-    info.callsign = vct->ShortChannelName(i);
+    info.m_callSign = vct->ShortChannelName(i);
 
-    info.service_name = vct->GetExtendedChannelName(i);
-    if (info.service_name.isEmpty())
-        info.service_name = vct->ShortChannelName(i);
+    info.m_serviceName = vct->GetExtendedChannelName(i);
+    if (info.m_serviceName.isEmpty())
+        info.m_serviceName = vct->ShortChannelName(i);
 
-    info.chan_num           = QString::null;
+    info.m_chanNum.clear();
 
-    info.service_id         = vct->ProgramNumber(i);
-    info.atsc_major_channel = vct->MajorChannel(i);
-    info.atsc_minor_channel = vct->MinorChannel(i);
+    info.m_serviceId        = vct->ProgramNumber(i);
+    info.m_atscMajorChannel = vct->MajorChannel(i);
+    info.m_atscMinorChannel = vct->MinorChannel(i);
 
-    info.use_on_air_guide = !vct->IsHidden(i) ||
-        (vct->IsHidden(i) && !vct->IsHiddenInGuide(i));
+    info.m_useOnAirGuide    = !vct->IsHidden(i) || !vct->IsHiddenInGuide(i);
 
-    info.hidden           = vct->IsHidden(i);
-    info.hidden_in_guide  = vct->IsHiddenInGuide(i);
+    info.m_hidden           = vct->IsHidden(i);
+    info.m_hiddenInGuide    = vct->IsHiddenInGuide(i);
 
-    info.vct_tsid         = vct->TransportStreamID();
-    info.vct_chan_tsid    = vct->ChannelTransportStreamID(i);
-    info.is_encrypted    |= vct->IsAccessControlled(i);
-    info.is_data_service  = vct->ServiceType(i) == 0x04;
-    info.is_audio_service = vct->ServiceType(i) == 0x03;
+    info.m_vctTsId          = vct->TransportStreamID();
+    info.m_vctChanTsId      = vct->ChannelTransportStreamID(i);
+    info.m_isEncrypted     |= vct->IsAccessControlled(i);
+    info.m_isDataService    = vct->ServiceType(i) == 0x04;
+    info.m_isAudioService   = vct->ServiceType(i) == 0x03;
 
-    info.in_vct       = true;
+    info.m_inVct        = true;
 }
 
 static void update_info(ChannelInsertInfo &info,
@@ -1072,77 +1172,91 @@ static void update_info(ChannelInsertInfo &info,
     //             (dbver == "1067")
     bool force_guide_present = (
         // Telenor (NO)
-        (sdt->OriginalNetworkID() ==    70) ||
+        (sdt->OriginalNetworkID() == OriginalNetworkID::TELENOR) ||
 #if 0 // #9592#comment:23 - meanwhile my provider changed his signaling
         // Kabelplus (AT) formerly Kabelsignal, registered to NDS, see #9592
         (sdt->OriginalNetworkID() ==   222) ||
 #endif
         // ERT (GR) from the private temporary allocation, see #9592:comment:17
-        (sdt->OriginalNetworkID() == 65330)
+        (sdt->OriginalNetworkID() == 65330) ||
+        // Digitenne (NL) see #13427
+        (sdt->OriginalNetworkID() == OriginalNetworkID::NOZEMA)
     );
     // HACK end -- special exception for these networks
 
     // Figure out best service name and callsign...
     ServiceDescriptor *desc = sdt->GetServiceDescriptor(i);
-    QString callsign = QString::null;
-    QString service_name = QString::null;
+    QString callsign;
+    QString service_name;
     if (desc)
     {
         callsign = desc->ServiceShortName();
         if (callsign.trimmed().isEmpty())
+        {
             callsign = QString("%1-%2-%3")
                 .arg(ChannelUtil::GetUnknownCallsign()).arg(sdt->TSID())
                 .arg(sdt->ServiceID(i));
+        }
 
         service_name = desc->ServiceName();
         if (service_name.trimmed().isEmpty())
-            service_name = QString::null;
+            service_name.clear();
+
+        info.m_serviceType = desc->ServiceType();
+        info.m_isDataService =
+            (desc && !desc->IsDTV() && !desc->IsDigitalAudio());
+        info.m_isAudioService = (desc && desc->IsDigitalAudio());
+        delete desc;
+    }
+    else
+    {
+        LOG(VB_CHANSCAN, LOG_INFO, "ChannelScanSM: " +
+            QString("No ServiceDescriptor for onid %1 tid %2 sid %3")
+                .arg(sdt->OriginalNetworkID()).arg(sdt->TSID()).arg(sdt->ServiceID(i)));
     }
 
-    if (info.callsign.isEmpty())
-        info.callsign = callsign;
-    if (info.service_name.isEmpty())
-        info.service_name = service_name;
+    if (info.m_callSign.isEmpty())
+        info.m_callSign = callsign;
+    if (info.m_serviceName.isEmpty())
+        info.m_serviceName = service_name;
 
-    info.use_on_air_guide =
+    info.m_useOnAirGuide =
         sdt->HasEITPresentFollowing(i) ||
         sdt->HasEITSchedule(i) ||
         force_guide_present;
 
-    info.hidden           = false;
-    info.hidden_in_guide  = false;
-
-    info.is_data_service =
-        (desc && !desc->IsDTV() && !desc->IsDigitalAudio());
-    info.is_audio_service = (desc && desc->IsDigitalAudio());
-    delete desc;
-
-    info.service_id = sdt->ServiceID(i);
-    info.sdt_tsid   = sdt->TSID();
-    info.orig_netid = sdt->OriginalNetworkID();
-    info.in_sdt     = true;
+    info.m_hidden           = false;
+    info.m_hiddenInGuide    = false;
+    info.m_serviceId        = sdt->ServiceID(i);
+    info.m_sdtTsId          = sdt->TSID();
+    info.m_origNetId        = sdt->OriginalNetworkID();
+    info.m_inSdt            = true;
 
     desc_list_t parsed =
         MPEGDescriptor::Parse(sdt->ServiceDescriptors(i),
-                                sdt->ServiceDescriptorsLength(i));
+                              sdt->ServiceDescriptorsLength(i));
     // Look for default authority
     const unsigned char *def_auth =
         MPEGDescriptor::Find(parsed, DescriptorID::default_authority);
     if (def_auth)
     {
         DefaultAuthorityDescriptor authority(def_auth);
-        LOG(VB_CHANSCAN, LOG_INFO, QString("ChannelScanSM: found default "
-                                          "authority(SDT) for service %1 %2 %3")
-                .arg(info.orig_netid).arg(info.sdt_tsid).arg(info.service_id));
-        info.default_authority = authority.DefaultAuthority();
+        if (authority.IsValid())
+        {
+            LOG(VB_CHANSCAN, LOG_INFO,
+                QString("ChannelScanSM: Found default authority '%1' in SDT for service %2 %3 %4")
+                    .arg(authority.DefaultAuthority())
+                    .arg(info.m_origNetId).arg(info.m_sdtTsId).arg(info.m_serviceId));
+            info.m_defaultAuthority = authority.DefaultAuthority();
+            return;
+        }
     }
-    else
-    {
-        uint64_t index = (uint64_t)info.orig_netid << 32 |
-                        info.sdt_tsid << 16 | info.service_id;
-        if (defAuthorities.contains(index))
-            info.default_authority = defAuthorities[index];
-    }
+
+    // If no authority in the SDT then use the one found in the BAT or the SDTo
+    uint64_t index = (uint64_t)info.m_origNetId << 32 |
+        info.m_sdtTsId << 16 | info.m_serviceId;
+    if (defAuthorities.contains(index))
+        info.m_defaultAuthority = defAuthorities[index];
 }
 
 uint ChannelScanSM::GetCurrentTransportInfo(
@@ -1150,7 +1264,8 @@ uint ChannelScanSM::GetCurrentTransportInfo(
 {
     if (m_current.iter() == m_scanTransports.end())
     {
-        cur_chan = cur_chan_tr = QString::null;
+        cur_chan.clear();
+        cur_chan_tr.clear();
         return 0;
     }
 
@@ -1158,23 +1273,23 @@ uint ChannelScanSM::GetCurrentTransportInfo(
 
     QMap<uint,ChannelInsertInfo> list = GetChannelList(m_current, m_currentInfo);
     {
-        for (int i = 0; i < list.size(); ++i)
+        foreach (auto & info, list)
         {
             max_chan_cnt +=
-                (list[i].in_pat || list[i].in_pmt ||
-                 list[i].in_sdt || list[i].in_vct) ? 1 : 0;
+                (info.m_inPat || info.m_inPmt ||
+                 info.m_inSdt || info.m_inVct) ? 1 : 0;
         }
     }
 
     QString offset_str_tr = m_current.offset() ?
         QObject::tr(" offset %2").arg(m_current.offset()) : "";
      cur_chan_tr = QString("%1%2")
-        .arg((*m_current).FriendlyName).arg(offset_str_tr);
+        .arg((*m_current).m_friendlyName).arg(offset_str_tr);
 
     QString offset_str = m_current.offset() ?
         QString(" offset %2").arg(m_current.offset()) : "";
     cur_chan = QString("%1%2")
-        .arg((*m_current).FriendlyName).arg(offset_str);
+        .arg((*m_current).m_friendlyName).arg(offset_str);
 
     return max_chan_cnt;
 }
@@ -1185,62 +1300,58 @@ ChannelScanSM::GetChannelList(transport_scan_items_it_t trans_info,
 {
     QMap<uint,ChannelInsertInfo> pnum_to_dbchan;
 
-    uint    mplexid   = (*trans_info).mplexid;
-    int     freqid    = (*trans_info).friendlyNum;
-    QString freqidStr = (freqid) ? QString::number(freqid) : QString::null;
-    QString iptv_channel = (*trans_info).iptv_channel;
+    uint    mplexid   = (*trans_info).m_mplexid;
+    int     freqid    = (*trans_info).m_friendlyNum;
+    QString freqidStr = (freqid) ? QString::number(freqid) : QString("");
+    QString iptv_channel = (*trans_info).m_iptvChannel;
 
     // channels.conf
-    const DTVChannelInfoList &echan = (*trans_info).expectedChannels;
-    for (uint i = 0; i < echan.size(); ++i)
+    const DTVChannelInfoList &echan = (*trans_info).m_expectedChannels;
+    for (const auto & chan : echan)
     {
-        uint pnum = echan[i].serviceid;
+        uint pnum = chan.m_serviceid;
         PCM_INFO_INIT("mpeg");
-        info.service_name = echan[i].name;
-        info.in_channels_conf = true;
+        info.m_serviceName = chan.m_name;
+        info.m_inChannelsConf = true;
     }
 
     // PATs
-    pat_map_t::const_iterator pat_list_it = scan_info->pats.begin();
-    for (; pat_list_it != scan_info->pats.end(); ++pat_list_it)
+    foreach (auto pat_list, scan_info->m_pats)
     {
-        pat_vec_t::const_iterator pat_it = (*pat_list_it).begin();
-        for (; pat_it != (*pat_list_it).end(); ++pat_it)
+        for (const auto *pat : pat_list)
         {
             bool could_be_opencable = false;
-            for (uint i = 0; i < (*pat_it)->ProgramCount(); ++i)
+            for (uint i = 0; i < pat->ProgramCount(); ++i)
             {
-                if (((*pat_it)->ProgramNumber(i) == 0) &&
-                    ((*pat_it)->ProgramPID(i) == 0x1ffc))
+                if ((pat->ProgramNumber(i) == 0) &&
+                    (pat->ProgramPID(i) == 0x1ffc))
                 {
                     could_be_opencable = true;
                 }
             }
 
-            for (uint i = 0; i < (*pat_it)->ProgramCount(); ++i)
+            for (uint i = 0; i < pat->ProgramCount(); ++i)
             {
-                uint pnum = (*pat_it)->ProgramNumber(i);
+                uint pnum = pat->ProgramNumber(i);
                 if (pnum)
                 {
                     PCM_INFO_INIT("mpeg");
-                    info.pat_tsid = (*pat_it)->TransportStreamID();
-                    info.could_be_opencable = could_be_opencable;
-                    info.in_pat = true;
+                    info.m_patTsId = pat->TransportStreamID();
+                    info.m_couldBeOpencable = could_be_opencable;
+                    info.m_inPat = true;
                 }
             }
         }
     }
 
     // PMTs
-    pmt_vec_t::const_iterator pmt_it = scan_info->pmts.begin();
-    for (; pmt_it != scan_info->pmts.end(); ++pmt_it)
+    foreach (auto pmt, scan_info->m_pmts)
     {
-        const ProgramMapTable *pmt = *pmt_it;
         uint pnum = pmt->ProgramNumber();
         PCM_INFO_INIT("mpeg");
         for (uint i = 0; i < pmt->StreamCount(); ++i)
         {
-            info.could_be_opencable |=
+            info.m_couldBeOpencable |=
                 (StreamID::OpenCableVideo == pmt->StreamType(i));
         }
 
@@ -1248,60 +1359,68 @@ ChannelScanSM::GetChannelList(transport_scan_items_it_t trans_info,
             pmt->ProgramInfo(), pmt->ProgramInfoLength(),
             DescriptorID::registration);
 
-        for (uint i = 0; i < descs.size(); ++i)
+        for (auto & desc : descs)
         {
-            RegistrationDescriptor reg(descs[i]);
+            RegistrationDescriptor reg(desc);
+            if (!reg.IsValid())
+                continue;
             if (reg.FormatIdentifierString() == "CUEI" ||
                 reg.FormatIdentifierString() == "SCTE")
-                info.is_opencable = true;
+                info.m_couldBeOpencable = true;
         }
 
-        info.is_encrypted |= pmt->IsEncrypted(GetDTVChannel()->GetSIStandard());
-        info.in_pmt = true;
+        info.m_isEncrypted |= pmt->IsEncrypted(GetDTVChannel()->GetSIStandard());
+        info.m_inPmt = true;
     }
 
     // Cable VCTs
-    cvct_vec_t::const_iterator cvct_it = scan_info->cvcts.begin();
-    for (; cvct_it != scan_info->cvcts.end(); ++cvct_it)
+    for (const auto *cvct : scan_info->m_cvcts)
     {
-        for (uint i = 0; i < (*cvct_it)->ChannelCount(); ++i)
+        for (uint i = 0; i < cvct->ChannelCount(); ++i)
         {
-            uint pnum = (*cvct_it)->ProgramNumber(i);
+            uint pnum = cvct->ProgramNumber(i);
             PCM_INFO_INIT("atsc");
-            update_info(info, *cvct_it, i);
+            update_info(info, cvct, i);
+
+            // One-part channel number, as defined in the ATSC Standard:
+            // Program and System Information Protocol for Terrestrial Broadcast and Cable
+            // Doc. A65/2013  7 August 2013  page 35
+            if ((info.m_atscMajorChannel & 0x3F0) == 0x3F0)
+            {
+                info.m_chanNum = QString::number(((info.m_atscMajorChannel & 0x00F) << 10) + info.m_atscMinorChannel);
+            }
         }
     }
 
     // Terrestrial VCTs
-    tvct_vec_t::const_iterator tvct_it = scan_info->tvcts.begin();
-    for (; tvct_it != scan_info->tvcts.end(); ++tvct_it)
+    for (const auto *tvct : scan_info->m_tvcts)
     {
-        for (uint i = 0; i < (*tvct_it)->ChannelCount(); ++i)
+        for (uint i = 0; i < tvct->ChannelCount(); ++i)
         {
-            uint pnum = (*tvct_it)->ProgramNumber(i);
+            uint pnum = tvct->ProgramNumber(i);
             PCM_INFO_INIT("atsc");
-            update_info(info, *tvct_it, i);
+            update_info(info, tvct, i);
         }
     }
 
     // SDTs
-    sdt_map_t::const_iterator sdt_list_it = scan_info->sdts.begin();
-    for (; sdt_list_it != scan_info->sdts.end(); ++sdt_list_it)
+    QString siStandard = (scan_info->m_mgt == nullptr) ? "dvb" : "atsc";
+    foreach (auto sdt_list, scan_info->m_sdts)
     {
-        sdt_vec_t::const_iterator sdt_it = (*sdt_list_it).begin();
-        for (; sdt_it != (*sdt_list_it).end(); ++sdt_it)
+        for (const auto *sdt_it : sdt_list)
         {
-            for (uint i = 0; i < (*sdt_it)->ServiceCount(); ++i)
+            for (uint i = 0; i < sdt_it->ServiceCount(); ++i)
             {
-                uint pnum = (*sdt_it)->ServiceID(i);
-                PCM_INFO_INIT("dvb");
-                update_info(info, *sdt_it, i, m_defAuthorities);
+                uint pnum = sdt_it->ServiceID(i);
+                PCM_INFO_INIT(siStandard);
+                update_info(info, sdt_it, i, m_defAuthorities);
             }
         }
     }
 
     // NIT
     QMap<qlonglong, uint> ukChanNums;
+    QMap<qlonglong, uint> scnChanNums;
     QMap<uint,ChannelInsertInfo>::iterator dbchan_it;
     for (dbchan_it = pnum_to_dbchan.begin();
          dbchan_it != pnum_to_dbchan.end(); ++dbchan_it)
@@ -1309,17 +1428,16 @@ ChannelScanSM::GetChannelList(transport_scan_items_it_t trans_info,
         ChannelInsertInfo &info = *dbchan_it;
 
         // NIT
-        nit_vec_t::const_iterator nits_it = scan_info->nits.begin();
-        for (; nits_it != scan_info->nits.end(); ++nits_it)
+        for (const auto *item : scan_info->m_nits)
         {
-            for (uint i = 0; i < (*nits_it)->TransportStreamCount(); ++i)
+            for (uint i = 0; i < item->TransportStreamCount(); ++i)
             {
-                const NetworkInformationTable *nit = (*nits_it);
-                if ((nit->TSID(i)              == info.sdt_tsid) &&
-                    (nit->OriginalNetworkID(i) == info.orig_netid))
+                const NetworkInformationTable *nit = item;
+                if ((nit->TSID(i)              == info.m_sdtTsId) &&
+                    (nit->OriginalNetworkID(i) == info.m_origNetId))
                 {
-                    info.netid = nit->NetworkID();
-                    info.in_nit = true;
+                    info.m_netId = nit->NetworkID();
+                    info.m_inNit = true;
                 }
                 else
                 {
@@ -1331,50 +1449,251 @@ ChannelScanSM::GetChannelList(transport_scan_items_it_t trans_info,
                     MPEGDescriptor::Parse(nit->TransportDescriptors(i),
                                           nit->TransportDescriptorsLength(i));
 
-                const unsigned char *desc =
-                    MPEGDescriptor::Find(
-                        list, PrivateDescriptorID::dvb_logical_channel_descriptor);
-
-                if (desc)
+                // Logical channel numbers
                 {
-                    DVBLogicalChannelDescriptor uklist(desc);
-                    for (uint j = 0; j < uklist.ChannelCount(); ++j)
+                    const unsigned char *desc =
+                        MPEGDescriptor::Find(
+                            list, PrivateDescriptorID::dvb_logical_channel_descriptor);
+
+                    if (desc)
                     {
-                        ukChanNums[((qlonglong)info.orig_netid<<32) |
-                                   uklist.ServiceID(j)] =
-                            uklist.ChannelNumber(j);
+                        DVBLogicalChannelDescriptor uklist(desc);
+                        if (!uklist.IsValid())
+                            continue;
+                        for (uint j = 0; j < uklist.ChannelCount(); ++j)
+                        {
+                            ukChanNums[((qlonglong)info.m_origNetId<<32) |
+                                    uklist.ServiceID(j)] =
+                                uklist.ChannelNumber(j);
+                        }
+                    }
+                }
+
+                // HD Simulcast logical channel numbers
+                {
+                    const unsigned char *desc =
+                        MPEGDescriptor::Find(
+                            list, PrivateDescriptorID::dvb_simulcast_channel_descriptor);
+
+                    if (desc)
+                    {
+                        DVBSimulcastChannelDescriptor scnlist(desc);
+                        if (!scnlist.IsValid())
+                            continue;
+                        for (uint j = 0; j < scnlist.ChannelCount(); ++j)
+                        {
+                            scnChanNums[((qlonglong)info.m_origNetId<<32) |
+                                        scnlist.ServiceID(j)] =
+                                 scnlist.ChannelNumber(j);
+                        }
                     }
                 }
             }
         }
     }
 
-    // Get IPTV or DVB Logical channel numbers
+    // BAT
+
+    // Channel numbers for Freesat and Sky on Astra 28.2E
+    //
+    // Get the Logical Channel Number (LCN) information from the BAT.
+    // The first filter is on the bouquet ID.
+    // Then collect all LCN for the selected region and
+    // for the common (undefined) region with id 0xFFFF.
+    // The LCN of the selected region has priority; if
+    // a service is not defined there then the value of the LCN
+    // table of the common region is used.
+    // This works because the BAT of each transport contains
+    // the LCN of all transports and services for all bouquets.
+    //
+    // For reference, this website has the Freesat and Sky channel numbers
+    // for each bouquet and region:
+    // https://www.satellite-calculations.com/DVB/28.2E/28E_FreeSat_ChannelNumber.php
+    // https://www.satellite-calculations.com/DVB/28.2E/28E_Sky_ChannelNumber.php
+    //
+
+    // Lookup table from LCN to service ID
+    QMap<uint,qlonglong> lcn_sid;
+
+    for (const auto *bat : scan_info->m_bats)
+    {
+        // Only the bouquet selected by user
+        if (bat->BouquetID() != m_bouquetId)
+            continue;
+
+        for (uint t = 0; t < bat->TransportStreamCount(); ++t)
+        {
+            uint netid = bat->OriginalNetworkID(t);
+
+            // No network check to allow scanning on all Sky satellites
+#if 0
+            if (!(netid == OriginalNetworkID::SES2  ||
+                  netid == OriginalNetworkID::BBC   ||
+                  netid == OriginalNetworkID::SKYNZ ))
+                continue;
+#endif
+            desc_list_t parsed =
+                MPEGDescriptor::Parse(bat->TransportDescriptors(t),
+                                      bat->TransportDescriptorsLength(t));
+
+            uint priv_dsid = 0;
+            for (const auto *item : parsed)
+            {
+                if (item[0] == DescriptorID::private_data_specifier)
+                {
+                    PrivateDataSpecifierDescriptor pd(item);
+                    if (pd.IsValid())
+                        priv_dsid = pd.PrivateDataSpecifier();
+                }
+
+                // Freesat logical channels
+                if (priv_dsid == PrivateDataSpecifierID::FSAT &&
+                    item[0] == PrivateDescriptorID::freesat_lcn_table)
+                {
+                    FreesatLCNDescriptor ld(item);
+                    if (ld.IsValid())
+                    {
+                        for (uint i = 0; i<ld.ServiceCount(); i++)
+                        {
+                            uint service_id = ld.ServiceID(i);
+                            for (uint j=0; j<ld.LCNCount(i); j++)
+                            {
+                                uint region_id = ld.RegionID(i,j);
+                                uint lcn = ld.LogicalChannelNumber(i,j);
+                                if (region_id == m_regionId)
+                                {
+                                    lcn_sid[lcn] = ((qlonglong)netid<<32) | service_id;
+                                }
+                                else if (region_id == kRegionUndefined)
+                                {
+                                    if (lcn_sid.value(lcn,0) == 0)
+                                        lcn_sid[lcn] = ((qlonglong)netid<<32) | service_id;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Sky logical channels
+                if (priv_dsid == PrivateDataSpecifierID::BSB1 &&
+                    item[0] == PrivateDescriptorID::sky_lcn_table)
+                {
+                    SkyLCNDescriptor ld(item);
+                    if (ld.IsValid())
+                    {
+                        uint region_id = ld.RegionID();
+                        for (uint i = 0; i<ld.ServiceCount(); i++)
+                        {
+                            uint service_id = ld.ServiceID(i);
+                            uint lcn = ld.LogicalChannelNumber(i);
+                            if (region_id == m_regionId)
+                            {
+                                lcn_sid[lcn] = ((qlonglong)netid<<32) | service_id;
+                            }
+                            else if (region_id == kRegionUndefined)
+                            {
+                                if (lcn_sid.value(lcn,0) == 0)
+                                    lcn_sid[lcn] = ((qlonglong)netid<<32) | service_id;
+                            }
+#if 0
+                            LOG(VB_CHANSCAN, LOG_INFO, LOC +
+                                QString("LCN bid:%1 tid:%2 rid:%3 sid:%4 lcn:%5")
+                                    .arg(bat->BouquetID()).arg(bat->TSID(t)).arg(region_id).arg(service_id).arg(lcn));
+#endif
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Create the reverse table from service id to LCN.
+    // If the service has more than one logical
+    // channel number the lowest number is used.
+    QMap<qlonglong, uint> sid_lcn;
+    QMap<uint, qlonglong>::const_iterator r = lcn_sid.constEnd();
+    while (r != lcn_sid.constBegin())
+    {
+        --r;
+        qlonglong sid = r.value();
+        uint lcn = r.key();
+        sid_lcn[sid] = lcn;
+    }
+
+    // ------------------------------------------------------------------------
+
+    // Get IPTV channel numbers
     for (dbchan_it = pnum_to_dbchan.begin();
          dbchan_it != pnum_to_dbchan.end(); ++dbchan_it)
     {
         ChannelInsertInfo &info = *dbchan_it;
 
-        if (!info.chan_num.isEmpty())
+        if (!info.m_chanNum.isEmpty())
             continue;
 
-        if (iptv_channel.isEmpty()) // DVB Logical channel numbers (LCN)
+        if (!iptv_channel.isEmpty())
         {
-            QMap<qlonglong, uint>::const_iterator it = ukChanNums.find
-                       (((qlonglong)info.orig_netid<<32) | info.service_id);
+            info.m_chanNum = iptv_channel;
+            if (info.m_serviceId)
+                info.m_chanNum += "-" + QString::number(info.m_serviceId);
+        }
+    }
+
+    // Get DVB Logical Channel Numbers
+    for (dbchan_it = pnum_to_dbchan.begin();
+         dbchan_it != pnum_to_dbchan.end(); ++dbchan_it)
+    {
+        ChannelInsertInfo &info = *dbchan_it;
+
+        if (!info.m_chanNum.isEmpty())
+            continue;
+
+        // DVB HD Simulcast channel numbers
+        //
+        // The HD simulcast channel number table gives the correct channel number
+        // when HD and SD versions of the same channel are simultaneously broadcast
+        // and the receiver is capable of receiving the HD signal.
+        // The latter is assumed correct for a MythTV system.
+        //
+        if (info.m_chanNum.isEmpty())
+        {
+            qlonglong key = ((qlonglong)info.m_origNetId<<32) | info.m_serviceId;
+            QMap<qlonglong, uint>::const_iterator it = scnChanNums.find(key);
+
+            if (it != scnChanNums.end())
+            {
+                info.m_chanNum = QString::number(*it);
+            }
+        }
+
+        // DVB Logical Channel Numbers (a.k.a. UK channel numbers)
+        if (info.m_chanNum.isEmpty())
+        {
+            qlonglong key = ((qlonglong)info.m_origNetId<<32) | info.m_serviceId;
+            QMap<qlonglong, uint>::const_iterator it = ukChanNums.find(key);
 
             if (it != ukChanNums.end())
-                info.chan_num = QString::number(*it);
+            {
+                info.m_chanNum = QString::number(*it);
+            }
         }
-        else // IPTV programs
+
+        // Freesat and Sky channel numbers
+        if (info.m_chanNum.isEmpty())
         {
-            info.chan_num = iptv_channel;
-            if (info.service_id)
-                info.chan_num += "-" + QString::number(info.service_id);
+            qlonglong key = ((qlonglong)info.m_origNetId<<32) | info.m_serviceId;
+            QMap<qlonglong, uint>::const_iterator it = sid_lcn.find(key);
+
+            if (it != sid_lcn.end())
+            {
+                info.m_chanNum = QString::number(*it);
+            }
         }
 
         LOG(VB_CHANSCAN, LOG_INFO, LOC +
-            QString("GetChannelList: set chan_num '%1'").arg(info.chan_num));
+            QString("GetChannelList: service %1 (0x%2) chan_num '%3' callsign '%4'")
+                .arg(info.m_serviceId).arg(info.m_serviceId,4,16,QChar('0'))
+                .arg(info.m_chanNum).arg(info.m_callSign));
     }
 
     // Get QAM/SCTE/MPEG channel numbers
@@ -1383,21 +1702,25 @@ ChannelScanSM::GetChannelList(transport_scan_items_it_t trans_info,
     {
         ChannelInsertInfo &info = *dbchan_it;
 
-        if (!info.chan_num.isEmpty())
+        if (!info.m_chanNum.isEmpty())
             continue;
 
-        if ((info.si_standard == "mpeg") ||
-            (info.si_standard == "scte") ||
-            (info.si_standard == "opencable"))
+        if ((info.m_siStandard == "mpeg") ||
+            (info.m_siStandard == "scte") ||
+            (info.m_siStandard == "opencable"))
         {
-            if (info.freqid.isEmpty())
-                info.chan_num = QString("%1-%2")
-                    .arg(info.source_id)
-                    .arg(info.service_id);
+            if (info.m_freqId.isEmpty())
+            {
+                info.m_chanNum = QString("%1-%2")
+                    .arg(info.m_sourceId)
+                    .arg(info.m_serviceId);
+            }
             else
-                info.chan_num = QString("%1-%2")
-                    .arg(info.freqid)
-                    .arg(info.service_id);
+            {
+                info.m_chanNum = QString("%1-%2")
+                    .arg(info.m_freqId)
+                    .arg(info.m_serviceId);
+            }
         }
     }
 
@@ -1407,43 +1730,102 @@ ChannelScanSM::GetChannelList(transport_scan_items_it_t trans_info,
     {
         uint pnum = dbchan_it.key();
         ChannelInsertInfo &info = *dbchan_it;
-        info.decryption_status = scan_info->program_encryption_status[pnum];
+        info.m_decryptionStatus = scan_info->m_programEncryptionStatus[pnum];
     }
 
     return pnum_to_dbchan;
 }
 
-ScanDTVTransportList ChannelScanSM::GetChannelList(void) const
+ScanDTVTransportList ChannelScanSM::GetChannelList(bool addFullTS) const
 {
     ScanDTVTransportList list;
 
     uint cardid = m_channel->GetInputID();
 
-    DTVTunerType tuner_type = GuessDTVTunerType(DTVTunerType::kTunerTypeATSC);
+    DTVTunerType tuner_type(DTVTunerType::kTunerTypeATSC);
+    tuner_type = GuessDTVTunerType(tuner_type);
 
-    ChannelList::const_iterator it = m_channelList.begin();
-    for (; it != m_channelList.end(); ++it)
+    foreach (const auto & it, m_channelList)
     {
         QMap<uint,ChannelInsertInfo> pnum_to_dbchan =
-            GetChannelList(it->first, it->second);
+            GetChannelList(it.first, it.second);
 
-        ScanDTVTransport item((*it->first).tuning, tuner_type, cardid);
-        item.iptv_tuning = (*(it->first)).iptv_tuning;
+        ScanDTVTransport item((*it.first).m_tuning, tuner_type, cardid);
+        item.m_iptvTuning = (*(it.first)).m_iptvTuning;
+        item.m_signalStrength = (*(it.first)).m_signalStrength;
+        item.m_networkID = (*(it.first)).m_networkID;
+        item.m_transportID = (*(it.first)).m_transportID;
 
         QMap<uint,ChannelInsertInfo>::iterator dbchan_it;
         for (dbchan_it = pnum_to_dbchan.begin();
              dbchan_it != pnum_to_dbchan.end(); ++dbchan_it)
         {
-            item.channels.push_back(*dbchan_it);
+            item.m_channels.push_back(*dbchan_it);
         }
 
-        if (item.channels.size())
+        if (!item.m_channels.empty())
+        {
+            if (addFullTS)
+            {
+                /* If addFullTS, then add a 'MPTS' channel
+                   which can be used to record the entire MPTS from
+                   the transport. */
+                dbchan_it = pnum_to_dbchan.begin();
+                ChannelInsertInfo info = *dbchan_it;
+
+                // Use transport stream ID as (fake) service ID
+                // to use in callsign and as channel number
+                info.m_serviceId = info.m_sdtTsId ? info.m_sdtTsId : info.m_patTsId;
+
+                if (tuner_type == DTVTunerType::kTunerTypeASI)
+                {
+                    info.m_callSign = QString("MPTS_%1")
+                                    .arg(CardUtil::GetDisplayName(cardid));
+                }
+                else if (info.m_siStandard == "mpeg" ||
+                         info.m_siStandard == "scte" ||
+                         info.m_siStandard == "opencable")
+                {
+                    info.m_callSign = QString("MPTS_%1").arg(info.m_freqId);
+                }
+                else if (info.m_atscMajorChannel > 0)
+                {
+                    if (info.m_atscMajorChannel < 0x3F0)
+                    {
+                        info.m_callSign = QString("MPTS_%1").arg(info.m_atscMajorChannel);
+                    }
+                    else
+                    {
+                        info.m_callSign = QString("MPTS_%1").arg(info.m_freqId);
+                    }
+                }
+                else if (info.m_serviceId > 0)
+                {
+                    info.m_callSign = QString("MPTS_%1").arg(info.m_serviceId);
+                }
+                else if (!info.m_chanNum.isEmpty())
+                {
+                    info.m_callSign = QString("MPTS_%1").arg(info.m_chanNum);
+                }
+                else
+                {
+                    info.m_callSign = "MPTS_UNKNOWN";
+                }
+
+                info.m_serviceName = info.m_callSign;
+                info.m_atscMinorChannel = 0;
+                info.m_format = "MPTS";
+                info.m_useOnAirGuide = false;
+                info.m_isEncrypted = false;
+                item.m_channels.push_back(info);
+            }
+
             list.push_back(item);
+        }
     }
 
     return list;
 }
-
 
 DTVSignalMonitor* ChannelScanSM::GetDTVSignalMonitor(void)
 {
@@ -1455,7 +1837,7 @@ DVBSignalMonitor* ChannelScanSM::GetDVBSignalMonitor(void)
 #ifdef USING_DVB
     return dynamic_cast<DVBSignalMonitor*>(m_signalMonitor);
 #else
-    return NULL;
+    return nullptr;
 #endif
 }
 
@@ -1474,7 +1856,7 @@ HDHRChannel *ChannelScanSM::GetHDHRChannel(void)
 #ifdef USING_HDHOMERUN
     return dynamic_cast<HDHRChannel*>(m_channel);
 #else
-    return NULL;
+    return nullptr;
 #endif
 }
 
@@ -1483,7 +1865,7 @@ DVBChannel *ChannelScanSM::GetDVBChannel(void)
 #ifdef USING_DVB
     return dynamic_cast<DVBChannel*>(m_channel);
 #else
-    return NULL;
+    return nullptr;
 #endif
 }
 
@@ -1492,7 +1874,7 @@ const DVBChannel *ChannelScanSM::GetDVBChannel(void) const
 #ifdef USING_DVB
     return dynamic_cast<const DVBChannel*>(m_channel);
 #else
-    return NULL;
+    return nullptr;
 #endif
 }
 
@@ -1501,7 +1883,7 @@ V4LChannel *ChannelScanSM::GetV4LChannel(void)
 #ifdef USING_V4L2
     return dynamic_cast<V4LChannel*>(m_channel);
 #else
-    return NULL;
+    return nullptr;
 #endif
 }
 
@@ -1516,7 +1898,7 @@ void ChannelScanSM::StartScanner(void)
         if (m_scannerThread->wait(1000))
         {
             delete m_scannerThread;
-            m_scannerThread = NULL;
+            m_scannerThread = nullptr;
         }
     }
     m_threadExit = false;
@@ -1546,7 +1928,7 @@ void ChannelScanSM::run(void)
 bool ChannelScanSM::HasTimedOut(void)
 {
     if (m_currentTestingDecryption &&
-        (m_timer.elapsed() > (int)kDecryptionTimeout))
+        m_timer.hasExpired(kDecryptionTimeout))
     {
         m_currentTestingDecryption = false;
         return true;
@@ -1563,7 +1945,8 @@ bool ChannelScanSM::HasTimedOut(void)
         const DiSEqCDevRotor *rotor = GetDVBChannel()->GetRotor();
         if (rotor)
         {
-            bool was_moving, is_moving;
+            bool was_moving = false;
+            bool is_moving = false;
             sigmon->GetRotorStatus(was_moving, is_moving);
             if (was_moving && !is_moving)
             {
@@ -1574,12 +1957,11 @@ bool ChannelScanSM::HasTimedOut(void)
     }
 #endif // USING_DVB
 
-
     // have the tables have timed out?
-    if (m_timer.elapsed() > (int)m_channelTimeout)
+    if (m_timer.hasExpired(m_channelTimeout))
     {
         // the channelTimeout alone is only valid if we have seen no tables..
-        const ScanStreamData *sd = NULL;
+        const ScanStreamData *sd = nullptr;
         if (GetDTVSignalMonitor())
             sd = GetDTVSignalMonitor()->GetScanStreamData();
 
@@ -1587,21 +1969,21 @@ bool ChannelScanSM::HasTimedOut(void)
             return true;
 
         if (sd->HasCachedAnyNIT() || sd->HasCachedAnySDTs())
-            return m_timer.elapsed() > (int) kDVBTableTimeout;
+            return m_timer.hasExpired(kDVBTableTimeout);
         if (sd->HasCachedMGT() || sd->HasCachedAnyVCTs())
-            return m_timer.elapsed() > (int) kATSCTableTimeout;
+            return m_timer.hasExpired(kATSCTableTimeout);
         if (sd->HasCachedAnyPAT() || sd->HasCachedAnyPMTs())
-            return m_timer.elapsed() > (int) kMPEGTableTimeout;
+            return m_timer.hasExpired(kMPEGTableTimeout);
 
         return true;
     }
 
     // ok the tables haven't timed out, but have we hit the signal timeout?
     SignalMonitor *sm = GetSignalMonitor();
-    if ((m_timer.elapsed() > (int)(*m_current).timeoutTune) &&
+    if (m_timer.hasExpired((*m_current).m_timeoutTune) &&
         sm && !sm->HasSignalLock())
     {
-        const ScanStreamData *sd = NULL;
+        const ScanStreamData *sd = nullptr;
         if (GetDTVSignalMonitor())
             sd = GetDTVSignalMonitor()->GetScanStreamData();
 
@@ -1681,8 +2063,7 @@ void ChannelScanSM::HandleActiveScan(void)
             {
                 QString name = QString("TransportID %1").arg(it.key() & 0xffff);
                 TransportScanItem item(m_sourceID, name, *it, m_signalTimeout);
-                LOG(VB_CHANSCAN, LOG_INFO, LOC + "Adding " + name + " - " +
-                    item.tuning.toString());
+                LOG(VB_CHANSCAN, LOG_INFO, LOC + "Adding " + name + ' ' + item.m_tuning.toString());
                 m_scanTransports.push_back(item);
                 m_tsScanned.insert(it.key());
             }
@@ -1709,29 +2090,33 @@ bool ChannelScanSM::Tune(const transport_scan_items_it_t &transport)
     {
         // always wait for rotor to finish
         GetDVBSignalMonitor()->AddFlags(SignalMonitor::kDVBSigMon_WaitForPos);
-        GetDVBSignalMonitor()->SetRotorTarget(1.0f);
+        GetDVBSignalMonitor()->SetRotorTarget(1.0F);
     }
 #endif // USING_DVB
 
     if (!GetDTVChannel())
         return false;
 
-    if (item.mplexid > 0 && transport.offset() == 0)
-        return GetDTVChannel()->TuneMultiplex(item.mplexid, m_inputName);
+    if (item.m_mplexid > 0 && transport.offset() == 0)
+        return GetDTVChannel()->TuneMultiplex(item.m_mplexid, m_inputName);
 
-    if (item.tuning.sistandard == "MPEG")
-        return GetDTVChannel()->Tune(item.iptv_tuning, true);
+    if (item.m_tuning.m_sistandard == "MPEG")
+        return GetDTVChannel()->Tune(item.m_iptvTuning, true);
 
     const uint64_t freq = item.freq_offset(transport.offset());
-    DTVMultiplex tuning = item.tuning;
-    tuning.frequency = freq;
+    DTVMultiplex tuning = item.m_tuning;
+    tuning.m_frequency = freq;
 
+    if (m_scanDTVTunerType == DTVTunerType::kTunerTypeDVBT)
+    {
+        tuning.m_modSys = DTVModulationSystem::kModulationSystem_DVBT;
+    }
     if (m_scanDTVTunerType == DTVTunerType::kTunerTypeDVBT2)
     {
         if (m_dvbt2Tried)
-            tuning.mod_sys = DTVModulationSystem::kModulationSystem_DVBT2;
+            tuning.m_modSys = DTVModulationSystem::kModulationSystem_DVBT2;
         else
-            tuning.mod_sys = DTVModulationSystem::kModulationSystem_DVBT;
+            tuning.m_modSys = DTVModulationSystem::kModulationSystem_DVBT;
     }
 
     return GetDTVChannel()->Tune(tuning);
@@ -1742,10 +2127,10 @@ void ChannelScanSM::ScanTransport(const transport_scan_items_it_t &transport)
     QString offset_str = (transport.offset()) ?
         QObject::tr(" offset %2").arg(transport.offset()) : "";
     QString cur_chan = QString("%1%2")
-        .arg((*m_current).FriendlyName).arg(offset_str);
+        .arg((*m_current).m_friendlyName).arg(offset_str);
     QString tune_msg_str =
         QObject::tr("ScanTransport Tuning to %1 mplexid(%2)")
-        .arg(cur_chan).arg((*m_current).mplexid);
+        .arg(cur_chan).arg((*m_current).m_mplexid);
 
     const TransportScanItem &item = *transport;
 
@@ -1758,7 +2143,7 @@ void ChannelScanSM::ScanTransport(const transport_scan_items_it_t &transport)
 
     if (m_channelsFound)
     {
-        QString progress = QObject::tr(": Found %n", "", m_channelsFound);
+        QString progress = QObject::tr("Found %n", "", m_channelsFound);
         m_scanMonitor->ScanUpdateStatusTitleText(progress);
     }
 
@@ -1770,7 +2155,7 @@ void ChannelScanSM::ScanTransport(const transport_scan_items_it_t &transport)
         UpdateScanPercentCompleted();
         LOG(VB_CHANSCAN, LOG_ERR, LOC +
             QString("Failed to tune %1 mplexid(%2) at offset %3")
-                .arg(item.FriendlyName).arg(item.mplexid)
+                .arg(item.m_friendlyName).arg(item.m_mplexid)
                 .arg(transport.offset()));
         return;
     }
@@ -1780,13 +2165,14 @@ void ChannelScanSM::ScanTransport(const transport_scan_items_it_t &transport)
     {
         GetDTVSignalMonitor()->GetScanStreamData()->Reset();
         GetDTVSignalMonitor()->SetChannel(-1,-1);
+        GetDTVSignalMonitor()->SetDVBService(0, 0, -1);
     }
 
     // Start signal monitor for this channel
     m_signalMonitor->Start();
 
     m_timer.start();
-    m_waitingForTables = (item.tuning.sistandard != "analog");
+    m_waitingForTables = (item.m_tuning.m_sistandard != "analog");
 }
 
 /** \fn ChannelScanSM::StopScanner(void)
@@ -1803,7 +2189,7 @@ void ChannelScanSM::StopScanner(void)
         if (m_scannerThread->wait(1000))
         {
             delete m_scannerThread;
-            m_scannerThread = NULL;
+            m_scannerThread = nullptr;
         }
     }
 
@@ -1823,6 +2209,15 @@ bool ChannelScanSM::ScanTransports(
     const QString &table_start,
     const QString &table_end)
 {
+    LOG(VB_CHANSCAN, LOG_DEBUG, LOC +
+        QString("%1: ").arg(__FUNCTION__) +
+        QString("SourceID:%1 ").arg(SourceID) +
+        QString("std:%1 ").arg(std) +
+        QString("modulation:%1 ").arg(modulation) +
+        QString("country:%1 ").arg(country) +
+        QString("table_start:%1 ").arg(table_start) +
+        QString("table_end:%1 ").arg(table_end));
+
     QString name("");
     if (m_scanning)
         return false;
@@ -1833,7 +2228,7 @@ bool ChannelScanSM::ScanTransports(
     freq_table_list_t tables =
         get_matching_freq_tables(std, modulation, country);
 
-    if (tables.size() == 0)
+    if (tables.empty())
     {
         QString msg = QString("No freq table for (%1, %2, %3) found")
                       .arg(std).arg(modulation).arg(country);
@@ -1844,15 +2239,15 @@ bool ChannelScanSM::ScanTransports(
             .arg(std).arg(modulation).arg(country).arg(tables.size()));
 
     QString start = table_start;
-    QString end   = table_end;
-    freq_table_list_t::iterator it = tables.begin();
-    for (; it != tables.end(); ++it)
+    const QString& end   = table_end;
+    // NOLINTNEXTLINE(modernize-loop-convert)
+    for (auto it = tables.begin(); it != tables.end(); ++it)
     {
         const FrequencyTable &ft = **it;
-        int     name_num         = ft.name_offset;
-        QString strNameFormat    = ft.name_format;
-        uint    freq             = ft.frequencyStart;
-        while (freq <= ft.frequencyEnd)
+        int     name_num         = ft.m_nameOffset;
+        QString strNameFormat    = ft.m_nameFormat;
+        uint    freq             = ft.m_frequencyStart;
+        while (freq <= ft.m_frequencyEnd)
         {
             name = strNameFormat;
             if (strNameFormat.indexOf("%") >= 0)
@@ -1860,7 +2255,7 @@ bool ChannelScanSM::ScanTransports(
 
             if (start.isEmpty() || name == start)
             {
-                start = QString::null;
+                start.clear();
 
                 TransportScanItem item(SourceID, std, name, name_num,
                                        freq, ft, m_signalTimeout);
@@ -1871,7 +2266,7 @@ bool ChannelScanSM::ScanTransports(
             }
 
             ++name_num;
-            freq += ft.frequencyStep;
+            freq += ft.m_frequencyStep;
 
             if (!end.isEmpty() && name == end)
                 break;
@@ -1908,11 +2303,11 @@ bool ChannelScanSM::ScanForChannels(uint sourceid,
     DTVTunerType tunertype;
     tunertype.Parse(cardtype);
 
-    DTVChannelList::const_iterator it = channels.begin();
-    for (uint i = 0; it != channels.end(); ++it, ++i)
+    auto it = channels.cbegin();
+    for (uint i = 0; it != channels.cend(); ++it, ++i)
     {
         DTVTransport tmp = *it;
-        tmp.sistandard = std;
+        tmp.m_sistandard = std;
         TransportScanItem item(sourceid, QString::number(i),
                                tunertype, tmp, m_signalTimeout);
 
@@ -1979,10 +2374,8 @@ bool ChannelScanSM::ScanIPTVChannels(uint sourceid,
 bool ChannelScanSM::ScanTransportsStartingOn(
     int sourceid, const QMap<QString,QString> &startChan)
 {
-    QMap<QString,QString>::const_iterator it;
-
-    if (startChan.find("std")        == startChan.end() ||
-        startChan.find("type")       == startChan.end())
+    if (startChan.find("std")  == startChan.end() ||
+        startChan.find("type") == startChan.end())
     {
         return false;
     }
@@ -2018,7 +2411,7 @@ bool ChannelScanSM::ScanTransportsStartingOn(
 
     if (ok)
     {
-        tuning.sistandard = si_std;
+        tuning.m_sistandard = si_std;
         TransportScanItem item(
             sourceid, QObject::tr("Frequency %1").arg(startChan["frequency"]),
             tuning, m_signalTimeout);
@@ -2064,7 +2457,7 @@ bool ChannelScanSM::AddToList(uint mplexid)
     uint    sourceid   = query.value(0).toUInt();
     QString sistandard = query.value(1).toString();
     uint    tsid       = query.value(2).toUInt();
-    DTVTunerType tt = DTVTunerType::kTunerTypeUnknown;
+    DTVTunerType tt(DTVTunerType::kTunerTypeUnknown);
 
     QString fn = (tsid) ? QString("Transport ID %1").arg(tsid) :
         QString("Multiplex #%1").arg(mplexid);
@@ -2091,7 +2484,11 @@ bool ChannelScanSM::AddToList(uint mplexid)
 
     TransportScanItem item(sourceid, sistandard, fn, mplexid, m_signalTimeout);
 
-    if (item.tuning.FillFromDB(tt, mplexid))
+    LOG(VB_CHANSCAN, LOG_DEBUG, LOC +
+        QString("tunertype:%1 %2 sourceid:%3 sistandard:%4 fn:'%5' mplexid:%6")
+            .arg(tt).arg(tt.toString()).arg(sourceid).arg(sistandard).arg(fn).arg(mplexid));
+
+    if (item.m_tuning.FillFromDB(tt, mplexid))
     {
         LOG(VB_CHANSCAN, LOG_INFO, LOC + "Adding " + fn);
         m_scanTransports.push_back(item);
@@ -2144,7 +2541,7 @@ bool ChannelScanSM::ScanCurrentTransport(const QString &sistandard)
 }
 
 /** \fn ChannelScanSM::CheckImportedList(const DTVChannelInfoList&,uint,QString&,QString&,QString&)
- *  \brief If we are scanning a dvb-utils import verify channel is in list..
+ *  \brief If we are scanning a dvb-utils import verify channel is in list.
  */
 bool ChannelScanSM::CheckImportedList(
     const DTVChannelInfoList &channels,
@@ -2157,20 +2554,20 @@ bool ChannelScanSM::CheckImportedList(
         return true;
 
     bool found = false;
-    for (uint i = 0; i < channels.size(); ++i)
+    for (const auto & channel : channels)
     {
         LOG(VB_GENERAL, LOG_DEBUG, LOC +
             QString("comparing %1 %2 against %3 %4")
-                .arg(channels[i].serviceid).arg(channels[i].name)
+                .arg(channel.m_serviceid).arg(channel.m_name)
                 .arg(mpeg_program_num).arg(common_status_info));
 
-        if (channels[i].serviceid == mpeg_program_num)
+        if (channel.m_serviceid == mpeg_program_num)
         {
             found = true;
-            if (!channels[i].name.isEmpty())
+            if (!channel.m_name.isEmpty())
             {
-                service_name = channels[i].name; service_name.detach();
-                callsign     = channels[i].name; callsign.detach();
+                service_name = channel.m_name;
+                callsign     = channel.m_name;
             }
         }
     }

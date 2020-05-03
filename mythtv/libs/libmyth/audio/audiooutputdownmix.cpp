@@ -19,7 +19,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include "audiooutputbase.h"
 #include "audiooutputdownmix.h"
 
-#include "string.h"
+#include <cstring>
 
 #define LOC QString("Downmixer: ")
 
@@ -46,12 +46,12 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
 static const float m6db = 0.5;
-static const float m3db = 0.7071067811865476f;           // 3dB  = SQRT(2)
-static const float mm3db = -0.7071067811865476f;         // -3dB = SQRT(1/2)
-static const float msqrt_1_3 = -0.577350269189626f;      // -SQRT(1/3)
-static const float sqrt_2_3 = 0.816496580927726f;        // SQRT(2/3)
-static const float sqrt_2_3by3db = 0.577350269189626f;   // SQRT(2/3)*-3dB = SQRT(2/3)*SQRT(1/2)=SQRT(1/3)
-static const float msqrt_1_3bym3db = 0.408248290463863f; // -SQRT(1/3)*-3dB = -SQRT(1/3)*SQRT(1/2) = -SQRT(1/6)
+static const float m3db = 0.7071067811865476F;           // 3dB  = SQRT(2)
+static const float mm3db = -0.7071067811865476F;         // -3dB = SQRT(1/2)
+static const float msqrt_1_3 = -0.577350269189626F;      // -SQRT(1/3)
+static const float sqrt_2_3 = 0.816496580927726F;        // SQRT(2/3)
+static const float sqrt_2_3by3db = 0.577350269189626F;   // SQRT(2/3)*-3dB = SQRT(2/3)*SQRT(1/2)=SQRT(1/3)
+static const float msqrt_1_3bym3db = 0.408248290463863F; // -SQRT(1/3)*-3dB = -SQRT(1/3)*SQRT(1/2) = -SQRT(1/6)
 
 int matrix[4][2] = { { 1, 1 }, { 2, 2 }, { 3, 3 }, { 4, 4 } };
 
@@ -165,7 +165,7 @@ static const float s51_matrix[3][8][6] =
 };
 
 int AudioOutputDownmix::DownmixFrames(int channels_in, int  channels_out,
-                                      float *dst, float *src, int frames)
+                                      float *dst, const float *src, int frames)
 {
     if (channels_in < channels_out)
         return -1;
@@ -174,13 +174,12 @@ int AudioOutputDownmix::DownmixFrames(int channels_in, int  channels_out,
     //    .arg(frames).arg(channels_in).arg(channels_out));
     if (channels_out == 2)
     {
-        float tmp;
         int index = channels_in - 1;
         for (int n=0; n < frames; n++)
         {
             for (int i=0; i < channels_out; i++)
             {
-                tmp = 0.0f;
+                float tmp = 0.0F;
                 for (int j=0; j < channels_in; j++)
                     tmp += src[j] * stereo_matrix[index][j][i];
                 *dst++ = tmp;
@@ -190,13 +189,12 @@ int AudioOutputDownmix::DownmixFrames(int channels_in, int  channels_out,
     }
     else if (channels_out == 6)
     {
-        float tmp;
         int index = channels_in - 6;
         for (int n=0; n < frames; n++)
         {
             for (int i=0; i < channels_out; i++)
             {
-                tmp = 0.0f;
+                float tmp = 0.0F;
                 for (int j=0; j < channels_in; j++)
                     tmp += src[j] * s51_matrix[index][j][i];
                 *dst++ = tmp;

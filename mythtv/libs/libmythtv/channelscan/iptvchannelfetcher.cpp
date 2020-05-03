@@ -3,6 +3,7 @@
 // Std C headers
 #include <cmath>
 #include <unistd.h>
+#include <utility>
 
 // Qt headers
 #include <QFile>
@@ -22,21 +23,21 @@
 static bool parse_chan_info(const QString   &rawdata,
                             IPTVChannelInfo &info,
                             QString         &channum,
+                            int             &nextChanNum,
                             uint            &lineNum);
 
-static bool parse_extinf(const QString &data,
+static bool parse_extinf(const QString &line,
                          QString       &channum,
-                         QString       &name);
+                         QString       &name,
+                         int           &nextChanNum);
 
 IPTVChannelFetcher::IPTVChannelFetcher(
-    uint cardid, const QString &inputname, uint sourceid,
+    uint cardid, QString inputname, uint sourceid,
     bool is_mpts, ScanMonitor *monitor) :
-    _scan_monitor(monitor),
-    _cardid(cardid),       _inputname(inputname),
-    _sourceid(sourceid),   _is_mpts(is_mpts),
-    _chan_cnt(1),          _thread_running(false),
-    _stop_now(false),      _thread(new MThread("IPTVChannelFetcher", this)),
-    _lock()
+    m_scanMonitor(monitor),
+    m_cardId(cardid),       m_inputName(std::move(inputname)),
+    m_sourceId(sourceid),   m_isMpts(is_mpts),
+    m_thread(new MThread("IPTVChannelFetcher", this))
 {
     LOG(VB_CHANNEL, LOG_INFO, LOC + QString("Has ScanMonitor %1")
         .arg(monitor?"true":"false"));
@@ -45,8 +46,8 @@ IPTVChannelFetcher::IPTVChannelFetcher(
 IPTVChannelFetcher::~IPTVChannelFetcher()
 {
     Stop();
-    delete _thread;
-    _thread = NULL;
+    delete m_thread;
+    m_thread = nullptr;
 }
 
 /** \fn IPTVChannelFetcher::Stop(void)
@@ -54,107 +55,107 @@ IPTVChannelFetcher::~IPTVChannelFetcher()
  */
 void IPTVChannelFetcher::Stop(void)
 {
-    _lock.lock();
+    m_lock.lock();
 
-    while (_thread_running)
+    while (m_threadRunning)
     {
-        _stop_now = true;
-        _lock.unlock();
-        _thread->wait(5);
-        _lock.lock();
+        m_stopNow = true;
+        m_lock.unlock();
+        m_thread->wait(5);
+        m_lock.lock();
     }
 
-    _lock.unlock();
+    m_lock.unlock();
 
-    _thread->wait();
+    m_thread->wait();
 }
 
 fbox_chan_map_t IPTVChannelFetcher::GetChannels(void)
 {
-    while (!_thread->isFinished())
-        _thread->wait(500);
+    while (!m_thread->isFinished())
+        m_thread->wait(500);
 
     LOG(VB_CHANNEL, LOG_INFO, LOC + QString("Found %1 channels")
-        .arg(_channels.size()));
-    return _channels;
+        .arg(m_channels.size()));
+    return m_channels;
 }
 
 /// \brief Scans the given frequency list.
 void IPTVChannelFetcher::Scan(void)
 {
     Stop();
-    _stop_now = false;
-    _thread->start();
+    m_stopNow = false;
+    m_thread->start();
 }
 
 void IPTVChannelFetcher::run(void)
 {
-    _lock.lock();
-    _thread_running = true;
-    _lock.unlock();
+    m_lock.lock();
+    m_threadRunning = true;
+    m_lock.unlock();
 
     // Step 1/4 : Get info from DB
-    QString url = CardUtil::GetVideoDevice(_cardid);
+    QString url = CardUtil::GetVideoDevice(m_cardId);
 
-    if (_stop_now || url.isEmpty())
+    if (m_stopNow || url.isEmpty())
     {
         LOG(VB_CHANNEL, LOG_INFO, LOC + "Playlist URL was empty");
-        QMutexLocker locker(&_lock);
-        _thread_running = false;
-        _stop_now = true;
+        QMutexLocker locker(&m_lock);
+        m_threadRunning = false;
+        m_stopNow = true;
         return;
     }
 
     LOG(VB_CHANNEL, LOG_INFO, LOC + QString("Playlist URL: %1").arg(url));
 
     // Step 2/4 : Download
-    if (_scan_monitor)
+    if (m_scanMonitor)
     {
-        _scan_monitor->ScanPercentComplete(5);
-        _scan_monitor->ScanAppendTextToLog(tr("Downloading Playlist"));
+        m_scanMonitor->ScanPercentComplete(5);
+        m_scanMonitor->ScanAppendTextToLog(tr("Downloading Playlist"));
     }
 
-    QString playlist = DownloadPlaylist(url, true);
+    QString playlist = DownloadPlaylist(url);
 
-    if (_stop_now || playlist.isEmpty())
+    if (m_stopNow || playlist.isEmpty())
     {
-        if (playlist.isNull() && _scan_monitor)
+        if (playlist.isNull() && m_scanMonitor)
         {
-            _scan_monitor->ScanAppendTextToLog(
+            m_scanMonitor->ScanAppendTextToLog(
                 QCoreApplication::translate("(Common)", "Error"));
-            _scan_monitor->ScanPercentComplete(100);
-            _scan_monitor->ScanErrored(tr("Downloading Playlist Failed"));
+            m_scanMonitor->ScanPercentComplete(100);
+            m_scanMonitor->ScanErrored(tr("Downloading Playlist Failed"));
         }
-        QMutexLocker locker(&_lock);
-        _thread_running = false;
-        _stop_now = true;
+        QMutexLocker locker(&m_lock);
+        m_threadRunning = false;
+        m_stopNow = true;
         return;
     }
 
     // Step 3/4 : Process
-    if (_scan_monitor)
+    if (m_scanMonitor)
     {
-        _scan_monitor->ScanPercentComplete(35);
-        _scan_monitor->ScanAppendTextToLog(tr("Processing Playlist"));
+        m_scanMonitor->ScanPercentComplete(35);
+        m_scanMonitor->ScanAppendTextToLog(tr("Processing Playlist"));
     }
 
-    _channels.clear();
-    _channels = ParsePlaylist(playlist, this);
+    m_channels.clear();
+    m_channels = ParsePlaylist(playlist, this);
 
     // Step 4/4 : Finish up
-    if (_scan_monitor)
-        _scan_monitor->ScanAppendTextToLog(tr("Adding Channels"));
-    SetTotalNumChannels(_channels.size());
+    if (m_scanMonitor)
+        m_scanMonitor->ScanAppendTextToLog(tr("Adding Channels"));
+    SetTotalNumChannels(m_channels.size());
 
     LOG(VB_CHANNEL, LOG_INFO, LOC + QString("Found %1 channels")
-        .arg(_channels.size()));
+        .arg(m_channels.size()));
 
-    if (!_is_mpts)
+    if (!m_isMpts)
     {
-        fbox_chan_map_t::const_iterator it = _channels.begin();
-        for (uint i = 1; it != _channels.end(); ++it, ++i)
+        fbox_chan_map_t::const_iterator it = m_channels.begin();
+        for (uint i = 1; it != m_channels.end(); ++it, ++i)
         {
-            QString channum = it.key();
+            const QString& channum = it.key();
             QString name    = (*it).m_name;
             QString xmltvid = (*it).m_xmltvid.isEmpty() ? "" : (*it).m_xmltvid;
             uint programnumber = (*it).m_programNumber;
@@ -164,76 +165,77 @@ void IPTVChannelFetcher::run(void)
             LOG(VB_CHANNEL, LOG_INFO, QString("Handling channel %1 %2")
                 .arg(channum).arg(name));
 
-            int chanid = ChannelUtil::GetChanID(_sourceid, channum);
+            int chanid = ChannelUtil::GetChanID(m_sourceId, channum);
             if (chanid <= 0)
             {
-                if (_scan_monitor)
+                if (m_scanMonitor)
                 {
-                    _scan_monitor->ScanAppendTextToLog(
-                                                       tr("Adding %1").arg(msg));
+                    m_scanMonitor->ScanAppendTextToLog(tr("Adding %1").arg(msg));
                 }
-                chanid = ChannelUtil::CreateChanID(_sourceid, channum);
-                ChannelUtil::CreateChannel(0, _sourceid, chanid, name, name,
+                chanid = ChannelUtil::CreateChanID(m_sourceId, channum);
+                ChannelUtil::CreateChannel(0, m_sourceId, chanid, name, name,
                                            channum, programnumber, 0, 0,
-                                           false, false, false, QString::null,
-                                           QString::null, "Default", xmltvid);
+                                           false, kChannelVisible, QString(),
+                                           QString(), "Default", xmltvid);
                 ChannelUtil::CreateIPTVTuningData(chanid, (*it).m_tuning);
             }
             else
             {
-                if (_scan_monitor)
+                if (m_scanMonitor)
                 {
-                    _scan_monitor->ScanAppendTextToLog(
+                    m_scanMonitor->ScanAppendTextToLog(
                                                tr("Updating %1").arg(msg));
                 }
-                ChannelUtil::UpdateChannel(0, _sourceid, chanid, name, name,
+                ChannelUtil::UpdateChannel(0, m_sourceId, chanid, name, name,
                                            channum, programnumber, 0, 0,
-                                           false, false, false, QString::null,
-                                           QString::null, "Default", xmltvid);
+                                           false, kChannelVisible, QString(),
+                                           QString(), "Default", xmltvid);
                 ChannelUtil::UpdateIPTVTuningData(chanid, (*it).m_tuning);
             }
 
             SetNumChannelsInserted(i);
         }
 
-        if (_scan_monitor)
+        if (m_scanMonitor)
         {
-            _scan_monitor->ScanAppendTextToLog(tr("Done"));
-            _scan_monitor->ScanAppendTextToLog("");
-            _scan_monitor->ScanPercentComplete(100);
-            _scan_monitor->ScanComplete();
+            m_scanMonitor->ScanAppendTextToLog(tr("Done"));
+            m_scanMonitor->ScanAppendTextToLog("");
+            m_scanMonitor->ScanPercentComplete(100);
+            m_scanMonitor->ScanComplete();
         }
     }
 
-    QMutexLocker locker(&_lock);
-    _thread_running = false;
-    _stop_now = true;
+    QMutexLocker locker(&m_lock);
+    m_threadRunning = false;
+    m_stopNow = true;
 }
 
 void IPTVChannelFetcher::SetNumChannelsParsed(uint val)
 {
-    uint minval = 35, range = 70 - minval;
-    uint pct = minval + (uint) truncf((((float)val) / _chan_cnt) * range);
-    if (_scan_monitor)
-        _scan_monitor->ScanPercentComplete(pct);
+    uint minval = 35;
+    uint range = 70 - minval;
+    uint pct = minval + (uint) truncf((((float)val) / m_chanCnt) * range);
+    if (m_scanMonitor)
+        m_scanMonitor->ScanPercentComplete(pct);
 }
 
 void IPTVChannelFetcher::SetNumChannelsInserted(uint val)
 {
-    uint minval = 70, range = 100 - minval;
-    uint pct = minval + (uint) truncf((((float)val) / _chan_cnt) * range);
-    if (_scan_monitor)
-        _scan_monitor->ScanPercentComplete(pct);
+    uint minval = 70;
+    uint range = 100 - minval;
+    uint pct = minval + (uint) truncf((((float)val) / m_chanCnt) * range);
+    if (m_scanMonitor)
+        m_scanMonitor->ScanPercentComplete(pct);
 }
 
 void IPTVChannelFetcher::SetMessage(const QString &status)
 {
-    if (_scan_monitor)
-        _scan_monitor->ScanAppendTextToLog(status);
+    if (m_scanMonitor)
+        m_scanMonitor->ScanAppendTextToLog(status);
 }
 
-QString IPTVChannelFetcher::DownloadPlaylist(const QString &url,
-                                             bool inQtThread)
+// This function is always called from a thread context.
+QString IPTVChannelFetcher::DownloadPlaylist(const QString &url)
 {
     if (url.startsWith("file", Qt::CaseInsensitive))
     {
@@ -291,13 +293,14 @@ fbox_chan_map_t IPTVChannelFetcher::ParsePlaylist(
     const QString &reallyrawdata, IPTVChannelFetcher *fetcher)
 {
     fbox_chan_map_t chanmap;
+    int nextChanNum = 1;
 
     QString rawdata = reallyrawdata;
     rawdata.replace("\r\n", "\n");
 
     // Verify header is ok
     QString header = rawdata.section("\n", 0, 0);
-    if (header != "#EXTM3U")
+    if (!header.startsWith("#EXTM3U"))
     {
         LOG(VB_GENERAL, LOG_ERR, LOC +
             QString("Invalid channel list header (%1)").arg(header));
@@ -322,14 +325,42 @@ fbox_chan_map_t IPTVChannelFetcher::ParsePlaylist(
                 .arg(num_channels));
     }
 
+    // get the next available channel number for the source (only used if we can't find one in the playlist)
+    if (fetcher)
+    {
+        MSqlQuery query(MSqlQuery::InitCon());
+        QString sql = "select MAX(CONVERT(channum, UNSIGNED INTEGER)) from channel where sourceid = :SOURCEID;";
+
+        query.prepare(sql);
+        query.bindValue(":SOURCEID", fetcher->m_sourceId);
+
+        if (!query.exec())
+        {
+            MythDB::DBError("Get next max channel number", query);
+        }
+        else
+        {
+            if (query.first())
+            {
+                nextChanNum = query.value(0).toInt() + 1;
+                LOG(VB_GENERAL, LOG_INFO, LOC + QString("Next available channel number from DB is: %1").arg(nextChanNum));
+            }
+            else
+            {
+                nextChanNum = 1;
+                LOG(VB_GENERAL, LOG_INFO, LOC + QString("No channels found for this source, using default channel number: %1").arg(nextChanNum));
+            }
+        }
+    }
+
     // Parse each channel
     uint lineNum = 1;
     for (uint i = 1; true; ++i)
     {
         IPTVChannelInfo info;
-        QString channum = QString::null;
+        QString channum;
 
-        if (!parse_chan_info(rawdata, info, channum, lineNum))
+        if (!parse_chan_info(rawdata, info, channum, nextChanNum, lineNum))
             break;
 
         QString msg = tr("Encountered malformed channel");
@@ -342,7 +373,7 @@ fbox_chan_map_t IPTVChannelFetcher::ParsePlaylist(
                 .arg(info.m_tuning.GetDataURL().toString());
             LOG(VB_CHANNEL, LOG_INFO, LOC + msg);
 
-            msg = QString::null; // don't tell fetcher
+            msg.clear(); // don't tell fetcher
         }
 
         if (fetcher)
@@ -359,6 +390,7 @@ fbox_chan_map_t IPTVChannelFetcher::ParsePlaylist(
 static bool parse_chan_info(const QString   &rawdata,
                             IPTVChannelInfo &info,
                             QString         &channum,
+                            int             &nextChanNum,
                             uint            &lineNum)
 {
     // #EXTINF:0,2 - France 2                <-- duration,channum - channame
@@ -388,7 +420,7 @@ static bool parse_chan_info(const QString   &rawdata,
         {
             if (line.startsWith("#EXTINF:"))
             {
-                parse_extinf(line.mid(line.indexOf(':')+1), channum, name);
+                parse_extinf(line.mid(line.indexOf(':')+1), channum, name, nextChanNum);
             }
             else if (line.startsWith("#EXTMYTHTV:"))
             {
@@ -427,7 +459,8 @@ static bool parse_chan_info(const QString   &rawdata,
 
 static bool parse_extinf(const QString &line,
                          QString       &channum,
-                         QString       &name)
+                         QString       &name,
+                         int           &nextChanNum)
 {
     // Parse extension portion, Freebox or SAT>IP format
     QRegExp chanNumName1("^-?\\d+,(\\d+)(?:\\.\\s|\\s-\\s)(.*)$");
@@ -476,18 +509,41 @@ static bool parse_extinf(const QString &line,
     {
         channum = chanNumName5.cap(1).simplified();
         name = chanNumName5.cap(2).simplified();
-        bool ok;
+        bool ok = false;
         int channel_number = channum.toInt (&ok);
-        if ((ok == true) && (channel_number > 0))
+        if (ok && (channel_number > 0))
         {
             return true;
         }
     }
 
-    // line is supposed to contain the "0,2 - France 2" part
-    QString msg = LOC +
-        QString("Invalid header in channel list line \n\t\t\tEXTINF:%1")
-        .arg(line);
+    // Parse extension portion, https://github.com/iptv-org/iptv/blob/master/channels/ style
+    // EG. #EXTINF:-1 tvg-id="" tvg-name="" tvg-logo="https://i.imgur.com/VejnhiB.png" group-title="News",BBC News
+    QRegExp chanNumName6("(^-?\\d+)\\s+[^,]*[^,]*,(.*)$");
+    pos = chanNumName6.indexIn(line);
+    if (pos != -1)
+    {
+        channum = chanNumName6.cap(1).simplified();
+        name = chanNumName6.cap(2).simplified();
+
+        bool ok = false;
+        int channel_number = channum.toInt(&ok);
+        if (ok && channel_number > 0)
+        {
+            if (channel_number >= nextChanNum)
+                nextChanNum = channel_number + 1;
+            return true;
+        }
+
+        // no valid channel number found use the default next one
+        LOG(VB_GENERAL, LOG_ERR, QString("No channel number found, using next available: %1 for channel: %2").arg(nextChanNum).arg(name));
+        channum = QString::number(nextChanNum);
+        nextChanNum++;
+        return true;
+    }
+
+    // not one of the formats we support
+    QString msg = LOC + QString("Invalid header in channel list line \n\t\t\tEXTINF:%1").arg(line);
     LOG(VB_GENERAL, LOG_ERR, msg);
     return false;
 }

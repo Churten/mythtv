@@ -19,17 +19,20 @@ class PlaylistLoadingThread : public MThread
 {
   public:
     PlaylistLoadingThread(PlaylistContainer *parent_ptr,
-                          AllMusic *all_music_ptr);
-    virtual void run();
+                          AllMusic *all_music_ptr)
+        : MThread("PlaylistLoading"), m_parent(parent_ptr),
+          m_allMusic(all_music_ptr) {}
+
+    void run() override; // MThread
 
   private:
-    PlaylistContainer *parent;
-    AllMusic          *all_music;
+    PlaylistContainer *m_parent   {nullptr};
+    AllMusic          *m_allMusic {nullptr};
 };
 
 class PlaylistContainer
 {
-    Q_DECLARE_TR_FUNCTIONS(PlaylistContainer)
+    Q_DECLARE_TR_FUNCTIONS(PlaylistContainer);
 
   public:
     explicit PlaylistContainer(AllMusic *all_music);
@@ -46,16 +49,16 @@ class PlaylistContainer
 
     void            save();
 
-    void            createNewPlaylist(QString name);
-    void            copyNewPlaylist(QString name);
+    void            createNewPlaylist(const QString &name);
+    void            copyNewPlaylist(const QString &name);
     void            copyToActive(int index);
 
     QString         getPlaylistName(int index, bool &reference);
 
-    void            deletePlaylist(int index);
+    void            deletePlaylist(int kill_me);
     void            renamePlaylist(int index, QString new_name);
 
-    bool            nameIsUnique(QString a_name, int which_id);
+    bool            nameIsUnique(const QString& a_name, int which_id);
 
     void            clearActive();
 
@@ -69,19 +72,18 @@ class PlaylistContainer
     QStringList       getPlaylistNames(void);
 
   private:
-    Playlist            *m_activePlaylist;
-    Playlist            *m_streamPlaylist;
-    QList<Playlist*>    *m_allPlaylists;
-    AllMusic            *m_allMusic;
+    Playlist               *m_activePlaylist  {nullptr};
+    Playlist               *m_streamPlaylist  {nullptr};
+    QList<Playlist*>       *m_allPlaylists    {nullptr};
 
-    PlaylistLoadingThread  *m_playlistsLoader;
-    bool                    m_doneLoading;
+    PlaylistLoadingThread  *m_playlistsLoader {nullptr};
+    bool                    m_doneLoading     {false};
     QString                 m_myHost;
 
-    int m_ratingWeight;
-    int m_playCountWeight;
-    int m_lastPlayWeight;
-    int m_randomWeight;
+    int m_ratingWeight                        {2};
+    int m_playCountWeight                     {2};
+    int m_lastPlayWeight                      {2};
+    int m_randomWeight                        {2};
 };
 
 #endif // _PLAYLIST_CONTAINER_H_

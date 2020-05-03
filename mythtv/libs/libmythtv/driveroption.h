@@ -16,21 +16,22 @@ struct DriverOption
     enum type_t { UNKNOWN_TYPE, INTEGER, BOOLEAN, STRING, MENU,
                   BUTTON, BITMASK };
 
-    typedef QMap<int, QString> menu_t;
-    typedef QMap<category_t, DriverOption> Options;
+    using menu_t = QMap<int, QString>;
+    using Options = QMap<category_t, DriverOption>;
 
-    DriverOption(void) : category(UNKNOWN_CAT), minimum(0), maximum(0),
-                         default_value(0), current(0), step(0), flags(0),
-                         type(UNKNOWN_TYPE) {}
-    ~DriverOption(void) {}
+    DriverOption(void) = default;
+    ~DriverOption(void) = default;
 
-    QString    name;
-    category_t category;
-    int32_t    minimum, maximum, default_value, current;
-    uint32_t   step;
-    uint32_t   flags;
-    menu_t     menu;
-    type_t     type;
+    QString    m_name;
+    category_t m_category      {UNKNOWN_CAT};
+    int32_t    m_minimum       {0};
+    int32_t    m_maximum       {0};
+    int32_t    m_defaultValue  {0};
+    int32_t    m_current       {0};
+    uint32_t   m_step          {0};
+    uint32_t   m_flags         {0};
+    menu_t     m_menu;
+    type_t     m_type          {UNKNOWN_TYPE};
 };
 
 #endif

@@ -17,11 +17,7 @@
 // ---------------------------------------------------
 
 GeneralSetupWizard::GeneralSetupWizard(MythScreenStack *parent, const char *name)
-    : MythScreenType(parent, name),
-      m_submitButton(NULL),    m_viewButton(NULL),
-      m_deleteButton(NULL),    m_nextButton(NULL),
-      m_cancelButton(NULL),    m_profileLocation(NULL),
-      m_adminPassword(NULL),   m_busyPopup(NULL)
+    : MythScreenType(parent, name)
 {
     m_popupStack = GetMythMainWindow()->GetStack("popup stack");
     m_hardwareProfile = new HardwareProfile();
@@ -29,11 +25,8 @@ GeneralSetupWizard::GeneralSetupWizard(MythScreenStack *parent, const char *name
 
 bool GeneralSetupWizard::Create()
 {
-    bool foundtheme = false;
-
     // Load the theme for this screen
-    foundtheme = LoadWindowFromXML("config-ui.xml", "generalwizard", this);
-
+    bool foundtheme = LoadWindowFromXML("config-ui.xml", "generalwizard", this);
     if (!foundtheme)
         return false;
 
@@ -95,10 +88,6 @@ bool GeneralSetupWizard::Create()
     return true;
 }
 
-GeneralSetupWizard::~GeneralSetupWizard()
-{
-}
-
 void GeneralSetupWizard::loadData()
 {
     if (!m_hardwareProfile)
@@ -110,7 +99,7 @@ void GeneralSetupWizard::loadData()
         m_profileLocation->SetText(m_hardwareProfile->GetProfileURL());
 
     if (m_adminPassword)
-        m_adminPassword->SetText(m_hardwareProfile->GetAdminPasswordFromFile());
+        m_adminPassword->SetText(HardwareProfile::GetAdminPasswordFromFile());
 }
 
 void GeneralSetupWizard::slotNext(void)
@@ -118,7 +107,7 @@ void GeneralSetupWizard::slotNext(void)
     save();
 
     MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
-    AudioSetupWizard *sw = new AudioSetupWizard(mainStack, this, "audiosetupwizard");
+    auto *sw = new AudioSetupWizard(mainStack, this, "audiosetupwizard");
 
     if (sw->Create())
     {
@@ -134,8 +123,7 @@ void GeneralSetupWizard::slotSubmit(void)
                          "hardware profile with the MythTV developers? "
                          "Profiles are anonymous and are a great way to "
                          "help with future development.");
-    MythConfirmationDialog *confirmdialog =
-            new MythConfirmationDialog(m_popupStack,message);
+    auto *confirmdialog = new MythConfirmationDialog(m_popupStack,message);
 
     if (confirmdialog->Create())
         m_popupStack->AddScreen(confirmdialog);
@@ -154,21 +142,21 @@ void GeneralSetupWizard::OnSubmitPromptReturn(bool submit)
             if (m_busyPopup)
             {
                 m_busyPopup->Close();
-                m_busyPopup = NULL;
+                m_busyPopup = nullptr;
             }
             ShowOkPopup(tr("Hardware profile submitted. Thank you for supporting "
                            "MythTV!"));
             if (m_profileLocation)
                 m_profileLocation->SetText(m_hardwareProfile->GetProfileURL());
             if (m_adminPassword)
-                m_adminPassword->SetText(m_hardwareProfile->GetAdminPasswordFromFile());
+                m_adminPassword->SetText(HardwareProfile::GetAdminPasswordFromFile());
         }
         else
         {
             if (m_busyPopup)
             {
                 m_busyPopup->Close();
-                m_busyPopup = NULL;
+                m_busyPopup = nullptr;
             }
             ShowOkPopup(tr("Encountered a problem while submitting your profile."));
         }
@@ -207,20 +195,17 @@ void GeneralSetupWizard::slotView(void)
         GetMythMainWindow()->HandleMedia("WebBrowser", url);
         return;
     }
-    else
-    {
-        QString cmd = browser;
-        cmd.replace("%ZOOM%", zoom);
-        cmd.replace("%URL%", url);
-        cmd.replace('\'', "%27");
-        cmd.replace("&","\\&");
-        cmd.replace(";","\\;");
 
-        GetMythMainWindow()->AllowInput(false);
-        myth_system(cmd, kMSDontDisableDrawing);
-        GetMythMainWindow()->AllowInput(true);
-        return;
-    }
+    QString cmd = browser;
+    cmd.replace("%ZOOM%", zoom);
+    cmd.replace("%URL%", url);
+    cmd.replace('\'', "%27");
+    cmd.replace("&","\\&");
+    cmd.replace(";","\\;");
+
+    GetMythMainWindow()->AllowInput(false);
+    myth_system(cmd, kMSDontDisableDrawing);
+    GetMythMainWindow()->AllowInput(true);
 }
 
 void GeneralSetupWizard::slotDelete(void)
@@ -236,8 +221,7 @@ void GeneralSetupWizard::slotDelete(void)
                          "is anonymous and helps the developers "
                          "to know what hardware the majority of users "
                          "prefer.");
-    MythConfirmationDialog *confirmdialog =
-            new MythConfirmationDialog(m_popupStack,message);
+    auto *confirmdialog = new MythConfirmationDialog(m_popupStack,message);
 
     if (confirmdialog->Create())
         m_popupStack->AddScreen(confirmdialog);
@@ -256,7 +240,7 @@ void GeneralSetupWizard::OnDeletePromptReturn(bool submit)
             if (m_busyPopup)
             {
                 m_busyPopup->Close();
-                m_busyPopup = NULL;
+                m_busyPopup = nullptr;
             }
             ShowOkPopup(tr("Hardware profile deleted."));
             if (m_profileLocation)
@@ -269,7 +253,7 @@ void GeneralSetupWizard::OnDeletePromptReturn(bool submit)
             if (m_busyPopup)
             {
                 m_busyPopup->Close();
-                m_busyPopup = NULL;
+                m_busyPopup = nullptr;
             }
             ShowOkPopup(tr("Encountered a problem while deleting your profile."));
         }
@@ -287,13 +271,13 @@ bool GeneralSetupWizard::keyPressEvent(QKeyEvent *event)
 
     bool handled = false;
 
-    if (!handled && MythScreenType::keyPressEvent(event))
+    if (MythScreenType::keyPressEvent(event))
         handled = true;
 
     return handled;
 }
 
-void GeneralSetupWizard::CreateBusyDialog(QString message)
+void GeneralSetupWizard::CreateBusyDialog(const QString& message)
 {
     if (m_busyPopup)
         return;

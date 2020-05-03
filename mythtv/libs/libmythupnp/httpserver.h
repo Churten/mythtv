@@ -20,6 +20,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #endif
+#include <utility>
 
 // Qt headers
 #include <QReadWriteLock>
@@ -28,11 +29,10 @@
 #include <QPointer>
 #include <QMutex>
 #include <QList>
-
 #include <QSslConfiguration>
 #include <QSslError>
-#include <QSslSocket>
 #include <QSslKey>
+#include <QSslSocket>
 
 // MythTV headers
 #include "mythqtcompat.h"
@@ -42,7 +42,7 @@
 #include "upnputil.h"
 #include "compat.h"
 
-typedef struct timeval  TaskTime;
+using TaskTime = struct timeval;
 
 class HttpWorkerThread;
 class QScriptEngine;
@@ -53,12 +53,12 @@ class QSslCertificate;
 class QSslConfiguration;
 #endif
 
-typedef enum
+enum ContentProtection
 {
     cpLocalNoAuth = 0x00,  // Can only be accessed locally, but no authentication is required
     cpLocalAuth   = 0x01,  // Can only be accessed locally, authentication is required
     cpRemoteAuth  = 0x02   // Can be accessed remotely, authentication is required
-} ContentProtection;
+};
 
 /////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////
@@ -82,13 +82,13 @@ class UPNP_PUBLIC HttpServerExtension : public QObject
         
     public:
 
-        HttpServerExtension( const QString &sName, const  QString &sSharePath)
-           : m_sName( sName ), m_sSharePath( sSharePath ),
+        HttpServerExtension( QString sName, QString sSharePath)
+           : m_sName(std::move( sName )), m_sSharePath(std::move( sSharePath )),
              m_nSocketTimeout(-1),
              m_nSupportedMethods((RequestTypeGet | RequestTypePost | // Defaults, extensions may extend the list
                                   RequestTypeHead | RequestTypeOptions)) {};
 
-        virtual ~HttpServerExtension() {};
+        ~HttpServerExtension() override = default;
 
         virtual bool ProcessRequest(HTTPRequest *pRequest) = 0;
 
@@ -99,7 +99,7 @@ class UPNP_PUBLIC HttpServerExtension : public QObject
         virtual int GetSocketTimeout() const { return m_nSocketTimeout; }// -1 = Use config value
 };
 
-typedef QList<QPointer<HttpServerExtension> > HttpServerExtensionList;
+using HttpServerExtensionList = QList<QPointer<HttpServerExtension> >;
 
 /////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////
@@ -115,15 +115,15 @@ class UPNP_PUBLIC HttpServer : public ServerPool
 
   public:
     HttpServer();
-    virtual ~HttpServer();
+    ~HttpServer() override;
 
-    void RegisterExtension(HttpServerExtension*);
-    void UnregisterExtension(HttpServerExtension*);
-    void DelegateRequest(HTTPRequest*);
+    void RegisterExtension(HttpServerExtension *pExtension);
+    void UnregisterExtension(HttpServerExtension *pExtension);
+    void DelegateRequest(HTTPRequest *pRequest);
     /**
      * \brief Get the idle socket timeout value for the relevant extension
      */
-    uint GetSocketTimeout(HTTPRequest*) const;
+    uint GetSocketTimeout(HTTPRequest *pRequest) const;
 
     QString GetSharePath(void) const
     { // never modified after creation, so no need to lock
@@ -148,7 +148,7 @@ class UPNP_PUBLIC HttpServer : public ServerPool
     QMultiMap< QString, HttpServerExtension* >  m_basePaths;
     QString                 m_sSharePath;
     MThreadPool             m_threadPool;
-    bool                    m_running; // protected by m_rwlock
+    bool                    m_running    { true }; // protected by m_rwlock
 
     static QMutex           s_platformLock;
     static QString          s_platform;
@@ -160,7 +160,7 @@ class UPNP_PUBLIC HttpServer : public ServerPool
     const QString m_privateToken; // Private token; Used to salt digest auth nonce, changes on backend restart
 
   protected slots:
-    virtual void newTcpConnection(qt_socket_fd_t socket); // QTcpServer
+    void newTcpConnection(qt_socket_fd_t socket) override; // QTcpServer
 
   private:
     void LoadSSLConfig();
@@ -181,17 +181,16 @@ class HttpWorker : public QRunnable
     /**
      * \param httpServer The parent server of this request
      * \param sock       The socket
-     * \param socketTimeout The time in seconds to wait after the connection goes idle before closing the socket
      * \param type       The type of connection - Plain TCP, SSL or other?
      * \param sslConfig  The SSL configuration (for SSL sockets)
      */
     HttpWorker(HttpServer &httpServer, qt_socket_fd_t sock, PoolServerType type
 #ifndef QT_NO_OPENSSL
-               , QSslConfiguration sslConfig
+               , const QSslConfiguration& sslConfig
 #endif
     );
 
-    virtual void run(void);
+    void run(void) override; // QRunnable
 
   protected:
     HttpServer &m_httpServer; 

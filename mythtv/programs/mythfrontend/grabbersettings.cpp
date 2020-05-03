@@ -19,21 +19,10 @@ using namespace std;
 
 // ---------------------------------------------------
 
-GrabberSettings::GrabberSettings(MythScreenStack *parent, const char *name)
-    : MythScreenType(parent, name),
-      m_movieGrabberButtonList(NULL),      m_tvGrabberButtonList(NULL),
-      m_gameGrabberButtonList(NULL),       m_dailyUpdatesCheck(NULL),
-      m_okButton(NULL),                    m_cancelButton(NULL)
-{
-}
-
 bool GrabberSettings::Create()
 {
-    bool foundtheme = false;
-
     // Load the theme for this screen
-    foundtheme = LoadWindowFromXML("config-ui.xml", "grabbersettings", this);
-
+    bool foundtheme = LoadWindowFromXML("config-ui.xml", "grabbersettings", this);
     if (!foundtheme)
         return false;
 
@@ -79,10 +68,6 @@ bool GrabberSettings::Create()
     return true;
 }
 
-GrabberSettings::~GrabberSettings()
-{
-}
-
 void GrabberSettings::Load(void)
 {
     m_movieGrabberList = MetaGrabberScript::GetList(kGrabberMovie, true);
@@ -97,8 +82,8 @@ void GrabberSettings::Init(void)
     {
         InfoMap map;
         it->toMap(map);
-        MythUIButtonListItem *item =
-                    new MythUIButtonListItem(m_movieGrabberButtonList, it->GetName());
+        auto *item = new MythUIButtonListItem(m_movieGrabberButtonList,
+                                              it->GetName());
         item->SetData(it->GetRelPath());
         item->SetTextFromMap(map);
     }
@@ -110,8 +95,8 @@ void GrabberSettings::Init(void)
     {
         InfoMap map;
         it->toMap(map);
-        MythUIButtonListItem *item =
-                    new MythUIButtonListItem(m_tvGrabberButtonList, it->GetName());
+        auto *item = new MythUIButtonListItem(m_tvGrabberButtonList,
+                                              it->GetName());
         item->SetData(it->GetRelPath());
         item->SetTextFromMap(map);
     }
@@ -123,8 +108,8 @@ void GrabberSettings::Init(void)
     {
         InfoMap map;
         it->toMap(map);
-        MythUIButtonListItem *item =
-                    new MythUIButtonListItem(m_gameGrabberButtonList, it->GetName());
+        auto *item = new MythUIButtonListItem(m_gameGrabberButtonList,
+                                              it->GetName());
         item->SetData(it->GetRelPath());
         item->SetTextFromMap(map);
     }
@@ -140,9 +125,9 @@ void GrabberSettings::Init(void)
     QString currentGameGrabber = gCoreContext->GetSetting("mythgame.MetadataGrabber",
                                          "metadata/Game/giantbomb.py");
 
-    m_movieGrabberButtonList->SetValueByData(qVariantFromValue(currentMovieGrabber));
-    m_tvGrabberButtonList->SetValueByData(qVariantFromValue(currentTVGrabber));
-    m_gameGrabberButtonList->SetValueByData(qVariantFromValue(currentGameGrabber));
+    m_movieGrabberButtonList->SetValueByData(QVariant::fromValue(currentMovieGrabber));
+    m_tvGrabberButtonList->SetValueByData(QVariant::fromValue(currentTVGrabber));
+    m_gameGrabberButtonList->SetValueByData(QVariant::fromValue(currentGameGrabber));
 
     int updates =
         gCoreContext->GetNumSetting("DailyArtworkUpdates", 0);
@@ -170,10 +155,5 @@ bool GrabberSettings::keyPressEvent(QKeyEvent *event)
     if (GetFocusWidget()->keyPressEvent(event))
         return true;
 
-    bool handled = false;
-
-    if (!handled && MythScreenType::keyPressEvent(event))
-        handled = true;
-
-    return handled;
+    return MythScreenType::keyPressEvent(event);
 }

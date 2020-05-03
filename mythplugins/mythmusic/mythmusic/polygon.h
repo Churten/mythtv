@@ -1,16 +1,18 @@
 #ifndef POLYGON_H_
 #define POLYGON_H_
 
-#include <string.h>
+#include <cstring>
 
 template<typename Pixel>
 class Bitmap
 {
   public:
-    int width, height, extra;
-    Pixel *data;
+    int width   { 0 };
+    int height  { 0 };
+    int extra;
+    Pixel *data { nullptr };
 
-    explicit Bitmap(int e = 0) : width(0), height(0), extra(e), data(NULL) { }
+    explicit Bitmap(int e = 0) : extra(e) {}
     ~Bitmap() { delete[] data; }
 
     void size(int w,int h)

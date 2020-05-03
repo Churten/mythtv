@@ -1,10 +1,12 @@
 #ifndef AUDIOOUTPUT
 #define AUDIOOUTPUT
 
+#include <utility>
+
 // Qt headers
+#include <QCoreApplication>
 #include <QString>
 #include <QVector>
-#include <QCoreApplication>
 
 // MythTV headers
 #include "compat.h"
@@ -21,25 +23,28 @@ struct AVFrame;
 
 class MPUBLIC AudioOutput : public VolumeBase, public OutputListeners
 {
-    Q_DECLARE_TR_FUNCTIONS(AudioOutput)
+    Q_DECLARE_TR_FUNCTIONS(AudioOutput);
 
  public:
     class AudioDeviceConfig
     {
       public:
-        QString name;
-        QString desc;
-        AudioOutputSettings settings;
+        QString             m_name;
+        QString             m_desc;
+        AudioOutputSettings m_settings;
         AudioDeviceConfig(void) :
-            name(QString()), desc(QString()),
-            settings(AudioOutputSettings(true)) { };
-        AudioDeviceConfig(const QString &name,
-                          const QString &desc) :
-            name(name), desc(desc),
-            settings(AudioOutputSettings(true)) { };
+            m_settings(AudioOutputSettings(true)) { };
+        AudioDeviceConfig(QString name,
+                          QString desc) :
+            m_name(std::move(name)), m_desc(std::move(desc)),
+            m_settings(AudioOutputSettings(true)) { };
+        AudioDeviceConfig(const AudioDeviceConfig &) = default;
+        AudioDeviceConfig(AudioDeviceConfig &&) = default;
+        AudioDeviceConfig &operator= (const AudioDeviceConfig &) = default;
+        AudioDeviceConfig &operator= (AudioDeviceConfig &&) = default;
     };
 
-    typedef QVector<AudioDeviceConfig> ADCVect;
+    using ADCVect = QVector<AudioDeviceConfig>;
 
     static void Cleanup(void);
     static ADCVect* GetOutputList(void);
@@ -48,29 +53,25 @@ class MPUBLIC AudioOutput : public VolumeBase, public OutputListeners
 
     // opens one of the concrete subclasses
     static AudioOutput *OpenAudio(
-        const QString &audiodevice, const QString &passthrudevice,
-        AudioFormat format, int channels, int codec, int samplerate,
+        const QString &main_device, const QString &passthru_device,
+        AudioFormat format, int channels, AVCodecID codec, int samplerate,
         AudioOutputSource source, bool set_initial_vol, bool passthru,
-        int upmixer_startup = 0, AudioOutputSettings *custom = NULL);
+        int upmixer_startup = 0, AudioOutputSettings *custom = nullptr);
     static AudioOutput *OpenAudio(AudioSettings &settings,
                                   bool willsuspendpa = true);
     static AudioOutput *OpenAudio(
         const QString &main_device,
-        const QString &passthru_device = QString::null,
+        const QString &passthru_device = QString(),
         bool willsuspendpa = true);
 
-    AudioOutput() :
-        VolumeBase(),             OutputListeners(),
-        lastError(QString::null), lastWarn(QString::null),
-        pulsewassuspended(false), _frame(NULL) {}
-
-    virtual ~AudioOutput();
+    AudioOutput() = default;
+    ~AudioOutput() override;
 
     // reconfigure sound out for new params
     virtual void Reconfigure(const AudioSettings &settings) = 0;
 
     virtual void SetStretchFactor(float factor);
-    virtual float GetStretchFactor(void) const { return 1.0f; }
+    virtual float GetStretchFactor(void) const { return 1.0F; }
     virtual int GetChannels(void) const { return 2; }
     virtual AudioFormat GetFormat(void) const { return FORMAT_S16; };
     virtual int GetBytesPerFrame(void) const { return 4; };
@@ -78,7 +79,7 @@ class MPUBLIC AudioOutput : public VolumeBase, public OutputListeners
     virtual AudioOutputSettings* GetOutputSettingsCleaned(bool digital = true);
     virtual AudioOutputSettings* GetOutputSettingsUsers(bool digital = true);
     virtual bool CanPassthrough(int samplerate, int channels,
-                                int codec, int profile) const;
+                                AVCodecID codec, int profile) const;
     virtual bool CanDownmix(void) const { return false; };
 
     // dsprate is in 100 * samples/second
@@ -86,32 +87,41 @@ class MPUBLIC AudioOutput : public VolumeBase, public OutputListeners
 
     virtual void Reset(void) = 0;
 
-    virtual bool AddFrames(void *buffer, int frames, int64_t timecode) = 0;
         /**
-         * AddData:
+         * Add frames to the audiobuffer for playback
+         *
+         * \param[in] buffer pointer to audio data
+         * \param[in] frames number of frames added.
+         * \param[in] timecode timecode of the first sample added (in msec)
+         *
+         * \return false if there wasn't enough space in audio buffer to
+         *     process all the data
+         */
+    virtual bool AddFrames(void *buffer, int frames, int64_t timecode) = 0;
+
+        /**
          * Add data to the audiobuffer for playback
          *
-         * in:
-         *     buffer  : pointer to audio data
-         *     len     : length of audio data added
-         *     timecode: timecode of the first sample added
-         *     frames  : number of frames added.
-         * out:
-         *     return false if there wasn't enough space in audio buffer to
+         * \param[in] buffer pointer to audio data
+         * \param[in] len length of audio data added
+         * \param[in] timecode timecode of the first sample added (in msec)
+         * \param[in] frames number of frames added.
+         *
+         * \return false if there wasn't enough space in audio buffer to
          *     process all the data
          */
     virtual bool AddData(void *buffer, int len,
                          int64_t timecode, int frames) = 0;
+
         /**
-         * NeedDecodingBeforePassthrough:
-         * returns true if AudioOutput class can determine the length in
+         * \return true if AudioOutput class can determine the length in
          * millisecond of native audio frames bitstreamed passed to AddData.
          * If false, LengthLastData method must be implemented
          */
     virtual bool NeedDecodingBeforePassthrough(void) const { return true; };
+
         /**
-         * LengthLastData:
-         * returns the length of the last data added in millisecond.
+         * \return the length of the last data added in millisecond.
          * This function must be implemented if NeedDecodingBeforePassthrough
          * returned false
          */
@@ -130,10 +140,10 @@ class MPUBLIC AudioOutput : public VolumeBase, public OutputListeners
     /// report amount of audio buffered in milliseconds.
     virtual int64_t GetAudioBufferedTime(void) { return 0; }
 
-    virtual void SetSourceBitrate(int ) { }
+    virtual void SetSourceBitrate(int /*rate*/ ) { }
 
-    QString GetError(void)   const { return lastError; }
-    QString GetWarning(void) const { return lastWarn; }
+    QString GetError(void)   const { return m_lastError; }
+    QString GetWarning(void) const { return m_lastWarn; }
 
     virtual void GetBufferStatus(uint &fill, uint &total)
         { fill = total = 0; }
@@ -146,23 +156,22 @@ class MPUBLIC AudioOutput : public VolumeBase, public OutputListeners
     virtual bool IsUpmixing(void)   { return false; }
     virtual bool ToggleUpmix(void)  { return false; }
     virtual bool CanUpmix(void)     { return false; }
-    bool PulseStatus(void) { return pulsewassuspended; }
+    bool PulseStatus(void) { return m_pulseWasSuspended; }
+
     /**
-     * CanProcess
-     * argument: AudioFormat
+     * \param fmt The audio format in question.
      * return true if class can handle AudioFormat
      * All AudioOutput derivative must be able to handle S16
      */
     virtual bool CanProcess(AudioFormat fmt) { return fmt == FORMAT_S16; }
+
     /**
-     * CanProcess
-     * return bitmask of all AudioFormat handled
+     * \return bitmask of all AudioFormat handled
      * All AudioOutput derivative must be able to handle S16
      */
     virtual uint32_t CanProcess(void) { return 1 << FORMAT_S16; }
 
     /**
-     * DecodeAudio
      * Utility routine.
      * Decode an audio packet, and compact it if data is planar
      * Return negative error code if an error occurred during decoding
@@ -170,14 +179,19 @@ class MPUBLIC AudioOutput : public VolumeBase, public OutputListeners
      * data_size contains the size of decoded data copied into buffer
      * data decoded will be S16 samples if class instance can't handle HD audio
      * or S16 and above otherwise. No U8 PCM format can be returned
+     *
+     * \param[in] ctx The current audio context information.
+     * \param[in] buffer Destination for the copy
+     * \param[out] data_size The number of bytes copied.
+     * \param[in] pkt The source data packet
      */
     virtual int DecodeAudio(AVCodecContext *ctx,
                     uint8_t *buffer, int &data_size,
                     const AVPacket *pkt);
     /**
-     * MAX_SIZE_BUFFER is the maximum size of a buffer to be used with DecodeAudio
+     * kMaxSizeBuffer is the maximum size of a buffer to be used with DecodeAudio
      */
-    static const int MAX_SIZE_BUFFER = 384000;
+    static const int kMaxSizeBuffer = 384000;
 
   protected:
     void Error(const QString &msg);
@@ -186,10 +200,10 @@ class MPUBLIC AudioOutput : public VolumeBase, public OutputListeners
     void ClearError(void);
     void ClearWarning(void);
 
-    QString lastError;
-    QString lastWarn;
-    bool pulsewassuspended;
-    AVFrame *_frame;
+    QString m_lastError;
+    QString m_lastWarn;
+    bool    m_pulseWasSuspended {false};
+    AVFrame *m_frame            {nullptr};
 };
 
 #endif

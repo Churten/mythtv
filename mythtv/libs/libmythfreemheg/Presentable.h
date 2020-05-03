@@ -34,17 +34,17 @@
 class MHPresentable : public MHIngredient  
 {
   public:
-    MHPresentable() {}
-    MHPresentable(const MHPresentable &ref): MHIngredient(ref) {}
+    MHPresentable() = default;
+    MHPresentable(const MHPresentable&) = default;
     // No new components.
 
     // Actions.
-    virtual void Run(MHEngine *engine);
-    virtual void Stop(MHEngine *engine);
+    void Run(MHEngine *engine) override; // MHRoot
+    void Stop(MHEngine *engine) override; // MHRoot
 
     // Additional actions for stream components.
-    virtual void BeginPlaying(MHEngine *) {}
-    virtual void StopPlaying(MHEngine *) {}
+    virtual void BeginPlaying(MHEngine */*engine*/) {}
+    virtual void StopPlaying(MHEngine */*engine*/) {}
 };
 
 // Run and stop actions.
@@ -52,14 +52,16 @@ class MHRun: public MHElemAction
 {
   public:
     MHRun(): MHElemAction(":Run") {}
-    virtual void Perform(MHEngine *engine) { Target(engine)->Run(engine); }
+    void Perform(MHEngine *engine) override // MHElemAction
+        { Target(engine)->Run(engine); }
 };
 
 class MHStop: public MHElemAction
 {
   public:
     MHStop(): MHElemAction(":Stop") {}
-    virtual void Perform(MHEngine *engine) { Target(engine)->Stop(engine); }
+    void Perform(MHEngine *engine) override // MHElemAction
+        { Target(engine)->Stop(engine); }
 };
 
 #endif

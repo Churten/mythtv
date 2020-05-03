@@ -113,9 +113,7 @@ class SERVICE_PUBLIC VideoMetadataInfo : public QObject
 
         static inline void InitializeCustomTypes();
 
-    public:
-
-        VideoMetadataInfo(QObject *parent = 0)
+        Q_INVOKABLE VideoMetadataInfo(QObject *parent = nullptr)
                         : QObject         ( parent ),
                           m_Id            ( 0      ),
                           m_Collectionref ( 0      ),
@@ -129,60 +127,51 @@ class SERVICE_PUBLIC VideoMetadataInfo : public QObject
                           m_Visible       ( false  ),
                           m_Watched       ( false  ),
                           m_Processed     ( false  ),
-                          m_Artwork       ( NULL   ),
-                          m_Cast          ( NULL   ),
-                          m_Genres        ( NULL   ),
+                          m_Artwork       ( nullptr ),
+                          m_Cast          ( nullptr ),
+                          m_Genres        ( nullptr ),
                           m_SerializeArtwork( true ),
                           m_SerializeCast   ( true ),
                           m_SerializeGenres ( true )
         {
         }
 
-        VideoMetadataInfo( const VideoMetadataInfo &src )
+        void Copy( const VideoMetadataInfo *src )
         {
-            Copy( src );
+            m_Id               = src->m_Id;
+            m_SerializeArtwork = src->m_SerializeArtwork;
+            m_SerializeCast    = src->m_SerializeCast;
+            m_SerializeGenres  = src->m_SerializeGenres;
+
+            if ( src->m_Artwork != nullptr)
+                Artwork()->Copy( src->m_Artwork );
+
+            if (src->m_Cast != nullptr)
+                Cast()->Copy( src->m_Cast );
+
+            if (src->m_Genres != nullptr)
+                Genres()->Copy( src->m_Genres );
+
         }
 
-        void Copy( const VideoMetadataInfo &src )
-        {
-            m_Id               = src.m_Id;
-            m_SerializeArtwork = src.m_SerializeArtwork;
-            m_SerializeCast    = src.m_SerializeCast;
-            m_SerializeGenres  = src.m_SerializeGenres;
-
-            if ( src.m_Artwork != NULL)
-                Artwork()->Copy( src.m_Artwork );
-
-            if (src.m_Cast != NULL)
-                Cast()->Copy( src.m_Cast );
-
-            if (src.m_Genres != NULL)
-                Genres()->Copy( src.m_Genres );
-
-        }
+    private:
+        Q_DISABLE_COPY(VideoMetadataInfo);
 };
 
-} // namespace DTC
-
-Q_DECLARE_METATYPE( DTC::VideoMetadataInfo  )
-Q_DECLARE_METATYPE( DTC::VideoMetadataInfo* )
-
-namespace DTC
-{
 inline void VideoMetadataInfo::InitializeCustomTypes()
 {
-    qRegisterMetaType< VideoMetadataInfo  >();
     qRegisterMetaType< VideoMetadataInfo* >();
 
-    if (QMetaType::type( "DTC::ArtworkInfoList" ) == 0)
+    if (QMetaType::type( "DTC::ArtworkInfoList*" ) == 0)
         ArtworkInfoList::InitializeCustomTypes();
 
-    if (QMetaType::type( "DTC::CastMemberList" ) == 0)
+    if (QMetaType::type( "DTC::CastMemberList*" ) == 0)
         CastMemberList::InitializeCustomTypes();
 
-    if (QMetaType::type( "DTC::GenreMemberList" ) == 0)
+    if (QMetaType::type( "DTC::GenreMemberList*" ) == 0)
         GenreList::InitializeCustomTypes();
 }
-}
+
+} // namespace DTC
 
 #endif

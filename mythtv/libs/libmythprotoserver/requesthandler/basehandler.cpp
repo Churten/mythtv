@@ -19,7 +19,7 @@ bool BaseRequestHandler::HandleAnnounce(MythSocket *socket,
     if (commands.size() != 4)
         return false;
 
-    bool blockShutdown;
+    bool blockShutdown = true;
     if (commands[1] == "Playback")
         blockShutdown = true;
     else if (commands[1] == "Monitor")
@@ -33,7 +33,7 @@ bool BaseRequestHandler::HandleAnnounce(MythSocket *socket,
     bool systemevents = ( (eventlevel == 1) || (eventlevel == 3));
     bool normalevents = ( (eventlevel == 1) || (eventlevel == 2));
 
-    SocketHandler *handler = new SocketHandler(socket, m_parent, hostname);
+    auto *handler = new SocketHandler(socket, m_parent, hostname);
     socket->SetAnnounce(slist);
 
     handler->BlockShutdown(blockShutdown);
@@ -44,7 +44,7 @@ bool BaseRequestHandler::HandleAnnounce(MythSocket *socket,
 
     handler->WriteStringList(QStringList("OK"));
     handler->DecrRef();
-    handler = NULL;
+    handler = nullptr;
 
     LOG(VB_GENERAL, LOG_DEBUG, QString("MainServer::ANN %1")
                                     .arg(commands[1]));
@@ -56,8 +56,21 @@ bool BaseRequestHandler::HandleAnnounce(MythSocket *socket,
     return true;
 }
 
+/**
+ * \fn BaseRequestHandler::HandleQuery
+ * \brief Dispatch query messages received from a client.
+ *
+ * \param sock     The socket on which the message arrived. This is
+ *                 used to communicate the response back to the sender
+ *                 of the query.
+ * \param commands The command to execute.
+ * \param slist    Additional list arguments to the query. None of the
+ *                 supported queries have any additional arguments, so
+ *                 this variable is never used.
+ */
 bool BaseRequestHandler::HandleQuery(SocketHandler *sock,
-                                QStringList &commands, QStringList &slist)
+                                     QStringList &commands,
+                                     QStringList &/*slist*/)
 {
     QString command = commands[0];
     bool res = false;
@@ -97,12 +110,14 @@ bool BaseRequestHandler::HandleQueryLoad(SocketHandler *sock)
         strlist << "getloadavg() failed";
     }
     else
+    {
         strlist << QString::number(loads[0])
                 << QString::number(loads[1])
                 << QString::number(loads[2]);
+    }
 #else
-	strlist << "ERROR";
-	strlist << "getloadavg() not supported on Windows";
+    strlist << "ERROR";
+    strlist << "getloadavg() not supported on Windows";
 #endif
 
     sock->WriteStringList(strlist);
@@ -117,7 +132,7 @@ bool BaseRequestHandler::HandleQueryLoad(SocketHandler *sock)
 bool BaseRequestHandler::HandleQueryUptime(SocketHandler *sock)
 {
     QStringList strlist;
-    time_t      uptime;
+    time_t      uptime = 0;
 
     if (getUptime(uptime))
         strlist << QString::number(uptime);
@@ -154,7 +169,10 @@ bool BaseRequestHandler::HandleQueryHostname(SocketHandler *sock)
 bool BaseRequestHandler::HandleQueryMemStats(SocketHandler *sock)
 {
     QStringList strlist;
-    int         totalMB, freeMB, totalVM, freeVM;
+    int totalMB = 0;
+    int freeMB  = 0;
+    int totalVM = 0;
+    int freeVM  = 0;
 
     if (getMemStats(totalMB, freeMB, totalVM, freeVM))
     {

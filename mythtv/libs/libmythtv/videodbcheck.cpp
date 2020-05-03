@@ -52,10 +52,9 @@ static bool performActualUpdate(const QStringList &updates,
     LOG(VB_GENERAL, LOG_NOTICE,
         QString("Upgrading to MythVideo schema version %1") .arg(version));
 
-    for (QStringList::const_iterator p = updates.begin();
-         p != updates.end(); ++p)
+    foreach (const auto & update, updates)
     {
-        if (!query.exec(*p))
+        if (!query.exec(update))
         {
             MythDB::DBError("performActualUpdate", query);
             return false;
@@ -137,12 +136,16 @@ static void UpdateHashes(void)
             updatequery.bindValue(":FILENAME", filename);
             updatequery.bindValue(":HOST", host);
             if (!updatequery.exec())
+            {
                 MythDB::DBError(QObject::tr("Error: failed to hash file "
                                             "'%1'").arg(filename), updatequery);
+            }
             else
+            {
                 LOG(VB_GENERAL, LOG_INFO,
                     QString("Hash (%1) generated for file (%2)")
                         .arg(hash).arg(filename));
+            }
         }
     }
 }
@@ -334,15 +337,12 @@ static bool InitializeVideoSchema(void)
 "INSERT INTO videotypes VALUES (30,'swf','Internal',0,0);",
 "INSERT INTO videotypes VALUES (31,'f4v','Internal',0,0);",
 "INSERT INTO videotypes VALUES (32,'nuv','Internal',0,0);",
-NULL
+nullptr
 };
 
     QString dbver = "";
-    if (!performActualUpdate(updates, finalVideoDatabaseVersion, dbver,
-                             MythVideoVersionName))
-        return false;
-
-    return true;
+    return performActualUpdate(updates, finalVideoDatabaseVersion, dbver,
+                               MythVideoVersionName);
 }
 
 bool doUpgradeVideoDatabaseSchema(void)
@@ -376,6 +376,7 @@ bool doUpgradeVideoDatabaseSchema(void)
     if (dbver == "1016")
     {
         const QString updates[] = {
+// NOLINTNEXTLINE(bugprone-suspicious-missing-comma)
 "ALTER TABLE dvdbookmark"
 "  MODIFY serialid varbinary(16) NOT NULL default '',"
 "  MODIFY name varbinary(32) default NULL;",
@@ -420,6 +421,7 @@ bool doUpgradeVideoDatabaseSchema(void)
     if (dbver == "1017")
     {
         const QString updates[] = {
+// NOLINTNEXTLINE(bugprone-suspicious-missing-comma)
 "ALTER TABLE dvdbookmark"
 "  DEFAULT CHARACTER SET default,"
 "  MODIFY serialid varchar(16) CHARACTER SET utf8 NOT NULL default '',"
@@ -698,9 +700,11 @@ bool doUpgradeVideoDatabaseSchema(void)
                                    " DROP INDEX title_2");
 
                     if (!update.exec())
+                    {
                          MythDB::DBError("Unable to drop duplicate index "
                                          "on videometadata. Ignoring.",
                                          update);
+                    }
                     break;
                 }
             }

@@ -37,35 +37,35 @@ class Myth : public MythServices
 
     public:
 
-        Q_INVOKABLE explicit Myth( QObject *parent = 0 ) : MythServices( parent ) {}
+        Q_INVOKABLE explicit Myth( QObject *parent = nullptr ) : MythServices( parent ) {}
 
     public:
 
-        DTC::ConnectionInfo* GetConnectionInfo  ( const QString   &Pin );
+        DTC::ConnectionInfo* GetConnectionInfo  ( const QString   &Pin ) override; // MythServices
 
-        QString             GetHostName         ( );
-        QStringList         GetHosts            ( );
-        QStringList         GetKeys             ( );
+        QString             GetHostName         ( ) override; // MythServices
+        QStringList         GetHosts            ( ) override; // MythServices
+        QStringList         GetKeys             ( ) override; // MythServices
 
         DTC::StorageGroupDirList*  GetStorageGroupDirs ( const QString   &GroupName,
-                                                         const QString   &HostName );
+                                                         const QString   &HostName ) override; // MythServices
 
         bool                AddStorageGroupDir  ( const QString   &GroupName,
                                                   const QString   &DirName,
-                                                  const QString   &HostName );
+                                                  const QString   &HostName ) override; // MythServices
 
         bool                RemoveStorageGroupDir( const QString   &GroupName,
                                                    const QString   &DirName,
-                                                   const QString   &HostName );
+                                                   const QString   &HostName ) override; // MythServices
 
-        DTC::TimeZoneInfo*  GetTimeZone         ( );
+        DTC::TimeZoneInfo*  GetTimeZone         ( ) override; // MythServices
 
-        QString             GetFormatDate       ( const QDateTime Date,
-                                                  bool            ShortDate );
-        QString             GetFormatDateTime   ( const QDateTime DateTime,
-                                                  bool            ShortDate );
-        QString             GetFormatTime       ( const QDateTime Time );
-        QDateTime           ParseISODateString  ( const QString   &DateTime );
+        QString             GetFormatDate       ( QDateTime       Date,
+                                                  bool            ShortDate ) override; // MythServices
+        QString             GetFormatDateTime   ( QDateTime       DateTime,
+                                                  bool            ShortDate ) override; // MythServices
+        QString             GetFormatTime       ( QDateTime       Time ) override; // MythServices
+        QDateTime           ParseISODateString  ( const QString   &DateTime ) override; // MythServices
 
         DTC::LogMessageList* GetLogs            ( const QString   &HostName,
                                                   const QString   &Application,
@@ -79,35 +79,35 @@ class Myth : public MythServices
                                                   const QDateTime &ToTime,
                                                   const QString   &Level,
                                                   const QString   &MsgContains
-                                                );
+                                                ) override; // MythServices
 
 
-        DTC::FrontendList*  GetFrontends        ( bool OnLine );
+        DTC::FrontendList*  GetFrontends        ( bool OnLine ) override; // MythServices
 
         QString             GetSetting          ( const QString   &HostName,
                                                   const QString   &Key,
-                                                  const QString   &Default );
+                                                  const QString   &Default ) override; // MythServices
 
-        DTC::SettingList*   GetSettingList      ( const QString   &HostName );
+        DTC::SettingList*   GetSettingList      ( const QString   &HostName ) override; // MythServices
 
         bool                PutSetting          ( const QString   &HostName,
                                                   const QString   &Key,
-                                                  const QString   &Value   );
+                                                  const QString   &Value   ) override; // MythServices
 
         bool                ChangePassword      ( const QString   &UserName,
                                                   const QString   &OldPassword,
-                                                  const QString   &NewPassword );
+                                                  const QString   &NewPassword ) override; // MythServices
 
         bool                TestDBSettings      ( const QString &HostName,
                                                   const QString &UserName,
                                                   const QString &Password,
                                                   const QString &DBName,
-                                                  int   dbPort);
+                                                  int   dbPort) override; // MythServices
 
         bool                SendMessage         ( const QString &Message,
                                                   const QString &Address,
                                                   int   udpPort,
-                                                  int   Timeout);
+                                                  int   Timeout) override; // MythServices
 
         bool                SendNotification    ( bool  Error,
                                                   const QString &Type,
@@ -123,23 +123,34 @@ class Myth : public MythServices
                                                   uint  Visibility,
                                                   uint  Priority,
                                                   const QString &Address,
-                                                  int   udpPort );
+                                                  int   udpPort ) override; // MythServices
 
-        bool                BackupDatabase      ( void );
+        bool                BackupDatabase      ( void ) override; // MythServices
 
-        bool                CheckDatabase       ( bool Repair );
+        bool                CheckDatabase       ( bool Repair ) override; // MythServices
 
-        bool                ProfileSubmit       ( void );
+        bool                DelayShutdown       ( void ) override; // MythServices
 
-        bool                ProfileDelete       ( void );
+        bool                ProfileSubmit       ( void ) override; // MythServices
 
-        QString             ProfileURL          ( void );
+        bool                ProfileDelete       ( void ) override; // MythServices
 
-        QString             ProfileUpdated      ( void );
+        QString             ProfileURL          ( void ) override; // MythServices
 
-        QString             ProfileText         ( void );
+        QString             ProfileUpdated      ( void ) override; // MythServices
 
-        DTC::BackendInfo*   GetBackendInfo      ( void );
+        QString             ProfileText         ( void ) override; // MythServices
+
+        DTC::BackendInfo*   GetBackendInfo      ( void ) override; // MythServices
+
+        bool                ManageDigestUser    ( const QString &Action,
+                                                  const QString &UserName,
+                                                  const QString &Password,
+                                                  const QString &NewPassword,
+                                                  const QString &AdminPassword ) override; // MythServices
+
+        bool                ManageUrlProtection  ( const QString &Services,
+                                                   const QString &AdminPassword ) override; // MythServices
 };
 
 // --------------------------------------------------------------------------
@@ -168,7 +179,7 @@ class ScriptableMyth : public QObject
 
     public:
 
-        Q_INVOKABLE ScriptableMyth( QScriptEngine *pEngine, QObject *parent = 0 ) : QObject( parent )
+        Q_INVOKABLE explicit ScriptableMyth( QScriptEngine *pEngine, QObject *parent = nullptr ) : QObject( parent )
         {
             m_pEngine = pEngine;
         }
@@ -177,7 +188,7 @@ class ScriptableMyth : public QObject
 
         QObject* GetConnectionInfo  ( const QString   &Pin )
         {
-            SCRIPT_CATCH_EXCEPTION( NULL,
+            SCRIPT_CATCH_EXCEPTION( nullptr,
                 return m_obj.GetConnectionInfo( Pin );
             )
         }
@@ -206,7 +217,7 @@ class ScriptableMyth : public QObject
         QObject* GetStorageGroupDirs ( const QString   &GroupName,
                                        const QString   &HostName )
         {
-            SCRIPT_CATCH_EXCEPTION( NULL,
+            SCRIPT_CATCH_EXCEPTION( nullptr,
                 return m_obj.GetStorageGroupDirs( GroupName, HostName );
             )
         }
@@ -231,12 +242,12 @@ class ScriptableMyth : public QObject
 
         QObject* GetTimeZone()
         {
-            SCRIPT_CATCH_EXCEPTION( NULL,
+            SCRIPT_CATCH_EXCEPTION( nullptr,
                 return m_obj.GetTimeZone( );
             )
         }
 
-        QString   GetFormatDate( const QDateTime Date,
+        QString   GetFormatDate( const QDateTime& Date,
                                  bool            ShortDate = false )
         {
             SCRIPT_CATCH_EXCEPTION( QString(),
@@ -244,7 +255,7 @@ class ScriptableMyth : public QObject
             )
         }
 
-        QString   GetFormatDateTime( const QDateTime DateTime,
+        QString   GetFormatDateTime( const QDateTime& DateTime,
                                      bool            ShortDate = false )
         {
             SCRIPT_CATCH_EXCEPTION( QString(),
@@ -252,7 +263,7 @@ class ScriptableMyth : public QObject
             )
         }
 
-        QString   GetFormatTime( const QDateTime Time )
+        QString   GetFormatTime( const QDateTime& Time )
         {
             SCRIPT_CATCH_EXCEPTION( QString(),
                 return m_obj.GetFormatTime( Time );
@@ -279,7 +290,7 @@ class ScriptableMyth : public QObject
                           const QString   &Level,
                           const QString   &MsgContains )
         {
-            SCRIPT_CATCH_EXCEPTION( NULL,
+            SCRIPT_CATCH_EXCEPTION( nullptr,
                 return m_obj.GetLogs( HostName, Application, PID, TID, Thread,
                                   Filename, Line, Function, FromTime, ToTime,
                                   Level, MsgContains );
@@ -288,7 +299,7 @@ class ScriptableMyth : public QObject
 
         QObject* GetFrontends( bool OnLine )
         {
-            SCRIPT_CATCH_EXCEPTION( NULL,
+            SCRIPT_CATCH_EXCEPTION( nullptr,
                 return m_obj.GetFrontends( OnLine );
             )
         }
@@ -304,7 +315,7 @@ class ScriptableMyth : public QObject
 
         QObject* GetSettingList ( const QString   &HostName )
         {
-            SCRIPT_CATCH_EXCEPTION( NULL,
+            SCRIPT_CATCH_EXCEPTION( nullptr,
                 return m_obj.GetSettingList( HostName );
             )
         }
@@ -354,6 +365,13 @@ class ScriptableMyth : public QObject
             )
         }
 
+        bool DelayShutdown( void )
+        {
+            SCRIPT_CATCH_EXCEPTION( false,
+                return m_obj.DelayShutdown();
+            )
+        }
+
         bool ProfileSubmit( void )
         {
             SCRIPT_CATCH_EXCEPTION( false,
@@ -391,12 +409,34 @@ class ScriptableMyth : public QObject
 
         QObject* GetBackendInfo( void )
         {
-            SCRIPT_CATCH_EXCEPTION( NULL,
+            SCRIPT_CATCH_EXCEPTION( nullptr,
                 return m_obj.GetBackendInfo();
+            )
+        }
+        bool ManageDigestUser( const QString &Action,
+                               const QString &UserName,
+                               const QString &Password,
+                               const QString &NewPassword,
+                               const QString &AdminPassword )
+        {
+            SCRIPT_CATCH_EXCEPTION( false,
+                return m_obj.ManageDigestUser( Action,
+                                               UserName,
+                                               Password,
+                                               NewPassword,
+                                               AdminPassword );
+            )
+        }
+        bool ManageUrlProtection( const QString &Services,
+                                  const QString &AdminPassword )
+        {
+            SCRIPT_CATCH_EXCEPTION( false,
+                return m_obj.ManageUrlProtection( Services, AdminPassword );
             )
         }
 };
 
+// NOLINTNEXTLINE(modernize-use-auto)
 Q_SCRIPT_DECLARE_QMETAOBJECT_MYTHTV( ScriptableMyth, QObject*);
 
 #endif

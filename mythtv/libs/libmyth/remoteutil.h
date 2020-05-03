@@ -1,7 +1,7 @@
 #ifndef REMOTEUTIL_H_
 #define REMOTEUTIL_H_
 
-#include <time.h>
+#include <ctime>
 
 #include <QStringList>
 #include <QDateTime>
@@ -15,12 +15,12 @@ class ProgramInfo;
 class MythEvent;
 
 MPUBLIC vector<ProgramInfo *> *RemoteGetRecordedList(int sort);
-MPUBLIC bool RemoteGetLoad(float load[3]);
+MPUBLIC bool RemoteGetLoad(double load[3]);
 MPUBLIC bool RemoteGetUptime(time_t &uptime);
 MPUBLIC
 bool RemoteGetMemStats(int &totalMB, int &freeMB, int &totalVM, int &freeVM);
 MPUBLIC bool RemoteCheckFile(
-    const ProgramInfo *pginfo, bool checkSlaves = true);
+    ProgramInfo *pginfo, bool checkSlaves = true);
 MPUBLIC bool RemoteDeleteRecording( uint recordingID, bool forceMetadataDelete,
                                     bool forgetHistory);
 MPUBLIC
@@ -45,7 +45,7 @@ MPUBLIC int RemoteGetRecordingStatus(const ProgramInfo *pginfo, int overrecsecs,
                                      int underrecsecs);
 MPUBLIC vector<ProgramInfo *> *RemoteGetCurrentlyRecordingList(void);
 
-MPUBLIC bool RemoteGetFileList(QString host, QString path, QStringList* list,
+MPUBLIC bool RemoteGetFileList(const QString& host, const QString& path, QStringList* list,
                        QString sgroup, bool fileNamesOnly = false);
 MPUBLIC bool RemoteGetActiveBackends(QStringList *list);
 

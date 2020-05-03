@@ -52,29 +52,31 @@ int main(int argc, char *argv[])
 
     if (cmdline.toBool("showversion"))
     {
-        cmdline.PrintVersion();
+        MythExternRecorderCommandLineParser::PrintVersion();
         return GENERIC_EXIT_OK;
     }
 
     QCoreApplication app(argc, argv);
     QCoreApplication::setApplicationName("mythexternrecorder");
 
-    int retval;
-    if ((retval = cmdline.ConfigureLogging()) != GENERIC_EXIT_OK)
+    int retval = cmdline.ConfigureLogging();
+    if (retval != GENERIC_EXIT_OK)
         return retval;
+    QString logfile = cmdline.GetLogFilePath();
+    QString logging = logPropagateArgs;
 
-    MythExternControl *control = new MythExternControl();
+    auto *control = new MythExternControl();
     MythExternRecApp  *process = nullptr;
 
     QString conf_file = cmdline.toString("conf");
     if (!conf_file.isEmpty())
     {
-        process = new MythExternRecApp("", conf_file);
+        process = new MythExternRecApp("", conf_file, logfile, logging);
     }
     else if (!cmdline.toString("exec").isEmpty())
     {
         QString command = cmdline.toString("exec");
-        process = new MythExternRecApp(command, "");
+        process = new MythExternRecApp(command, "", logfile, logging);
     }
     else if (!cmdline.toString("infile").isEmpty())
     {
@@ -82,7 +84,7 @@ int main(int argc, char *argv[])
         QString command = QString("ffmpeg -re -i \"%1\" "
                                   "-c:v copy -c:a copy -f mpegts -")
                           .arg(filename);
-        process = new MythExternRecApp(command, "");
+        process = new MythExternRecApp(command, "", logfile, logging);
     }
 
     QObject::connect(process, &MythExternRecApp::Opened,
@@ -110,6 +112,8 @@ int main(int argc, char *argv[])
                      process, &MythExternRecApp::LockTimeout);
     QObject::connect(control, &MythExternControl::HasTuner,
                      process, &MythExternRecApp::HasTuner);
+    QObject::connect(control, &MythExternControl::Cleanup,
+                     process, &MythExternRecApp::Cleanup);
     QObject::connect(control, &MythExternControl::LoadChannels,
                      process, &MythExternRecApp::LoadChannels);
     QObject::connect(control, &MythExternControl::FirstChannel,
@@ -118,6 +122,8 @@ int main(int argc, char *argv[])
                      process, &MythExternRecApp::NextChannel);
     QObject::connect(control, &MythExternControl::TuneChannel,
                      process, &MythExternRecApp::TuneChannel);
+    QObject::connect(control, &MythExternControl::TuneStatus,
+                     process, &MythExternRecApp::TuneStatus);
     QObject::connect(control, &MythExternControl::HasPictureAttributes,
                      process, &MythExternRecApp::HasPictureAttributes);
     QObject::connect(control, &MythExternControl::SetBlockSize,

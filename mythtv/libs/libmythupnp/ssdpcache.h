@@ -25,7 +25,7 @@
 #include "upnpexp.h"
 
 /// Key == Unique Service Name (USN)
-typedef QMap< QString, DeviceLocation * > EntryMap;
+using EntryMap = QMap< QString, DeviceLocation * >;
 
 /////////////////////////////////////////////////////////////////////////////
 // QDict Implementation that uses RefCounted pointers
@@ -35,7 +35,7 @@ class UPNP_PUBLIC SSDPCacheEntries : public ReferenceCounter
 {
   protected:
     /// Destructor protected to enforce Release method usage
-    virtual ~SSDPCacheEntries();
+    ~SSDPCacheEntries() override;
 
   public:
     SSDPCacheEntries();
@@ -51,9 +51,9 @@ class UPNP_PUBLIC SSDPCacheEntries : public ReferenceCounter
 
     DeviceLocation *GetFirst(void);
 
-    void GetEntryMap(EntryMap&);
+    void GetEntryMap(EntryMap &map);
 
-    QTextStream &OutputXML(QTextStream &os, uint *pnEntryCount = NULL) const;
+    QTextStream &OutputXML(QTextStream &os, uint *pnEntryCount = nullptr) const;
     void Dump(uint &nEntryCount) const;
 
     static QString GetNormalizedUSN(const QString &sUSN);
@@ -67,7 +67,7 @@ class UPNP_PUBLIC SSDPCacheEntries : public ReferenceCounter
 };
 
 /// Key == Service Type URI
-typedef QMap< QString, SSDPCacheEntries * > SSDPCacheEntriesMap;
+using SSDPCacheEntriesMap = QMap< QString, SSDPCacheEntries * >;
 
 /////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////
@@ -85,6 +85,8 @@ class UPNP_PUBLIC SSDPCache : public QObject,
     private:
         // Singleton instance used by all.
         static SSDPCache*       g_pSSDPCache;  
+        QStringList             m_badUrlList;
+        QStringList             m_goodUrlList;
 
     protected:
 
@@ -103,12 +105,13 @@ class UPNP_PUBLIC SSDPCache : public QObject,
         // ------------------------------------------------------------------
 
         SSDPCache();
+        Q_DISABLE_COPY(SSDPCache)
 
     public:
 
         static SSDPCache* Instance();
 
-        virtual ~SSDPCache();
+        ~SSDPCache() override;
 
         void Lock       () { m_mutex.lock();   }
         void Unlock     () { m_mutex.unlock(); }
@@ -129,8 +132,8 @@ class UPNP_PUBLIC SSDPCache : public QObject,
         void Dump       (void);
 
         QTextStream &OutputXML(QTextStream &os,
-                               uint        *pnDevCount   = NULL,
-                               uint        *pnEntryCount = NULL) const;
+                               uint        *pnDevCount   = nullptr,
+                               uint        *pnEntryCount = nullptr) const;
 
         SSDPCacheEntries *Find( const QString &sURI );
         DeviceLocation   *Find( const QString &sURI, const QString &sUSN );

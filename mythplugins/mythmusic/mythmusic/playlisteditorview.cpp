@@ -33,8 +33,6 @@ MusicGenericTree::MusicGenericTree(MusicGenericTree *parent,
     m_action = action;
     m_showArrow = showArrow;
 
-    SetSortText(name.toLower());
-
     if (!action.isEmpty() && !action.isNull())
         setSelectable(true);
 
@@ -43,10 +41,6 @@ MusicGenericTree::MusicGenericTree(MusicGenericTree *parent,
         parent->addNode(this);
         parent->setDrawArrow(true);
     }
-}
-
-MusicGenericTree::~MusicGenericTree(void)
-{
 }
 
 void MusicGenericTree::setDrawArrow(bool flag)
@@ -68,8 +62,8 @@ void MusicGenericTree::setCheck(MythUIButtonListItem::CheckState state)
 
 MythUIButtonListItem *MusicGenericTree::CreateListButton(MythUIButtonList *list)
 {
-    MusicButtonItem *item = new MusicButtonItem(list, GetText());
-    item->SetData(qVariantFromValue((MythGenericTree*) this));
+    auto *item = new MusicButtonItem(list, GetText());
+    item->SetData(QVariant::fromValue((MythGenericTree*) this));
 
     if (visibleChildCount() > 0)
         item->setDrawArrow(true);
@@ -94,9 +88,7 @@ MythUIButtonListItem *MusicGenericTree::CreateListButton(MythUIButtonList *list)
 PlaylistEditorView::PlaylistEditorView(MythScreenStack *parent, MythScreenType *parentScreen,
                                        const QString &layout, bool restorePosition)
          :MusicCommon(parent, parentScreen, "playlisteditorview"),
-            m_layout(layout), m_restorePosition(restorePosition),
-            m_rootNode(NULL), m_playlistTree(NULL), m_breadcrumbsText(NULL),
-            m_positionText(NULL)
+            m_layout(layout), m_restorePosition(restorePosition)
 {
     gCoreContext->addListener(this);
     gCoreContext->SaveSetting("MusicPlaylistEditorView", layout);
@@ -112,8 +104,7 @@ PlaylistEditorView::~PlaylistEditorView()
         delete m_deleteList.at(x);
     m_deleteList.clear();
 
-    if (m_rootNode)
-        delete m_rootNode;
+    delete m_rootNode;
 }
 
 bool PlaylistEditorView::Create(void)
@@ -185,25 +176,15 @@ bool PlaylistEditorView::Create(void)
 
 void PlaylistEditorView::customEvent(QEvent *event)
 {
-    if (event->type() == MusicPlayerEvent::MetadataChangedEvent)
-    {
+    if ((event->type() == MusicPlayerEvent::MetadataChangedEvent) ||
+        (event->type() == MusicPlayerEvent::AlbumArtChangedEvent))
+    { // NOLINT(bugprone-branch-clone)
         // TODO: this could be more efficient
         reloadTree();
     }
-    else if (event->type() == MusicPlayerEvent::AlbumArtChangedEvent)
-    {
-        // TODO: this could be more efficient
-        reloadTree();
-    }
-    else if (event->type() == MusicPlayerEvent::TrackRemovedEvent)
-    {
-        updateSelectedTracks();
-    }
-    else if (event->type() == MusicPlayerEvent::TrackAddedEvent)
-    {
-        updateSelectedTracks();
-    }
-    else if (event->type() == MusicPlayerEvent::AllTracksRemovedEvent)
+    else if ((event->type() == MusicPlayerEvent::TrackRemovedEvent) ||
+             (event->type() == MusicPlayerEvent::TrackAddedEvent)   ||
+             (event->type() == MusicPlayerEvent::AllTracksRemovedEvent))
     {
         updateSelectedTracks();
     }
@@ -219,8 +200,7 @@ void PlaylistEditorView::customEvent(QEvent *event)
     }
     else if (event->type() == MythEvent::MythEventMessage)
     {
-        MythEvent *me = dynamic_cast<MythEvent*>(event);
-
+        auto *me = dynamic_cast<MythEvent*>(event);
         if (!me)
             return;
 
@@ -241,10 +221,10 @@ void PlaylistEditorView::customEvent(QEvent *event)
     }
     else if (event->type() == DialogCompletionEvent::kEventType)
     {
-        DialogCompletionEvent *dce = static_cast<DialogCompletionEvent*>(event);
+        auto *dce = static_cast<DialogCompletionEvent*>(event);
 
         // make sure the user didn't ESCAPE out of the menu
-        if (dce->GetResult() < 0)
+        if ((dce == nullptr) || (dce->GetResult() < 0))
             return;
 
         QString resultid   = dce->GetId();
@@ -259,7 +239,7 @@ void PlaylistEditorView::customEvent(QEvent *event)
             if (!node)
                 return;
 
-            MusicGenericTree *mnode = dynamic_cast<MusicGenericTree*>(node);
+            auto *mnode = dynamic_cast<MusicGenericTree*>(node);
             if (!mnode)
                 return;
 
@@ -270,7 +250,7 @@ void PlaylistEditorView::customEvent(QEvent *event)
                     category = mnode->GetText();
 
                 MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
-                SmartPlaylistEditor* editor = new SmartPlaylistEditor(mainStack);
+                auto* editor = new SmartPlaylistEditor(mainStack);
 
                 if (!editor->Create())
                 {
@@ -300,7 +280,7 @@ void PlaylistEditorView::customEvent(QEvent *event)
                 QString name = mnode->GetText();
 
                 MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
-                SmartPlaylistEditor* editor = new SmartPlaylistEditor(mainStack);
+                auto* editor = new SmartPlaylistEditor(mainStack);
 
                 if (!editor->Create())
                 {
@@ -337,7 +317,7 @@ void PlaylistEditorView::customEvent(QEvent *event)
             if (!node)
                 return;
 
-            MusicGenericTree *mnode = dynamic_cast<MusicGenericTree*>(node);
+            auto *mnode = dynamic_cast<MusicGenericTree*>(node);
             if (!mnode)
                 return;
 
@@ -371,19 +351,15 @@ bool PlaylistEditorView::keyPressEvent(QKeyEvent *event)
     // if there is a pending jump point pass the key press to the default handler
     if (GetMythMainWindow()->IsExitingToMain())
     {
-        // do we need to stop playing?
-        if (gPlayer->isPlaying() && gCoreContext->GetSetting("MusicJumpPointAction", "stop") == "stop")
-            gPlayer->stop(true);
-
-        return MythScreenType::keyPressEvent(event);
+        // Just call the parent handler.  It will properly clean up.
+        return MusicCommon::keyPressEvent(event);
     }
 
     if (!m_moveTrackMode && GetFocusWidget() && GetFocusWidget()->keyPressEvent(event))
         return true;
 
-    bool handled = false;
     QStringList actions;
-    handled = GetMythMainWindow()->TranslateKeyPress("Music", event, actions);
+    bool handled = GetMythMainWindow()->TranslateKeyPress("Music", event, actions);
 
     for (int i = 0; i < actions.size() && !handled; i++)
     {
@@ -397,7 +373,7 @@ bool PlaylistEditorView::keyPressEvent(QKeyEvent *event)
             MythGenericTree *node = m_playlistTree->GetCurrentNode();
             if (node)
             {
-                MusicGenericTree *mnode = dynamic_cast<MusicGenericTree*>(node);
+                auto *mnode = dynamic_cast<MusicGenericTree*>(node);
                 if (mnode)
                 {
                     if (mnode->getAction() == "smartplaylist" && action == "EDIT")
@@ -406,7 +382,7 @@ bool PlaylistEditorView::keyPressEvent(QKeyEvent *event)
                         QString name = mnode->GetText();
 
                         MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
-                        SmartPlaylistEditor* editor = new SmartPlaylistEditor(mainStack);
+                        auto* editor = new SmartPlaylistEditor(mainStack);
 
                         if (!editor->Create())
                         {
@@ -427,7 +403,7 @@ bool PlaylistEditorView::keyPressEvent(QKeyEvent *event)
                         QString category = mnode->GetText();
 
                         MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
-                        SmartPlaylistEditor* editor = new SmartPlaylistEditor(mainStack);
+                        auto* editor = new SmartPlaylistEditor(mainStack);
 
                         if (!editor->Create())
                         {
@@ -446,7 +422,7 @@ bool PlaylistEditorView::keyPressEvent(QKeyEvent *event)
                     }
                     else if (mnode->getAction() == "trackid")
                     {
-                        MusicMetadata *mdata = gMusicData->all_music->getMetadata(mnode->getInt());
+                        MusicMetadata *mdata = gMusicData->m_all_music->getMetadata(mnode->getInt());
                         if (mdata)
                         {
                             if (action == "INFO")
@@ -467,7 +443,7 @@ bool PlaylistEditorView::keyPressEvent(QKeyEvent *event)
             MythGenericTree *node = m_playlistTree->GetCurrentNode();
             if (node)
             {
-                MusicGenericTree *mnode = dynamic_cast<MusicGenericTree*>(node);
+                auto *mnode = dynamic_cast<MusicGenericTree*>(node);
                 if (mnode)
                 {
                     if (mnode->getAction() == "smartplaylist")
@@ -503,8 +479,8 @@ bool PlaylistEditorView::keyPressEvent(QKeyEvent *event)
             MythUIButtonListItem *item = m_playlistTree->GetItemCurrent();
             if (item)
             {
-                MythGenericTree *node = item->GetData().value<MythGenericTree*>();
-                MusicGenericTree *mnode = dynamic_cast<MusicGenericTree*>(node);
+                auto *node = item->GetData().value<MythGenericTree*>();
+                auto *mnode = dynamic_cast<MusicGenericTree*>(node);
 
                 if (mnode)
                 {
@@ -525,11 +501,11 @@ bool PlaylistEditorView::keyPressEvent(QKeyEvent *event)
                             m_mainvisual->prepare();
                             m_mainvisual->mutex()->unlock();
                         }
-                     }
-                     else
-                     {
-                         handled = false;
-                     }
+                    }
+                    else
+                    {
+                        handled = false;
+                    }
                  }
              }
         }
@@ -538,9 +514,6 @@ bool PlaylistEditorView::keyPressEvent(QKeyEvent *event)
     }
 
     if (!handled && MusicCommon::keyPressEvent(event))
-        handled = true;
-
-    if (!handled && MythScreenType::keyPressEvent(event))
         handled = true;
 
     return handled;
@@ -553,7 +526,7 @@ void PlaylistEditorView::updateSonglist(MusicGenericTree *node)
     if (node->getAction() == "playlists" ||
         node->getAction() == "smartplaylists" ||
         node->getAction() == "smartplaylistcategory")
-    {
+    { // NOLINT(bugprone-branch-clone)
     }
     else if (node->getAction() == "trackid" || node->getAction() == "cdtrack")
     {
@@ -568,7 +541,7 @@ void PlaylistEditorView::updateSonglist(MusicGenericTree *node)
              node->getAction() == "years")
     {
         // get the list of tracks from the previous 'All Tracks' node
-        MusicGenericTree *allTracksNode = dynamic_cast<MusicGenericTree*>(node->getParent()->getChildAt(0));
+        auto *allTracksNode = dynamic_cast<MusicGenericTree*>(node->getParent()->getChildAt(0));
         if (allTracksNode)
         {
             for (int x = 0; x < allTracksNode->childCount(); x++)
@@ -588,7 +561,7 @@ void PlaylistEditorView::updateSonglist(MusicGenericTree *node)
              node->getAction() == "compartist")
     {
         // get the list of tracks from the 'All Tracks' node
-        MusicGenericTree *allTracksNode = dynamic_cast<MusicGenericTree*>(node->getChildAt(0));
+        auto *allTracksNode = dynamic_cast<MusicGenericTree*>(node->getChildAt(0));
         if (allTracksNode)
         {
             if (allTracksNode->childCount() == 0)
@@ -616,7 +589,7 @@ void PlaylistEditorView::updateSonglist(MusicGenericTree *node)
     {
         // get list of tracks to add from the playlist
         int playlistID = node->getInt();
-        Playlist *playlist = gMusicData->all_playlists->getPlaylist(playlistID);
+        Playlist *playlist = gMusicData->m_all_playlists->getPlaylist(playlistID);
 
         if (playlist)
         {
@@ -635,7 +608,7 @@ void PlaylistEditorView::updateSonglist(MusicGenericTree *node)
     else
     {
         // fall back to getting the tracks from the MetadataPtrList
-        MetadataPtrList *tracks = node->GetData().value<MetadataPtrList*>();
+        auto *tracks = node->GetData().value<MetadataPtrList*>();
         for (int x = 0; x < tracks->count(); x++)
         {
             MusicMetadata *mdata = tracks->at(x);
@@ -652,8 +625,8 @@ void PlaylistEditorView::ShowMenu(void)
         m_playlistOptions.playPLOption = PL_CURRENT;
         m_playlistOptions.insertPLOption = PL_REPLACE;
 
-        MythMenu *menu = NULL;
-        MusicGenericTree *mnode = dynamic_cast<MusicGenericTree*>(m_playlistTree->GetCurrentNode());
+        MythMenu *menu = nullptr;
+        auto *mnode = dynamic_cast<MusicGenericTree*>(m_playlistTree->GetCurrentNode());
 
         if (mnode)
         {
@@ -668,10 +641,8 @@ void PlaylistEditorView::ShowMenu(void)
             {
                 menu = createPlaylistMenu();
             }
-            else if (mnode->getAction() == "trackid")
-            {
-            }
-            else if (mnode->getAction() == "error")
+            else if ((mnode->getAction() == "trackid") ||
+                     (mnode->getAction() == "error"))
             {
             }
             else
@@ -684,11 +655,11 @@ void PlaylistEditorView::ShowMenu(void)
 
         if (menu)
         {
-            menu->AddItem(tr("More Options"), NULL, createMainMenu());
+            menu->AddItem(tr("More Options"), nullptr, createMainMenu());
 
             MythScreenStack *popupStack = GetMythMainWindow()->GetStack("popup stack");
 
-            MythDialogBox *menuPopup = new MythDialogBox(menu, popupStack, "actionmenu");
+            auto *menuPopup = new MythDialogBox(menu, popupStack, "actionmenu");
 
             if (menuPopup->Create())
                 popupStack->AddScreen(menuPopup);
@@ -704,14 +675,14 @@ void PlaylistEditorView::ShowMenu(void)
 
 MythMenu* PlaylistEditorView::createPlaylistMenu(void)
 {
-    MythMenu *menu = NULL;
+    MythMenu *menu = nullptr;
 
     if (GetFocusWidget() == m_playlistTree)
     {
-        MusicGenericTree *mnode = dynamic_cast<MusicGenericTree*>(m_playlistTree->GetCurrentNode());
+        auto *mnode = dynamic_cast<MusicGenericTree*>(m_playlistTree->GetCurrentNode());
 
         if (!mnode)
-            return NULL;
+            return nullptr;
 
         if (mnode->getAction() == "playlist")
         {
@@ -727,14 +698,14 @@ MythMenu* PlaylistEditorView::createPlaylistMenu(void)
 
 MythMenu* PlaylistEditorView::createSmartPlaylistMenu(void)
 {
-    MythMenu *menu = NULL;
+    MythMenu *menu = nullptr;
 
     if (GetFocusWidget() == m_playlistTree)
     {
-        MusicGenericTree *mnode = dynamic_cast<MusicGenericTree*>(m_playlistTree->GetCurrentNode());
+        auto *mnode = dynamic_cast<MusicGenericTree*>(m_playlistTree->GetCurrentNode());
 
         if (!mnode)
-            return NULL;
+            return nullptr;
 
         if (mnode->getAction() == "smartplaylists" || mnode->getAction() == "smartplaylistcategory")
         {
@@ -763,41 +734,41 @@ MythMenu* PlaylistEditorView::createSmartPlaylistMenu(void)
 void PlaylistEditorView::createRootNode(void )
 {
     if (!m_rootNode)
-        m_rootNode = new MusicGenericTree(NULL, "Root Music Node");
+        m_rootNode = new MusicGenericTree(nullptr, "Root Music Node");
 
-    MusicGenericTree *node = new MusicGenericTree(m_rootNode, tr("All Tracks"), "all tracks");
+    auto *node = new MusicGenericTree(m_rootNode, tr("All Tracks"), "all tracks");
     node->setDrawArrow(true);
-    node->SetData(qVariantFromValue(gMusicData->all_music->getAllMetadata()));
+    node->SetData(QVariant::fromValue(gMusicData->m_all_music->getAllMetadata()));
 
     node = new MusicGenericTree(m_rootNode, tr("Albums"), "albums");
     node->setDrawArrow(true);
-    node->SetData(qVariantFromValue(gMusicData->all_music->getAllMetadata()));
+    node->SetData(QVariant::fromValue(gMusicData->m_all_music->getAllMetadata()));
 
     node = new MusicGenericTree(m_rootNode, tr("Artists"), "artists");
     node->setDrawArrow(true);
-    node->SetData(qVariantFromValue(gMusicData->all_music->getAllMetadata()));
+    node->SetData(QVariant::fromValue(gMusicData->m_all_music->getAllMetadata()));
 
     node = new MusicGenericTree(m_rootNode, tr("Genres"), "genres");
     node->setDrawArrow(true);
-    node->SetData(qVariantFromValue(gMusicData->all_music->getAllMetadata()));
+    node->SetData(QVariant::fromValue(gMusicData->m_all_music->getAllMetadata()));
 #if 0
     node = new MusicGenericTree(m_rootNode, tr("Tags"), "tags");
     node->setDrawArrow(true);
-    node->SetData(qVariantFromValue(gMusicData->all_music->getAllMetadata()));
+    node->SetData(QVariant::fromValue(gMusicData->all_music->getAllMetadata()));
 #endif
     node = new MusicGenericTree(m_rootNode, tr("Ratings"), "ratings");
     node->setDrawArrow(true);
-    node->SetData(qVariantFromValue(gMusicData->all_music->getAllMetadata()));
+    node->SetData(QVariant::fromValue(gMusicData->m_all_music->getAllMetadata()));
 
     node = new MusicGenericTree(m_rootNode, tr("Years"), "years");
     node->setDrawArrow(true);
-    node->SetData(qVariantFromValue(gMusicData->all_music->getAllMetadata()));
+    node->SetData(QVariant::fromValue(gMusicData->m_all_music->getAllMetadata()));
 
     node = new MusicGenericTree(m_rootNode, tr("Compilations"), "compilations");
     node->setDrawArrow(true);
 
-    MetadataPtrList *alltracks = gMusicData->all_music->getAllMetadata();
-    MetadataPtrList *compTracks = new MetadataPtrList;
+    MetadataPtrList *alltracks = gMusicData->m_all_music->getAllMetadata();
+    auto *compTracks = new MetadataPtrList;
     m_deleteList.append(compTracks);
 
     for (int x = 0; x < alltracks->count(); x++)
@@ -809,18 +780,18 @@ void PlaylistEditorView::createRootNode(void )
                 compTracks->append(mdata);
         }
     }
-    node->SetData(qVariantFromValue(compTracks));
+    node->SetData(QVariant::fromValue(compTracks));
 
-    if (gMusicData->all_music->getCDTrackCount())
+    if (gMusicData->m_all_music->getCDTrackCount())
     {
-        node = new MusicGenericTree(m_rootNode, tr("CD - %1").arg(gMusicData->all_music->getCDTitle()), "cd");
+        node = new MusicGenericTree(m_rootNode, tr("CD - %1").arg(gMusicData->m_all_music->getCDTitle()), "cd");
         node->setDrawArrow(true);
-        node->SetData(qVariantFromValue(gMusicData->all_music->getAllCDMetadata()));
+        node->SetData(QVariant::fromValue(gMusicData->m_all_music->getAllCDMetadata()));
     }
 
     node = new MusicGenericTree(m_rootNode, tr("Directory"), "directory");
     node->setDrawArrow(true);
-    node->SetData(qVariantFromValue(gMusicData->all_music->getAllMetadata()));
+    node->SetData(QVariant::fromValue(gMusicData->m_all_music->getAllMetadata()));
 
     node = new MusicGenericTree(m_rootNode, tr("Playlists"), "playlists");
     node->setDrawArrow(true);
@@ -831,8 +802,8 @@ void PlaylistEditorView::createRootNode(void )
 
 void PlaylistEditorView::treeItemClicked(MythUIButtonListItem *item)
 {
-    MythGenericTree *node = item->GetData().value<MythGenericTree*>();
-    MusicGenericTree *mnode = dynamic_cast<MusicGenericTree*>(node);
+    auto *node = item->GetData().value<MythGenericTree*>();
+    auto *mnode = dynamic_cast<MusicGenericTree*>(node);
 
     if (!mnode || !gPlayer->getCurrentPlaylist() || mnode->getAction() == "error")
         return;
@@ -859,8 +830,8 @@ void PlaylistEditorView::treeItemClicked(MythUIButtonListItem *item)
 
 void PlaylistEditorView::treeItemVisible(MythUIButtonListItem *item)
 {
-    MythGenericTree *node = item->GetData().value<MythGenericTree*>();;
-    MusicGenericTree *mnode = dynamic_cast<MusicGenericTree*>(node);
+    auto *node = item->GetData().value<MythGenericTree*>();;
+    auto *mnode = dynamic_cast<MusicGenericTree*>(node);
 
     if (!mnode)
         return;
@@ -873,14 +844,14 @@ void PlaylistEditorView::treeItemVisible(MythUIButtonListItem *item)
 
         if (mnode->getAction() == "trackid")
         {
-            MusicMetadata *mdata = gMusicData->all_music->getMetadata(mnode->getInt());
+            MusicMetadata *mdata = gMusicData->m_all_music->getMetadata(mnode->getInt());
             if (mdata)
                 artFile = mdata->getAlbumArtFile();
         }
         else if (mnode->getAction() == "album")
         {
             // hunt for a coverart image for the album
-            MetadataPtrList *tracks = node->GetData().value<MetadataPtrList*>();
+            auto *tracks = node->GetData().value<MetadataPtrList*>();
             for (int x = 0; x < tracks->count(); x++)
             {
                 MusicMetadata *mdata = tracks->at(x);
@@ -948,7 +919,7 @@ void PlaylistEditorView::treeItemVisible(MythUIButtonListItem *item)
 
 void PlaylistEditorView::treeNodeChanged(MythGenericTree *node)
 {
-    MusicGenericTree *mnode = dynamic_cast<MusicGenericTree*>(node);
+    auto *mnode = dynamic_cast<MusicGenericTree*>(node);
     if (!mnode)
         return;
 
@@ -998,7 +969,7 @@ void PlaylistEditorView::treeNodeChanged(MythGenericTree *node)
 
 void PlaylistEditorView::filterTracks(MusicGenericTree *node)
 {
-    MetadataPtrList *tracks = node->GetData().value<MetadataPtrList*>();
+    auto *tracks = node->GetData().value<MetadataPtrList*>();
 
     if (!tracks)
         return;
@@ -1008,7 +979,7 @@ void PlaylistEditorView::filterTracks(MusicGenericTree *node)
         QMap<QString, int> map;
         QStringList list;
         bool isAlbum = false;
-        MusicGenericTree *parentNode = dynamic_cast<MusicGenericTree*>(node->getParent());
+        auto *parentNode = dynamic_cast<MusicGenericTree*>(node->getParent());
 
         if (parentNode)
             isAlbum = parentNode->getAction() == "album";
@@ -1042,7 +1013,7 @@ void PlaylistEditorView::filterTracks(MusicGenericTree *node)
         QMap<QString, int>::const_iterator i = map.constBegin();
         while (i != map.constEnd())
         {
-            MusicGenericTree *newnode = new MusicGenericTree(node, i.key(), "trackid");
+            auto *newnode = new MusicGenericTree(node, i.key(), "trackid");
             newnode->setInt(i.value());
             newnode->setDrawArrow(false);
             bool hasTrack = gPlayer->getCurrentPlaylist() ? gPlayer->getCurrentPlaylist()->checkTrack(newnode->getInt()) : false;
@@ -1068,7 +1039,7 @@ void PlaylistEditorView::filterTracks(MusicGenericTree *node)
                 }
                 else
                 {
-                    MetadataPtrList *filteredTracks = new MetadataPtrList;
+                    auto *filteredTracks = new MetadataPtrList;
                     m_deleteList.append(filteredTracks);
                     filteredTracks->append(mdata);
                     map.insert(mdata->Artist(), filteredTracks);
@@ -1079,8 +1050,8 @@ void PlaylistEditorView::filterTracks(MusicGenericTree *node)
         QMap<QString, MetadataPtrList*>::const_iterator i = map.constBegin();
         while (i != map.constEnd())
         {
-            MusicGenericTree *newnode = new MusicGenericTree(node, i.key(), "artist");
-            newnode->SetData(qVariantFromValue(i.value()));
+            auto *newnode = new MusicGenericTree(node, i.key(), "artist");
+            newnode->SetData(QVariant::fromValue(i.value()));
             ++i;
         }
 
@@ -1104,7 +1075,7 @@ void PlaylistEditorView::filterTracks(MusicGenericTree *node)
                     }
                     else
                     {
-                        MetadataPtrList *filteredTracks = new MetadataPtrList;
+                        auto *filteredTracks = new MetadataPtrList;
                         m_deleteList.append(filteredTracks);
                         filteredTracks->append(mdata);
                         map.insert(mdata->CompilationArtist(), filteredTracks);
@@ -1116,8 +1087,8 @@ void PlaylistEditorView::filterTracks(MusicGenericTree *node)
         QMap<QString, MetadataPtrList*>::const_iterator i = map.constBegin();
         while (i != map.constEnd())
         {
-            MusicGenericTree *newnode = new MusicGenericTree(node, i.key(), "compartist");
-            newnode->SetData(qVariantFromValue(i.value()));
+            auto *newnode = new MusicGenericTree(node, i.key(), "compartist");
+            newnode->SetData(QVariant::fromValue(i.value()));
             ++i;
         }
 
@@ -1139,7 +1110,7 @@ void PlaylistEditorView::filterTracks(MusicGenericTree *node)
                 }
                 else
                 {
-                    MetadataPtrList *filteredTracks = new MetadataPtrList;
+                    auto *filteredTracks = new MetadataPtrList;
                     m_deleteList.append(filteredTracks);
                     filteredTracks->append(mdata);
                     map.insert(mdata->Album(), filteredTracks);
@@ -1150,8 +1121,8 @@ void PlaylistEditorView::filterTracks(MusicGenericTree *node)
         QMap<QString, MetadataPtrList*>::const_iterator i = map.constBegin();
         while (i != map.constEnd())
         {
-            MusicGenericTree *newnode = new MusicGenericTree(node, i.key(), "album");
-            newnode->SetData(qVariantFromValue(i.value()));
+            auto *newnode = new MusicGenericTree(node, i.key(), "album");
+            newnode->SetData(QVariant::fromValue(i.value()));
             ++i;
         }
 
@@ -1173,7 +1144,7 @@ void PlaylistEditorView::filterTracks(MusicGenericTree *node)
                 }
                 else
                 {
-                    MetadataPtrList *filteredTracks = new MetadataPtrList;
+                    auto *filteredTracks = new MetadataPtrList;
                     m_deleteList.append(filteredTracks);
                     filteredTracks->append(mdata);
                     map.insert(mdata->Genre(), filteredTracks);
@@ -1184,8 +1155,9 @@ void PlaylistEditorView::filterTracks(MusicGenericTree *node)
         QMap<QString, MetadataPtrList*>::const_iterator i = map.constBegin();
         while (i != map.constEnd())
         {
-            MusicGenericTree *newnode = new MusicGenericTree(node, i.key(), "genre");
-            newnode->SetData(qVariantFromValue(i.value()));
+            auto *newnode = new MusicGenericTree(node, i.key(), "genre");
+            newnode->SetSortText(i.key()); // No manipulation of prefixes on genres
+            newnode->SetData(QVariant::fromValue(i.value()));
             ++i;
         }
 
@@ -1208,7 +1180,7 @@ void PlaylistEditorView::filterTracks(MusicGenericTree *node)
                 }
                 else
                 {
-                    MetadataPtrList *filteredTracks = new MetadataPtrList;
+                    auto *filteredTracks = new MetadataPtrList;
                     m_deleteList.append(filteredTracks);
                     filteredTracks->append(mdata);
                     map.insert(ratingStr, filteredTracks);
@@ -1219,8 +1191,8 @@ void PlaylistEditorView::filterTracks(MusicGenericTree *node)
         QMap<QString, MetadataPtrList*>::const_iterator i = map.constBegin();
         while (i != map.constEnd())
         {
-            MusicGenericTree *newnode = new MusicGenericTree(node, i.key(), "rating");
-            newnode->SetData(qVariantFromValue(i.value()));
+            auto *newnode = new MusicGenericTree(node, i.key(), "rating");
+            newnode->SetData(QVariant::fromValue(i.value()));
             ++i;
         }
     }
@@ -1241,7 +1213,7 @@ void PlaylistEditorView::filterTracks(MusicGenericTree *node)
                 }
                 else
                 {
-                    MetadataPtrList *filteredTracks = new MetadataPtrList;
+                    auto *filteredTracks = new MetadataPtrList;
                     m_deleteList.append(filteredTracks);
                     filteredTracks->append(mdata);
                     map.insert(yearStr, filteredTracks);
@@ -1252,8 +1224,8 @@ void PlaylistEditorView::filterTracks(MusicGenericTree *node)
         QMap<QString, MetadataPtrList*>::const_iterator i = map.constBegin();
         while (i != map.constEnd())
         {
-            MusicGenericTree *newnode = new MusicGenericTree(node, i.key(), "year");
-            newnode->SetData(qVariantFromValue(i.value()));
+            auto *newnode = new MusicGenericTree(node, i.key(), "year");
+            newnode->SetData(QVariant::fromValue(i.value()));
             ++i;
         }
     }
@@ -1267,7 +1239,7 @@ void PlaylistEditorView::filterTracks(MusicGenericTree *node)
         while (climber)
         {
             dir = climber->GetText() + '/' + dir;
-            climber = (MusicGenericTree *) climber->getParent();
+            climber = dynamic_cast<MusicGenericTree *>(climber->getParent());
         }
 
         // remove the top two nodes
@@ -1295,7 +1267,7 @@ void PlaylistEditorView::filterTracks(MusicGenericTree *node)
                 }
                 else
                 {
-                    MetadataPtrList *filteredTracks = new MetadataPtrList;
+                    auto *filteredTracks = new MetadataPtrList;
                     m_deleteList.append(filteredTracks);
                     filteredTracks->append(mdata);
                     map.insert(key, filteredTracks);
@@ -1309,8 +1281,8 @@ void PlaylistEditorView::filterTracks(MusicGenericTree *node)
         {
             if (!i.key().startsWith("[TRACK]"))
             {
-                MusicGenericTree *newnode = new MusicGenericTree(node, i.key(), "directory");
-                newnode->SetData(qVariantFromValue(i.value()));
+                auto *newnode = new MusicGenericTree(node, i.key(), "directory");
+                newnode->SetData(QVariant::fromValue(i.value()));
             }
             ++i;
         }
@@ -1321,7 +1293,7 @@ void PlaylistEditorView::filterTracks(MusicGenericTree *node)
         {
             if (i.key().startsWith("[TRACK]"))
             {
-                MusicGenericTree *newnode = new MusicGenericTree(node, i.key().mid(7), "trackid");
+                auto *newnode = new MusicGenericTree(node, i.key().mid(7), "trackid");
                 newnode->setInt(i.value()->at(0)->ID());
                 newnode->setDrawArrow(false);
                 bool hasTrack = gPlayer->getCurrentPlaylist() ? gPlayer->getCurrentPlaylist()->checkTrack(newnode->getInt()) : false;
@@ -1341,10 +1313,10 @@ void PlaylistEditorView::filterTracks(MusicGenericTree *node)
         while (climber)
         {
             fields.append(climber->getAction());
-            climber = (MusicGenericTree *) climber->getParent();
+            climber = dynamic_cast<MusicGenericTree *>(climber->getParent());
         }
 
-        MusicGenericTree *newnode = new MusicGenericTree(node, tr("All Tracks"), "all tracks");
+        auto *newnode = new MusicGenericTree(node, tr("All Tracks"), "all tracks");
         newnode->setDrawArrow(true);
         newnode->SetData(node->GetData());
 
@@ -1375,16 +1347,16 @@ void PlaylistEditorView::filterTracks(MusicGenericTree *node)
                     break;
                 }
 
-                mnode = (MusicGenericTree *) mnode->getParent();
+                mnode = dynamic_cast<MusicGenericTree *>(mnode->getParent());
 
             } while (mnode);
 
             // only show the Comp. Artist if it differs from the Artist
             bool found = false;
-            MetadataPtrList *tracks = node->GetData().value<MetadataPtrList*>();
-            for (int x = 0; x < tracks->count(); x++)
+            auto *tracks2 = node->GetData().value<MetadataPtrList*>();
+            for (int x = 0; x < tracks2->count(); x++)
             {
-                MusicMetadata *mdata = tracks->at(x);
+                MusicMetadata *mdata = tracks2->at(x);
                 if (mdata)
                 {
                     if (mdata->Artist() != mdata->CompilationArtist())
@@ -1443,7 +1415,9 @@ void PlaylistEditorView::getSmartPlaylistCategories(MusicGenericTree *node)
         {
             while (query.next())
             {
-                MusicGenericTree *newnode =
+                // No memory leak. MusicGenericTree adds the new node
+                // into a list of nodes maintained by its parent.
+                auto *newnode =
                     new MusicGenericTree(node, query.value(1).toString(), "smartplaylistcategory");
                 newnode->setInt(query.value(0).toInt());
             }
@@ -1469,7 +1443,9 @@ void PlaylistEditorView::getSmartPlaylists(MusicGenericTree *node)
         {
             while (query.next())
             {
-                MusicGenericTree *newnode =
+                // No memory leak. MusicGenericTree adds the new node
+                // into a list of nodes maintained by its parent.
+                auto *newnode =
                     new MusicGenericTree(node, query.value(1).toString(), "smartplaylist");
                 newnode->setInt(query.value(0).toInt());
             }
@@ -1486,7 +1462,7 @@ void PlaylistEditorView::getSmartPlaylistTracks(MusicGenericTree *node, int play
     // find smartplaylist
     QString matchType;
     QString orderBy;
-    int limitTo;
+    int limitTo = 0;
 
     query.prepare("SELECT smartplaylistid, matchtype, orderby, limitto "
                   "FROM music_smartplaylists "
@@ -1532,8 +1508,10 @@ void PlaylistEditorView::getSmartPlaylistTracks(MusicGenericTree *node, int play
             QString value1 = query.value(2).toString();
             QString value2 = query.value(3).toString();
             if (!bFirst)
+            {
                 whereClause += matchType + getCriteriaSQL(fieldName,
                                            operatorName, value1, value2);
+            }
             else
             {
                bFirst = false;
@@ -1576,7 +1554,7 @@ void PlaylistEditorView::getSmartPlaylistTracks(MusicGenericTree *node, int play
 
     while (query.next())
     {
-        MusicGenericTree *newnode =
+        auto *newnode =
                 new MusicGenericTree(node, query.value(1).toString(), "trackid");
         newnode->setInt(query.value(0).toInt());
         newnode->setDrawArrow(false);
@@ -1587,7 +1565,7 @@ void PlaylistEditorView::getSmartPlaylistTracks(MusicGenericTree *node, int play
     // check we found some tracks if not add something to let the user know
     if (node->childCount() == 0)
     {
-        MusicGenericTree *newnode =
+        auto *newnode =
                 new MusicGenericTree(node, tr("** No matching tracks **"), "error");
         newnode->setDrawArrow(false);
     }
@@ -1595,12 +1573,14 @@ void PlaylistEditorView::getSmartPlaylistTracks(MusicGenericTree *node, int play
 
 void PlaylistEditorView::getPlaylists(MusicGenericTree *node)
 {
-    QList<Playlist*> *playlists = gMusicData->all_playlists->getPlaylists();
+    QList<Playlist*> *playlists = gMusicData->m_all_playlists->getPlaylists();
 
     for (int x =0; x < playlists->count(); x++)
     {
         Playlist *playlist = playlists->at(x);
-        MusicGenericTree *newnode =
+        // No memory leak. MusicGenericTree adds the new node
+        // into a list of nodes maintained by its parent.
+        auto *newnode =
                 new MusicGenericTree(node, playlist->getName(), "playlist");
         newnode->setInt(playlist->getID());
     }
@@ -1608,13 +1588,13 @@ void PlaylistEditorView::getPlaylists(MusicGenericTree *node)
 
 void PlaylistEditorView::getCDTracks(MusicGenericTree *node)
 {
-    MetadataPtrList *tracks = gMusicData->all_music->getAllCDMetadata();
+    MetadataPtrList *tracks = gMusicData->m_all_music->getAllCDMetadata();
 
     for (int x = 0; x < tracks->count(); x++)
     {
         MusicMetadata *mdata = tracks->at(x);
         QString title = QString("%1 - %2").arg(mdata->Track()).arg(mdata->FormatTitle());
-        MusicGenericTree *newnode = new MusicGenericTree(node, title, "trackid");
+        auto *newnode = new MusicGenericTree(node, title, "trackid");
         newnode->setInt(mdata->ID());
         newnode->setDrawArrow(false);
         bool hasTrack = gPlayer->getCurrentPlaylist() ? gPlayer->getCurrentPlaylist()->checkTrack(mdata->ID()) : false;
@@ -1624,7 +1604,7 @@ void PlaylistEditorView::getCDTracks(MusicGenericTree *node)
 
 void PlaylistEditorView::getPlaylistTracks(MusicGenericTree *node, int playlistID)
 {
-    Playlist *playlist = gMusicData->all_playlists->getPlaylist(playlistID);
+    Playlist *playlist = gMusicData->m_all_playlists->getPlaylist(playlistID);
 
     if (playlist)
     {
@@ -1633,7 +1613,7 @@ void PlaylistEditorView::getPlaylistTracks(MusicGenericTree *node, int playlistI
             MusicMetadata *mdata = playlist->getSongAt(x);
             if (mdata)
             {
-                MusicGenericTree *newnode = new MusicGenericTree(node, mdata->Title(), "trackid");
+                auto *newnode = new MusicGenericTree(node, mdata->Title(), "trackid");
                 newnode->setInt(mdata->ID());
                 newnode->setDrawArrow(false);
                 bool hasTrack = gPlayer->getCurrentPlaylist() ? gPlayer->getCurrentPlaylist()->checkTrack(mdata->ID()) : false;
@@ -1645,7 +1625,7 @@ void PlaylistEditorView::getPlaylistTracks(MusicGenericTree *node, int playlistI
     // check we found some tracks if not add something to let the user know
     if (node->childCount() == 0)
     {
-        MusicGenericTree *newnode =
+        auto *newnode =
                 new MusicGenericTree(node, tr("** Empty Playlist!! **"), "error");
         newnode->setDrawArrow(false);
     }
@@ -1660,7 +1640,7 @@ void PlaylistEditorView::updateSelectedTracks(MusicGenericTree *node)
 {
     for (int x = 0; x < node->childCount(); x++)
     {
-        MusicGenericTree *mnode =  dynamic_cast<MusicGenericTree*>(node->getChildAt(x));
+        auto *mnode =  dynamic_cast<MusicGenericTree*>(node->getChildAt(x));
         if (mnode)
         {
             if (mnode->getAction() == "trackid")
@@ -1741,7 +1721,7 @@ void PlaylistEditorView::deleteSmartPlaylist(bool ok)
     MythGenericTree *node = m_playlistTree->GetCurrentNode();
     if (node)
     {
-        MusicGenericTree *mnode = dynamic_cast<MusicGenericTree*>(node);
+        auto *mnode = dynamic_cast<MusicGenericTree*>(node);
         if (mnode)
         {
             if (mnode->getAction() == "smartplaylist")
@@ -1764,14 +1744,14 @@ void PlaylistEditorView::deletePlaylist(bool ok)
     MythGenericTree *node = m_playlistTree->GetCurrentNode();
     if (node)
     {
-        MusicGenericTree *mnode = dynamic_cast<MusicGenericTree*>(node);
+        auto *mnode = dynamic_cast<MusicGenericTree*>(node);
         if (mnode)
         {
             if (mnode->getAction() == "playlist")
             {
                 int id = mnode->getInt();
 
-                gMusicData->all_playlists->deletePlaylist(id);
+                gMusicData->m_all_playlists->deletePlaylist(id);
                 m_playlistTree->RemoveCurrentItem(true);
             }
         }

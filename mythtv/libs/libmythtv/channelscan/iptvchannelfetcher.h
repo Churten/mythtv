@@ -6,13 +6,15 @@
 #ifndef _IPTVCHANNELFETCHER_H_
 #define _IPTVCHANNELFETCHER_H_
 
+#include <utility>
+
 // Qt headers
-#include <QString>
-#include <QRunnable>
-#include <QObject>
-#include <QMutex>
-#include <QMap>
 #include <QCoreApplication>
+#include <QMap>
+#include <QMutex>
+#include <QObject>
+#include <QRunnable>
+#include <QString>
 
 // MythTV headers
 #include "iptvtuningdata.h"
@@ -26,9 +28,9 @@ class IPTVChannelInfo
     Q_DECLARE_TR_FUNCTIONS(IPTVChannelInfo)
 
   public:
-    IPTVChannelInfo() : m_programNumber(0) {}
-    IPTVChannelInfo(const QString &name,
-                    const QString &xmltvid,
+    IPTVChannelInfo() = default;
+    IPTVChannelInfo(QString name,
+                    QString xmltvid,
                     const QString &data_url,
                     uint data_bitrate,
                     const QString &fec_type,
@@ -37,63 +39,66 @@ class IPTVChannelInfo
                     const QString &fec_url1,
                     uint fec_bitrate1,
                     uint programnumber) :
-        m_name(name), m_xmltvid(xmltvid), m_programNumber(programnumber),
+        m_name(std::move(name)), m_xmltvid(std::move(xmltvid)), m_programNumber(programnumber),
         m_tuning(data_url, data_bitrate,
-                 fec_type, fec_url0, fec_bitrate0, fec_url1, fec_bitrate1)
+                 fec_type, fec_url0, fec_bitrate0, fec_url1, fec_bitrate1,
+                 IPTVTuningData::inValid)
     {
     }
 
+ protected:
+    friend class TestIPTVRecorder;
     bool IsValid(void) const
     {
         return !m_name.isEmpty() && m_tuning.IsValid();
     }
 
   public:
-    QString m_name;
-    QString m_xmltvid;
-    uint m_programNumber;
+    QString        m_name;
+    QString        m_xmltvid;
+    uint           m_programNumber {0};
     IPTVTuningData m_tuning;
 };
-typedef QMap<QString,IPTVChannelInfo> fbox_chan_map_t;
+using fbox_chan_map_t = QMap<QString,IPTVChannelInfo>;
 
 class IPTVChannelFetcher : public QRunnable
 {
-    Q_DECLARE_TR_FUNCTIONS(IPTVChannelFetcher)
+    Q_DECLARE_TR_FUNCTIONS(IPTVChannelFetcher);
 
   public:
-    IPTVChannelFetcher(uint cardid, const QString &inputname, uint sourceid,
-                       bool is_mpts, ScanMonitor *monitor = NULL);
-    ~IPTVChannelFetcher();
+    IPTVChannelFetcher(uint cardid, QString inputname, uint sourceid,
+                       bool is_mpts, ScanMonitor *monitor = nullptr);
+    ~IPTVChannelFetcher() override;
 
     void Scan(void);
     void Stop(void);
     fbox_chan_map_t GetChannels(void);
 
-    static QString DownloadPlaylist(const QString &url, bool inQtThread);
+    static QString DownloadPlaylist(const QString &url);
     static fbox_chan_map_t ParsePlaylist(
-        const QString &rawdata, IPTVChannelFetcher *fetcher = NULL);
+        const QString &rawdata, IPTVChannelFetcher *fetcher = nullptr);
 
   private:
-    void SetTotalNumChannels(uint val) { _chan_cnt = (val) ? val : 1; }
-    void SetNumChannelsParsed(uint);
-    void SetNumChannelsInserted(uint);
+    void SetTotalNumChannels(uint val) { m_chanCnt = (val) ? val : 1; }
+    void SetNumChannelsParsed(uint val);
+    void SetNumChannelsInserted(uint val);
     void SetMessage(const QString &status);
 
   protected:
-    virtual void run(void); // QRunnable
+    void run(void) override; // QRunnable
 
   private:
-    ScanMonitor *_scan_monitor;
-    uint      _cardid;
-    QString   _inputname;
-    uint      _sourceid;
-    bool      _is_mpts;
-    fbox_chan_map_t _channels;
-    uint      _chan_cnt;
-    bool      _thread_running;
-    bool      _stop_now;
-    MThread  *_thread;
-    QMutex    _lock;
+    ScanMonitor     *m_scanMonitor    {nullptr};
+    uint             m_cardId;
+    QString          m_inputName;
+    uint             m_sourceId;
+    bool             m_isMpts;
+    fbox_chan_map_t  m_channels;
+    uint             m_chanCnt        {1};
+    bool             m_threadRunning  {false};
+    bool             m_stopNow        {false};
+    MThread         *m_thread         {nullptr};
+    QMutex           m_lock;
 };
 
 #endif // _IPTVCHANNELFETCHER_H_

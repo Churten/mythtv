@@ -5,18 +5,18 @@
 
 bool PremiereContentTransmissionDescriptor::Parse(void)
 {
-    _transmission_count = 0;
-    _date_ptrs.clear();
-    _time_ptrs.clear();
-    const uint8_t *dataptr = _data + 8;
-    while ((dataptr + 6) <= (_data + 2 + DescriptorLength()))
+    m_transmissionCount = 0;
+    m_datePtrs.clear();
+    m_timePtrs.clear();
+    const uint8_t *dataptr = m_data + 8;
+    while ((dataptr + 6) <= (m_data + 2 + DescriptorLength()))
     {
         uint starttime_no = *(dataptr+2);
         for (uint i=0; i < starttime_no; i+=3)
         {
-            _date_ptrs.push_back(dataptr);
-            _time_ptrs.push_back(dataptr + 3 + i);
-            _transmission_count++;
+            m_datePtrs.push_back(dataptr);
+            m_timePtrs.push_back(dataptr + 3 + i);
+            m_transmissionCount++;
         }
         dataptr += 3 + starttime_no;
     }
@@ -27,10 +27,10 @@ bool PremiereContentTransmissionDescriptor::Parse(void)
 QDateTime PremiereContentTransmissionDescriptor::StartTimeUTC(uint index) const
 {
     // set buf to the startdate
-    const uint8_t *buf = _date_ptrs[index];
+    const uint8_t *buf = m_datePtrs[index];
     uint mjd = (buf[0] << 8) | buf[1];
     // reset buf two bytes before the startime
-    buf = _time_ptrs[index]-2;
+    buf = m_timePtrs[index]-2;
     if (mjd >= 40587)
     {
         // Modified Julian date as number of days since 17th November 1858.
@@ -39,7 +39,11 @@ QDateTime PremiereContentTransmissionDescriptor::StartTimeUTC(uint index) const
         secsSince1970 += byteBCD2int(buf[2]) * 3600;
         secsSince1970 += byteBCD2int(buf[3]) * 60;
         secsSince1970 += byteBCD2int(buf[4]);
+#if QT_VERSION < QT_VERSION_CHECK(5,8,0)
         return MythDate::fromTime_t(secsSince1970);
+#else
+        return MythDate::fromSecsSinceEpoch(secsSince1970);
+#endif
     }
 
     // Original function taken from dvbdate.c in linuxtv-apps code
@@ -47,15 +51,15 @@ QDateTime PremiereContentTransmissionDescriptor::StartTimeUTC(uint index) const
     // "Specification for Service Information in Digital Video Broadcasting"
     // to convert from Modified Julian Date to Year, Month, Day.
 
-    const float tmpA = (float)(1.0 / 365.25);
-    const float tmpB = (float)(1.0 / 30.6001);
+    const auto tmpA = (float)(1.0 / 365.25);
+    const auto tmpB = (float)(1.0 / 30.6001);
 
     float mjdf = mjd;
-    int year  = (int) truncf((mjdf - 15078.2f) * tmpA);
+    int year  = (int) truncf((mjdf - 15078.2F) * tmpA);
     int month = (int) truncf(
-        (mjdf - 14956.1f - truncf(year * 365.25f)) * tmpB);
+        (mjdf - 14956.1F - truncf(year * 365.25F)) * tmpB);
     int day   = (int) truncf(
-        (mjdf - 14956.0f - truncf(year * 365.25f) - truncf(month * 30.6001f)));
+        (mjdf - 14956.0F - truncf(year * 365.25F) - truncf(month * 30.6001F)));
     int i     = (month == 14 || month == 15) ? 1 : 0;
 
     QDate date(1900 + year + i, month - 1 - i * 12, day);

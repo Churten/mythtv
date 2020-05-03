@@ -1,20 +1,9 @@
 #include "videodecodebuffer.h"
 
 #include "mythplayer.h"
-#include "videooutbase.h"
 
 #include <chrono> // for milliseconds
 #include <thread> // for sleep_for
-
-VideoDecodeBuffer::VideoDecodeBuffer(MythPlayer *player, VideoOutput *videoout,
-                                     bool cutlist, int size)
-  : m_player(player),         m_videoOutput(videoout),
-    m_honorCutlist(cutlist),  m_maxFrames(size),
-    m_runThread(true),        m_isRunning(false),
-    m_eof(false)
-{
-
-}
 
 VideoDecodeBuffer::~VideoDecodeBuffer()
 {
@@ -36,8 +25,6 @@ void VideoDecodeBuffer::stop(void)
 
 void VideoDecodeBuffer::run()
 {
-    frm_dir_map_t::iterator dm_iter;
-
     m_isRunning = true;
     while (m_runThread)
     {
@@ -47,12 +34,12 @@ void VideoDecodeBuffer::run()
         {
             locker.unlock();
 
-            DecodedFrameInfo tfInfo;
-            tfInfo.frame = NULL;
+            DecodedFrameInfo tfInfo {};
+            tfInfo.frame = nullptr;
             tfInfo.didFF = 0;
             tfInfo.isKey = false;
 
-            if (m_player->TranscodeGetNextFrame(dm_iter, tfInfo.didFF,
+            if (m_player->TranscodeGetNextFrame(tfInfo.didFF,
                 tfInfo.isKey, m_honorCutlist))
             {
                 tfInfo.frame = m_videoOutput->GetLastDecodedFrame();
@@ -85,12 +72,12 @@ VideoFrame *VideoDecodeBuffer::GetFrame(int &didFF, bool &isKey)
     if (m_frameList.isEmpty())
     {
         if (m_eof)
-            return NULL;
+            return nullptr;
 
         m_frameWaitCond.wait(locker.mutex());
 
         if (m_frameList.isEmpty())
-            return NULL;
+            return nullptr;
     }
 
     DecodedFrameInfo tfInfo = m_frameList.takeFirst();

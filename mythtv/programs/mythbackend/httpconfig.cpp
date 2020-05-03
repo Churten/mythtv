@@ -7,7 +7,6 @@
 
 // MythTV headers
 #include "httpconfig.h"
-#include "backendutil.h"
 #include "mythcontext.h"
 #include "mythdb.h"
 #include "mythdirs.h"
@@ -16,10 +15,6 @@
 #include "mythcoreutil.h"
 
 HttpConfig::HttpConfig() : HttpServerExtension("HttpConfig", QString())
-{
-}
-
-HttpConfig::~HttpConfig()
 {
 }
 
@@ -52,14 +47,14 @@ bool HttpConfig::ProcessRequest(HTTPRequest *request)
         // FIXME, this is always false, what's it for
         // JMS "fixed" by using endsWith()
         if (request->m_sBaseUrl.endsWith("config") &&
-            !database_settings.empty())
+            !m_databaseSettings.empty())
         {
             QString checkResult;
             PrintHeader(request->m_response, "/Config/Database");
-            check_settings(database_settings, request->m_mapParams,
+            check_settings(m_databaseSettings, request->m_mapParams,
                            checkResult);
-            load_settings(database_settings, "");
-            PrintSettings(request->m_response, database_settings);
+            load_settings(m_databaseSettings, "");
+            PrintSettings(request->m_response, m_databaseSettings);
             PrintFooter(request->m_response);
             handled = true;
         }
@@ -67,17 +62,16 @@ bool HttpConfig::ProcessRequest(HTTPRequest *request)
         {
             bool okToSave = false;
             QString checkResult;
-            QString fn = GetShareDir() + "backend-config/";
 
             if (request->m_sBaseUrl == "/Config/Database")
             {
-                if (check_settings(database_settings, request->m_mapParams,
+                if (check_settings(m_databaseSettings, request->m_mapParams,
                                    checkResult))
                     okToSave = true;
             }
             else if (request->m_sBaseUrl == "/Config/General")
             {
-                if (check_settings(general_settings, request->m_mapParams,
+                if (check_settings(m_generalSettings, request->m_mapParams,
                                    checkResult))
                     okToSave = true;
             }
@@ -119,16 +113,16 @@ bool HttpConfig::ProcessRequest(HTTPRequest *request)
         if (request->m_sBaseUrl == "/Config/Database")
         {
             fn += "config_backend_database.xml";
-            parse_settings(database_settings, fn);
+            parse_settings(m_databaseSettings, fn);
             result = StringMapToJSON(
-                GetSettingsMap(database_settings, gCoreContext->GetHostName()));
+                GetSettingsMap(m_databaseSettings, gCoreContext->GetHostName()));
         }
         else if (request->m_sBaseUrl == "/Config/General")
         {
             fn += "config_backend_general.xml";
-            parse_settings(general_settings, fn);
+            parse_settings(m_generalSettings, fn);
             result = StringMapToJSON(
-                GetSettingsMap(general_settings, gCoreContext->GetHostName()));
+                GetSettingsMap(m_generalSettings, gCoreContext->GetHostName()));
         }
 
         QTextStream os(&request->m_response);
@@ -205,24 +199,22 @@ bool HttpConfig::ProcessRequest(HTTPRequest *request)
                 entries = sgroup.GetFileInfoList(parts[1]);
             }
 
-            if (entries.size())
+            if (!entries.empty())
             {
                 QTextStream os(&request->m_response);
                 os << "<ul class=\"jqueryFileTree\" style=\"display: none;\">\r\n";
 
-                for (QStringList::iterator it = entries.begin();
-                     it != entries.end(); ++it)
+                foreach (auto entry, entries)
                 {
-                    QString entry = *it;
                     QStringList parts = entry.split("::");
                     QFileInfo fi(parts[1]);
                     if (dir == "/")
                         dir = "";
                     QString path =
-                            gCoreContext->GenMythURL(host,
-                                                     port,
-                                                     dir + parts[1],
-                                                     storageGroup);
+                            MythCoreContext::GenMythURL(host,
+                                                        port,
+                                                        dir + parts[1],
+                                                        storageGroup);
                     if (entry.startsWith("sgdir::"))
                     {
                         os << "    <li class=\"directory collapsed\"><a href=\"#\" rel=\""
@@ -251,11 +243,8 @@ bool HttpConfig::ProcessRequest(HTTPRequest *request)
                 os << "<ul class=\"jqueryFileTree\" style=\"display: none;\">\r\n";
 
                 QFileInfoList infoList = dir.entryInfoList();
-                for (QFileInfoList::iterator it  = infoList.begin();
-                                             it != infoList.end();
-                                           ++it )
+                foreach (auto & fi, infoList)
                 {
-                    QFileInfo &fi = *it;
                     if (!fi.isDir())
                         continue;
                     if (fi.fileName().startsWith("."))
@@ -267,15 +256,12 @@ bool HttpConfig::ProcessRequest(HTTPRequest *request)
 
                 bool dirsOnly = true;
                 if (request->m_mapParams.contains("dirsOnly"))
-                    dirsOnly = request->m_mapParams["dirsOnly"].toInt();
+                    dirsOnly = (request->m_mapParams["dirsOnly"].toInt() != 0);
 
                 if (!dirsOnly)
                 {
-                    for (QFileInfoList::iterator it  = infoList.begin();
-                                                 it != infoList.end();
-                                               ++it )
+                    foreach (auto & fi, infoList)
                     {
-                        QFileInfo &fi = *it;
                         if (fi.isDir())
                             continue;
                         if (fi.fileName().startsWith("."))
@@ -306,7 +292,7 @@ bool HttpConfig::ProcessRequest(HTTPRequest *request)
 
         return true;
     }
-    else if ((request->m_sMethod == "Database") || (NULL == gContext))
+    else if ((request->m_sMethod == "Database") || (nullptr == gContext))
     {
         QString fn = GetShareDir() + "backend-config/"
             "config_backend_database.xml";
@@ -321,9 +307,9 @@ bool HttpConfig::ProcessRequest(HTTPRequest *request)
         else
             OpenForm(request->m_response, form, group);
 
-        parse_settings(general_settings, fn, group);
-        load_settings(general_settings, gCoreContext->GetHostName());
-        PrintSettings(request->m_response, general_settings);
+        parse_settings(m_generalSettings, fn, group);
+        load_settings(m_generalSettings, gCoreContext->GetHostName());
+        PrintSettings(request->m_response, m_generalSettings);
 
         if (group.isEmpty())
             PrintFooter(request->m_response);
@@ -347,9 +333,9 @@ bool HttpConfig::ProcessRequest(HTTPRequest *request)
         else
             OpenForm(request->m_response, form, group);
 
-        parse_settings(general_settings, fn, group);
-        load_settings(general_settings, gCoreContext->GetHostName());
-        PrintSettings(request->m_response, general_settings);
+        parse_settings(m_generalSettings, fn, group);
+        load_settings(m_generalSettings, gCoreContext->GetHostName());
+        PrintSettings(request->m_response, m_generalSettings);
 
         if (group.isEmpty())
             PrintFooter(request->m_response);
@@ -431,7 +417,6 @@ void HttpConfig::PrintSettings(QBuffer &buffer, const MythSettingList &settings)
 {
     QTextStream os(&buffer);
 
-    MythSettingList::const_iterator it = settings.begin();
-    for (; it != settings.end(); ++it)
-        os << (*it)->ToHTML(1);
+    foreach (auto setting, settings)
+        os << setting->ToHTML(1);
 }

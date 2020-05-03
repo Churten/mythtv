@@ -16,7 +16,7 @@ using namespace std;
 #ifndef kIOFireWireAVCLibUnitInterfaceID2
 #define kIOFireWireAVCLibUnitInterfaceID2 \
     CFUUIDGetConstantUUIDWithBytes( \
-        NULL, \
+        nullptr, \
         0x85, 0xB5, 0xE9, 0x54, 0x0A, 0xEF, 0x11, 0xD8, \
         0x8D, 0x19, 0x00, 0x03, 0x93, 0x91, 0x4A, 0xBA)
 #endif
@@ -51,10 +51,10 @@ void DarwinAVCInfo::Update(uint64_t _guid, DarwinFirewireDevice *dev,
             &fw_device_notifier_ref);
     }
 
-    if (guid == _guid)
+    if (m_guid == _guid)
         return; // we're done
 
-    guid = _guid;
+    m_guid = _guid;
 
     //////////////////////////
     // get basic info
@@ -67,19 +67,19 @@ void DarwinAVCInfo::Update(uint64_t _guid, DarwinFirewireDevice *dev,
 
     CFNumberRef specDesc = (CFNumberRef)
         CFDictionaryGetValue(props, CFSTR("Unit_Spec_ID"));
-    CFNumberGetValue(specDesc, kCFNumberSInt32Type, &specid);
+    CFNumberGetValue(specDesc, kCFNumberSInt32Type, &m_specid);
 
     CFNumberRef typeDesc = (CFNumberRef)
         CFDictionaryGetValue(props, CFSTR("Unit_Type"));
-    CFNumberGetValue(typeDesc, kCFNumberSInt32Type, &modelid);
+    CFNumberGetValue(typeDesc, kCFNumberSInt32Type, &m_modelid);
 
     CFNumberRef vendorDesc = (CFNumberRef)
         CFDictionaryGetValue(props, CFSTR("Vendor_ID"));
-    CFNumberGetValue(vendorDesc, kCFNumberSInt32Type, &vendorid);
+    CFNumberGetValue(vendorDesc, kCFNumberSInt32Type, &m_vendorid);
 
     CFNumberRef versionDesc = (CFNumberRef)
         CFDictionaryGetValue(props, CFSTR("Unit_SW_Version"));
-    CFNumberGetValue(versionDesc, kCFNumberSInt32Type, &firmware_revision);
+    CFNumberGetValue(versionDesc, kCFNumberSInt32Type, &m_firmware_revision);
 
     CFStringRef tmp0 = (CFStringRef)
         CFDictionaryGetValue(props, CFSTR("FireWire Product Name"));
@@ -89,7 +89,7 @@ void DarwinAVCInfo::Update(uint64_t _guid, DarwinFirewireDevice *dev,
         memset(tmp1, 0, sizeof(tmp1));
         CFStringGetCString(tmp0, tmp1, sizeof(tmp1) - sizeof(char),
                            kCFStringEncodingMacRoman);
-        product_name = QString("%1").arg(tmp1);
+        m_product_name = QString("%1").arg(tmp1);
     }
 
     CFRelease(props);
@@ -97,7 +97,7 @@ void DarwinAVCInfo::Update(uint64_t _guid, DarwinFirewireDevice *dev,
     //////////////////////////
     // get subunit info
 
-    LOG(VB_RECORD, LOG_INFO, QString("Scanning guid: 0x%1").arg(guid, 0, 16));
+    LOG(VB_RECORD, LOG_INFO, QString("Scanning guid: 0x%1").arg(m_guid, 0, 16));
 
     bool wasOpen = IsAVCInterfaceOpen();
     if (OpenAVCInterface(thread_cf_ref))
@@ -207,7 +207,7 @@ bool DarwinAVCInfo::OpenAVCInterface(CFRunLoopRef &thread_cf_ref)
     if (kIOReturnSuccess != ret)
     {
         (*avc_handle)->Release(avc_handle);
-        avc_handle = NULL;
+        avc_handle = nullptr;
         return false;
     }
 
@@ -215,7 +215,7 @@ bool DarwinAVCInfo::OpenAVCInterface(CFRunLoopRef &thread_cf_ref)
     if (kIOReturnSuccess != ret)
     {
         (*avc_handle)->Release(avc_handle);
-        avc_handle = NULL;
+        avc_handle = nullptr;
         return false;
     }
 
@@ -231,7 +231,7 @@ void DarwinAVCInfo::CloseAVCInterface(void)
     (*avc_handle)->close(avc_handle);
     (*avc_handle)->Release(avc_handle);
 
-    avc_handle = NULL;
+    avc_handle = nullptr;
 }
 
 bool DarwinAVCInfo::OpenDeviceInterface(CFRunLoopRef &thread_cf_ref)
@@ -277,7 +277,7 @@ bool DarwinAVCInfo::OpenDeviceInterface(CFRunLoopRef &thread_cf_ref)
     if (kIOReturnSuccess != ret)
     {
         (*fw_handle)->Release(fw_handle);
-        fw_handle = NULL;
+        fw_handle = nullptr;
         return false;
     }
 
@@ -293,7 +293,7 @@ void DarwinAVCInfo::CloseDeviceInterface(void)
     (*fw_handle)->Close(fw_handle);
     (*fw_handle)->Release(fw_handle);
 
-    fw_handle = NULL;
+    fw_handle = nullptr;
 }
 
 bool DarwinAVCInfo::GetDeviceNodes(int &local_node, int &remote_node)

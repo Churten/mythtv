@@ -7,21 +7,16 @@
 #include <QApplication>
 #include <QDir>
 
-#if QT_VERSION < 0x050000
-#include <QTextCodec>
-#endif
-
 // libmythbase
 #include "mythdirs.h"
 #include "mythcorecontext.h"
 
-typedef QMap<QString, QTranslator*> TransMap;
+using TransMap = QMap<QString, QTranslator*>;
 
 class MythTranslationPrivate
 {
   public:
-    MythTranslationPrivate():
-          m_loaded(false) { };
+    MythTranslationPrivate() = default;
 
     void Init(void)
     {
@@ -32,7 +27,7 @@ class MythTranslationPrivate
         }
     };
 
-    bool m_loaded;
+    bool m_loaded {false};
     QString m_language;
     TransMap m_translators;
 };
@@ -56,15 +51,11 @@ void MythTranslation::load(const QString &module_name)
 
     if (lang == "en")
     {
-        gCoreContext->SaveSettingOnHost("Language", "en_US", NULL);
+        gCoreContext->OverrideSettingForSession("Language", "en_US");
         lang = "en_us";
     }
 
-#if QT_VERSION < 0x050000
-    QTextCodec::setCodecForTr(QTextCodec::codecForName("UTF-8"));
-#endif
-
-    QTranslator *trans = new QTranslator(0);
+    auto *trans = new QTranslator(nullptr);
     if (trans->load(GetTranslationsDir() + module_name
                     + "_" + lang + ".qm", "."))
     {
@@ -120,10 +111,8 @@ void MythTranslation::reload()
              ++it)
             keys.append(it.key());
 
-        for (QStringList::Iterator it = keys.begin();
-             it != keys.end();
-             ++it)
-            load(*it);
+        foreach (auto & key, keys)
+            load(key);
     }
 }
 

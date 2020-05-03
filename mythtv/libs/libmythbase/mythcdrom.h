@@ -10,30 +10,30 @@ class MBASE_PUBLIC MythCDROM : public MythMediaDevice
     MythCDROM(QObject* par, const char* DevicePath, bool SuperMount,
               bool AllowEject);
   public:
-    virtual ~MythCDROM() {};
+    ~MythCDROM() override = default;
 
     virtual bool mediaChanged(void) { return false; }
     virtual bool checkOK(void)      { return true; }
-    virtual MythMediaStatus checkMedia(void)
+    MythMediaStatus checkMedia(void) override // MythMediaDevice
     {
         return setStatus(MEDIASTAT_UNKNOWN, false);
     }
-    virtual void setDeviceSpeed(const char *devicePath, int speed);
+    void setDeviceSpeed(const char *devicePath, int speed) override; // MythMediaDevice
 
     static MythCDROM* get(QObject* par, const char* devicePath,
                                   bool SuperMount, bool AllowEject);
 
-    typedef enum
+    enum ImageType
     {
         kUnknown,
         kBluray,
         kDVD
-    }ImageType;
+    };
 
     static ImageType inspectImage(const QString& path);
 
   protected:
-    virtual void onDeviceMounted();
+    void onDeviceMounted() override; // MythMediaDevice
 };
 
 #endif

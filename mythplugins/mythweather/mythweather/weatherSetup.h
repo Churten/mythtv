@@ -27,12 +27,12 @@ struct SourceListInfo
     QString author;
     QString email;
     QString version;
-    uint update_timeout;
-    uint retrieve_timeout;
-    uint id;
+    uint update_timeout   {DEFAULT_UPDATE_TIMEOUT};
+    uint retrieve_timeout {};
+    uint id               {};
 };
 
-Q_DECLARE_METATYPE(SourceListInfo *)
+Q_DECLARE_METATYPE(SourceListInfo *);
 
 /** \class GlobalSetup
  *  \brief Screen for mythweather global settings
@@ -42,10 +42,11 @@ class GlobalSetup : public MythScreenType
     Q_OBJECT
 
   public:
-    GlobalSetup(MythScreenStack *parent, const QString &name);
-    ~GlobalSetup();
+    GlobalSetup(MythScreenStack *parent, const QString &name)
+        : MythScreenType(parent, name) {}
+    ~GlobalSetup() override = default;
 
-    bool Create(void);
+    bool Create(void) override; // MythScreenType
 
   protected slots:
     void saveData(void);
@@ -54,11 +55,10 @@ class GlobalSetup : public MythScreenType
     void loadData(void);
 
   private:
-    MythUICheckBox *m_backgroundCheckbox;
-    MythUISpinBox *m_timeoutSpinbox;
-    int m_timeout;
-    int m_hold_timeout;
-    MythUIButton *m_finishButton;
+    MythUICheckBox *m_backgroundCheckbox {nullptr};
+    MythUISpinBox  *m_timeoutSpinbox     {nullptr};
+    int             m_timeout            {0};
+    MythUIButton   *m_finishButton       {nullptr};
 };
 
 class ScreenSetup : public MythScreenType
@@ -67,11 +67,11 @@ class ScreenSetup : public MythScreenType
 
   public:
     ScreenSetup(MythScreenStack *parent, const QString &name, SourceManager *srcman);
-    ~ScreenSetup();
+    ~ScreenSetup() override;
 
-    bool Create(void);
-    bool keyPressEvent(QKeyEvent *);
-    void customEvent(QEvent*);
+    bool Create(void) override; // MythScreenType
+    bool keyPressEvent(QKeyEvent *event) override; // MythScreenType
+    void customEvent(QEvent *event) override; // MythUIType
 
   protected slots:
     void updateHelpText(void);
@@ -101,14 +101,14 @@ class SourceSetup : public MythScreenType
 
   public:
     SourceSetup(MythScreenStack *parent, const QString &name);
-    ~SourceSetup();
+    ~SourceSetup() override;
 
-    bool Create(void);
+    bool Create(void) override; // MythScreenType
 
     bool loadData(void);
 
   protected slots:
-    void sourceListItemSelected(MythUIButtonListItem *itm = 0);
+    void sourceListItemSelected(MythUIButtonListItem *item = nullptr);
     void updateSpinboxUpdate(void);
     void retrieveSpinboxUpdate(void);
     void saveData(void);
@@ -124,12 +124,12 @@ class SourceSetup : public MythScreenType
 struct ResultListInfo
 {
     QString idstr;
-    ScriptInfo *src;
+    ScriptInfo *src { nullptr };
 };
 
 Q_DECLARE_METATYPE(ResultListInfo *)
 
-typedef QMultiHash<QString, QList<ScriptInfo*> > CacheMap;
+using CacheMap = QMultiHash<QString, QList<ScriptInfo*> >;
 
 class LocationDialog : public MythScreenType
 {
@@ -139,9 +139,9 @@ class LocationDialog : public MythScreenType
     LocationDialog(MythScreenStack *parent, const QString &name,
                    MythScreenType *retScreen,
                    ScreenListInfo *si, SourceManager *srcman);
-    ~LocationDialog();
+    ~LocationDialog() override;
 
-    bool Create(void);
+    bool Create(void) override; // MythScreenType
 
   protected slots:
     void doSearch(void);

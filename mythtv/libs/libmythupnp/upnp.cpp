@@ -25,7 +25,7 @@
 UPnpDeviceDesc      UPnp::g_UPnpDeviceDesc;
 QList<QHostAddress> UPnp::g_IPAddrList;
 
-Configuration   *UPnp::g_pConfig        = NULL;
+Configuration   *UPnp::g_pConfig        = nullptr;
 
 //////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////
@@ -40,9 +40,20 @@ Configuration   *UPnp::g_pConfig        = NULL;
 //////////////////////////////////////////////////////////////////////////////
 
 UPnp::UPnp()
-    : m_pHttpServer(NULL), m_nServicePort(0)
+  : QObject()
 {
     LOG(VB_UPNP, LOG_DEBUG, "UPnp - Constructor");
+    // N.B. Ask for 5 second delay to send Bye Bye twice
+    // TODO Check whether we actually send Bye Bye twice:)
+    m_power = MythPower::AcquireRelease(this, true, 5);
+    if (m_power)
+    {
+        // NB We only listen for WillXXX signals which should give us time to send notifications
+        connect(m_power, &MythPower::WillRestart,  this, &UPnp::DisableNotifications);
+        connect(m_power, &MythPower::WillSuspend,  this, &UPnp::DisableNotifications);
+        connect(m_power, &MythPower::WillShutDown, this, &UPnp::DisableNotifications);
+        connect(m_power, &MythPower::WokeUp,       this, &UPnp::EnableNotificatins);
+    }
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -53,6 +64,8 @@ UPnp::~UPnp()
 {
     LOG(VB_UPNP, LOG_DEBUG, "UPnp - Destructor");
     CleanUp();
+    if (m_power)
+        MythPower::AcquireRelease(this, false);
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -61,9 +74,7 @@ UPnp::~UPnp()
 
 void UPnp::SetConfiguration( Configuration *pConfig )
 {
-    if (g_pConfig)
-        delete g_pConfig;
-
+    delete g_pConfig;
     g_pConfig = pConfig;
 }
 
@@ -73,10 +84,10 @@ void UPnp::SetConfiguration( Configuration *pConfig )
 
 Configuration *UPnp::GetConfiguration()
 {
-    // If someone is asking for a config and it's NULL, create a 
+    // If someone is asking for a config and it's nullptr, create a 
     // new XmlConfiguration since we don't have database info yet.
     
-    if (g_pConfig == NULL)
+    if (g_pConfig == nullptr)
         g_pConfig = new XmlConfiguration( "config.xml" );
 
     return g_pConfig;
@@ -113,14 +124,14 @@ bool UPnp::Initialize( QList<QHostAddress> &sIPAddrList, int nServicePort, HttpS
         return false;
     }
 
-    if (g_pConfig == NULL)
+    if (g_pConfig == nullptr)
     {
         LOG(VB_GENERAL, LOG_ERR,
             "UPnp::Initialize - Must call SetConfiguration.");
         return false;
     }
 
-    if ((m_pHttpServer = pHttpServer) == NULL)
+    if ((m_pHttpServer = pHttpServer) == nullptr)
     {
         LOG(VB_GENERAL, LOG_ERR,
             "UPnp::Initialize - Invalid Parameter (pHttpServer == NULL)");
@@ -128,11 +139,10 @@ bool UPnp::Initialize( QList<QHostAddress> &sIPAddrList, int nServicePort, HttpS
     }
 
     g_IPAddrList   = sIPAddrList;
-    int it;
-    bool ipv4 = gCoreContext->GetNumSetting("IPv4Support",1);
-    bool ipv6 = gCoreContext->GetNumSetting("IPv6Support",1);
+    bool ipv4 = gCoreContext->GetBoolSetting("IPv4Support",true);
+    bool ipv6 = gCoreContext->GetBoolSetting("IPv6Support",true);
 
-    for (it = 0; it < g_IPAddrList.size(); ++it)
+    for (int it = 0; it < g_IPAddrList.size(); ++it)
     {
         // If IPV4 support is disabled and this is an IPV4 address,
         // remove this address
@@ -189,7 +199,7 @@ void UPnp::CleanUp()
     if (g_pConfig)
     {
         delete g_pConfig;
-        g_pConfig = NULL;
+        g_pConfig = nullptr;
     }
 
 }
@@ -257,7 +267,8 @@ QString UPnp::GetResultDesc( UPnPResultCode eCode )
         //case UPnPResult_CMGR_AccessDenied             = 705,
         //case UPnPResult_CMGR_InvalidConnectionRef     = 706,
         case UPnPResult_CMGR_NotInNetwork           : return "Not In Network";
-        case UPnPResult_MythTV_NoNamespaceGiven:      return "Unknown";
+        case UPnPResult_MythTV_NoNamespaceGiven:      return "No Namespace Given";
+        case UPnPResult_MythTV_XmlParseError        : return "XML Parse Error";
     }
 
     return "Unknown";
@@ -273,7 +284,7 @@ void UPnp::FormatErrorResponse( HTTPRequest   *pRequest,
 {
     QString sMsg( msg );
 
-    if (pRequest != NULL)
+    if (pRequest != nullptr)
     {
         QString sDetails = "";
 
@@ -321,4 +332,14 @@ void UPnp::FormatRedirectResponse( HTTPRequest   *pRequest,
                                .arg(url.toString()));
 
     pRequest->SendResponse();
+}
+
+void UPnp::DisableNotifications(uint)
+{
+    SSDP::Instance()->DisableNotifications();
+}
+
+void UPnp::EnableNotificatins(qint64)
+{
+    SSDP::Instance()->EnableNotifications(m_nServicePort);
 }

@@ -1,5 +1,6 @@
 *.a
 *.o
+*.o.json
 moc_*.cpp
 moc_*.h
 *.moc
@@ -12,6 +13,7 @@ moc_*.h
 *.dylib
 object_script.*
 *~
+.#*
 .DS_Store
 .*.swp
 *.pc
@@ -35,7 +37,15 @@ release
 *.vcxproj.filters
 *.manifest
 bin
+moc
+obj
 *.ipch
 .directory
 .vscode
 .qmake.stash
+tags
+TAGS
+GPATH
+GRTAGS
+GTAGS
+compile_commands.json

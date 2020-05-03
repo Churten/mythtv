@@ -13,23 +13,10 @@ using namespace std;
 
 // ---------------------------------------------------
 
-PlayerSettings::PlayerSettings(MythScreenStack *parent, const char *name)
-    : MythScreenType(parent, name),
-      m_defaultPlayerEdit(NULL),    m_dvdPlayerEdit(NULL),
-      m_dvdDriveEdit(NULL),         m_blurayMountEdit(NULL),
-      m_altPlayerEdit(NULL),        m_blurayRegionList(NULL),
-      m_altCheck(NULL),             m_okButton(NULL),
-      m_cancelButton(NULL)
-{
-}
-
 bool PlayerSettings::Create()
 {
-    bool foundtheme = false;
-
     // Load the theme for this screen
-    foundtheme = LoadWindowFromXML("video-ui.xml", "playersettings", this);
-
+    bool foundtheme = LoadWindowFromXML("video-ui.xml", "playersettings", this);
     if (!foundtheme)
         return false;
 
@@ -119,10 +106,6 @@ bool PlayerSettings::Create()
     return true;
 }
 
-PlayerSettings::~PlayerSettings()
-{
-}
-
 void PlayerSettings::slotSave(void)
 {
     gCoreContext->SaveSetting("VideoDefaultPlayer", m_defaultPlayerEdit->GetText());
@@ -147,12 +130,7 @@ bool PlayerSettings::keyPressEvent(QKeyEvent *event)
     if (GetFocusWidget()->keyPressEvent(event))
         return true;
 
-    bool handled = false;
-
-    if (!handled && MythScreenType::keyPressEvent(event))
-        handled = true;
-
-    return handled;
+    return MythScreenType::keyPressEvent(event);
 }
 
 void PlayerSettings::toggleAlt()
@@ -161,26 +139,26 @@ void PlayerSettings::toggleAlt()
     if (m_altCheck->GetCheckState() == MythUIStateType::Full)
         checkstate = 1;
 
-    m_altPlayerEdit->SetVisible(checkstate);
+    m_altPlayerEdit->SetVisible(checkstate != 0);
 }
 
 void PlayerSettings::fillRegionList()
 {
-    MythUIButtonListItem *noRegion =
+    auto *noRegion =
             new MythUIButtonListItem(m_blurayRegionList, tr("No Region"));
     noRegion->SetData(0);
 
-    MythUIButtonListItem *regionA =
+    auto *regionA =
             new MythUIButtonListItem(m_blurayRegionList, tr("Region A: "
                                      "The Americas, Southeast Asia, Japan"));
     regionA->SetData(1);
 
-    MythUIButtonListItem *regionB =
+    auto *regionB =
             new MythUIButtonListItem(m_blurayRegionList, tr("Region B: "
                                      "Europe, Middle East, Africa, Oceania"));
     regionB->SetData(2);
 
-    MythUIButtonListItem *regionC =
+    auto *regionC =
             new MythUIButtonListItem(m_blurayRegionList, tr("Region C: "
                                      "Eastern Europe, Central and South Asia"));
     regionC->SetData(4);

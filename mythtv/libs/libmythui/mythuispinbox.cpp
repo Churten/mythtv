@@ -7,18 +7,9 @@
 #include "mythuitext.h"
 
 // QT headers
-#include <QDomDocument>
 #include <QCoreApplication>
-
-MythUISpinBox::MythUISpinBox(MythUIType *parent, const QString &name)
-    : MythUIButtonList(parent, name), m_hasTemplate(false),
-      m_moveAmount(0), m_low(0), m_high(0), m_step(0)
-{
-}
-
-MythUISpinBox::~MythUISpinBox()
-{
-}
+#include <QDomDocument>
+#include <utility>
 
 /**
  * \brief Set the lower and upper bounds of the spinbox, the interval and page
@@ -69,23 +60,21 @@ void MythUISpinBox::SetRange(int low, int high, int step, uint pageMultiple)
             if (!temp.isEmpty())
             {
                 if (temp.contains("%n"))
-#if QT_VERSION < 0x050000
-                    text = qApp->translate("ThemeUI", temp.toUtf8(), NULL,
-                                           QCoreApplication::UnicodeUTF8,
+                {
+                    text = qApp->translate("ThemeUI", temp.toUtf8(), nullptr,
                                            qAbs(value));
-#else
-                                        text = qApp->translate("ThemeUI", temp.toUtf8(), NULL,
-                                        qAbs(value));
-#endif
+                }
                 else
+                {
                     text = qApp->translate("ThemeUI", temp.toUtf8());
+                }
             }
         }
 
         if (text.isEmpty())
             text = QString::number(value);
 
-        new MythUIButtonListItem(this, text, qVariantFromValue(value));
+        new MythUIButtonListItem(this, text, QVariant::fromValue(value));
 
         if (reverse)
             value = value - step;
@@ -105,10 +94,9 @@ void MythUISpinBox::SetRange(int low, int high, int step, uint pageMultiple)
  */
 void MythUISpinBox::AddSelection(int value, const QString &label)
 {
-    MythUIButtonListItem *item;
     if (!label.isEmpty())
     {
-        item = GetItemByData(value);
+        MythUIButtonListItem *item = GetItemByData(value);
         if (item)
         {
             item->SetText(label);
@@ -120,7 +108,7 @@ void MythUISpinBox::AddSelection(int value, const QString &label)
 
     for (int pos = 0; pos < m_itemList.size(); pos++)
     {
-        item = m_itemList.at(pos);
+        MythUIButtonListItem *item = m_itemList.at(pos);
         if (item->GetData().toInt() > value)
         {
             insertPos = pos;
@@ -129,7 +117,7 @@ void MythUISpinBox::AddSelection(int value, const QString &label)
     }
 
     new MythUIButtonListItem(this, label.isEmpty() ? QString(value) : label,
-                                    qVariantFromValue(value), insertPos);
+                                    QVariant::fromValue(value), insertPos);
 }
 
 /**
@@ -194,7 +182,7 @@ bool MythUISpinBox::MoveUp(MovementUnit unit, uint amount)
  */
 void MythUISpinBox::CreateCopy(MythUIType *parent)
 {
-    MythUISpinBox *spinbox = new MythUISpinBox(parent, objectName());
+    auto *spinbox = new MythUISpinBox(parent, objectName());
     spinbox->CopyFrom(this);
 }
 
@@ -203,7 +191,7 @@ void MythUISpinBox::CreateCopy(MythUIType *parent)
  */
 void MythUISpinBox::CopyFrom(MythUIType *base)
 {
-    MythUISpinBox *spinbox = dynamic_cast<MythUISpinBox *>(base);
+    auto *spinbox = dynamic_cast<MythUISpinBox *>(base);
 
     if (!spinbox)
         return;
@@ -231,7 +219,11 @@ bool MythUISpinBox::keyPressEvent(QKeyEvent *event)
     if (handled)
         return true;
 
-    QString initialEntry = GetItemCurrent()->GetText();
+    MythUIButtonListItem *item = GetItemCurrent();
+    if (item == nullptr)
+        return MythUIButtonList::keyPressEvent(event);
+
+    QString initialEntry = item->GetText();
     bool doEntry = false;
 
     // Only invoke the entry dialog if the entry is a number
@@ -255,7 +247,7 @@ bool MythUISpinBox::keyPressEvent(QKeyEvent *event)
             break;
         }
     }
-    if (actions.size() == 0 && event->text() == "-")
+    if (actions.empty() && event->text() == "-")
     {
         if (!m_hasTemplate)
             initialEntry = "-";
@@ -270,16 +262,15 @@ bool MythUISpinBox::keyPressEvent(QKeyEvent *event)
 
     if (handled)
         return true;
-    else
-        return MythUIButtonList::keyPressEvent(event);
+    return MythUIButtonList::keyPressEvent(event);
 }
 
 void MythUISpinBox::ShowEntryDialog(QString initialEntry)
 {
     MythScreenStack *popupStack = GetMythMainWindow()->GetStack("popup stack");
 
-    SpinBoxEntryDialog *dlg = new SpinBoxEntryDialog(popupStack, "SpinBoxEntryDialog",
-        this, initialEntry, m_low, m_high, m_step);
+    auto *dlg = new SpinBoxEntryDialog(popupStack, "SpinBoxEntryDialog",
+        this, std::move(initialEntry), m_low, m_high, m_step);
 
     if (dlg->Create())
         popupStack->AddScreen(dlg);
@@ -294,11 +285,11 @@ SpinBoxEntryDialog::SpinBoxEntryDialog(MythScreenStack *parent, const char *name
         int low, int high, int step)
     : MythScreenType(parent, name, false),
         m_parentList(parentList),
-        m_searchText(searchText),
-        m_entryEdit(NULL),
-        m_cancelButton(NULL),
-        m_okButton(NULL),
-        m_rulesText(NULL),
+        m_searchText(std::move(searchText)),
+        m_entryEdit(nullptr),
+        m_cancelButton(nullptr),
+        m_okButton(nullptr),
+        m_rulesText(nullptr),
         m_okClicked(false),
         m_low(low),
         m_high(high),
@@ -308,10 +299,6 @@ SpinBoxEntryDialog::SpinBoxEntryDialog(MythScreenStack *parent, const char *name
     m_selection = parentList->GetCurrentPos();
 }
 
-
-SpinBoxEntryDialog::~SpinBoxEntryDialog()
-{
-}
 
 bool SpinBoxEntryDialog::Create(void)
 {

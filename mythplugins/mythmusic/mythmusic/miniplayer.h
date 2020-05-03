@@ -13,16 +13,16 @@ class MPUBLIC MiniPlayer : public MusicCommon
 
   public:
     explicit MiniPlayer(MythScreenStack *parent);
-    ~MiniPlayer();
+    ~MiniPlayer() override;
 
-    bool Create(void);
-    bool keyPressEvent(QKeyEvent *);
+    bool Create(void) override; // MythScreenType
+    bool keyPressEvent(QKeyEvent *event) override; // MusicCommon
 
   public slots:
     void timerTimeout(void);
 
   private:
-    QTimer *m_displayTimer;
+    QTimer *m_displayTimer {nullptr};
 };
 
 #endif

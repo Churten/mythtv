@@ -17,7 +17,6 @@ using namespace std;
 #include "mythmediamonitor.h"
 #include "mythcdrom.h"
 #include "mythcorecontext.h"
-#include "mythdialogs.h"
 #include "mythconfig.h"
 #include "mythdialogbox.h"
 #include "mythdate.h"
@@ -36,7 +35,7 @@ using namespace std;
 
 static const QString _Location = QObject::tr("Media Monitor");
 
-MediaMonitor *MediaMonitor::c_monitor = NULL;
+MediaMonitor *MediaMonitor::s_monitor = nullptr;
 
 // MonitorThread
 MonitorThread::MonitorThread(MediaMonitor* pMon, unsigned long interval) :
@@ -84,20 +83,20 @@ void MonitorThread::run(void)
 
 MediaMonitor* MediaMonitor::GetMediaMonitor(void)
 {
-    if (c_monitor)
-        return c_monitor;
+    if (s_monitor)
+        return s_monitor;
 
 #ifdef USING_DARWIN_DA
-    c_monitor = new MediaMonitorDarwin(NULL, MONITOR_INTERVAL, true);
+    s_monitor = new MediaMonitorDarwin(nullptr, MONITOR_INTERVAL, true);
 #else
   #if CONFIG_CYGWIN || defined(_WIN32)
-    c_monitor = new MediaMonitorWindows(NULL, MONITOR_INTERVAL, true);
+    s_monitor = new MediaMonitorWindows(nullptr, MONITOR_INTERVAL, true);
   #else
-    c_monitor = new MediaMonitorUnix(NULL, MONITOR_INTERVAL, true);
+    s_monitor = new MediaMonitorUnix(nullptr, MONITOR_INTERVAL, true);
   #endif
 #endif
 
-    return c_monitor;
+    return s_monitor;
 }
 
 void MediaMonitor::SetCDSpeed(const char *device, int speed)
@@ -114,7 +113,7 @@ void MediaMonitor::SetCDSpeed(const char *device, int speed)
         }
     }
 
-    MythCDROM *cd = MythCDROM::get(NULL, device, false, false);
+    MythCDROM *cd = MythCDROM::get(nullptr, device, false, false);
     if (cd)
     {
         cd->setDeviceSpeed(device, speed);
@@ -128,7 +127,7 @@ void MediaMonitor::SetCDSpeed(const char *device, int speed)
 }
 
 // When ejecting one of multiple devices, present a nice name to the user
-static const QString DevName(MythMediaDevice *d)
+static QString DevName(MythMediaDevice *d)
 {
     QString str = d->getVolumeID();  // First choice, the name of the media
 
@@ -194,7 +193,7 @@ MythMediaDevice * MediaMonitor::selectDrivePopup(const QString &label,
         QString msg = "MediaMonitor::selectDrivePopup() - no removable devices";
 
         LOG(VB_MEDIA, LOG_INFO, msg);
-        return NULL;
+        return nullptr;
     }
 
     if (drives.count() == 1)
@@ -205,27 +204,45 @@ MythMediaDevice * MediaMonitor::selectDrivePopup(const QString &label,
         return drives.front();
     }
 
-    QList <MythMediaDevice *>::iterator it;
-    QStringList buttonmsgs;
-    for (it = drives.begin(); it != drives.end(); ++it)
-        buttonmsgs += DevName(*it);
-    buttonmsgs += tr("Cancel");
-    const DialogCode cancelbtn = (DialogCode)
-        (((int)kDialogCodeButton0) + buttonmsgs.size() - 1);
+    MythMainWindow *win = GetMythMainWindow();
+    if (!win)
+        return nullptr;
 
-    DialogCode ret = MythPopupBox::ShowButtonPopup(
-        GetMythMainWindow(), "select drive", label,
-        buttonmsgs, cancelbtn);
+    MythScreenStack *stack = win->GetMainStack();
+    if (!stack)
+        return nullptr;
+
+    // Ignore MENU dialog actions
+    int btnIndex = -2;
+    while (btnIndex < -1)
+    {
+        auto *dlg = new MythDialogBox(label, stack, "select drive");
+        if (!dlg->Create())
+        {
+            delete dlg;
+            return nullptr;
+        }
+
+        // Add button for each drive
+        for (auto *drive : drives)
+            dlg->AddButton(DevName(drive));
+
+        dlg->AddButton(tr("Cancel"));
+
+        stack->AddScreen(dlg);
+
+        // Wait in local event loop so events are processed
+        QEventLoop block;
+        connect(dlg,    &MythDialogBox::Closed,
+                &block, [&](const QString& /*resultId*/, int result) { block.exit(result); });
+
+        // Block until dialog closes
+        btnIndex = block.exec();
+    }
 
     // If the user cancelled, return a special value
-    if ((kDialogCodeRejected == ret) || (cancelbtn == ret))
-        return (MythMediaDevice *)-1;
-
-    int idx = MythDialog::CalcItemIndex(ret);
-    if (idx < drives.count())
-        return drives[idx];
-
-    return NULL;
+    return btnIndex < 0 || btnIndex >= drives.size() ? (MythMediaDevice *)-1
+                                                     : drives.at(btnIndex);
 }
 
 
@@ -239,11 +256,8 @@ MythMediaDevice * MediaMonitor::selectDrivePopup(const QString &label,
  */
 void MediaMonitor::ChooseAndEjectMedia(void)
 {
-    MythMediaDevice *selected;
-
-
-    selected = selectDrivePopup(tr("Select removable media"
-                                   " to eject or insert"), true);
+    MythMediaDevice *selected =
+        selectDrivePopup(tr("Select removable media to eject or insert"), true);
 
     // If the user cancelled, no need to display or do anything more
     if (selected == (MythMediaDevice *) -1)
@@ -330,7 +344,6 @@ void MediaMonitor::AttemptEject(MythMediaDevice *device)
 MediaMonitor::MediaMonitor(QObject* par, unsigned long interval,
                            bool allowEject)
     : QObject(par), m_DevicesLock(QMutex::Recursive),
-      m_Active(false), m_Thread(NULL),
       m_MonitorPollingInterval(interval), m_AllowEject(allowEject)
 {
     // User can specify that some devices are not monitored
@@ -348,7 +361,7 @@ MediaMonitor::MediaMonitor(QObject* par, unsigned long interval,
     QStringList::Iterator dev;
     for (dev = m_IgnoreList.begin(); dev != m_IgnoreList.end(); ++dev)
     {
-        QFileInfo *fi = new QFileInfo(*dev);
+        auto *fi = new QFileInfo(*dev);
 
         if (fi && fi->isSymLink())
         {
@@ -372,7 +385,7 @@ void MediaMonitor::deleteLater(void)
     {
         StopMonitoring();
         delete m_Thread;
-        m_Thread = NULL;
+        m_Thread = nullptr;
     }
     QObject::deleteLater();
 }
@@ -429,10 +442,9 @@ void MediaMonitor::CheckDevices(void)
     QMutexLocker locker(&m_DevicesLock);
 
     QList<MythMediaDevice*>::iterator itr = m_Devices.begin();
-    MythMediaDevice* pDev;
     while (itr != m_Devices.end())
     {
-        pDev = *itr;
+        MythMediaDevice* pDev = *itr;
         if (pDev)
             pDev->checkMedia();
         ++itr;
@@ -447,7 +459,7 @@ void MediaMonitor::StartMonitoring(void)
     // Sanity check
     if (m_Active)
         return;
-    if (!gCoreContext->GetNumSetting("MonitorDrives", 0)) {
+    if (!gCoreContext->GetBoolSetting("MonitorDrives", false)) {
         LOG(VB_MEDIA, LOG_NOTICE, "MediaMonitor diasabled by user setting.");
         return;
     }
@@ -532,19 +544,18 @@ MythMediaDevice* MediaMonitor::GetMedia(const QString& path)
 {
     QMutexLocker locker(&m_DevicesLock);
 
-    QList<MythMediaDevice*>::iterator it = m_Devices.begin();
-    for (;it != m_Devices.end(); ++it)
+    foreach (auto & dev, m_Devices)
     {
-        if ((*it)->isSameDevice(path) &&
-            (((*it)->getStatus() == MEDIASTAT_USEABLE) ||
-             ((*it)->getStatus() == MEDIASTAT_MOUNTED) ||
-             ((*it)->getStatus() == MEDIASTAT_NOTMOUNTED)))
+        if (dev->isSameDevice(path) &&
+            ((dev->getStatus() == MEDIASTAT_USEABLE) ||
+             (dev->getStatus() == MEDIASTAT_MOUNTED) ||
+             (dev->getStatus() == MEDIASTAT_NOTMOUNTED)))
         {
-            return(*it);
+            return dev;
         }
     }
 
-    return NULL;
+    return nullptr;
 }
 
 /**
@@ -557,19 +568,19 @@ QString MediaMonitor::GetMountPath(const QString& devPath)
 {
     QString mountPath;
 
-    if (c_monitor)
+    if (s_monitor)
     {
-        MythMediaDevice *pMedia = c_monitor->GetMedia(devPath);
-        if (pMedia && c_monitor->ValidateAndLock(pMedia))
+        MythMediaDevice *pMedia = s_monitor->GetMedia(devPath);
+        if (pMedia && s_monitor->ValidateAndLock(pMedia))
         {
             mountPath = pMedia->getMountPath();
-            c_monitor->Unlock(pMedia);
+            s_monitor->Unlock(pMedia);
         }
         // The media monitor could be inactive.
         // Create a fake media device just to lookup mount map:
         else
         {
-            pMedia = MythCDROM::get(NULL, devPath.toLatin1(), true, false);
+            pMedia = MythCDROM::get(nullptr, devPath.toLatin1(), true, false);
             if (pMedia && pMedia->findMountPath())
                 mountPath = pMedia->getMountPath();
             else
@@ -606,24 +617,41 @@ QList<MythMediaDevice*> MediaMonitor::GetMedias(unsigned mediatypes)
 
     QList<MythMediaDevice*> medias;
 
-    QList<MythMediaDevice*>::iterator it = m_Devices.begin();
-    for (;it != m_Devices.end(); ++it)
+    foreach (auto & dev, m_Devices)
     {
-        if (((*it)->getMediaType() & mediatypes) &&
-            (((*it)->getStatus() == MEDIASTAT_USEABLE) ||
-             ((*it)->getStatus() == MEDIASTAT_MOUNTED) ||
-             ((*it)->getStatus() == MEDIASTAT_NOTMOUNTED)))
+        if ((dev->getMediaType() & mediatypes) &&
+            ((dev->getStatus() == MEDIASTAT_USEABLE) ||
+             (dev->getStatus() == MEDIASTAT_MOUNTED) ||
+             (dev->getStatus() == MEDIASTAT_NOTMOUNTED)))
         {
-            medias.push_back(*it);
+            medias.push_back(dev);
         }
     }
 
     return medias;
 }
 
+/** \fn MediaMonitor::RegisterMediaHandler
+ *  \brief Register a handler for media related events.
+ *
+ *  This method registers a callback function for when media related
+ *  events occur. The call must specify the type of media supported by
+ *  the handler, and (if needed) a list of media file extensions that
+ *  are supported.
+ *
+ *  \param destination A name for this callback function. For example:
+ *                     "MythDVD DVD Media Handler".  This argument
+ *                     must be unique as it is also used as the key
+ *                     for creating the map of handler.
+ *  \param description Unused.
+ *  \param callback    The function to call when an event occurs.
+ *  \param mediaType   The type of media supported by this callback. The
+ *                     value must be an enum of type MythMediaType.
+ *  \param extensions A list of file name extensions supported by this
+ *  callback.
+ */
 void MediaMonitor::RegisterMediaHandler(const QString  &destination,
                                         const QString  &description,
-                                        const QString  &key,
                                         void          (*callback)
                                               (MythMediaDevice*),
                                         int             mediaType,
@@ -635,7 +663,7 @@ void MediaMonitor::RegisterMediaHandler(const QString  &destination,
         QString msg = MythMediaDevice::MediaTypeString((MythMediaType)mediaType);
 
         if (extensions.length())
-            msg += QString(", ext(0x%1)").arg(extensions, 0, 16);
+            msg += QString(", ext(%1)").arg(extensions, 0, 16);
 
         LOG(VB_MEDIA, LOG_INFO,
                  "Registering '" + destination + "' as a media handler for " +
@@ -774,8 +802,15 @@ bool MediaMonitor::eventFilter(QObject *obj, QEvent *event)
 {
     if (event->type() == MythMediaEvent::kEventType)
     {
-        MythMediaDevice *pDev = ((MythMediaEvent*)event)->getDevice();
+        auto *me = dynamic_cast<MythMediaEvent *>(event);
+        if (me == nullptr)
+        {
+            LOG(VB_GENERAL, LOG_ALERT,
+                     "MediaMonitor::eventFilter() couldn't cast event");
+            return true;
+        }
 
+        MythMediaDevice *pDev = me->getDevice();
         if (!pDev)
         {
             LOG(VB_GENERAL, LOG_ALERT,
@@ -834,23 +869,23 @@ QString MediaMonitor::defaultDevice(const QString &dbSetting,
     {
         device = hardCodedDefault;
 
-        if (!c_monitor)
-            c_monitor = GetMediaMonitor();
+        if (!s_monitor)
+            s_monitor = GetMediaMonitor();
 
-        if (c_monitor)
+        if (s_monitor)
         {
-            MythMediaDevice *d = c_monitor->selectDrivePopup(label, false, true);
+            MythMediaDevice *d = s_monitor->selectDrivePopup(label, false, true);
 
             if (d == (MythMediaDevice *) -1)    // User cancelled
             {
                 device.clear(); // If user has explicitly cancelled return empty string
-                d = NULL;
+                d = nullptr;
             }
 
-            if (d && c_monitor->ValidateAndLock(d))
+            if (d && s_monitor->ValidateAndLock(d))
             {
                 device = d->getDevicePath();
-                c_monitor->Unlock(d);
+                s_monitor->Unlock(d);
             }
         }
     }
@@ -913,17 +948,16 @@ QString MediaMonitor::defaultDVDWriter()
 /**
  * \brief A string summarising the current devices, for debugging
  */
-const QString MediaMonitor::listDevices(void)
+QString MediaMonitor::listDevices(void)
 {
-    QList<MythMediaDevice*>::const_iterator dev;
     QStringList list;
 
-    for (dev = m_Devices.begin(); dev != m_Devices.end(); ++dev)
+    foreach (auto & dev, m_Devices)
     {
         QString devStr;
-        QString model = (*dev)->getDeviceModel();
-        QString path  = (*dev)->getDevicePath();
-        QString real  = (*dev)->getRealDevice();
+        QString model = dev->getDeviceModel();
+        const QString& path  = dev->getDevicePath();
+        const QString& real  = dev->getRealDevice();
 
         if (path != real)
             devStr += path + "->";

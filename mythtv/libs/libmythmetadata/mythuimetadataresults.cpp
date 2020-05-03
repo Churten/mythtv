@@ -18,8 +18,7 @@ MetadataResultsDialog::MetadataResultsDialog(
     const MetadataLookupList &results) :
 
     MythScreenType(lparent, "metadataresultspopup"),
-    m_results(results),
-    m_resultsList(0)
+    m_results(results)
 {
     m_imageDownload = new MetadataImageDownload(this);
 }
@@ -31,7 +30,7 @@ MetadataResultsDialog::~MetadataResultsDialog()
     if (m_imageDownload)
     {
         delete m_imageDownload;
-        m_imageDownload = NULL;
+        m_imageDownload = nullptr;
     }
 }
 
@@ -51,9 +50,8 @@ bool MetadataResultsDialog::Create()
     for (int i = 0;
             i != m_results.count(); ++i)
     {
-        MythUIButtonListItem *button =
-            new MythUIButtonListItem(m_resultsList,
-                m_results[i]->GetTitle());
+        auto *button = new MythUIButtonListItem(m_resultsList,
+                                                m_results[i]->GetTitle());
         InfoMap metadataMap;
         m_results[i]->toMap(metadataMap);
 
@@ -86,13 +84,15 @@ bool MetadataResultsDialog::Create()
             if (QFile::exists(dlfile))
                 button->SetImage(dlfile);
             else
+            {
                 m_imageDownload->addThumb(m_results[i]->GetTitle(),
                                  coverartfile,
-                                 qVariantFromValue<uint>(pos));
+                                 QVariant::fromValue<uint>(pos));
+            }
         }
 
         button->SetTextFromMap(metadataMap);
-        button->SetData(qVariantFromValue<uint>(i));
+        button->SetData(QVariant::fromValue<uint>(i));
     }
 
     connect(m_resultsList, SIGNAL(itemClicked(MythUIButtonListItem *)),
@@ -129,9 +129,11 @@ void MetadataResultsDialog::customEvent(QEvent *event)
 {
     if (event->type() == ThumbnailDLEvent::kEventType)
     {
-        ThumbnailDLEvent *tde = (ThumbnailDLEvent *)event;
+        auto *tde = dynamic_cast<ThumbnailDLEvent *>(event);
+        if (tde == nullptr)
+            return;
 
-        ThumbnailData *data = tde->thumb;
+        ThumbnailData *data = tde->m_thumb;
 
         QString file = data->url;
         uint pos = data->data.value<uint>();

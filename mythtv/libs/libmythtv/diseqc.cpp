@@ -95,12 +95,10 @@ QString DiSEqCDevDevice::TableToString(uint type, const TypeTable *table)
     {
         if (type == table->value)
         {
-            QString tmp = table->name;
-            tmp.detach();
-            return tmp;
+            return table->name;
         }
     }
-    return QString::null;
+    return QString();
 }
 
 uint DiSEqCDevDevice::TableFromString(const QString   &type,
@@ -124,11 +122,6 @@ uint DiSEqCDevDevice::TableFromString(const QString   &type,
  *  of a given network of DVB-S devices.
  */
 
-DiSEqCDevSettings::DiSEqCDevSettings()
-    : m_input_id((uint) -1)
-{
-}
-
 /** \fn DiSEqCDevSettings::Load(uint)
  *  \brief Loads configuration chain from DB for specified card input id.
  *  \param card_input_id Desired capture card input ID.
@@ -136,7 +129,7 @@ DiSEqCDevSettings::DiSEqCDevSettings()
  */
 bool DiSEqCDevSettings::Load(uint card_input_id)
 {
-    if (card_input_id == m_input_id)
+    if (card_input_id == m_inputId)
         return true;
 
     m_config.clear();
@@ -158,7 +151,7 @@ bool DiSEqCDevSettings::Load(uint card_input_id)
     while (query.next())
         m_config[query.value(0).toUInt()] = query.value(1).toDouble();
 
-    m_input_id = card_input_id;
+    m_inputId = card_input_id;
 
     return true;
 }
@@ -190,8 +183,7 @@ bool DiSEqCDevSettings::Store(uint card_input_id) const
         "       ( cardinputid, diseqcid, value) "
         "VALUES (:INPUTID,    :DEVID,     :VALUE) ");
 
-    uint_to_dbl_t::const_iterator it = m_config.begin();
-    for (; it != m_config.end(); ++it)
+    for (auto it = m_config.cbegin(); it != m_config.cend(); ++it)
     {
         query.bindValue(":INPUTID", card_input_id);
         query.bindValue(":DEVID",   it.key());
@@ -229,7 +221,7 @@ double DiSEqCDevSettings::GetValue(uint devid) const
 void DiSEqCDevSettings::SetValue(uint devid, double value)
 {
     m_config[devid] = value;
-    m_input_id = (uint) -1;
+    m_inputId = (uint) -1;
 }
 
 //////////////////////////////////////// DiSEqCDev
@@ -238,16 +230,15 @@ void DiSEqCDevSettings::SetValue(uint devid, double value)
  *  \brief Main DVB-S device interface.
  */
 
-DiSEqCDevTrees DiSEqCDev::m_trees;
+DiSEqCDevTrees DiSEqCDev::s_trees;
 
 /** \fn DiSEqCDev::FindTree(uint)
  *  \brief Retrieve device tree.
  *  \param cardid Capture card id.
- *  \param fd_frontend DVB frontend device file descriptor.
  */
 DiSEqCDevTree *DiSEqCDev::FindTree(uint cardid)
 {
-    return m_trees.FindTree(cardid);
+    return s_trees.FindTree(cardid);
 }
 
 /** \fn DiSEqCDev::InvalidateTrees(void)
@@ -255,7 +246,7 @@ DiSEqCDevTree *DiSEqCDev::FindTree(uint cardid)
  */
 void DiSEqCDev::InvalidateTrees(void)
 {
-    m_trees.InvalidateTrees();
+    s_trees.InvalidateTrees();
 }
 
 //////////////////////////////////////// DiSEqCDevTrees
@@ -272,17 +263,16 @@ DiSEqCDevTrees::~DiSEqCDevTrees()
 /** \fn DiSEqCDevTrees::FindTree(uint)
  *  \brief Retrieve device tree.
  *  \param cardid Capture card id.
- *  \param fd_frontend DVB frontend device file descriptor.
  */
 DiSEqCDevTree *DiSEqCDevTrees::FindTree(uint cardid)
 {
-    QMutexLocker lock(&m_trees_lock);
+    QMutexLocker lock(&m_treesLock);
 
     cardid_to_diseqc_tree_t::iterator it = m_trees.find(cardid);
     if (it != m_trees.end())
         return *it;
 
-    DiSEqCDevTree *tree = new DiSEqCDevTree;
+    auto *tree = new DiSEqCDevTree;
     tree->Load(cardid);
     m_trees[cardid] = tree;
 
@@ -294,11 +284,10 @@ DiSEqCDevTree *DiSEqCDevTrees::FindTree(uint cardid)
  */
 void DiSEqCDevTrees::InvalidateTrees(void)
 {
-    QMutexLocker lock(&m_trees_lock);
+    QMutexLocker lock(&m_treesLock);
 
-    cardid_to_diseqc_tree_t::iterator it = m_trees.begin();
-    for (; it != m_trees.end(); ++it)
-        delete *it;
+    for (auto & tree : m_trees)
+        delete tree;
 
     m_trees.clear();
 }
@@ -311,19 +300,12 @@ void DiSEqCDevTrees::InvalidateTrees(void)
 
 const uint DiSEqCDevTree::kFirstFakeDiSEqCID = 0xf0000000;
 
-DiSEqCDevTree::DiSEqCDevTree() :
-    m_fd_frontend(-1), m_root(NULL),
-    m_previous_fake_diseqcid(kFirstFakeDiSEqCID)
-{
-    Reset();
-}
-
 DiSEqCDevTree::~DiSEqCDevTree()
 {
     delete m_root;
 }
 
-/** \fn DiSEqCDevTree::Load(const QString&, const QString&)
+/** \fn DiSEqCDevTree::Load(const QString&)
  *  \brief Loads the device tree from the database.
  *  \param device recording input uses.
  *  \return True if successful.
@@ -363,14 +345,19 @@ bool DiSEqCDevTree::Load(const QString &device)
 bool DiSEqCDevTree::Load(uint cardid)
 {
     // clear children
+
+    // TODO find root cause so that "delete m_root" can be enabled again, see ticket #13465
+    // Not doing the "delete m_root" fixes a segfault but creates a memory leak
+#if 0
     delete m_root;
+#endif
     m_delete.clear();
-    m_root = NULL;
+    m_root = nullptr;
 
     // lookup configuration for this card
     MSqlQuery query(MSqlQuery::InitCon());
     query.prepare(
-        "SELECT diseqcid, cardtype "
+        "SELECT diseqcid, cardtype, inputname "
         "FROM capturecard "
         "WHERE cardid = :CARDID");
     query.bindValue(":CARDID", cardid);
@@ -384,12 +371,14 @@ bool DiSEqCDevTree::Load(uint cardid)
         return m_root;
     }
 
-    if (query.value(0).toUInt())
+    if (query.value(0).toBool())
     {
         m_root = DiSEqCDevDevice::CreateById(
             *this, query.value(0).toUInt());
     }
-    else if (query.value(1).toString().toUpper() == "DVB")
+    else if ((query.value(1).toString().toUpper() == "DVB") &&
+             ((query.value(2).toString().toUpper() == "DVB-S" ) ||
+              (query.value(2).toString().toUpper() == "DVB-S2")  ))
     {
         LOG(VB_GENERAL, LOG_WARNING, LOC +
             QString("No device tree for cardid %1").arg(cardid));
@@ -428,7 +417,8 @@ bool DiSEqCDevTree::Exists(int cardid)
 
 /** \fn DiSEqCDevTree::Store(uint, QString)
  *  \brief Stores the device tree to the database.
- *  \param device.
+ *  \param cardid Capture card id.
+ *  \param device Device id.
  *  \return True if successful.
  */
 bool DiSEqCDevTree::Store(uint cardid, const QString &device)
@@ -447,14 +437,13 @@ bool DiSEqCDevTree::Store(uint cardid, const QString &device)
             "DELETE FROM diseqc_config "
             "WHERE diseqcid = :DEVID");
 
-        vector<uint>::const_iterator it = m_delete.begin();
-        for (; it != m_delete.end(); ++it)
+        for (uint devid : m_delete)
         {
-            query0.bindValue(":DEVID", *it);
+            query0.bindValue(":DEVID", devid);
             if (!query0.exec())
                 MythDB::DBError("DiSEqCDevTree::Store 1", query0);
 
-            query1.bindValue(":DEVID", *it);
+            query1.bindValue(":DEVID", devid);
             if (!query1.exec())
                 MythDB::DBError("DiSEqCDevTree::Store 2", query1);
 
@@ -501,7 +490,7 @@ bool DiSEqCDevTree::SetTone(bool on)
 #ifdef USING_DVB
     for (uint retry = 0; !success && (retry < TIMEOUT_RETRIES); retry++)
     {
-        if (ioctl(m_fd_frontend, FE_SET_TONE,
+        if (ioctl(m_fdFrontend, FE_SET_TONE,
                   on ? SEC_TONE_ON : SEC_TONE_OFF) == 0)
             success = true;
         else
@@ -553,19 +542,19 @@ void DiSEqCDevTree::Reset(void)
     if (m_root)
         m_root->Reset();
 
-    m_last_voltage = (uint) -1;
+    m_lastVoltage = (uint) -1;
 }
 
 /** \fn DiSEqCDevTree::FindRotor(const DiSEqCDevSettings&,uint)
  *  \brief Returns the nth rotor device object in the tree.
  *  \param settings Configuration chain in effect.
  *  \param index 0 for first rotor, 1 for second, etc.
- *  \return Pointer to rotor object if found, NULL otherwise.
+ *  \return Pointer to rotor object if found, nullptr otherwise.
  */
 DiSEqCDevRotor *DiSEqCDevTree::FindRotor(const DiSEqCDevSettings &settings, uint index)
 {
     DiSEqCDevDevice *node  = m_root;
-    DiSEqCDevRotor  *rotor = NULL;
+    DiSEqCDevRotor  *rotor = nullptr;
 
     for (uint count = 0; node;)
     {
@@ -583,12 +572,12 @@ DiSEqCDevRotor *DiSEqCDevTree::FindRotor(const DiSEqCDevSettings &settings, uint
 /** \fn DiSEqCDevTree::FindLNB(const DiSEqCDevSettings&)
  *  \brief Returns the LNB device object selected by the configuration chain.
  *  \param settings Configuration chain in effect.
- *  \return Pointer to LNB object if found, NULL otherwise.
+ *  \return Pointer to LNB object if found, nullptr otherwise.
  */
 DiSEqCDevLNB *DiSEqCDevTree::FindLNB(const DiSEqCDevSettings &settings)
 {
     DiSEqCDevDevice *node = m_root;
-    DiSEqCDevLNB    *lnb  = NULL;
+    DiSEqCDevLNB    *lnb  = nullptr;
 
     while (node)
     {
@@ -606,12 +595,12 @@ DiSEqCDevLNB *DiSEqCDevTree::FindLNB(const DiSEqCDevSettings &settings)
 /** \fn DiSEqCDevTree::FindSCR(const DiSEqCDevSettings&)
  *  \brief Returns the SCR device object selected by the configuration chain.
  *  \param settings Configuration chain in effect.
- *  \return Pointer to SCR object if found, NULL otherwise.
+ *  \return Pointer to SCR object if found, nullptr otherwise.
  */
 DiSEqCDevSCR *DiSEqCDevTree::FindSCR(const DiSEqCDevSettings &settings)
 {
     DiSEqCDevDevice *node = m_root;
-    DiSEqCDevSCR    *scr  = NULL;
+    DiSEqCDevSCR    *scr  = nullptr;
 
     while (node)
     {
@@ -630,19 +619,19 @@ DiSEqCDevSCR *DiSEqCDevTree::FindSCR(const DiSEqCDevSettings &settings)
 /** \fn DiSEqCDevTree::FindDevice(uint)
  *  \brief Returns a device by ID.
  *  \param dev_id Device ID to find.
- *  \return Pointer to device, or NULL if not found in this tree.
+ *  \return Pointer to device, or nullptr if not found in this tree.
  */
 DiSEqCDevDevice *DiSEqCDevTree::FindDevice(uint dev_id)
 {
     if (m_root)
         return m_root->FindDevice(dev_id);
 
-    return NULL;
+    return nullptr;
 }
 
 /** \fn DiSEqCDevTree::SetRoot(DiSEqCDevDevice*)
  *  \brief Changes the root node of the tree.
- *  \param root New root node (may be NULL).
+ *  \param root New root node (may be nullptr).
  */
 void DiSEqCDevTree::SetRoot(DiSEqCDevDevice *root)
 {
@@ -650,8 +639,7 @@ void DiSEqCDevTree::SetRoot(DiSEqCDevDevice *root)
 
     m_root = root;
 
-    if (old_root)
-        delete old_root;
+    delete old_root;
 }
 
 #ifdef USING_DVB
@@ -710,7 +698,7 @@ bool DiSEqCDevTree::SendCommand(uint adr, uint cmd, uint repeats,
     bool resend_cmd = false;
 
     // prepare command
-    dvb_diseqc_master_cmd mcmd;
+    dvb_diseqc_master_cmd mcmd = {};
     mcmd.msg[0] = DISEQC_FRM;
     mcmd.msg[1] = adr;
     mcmd.msg[2] = cmd;
@@ -752,9 +740,10 @@ bool DiSEqCDevTree::SendCommand(uint adr, uint cmd, uint repeats,
 #endif // USING_DVB
 }
 
-/** \fn DiSEqCDevTree::ResetDiseqc(bool)
+/**
  *  \brief Resets the DiSEqC bus.
  *  \param hard_reset If true, the bus will be power cycled.
+ *  \param is_SCR Is this an SCR bus?
  *  \return True if successful.
  */
 bool DiSEqCDevTree::ResetDiseqc(bool hard_reset, bool is_SCR)
@@ -793,7 +782,7 @@ bool DiSEqCDevTree::ResetDiseqc(bool hard_reset, bool is_SCR)
     }
     else
     {
-        LOG(VB_CHANNEL, LOG_INFO, LOC + "Skiping reset: already done for this SCR bus");
+        LOG(VB_CHANNEL, LOG_INFO, LOC + "Skipping reset: already done for this SCR bus");
     }
 
     usleep(DISEQC_LONG_WAIT);
@@ -801,9 +790,14 @@ bool DiSEqCDevTree::ResetDiseqc(bool hard_reset, bool is_SCR)
     return true;
 }
 
+/**
+ *  \brief Retrieve device tree.
+ *  \param fd_frontend DVB frontend device file descriptor.
+ *  \param is_SCR Is this an SCR bus?
+ */
 void DiSEqCDevTree::Open(int fd_frontend, bool is_SCR)
 {
-    m_fd_frontend = fd_frontend;
+    m_fdFrontend = fd_frontend;
 
     // issue reset command
     ResetDiseqc(false, is_SCR);
@@ -812,7 +806,7 @@ void DiSEqCDevTree::Open(int fd_frontend, bool is_SCR)
 bool DiSEqCDevTree::SetVoltage(uint voltage)
 {
 
-    if (voltage == m_last_voltage)
+    if (voltage == m_lastVoltage)
         return true;
 
     int volts = ((voltage == SEC_VOLTAGE_18) ? 18 :
@@ -826,7 +820,7 @@ bool DiSEqCDevTree::SetVoltage(uint voltage)
 #ifdef USING_DVB
     for (uint retry = 0; !success && retry < TIMEOUT_RETRIES; retry++)
     {
-        if (ioctl(m_fd_frontend, FE_SET_VOLTAGE, voltage) == 0)
+        if (ioctl(m_fdFrontend, FE_SET_VOLTAGE, voltage) == 0)
             success = true;
         else
             usleep(TIMEOUT_WAIT);
@@ -839,7 +833,7 @@ bool DiSEqCDevTree::SetVoltage(uint voltage)
         return false;
     }
 
-    m_last_voltage = voltage;
+    m_lastVoltage = voltage;
     return true;
 }
 
@@ -868,27 +862,15 @@ bool DiSEqCDevTree::ApplyVoltage(const DiSEqCDevSettings &settings,
  *  \brief Represents a node in a DVB-S device network.
  */
 
-const DiSEqCDevDevice::TypeTable DiSEqCDevDevice::dvbdev_lookup[5] =
+const DiSEqCDevDevice::TypeTable DiSEqCDevDevice::kDvbdevLookup[5] =
 {
     { "switch",      kTypeSwitch },
     { "rotor",       kTypeRotor  },
     { "scr",         kTypeSCR    },
     { "lnb",         kTypeLNB    },
-    { QString::null, kTypeLNB    },
+    { QString(),     kTypeLNB    },
 };
 
-
-/**
- *  \param tree Parent reference to tree object.
- *  \param devid Device ID of this node.
- */
-DiSEqCDevDevice::DiSEqCDevDevice(DiSEqCDevTree &tree, uint devid)
-    : m_devid(devid),           m_dev_type(kTypeLNB),
-      m_desc(QString::null),    m_tree(tree),
-      m_parent(NULL),           m_ordinal(0),
-      m_repeat(1)
-{
-}
 
 DiSEqCDevDevice::~DiSEqCDevDevice()
 {
@@ -898,7 +880,7 @@ DiSEqCDevDevice::~DiSEqCDevDevice()
 
 DiSEqCDevDevice *DiSEqCDevDevice::FindDevice(uint dev_id)
 {
-    DiSEqCDevDevice *dev = NULL;
+    DiSEqCDevDevice *dev = nullptr;
 
     if (GetDeviceID() == dev_id)
         dev = this;
@@ -933,14 +915,14 @@ DiSEqCDevDevice *DiSEqCDevDevice::CreateById(DiSEqCDevTree &tree, uint devid)
     if (!query.exec() || !query.isActive())
     {
         MythDB::DBError("DiSEqCDevDevice::CreateById", query);
-        return NULL;
+        return nullptr;
     }
-    else if (!query.next())
+    if (!query.next())
     {
         LOG(VB_GENERAL, LOG_ERR, LOC + "CreateById failed to find dtv dev " +
                 QString("%1").arg(devid));
 
-        return NULL;
+        return nullptr;
     }
 
     dvbdev_t      type = DevTypeFromString(query.value(0).toString());
@@ -963,7 +945,7 @@ DiSEqCDevDevice *DiSEqCDevDevice::CreateByType(DiSEqCDevTree &tree,
     if (!dev_id)
         dev_id = tree.CreateFakeDiSEqCID();
 
-    DiSEqCDevDevice *node = NULL;
+    DiSEqCDevDevice *node = nullptr;
     switch (type)
     {
         case kTypeSwitch:
@@ -996,7 +978,7 @@ DiSEqCDevDevice *DiSEqCDevDevice::CreateByType(DiSEqCDevTree &tree,
     return node;
 }
 
-/** \fn DiSEqCDevDevice::Execute(const DiSEqCDevSettings&,const DTVMultiplex&)
+/** \fn DiSEqCDevDevice::Execute(const DiSEqCDevSettings& settings,const DTVMultiplex& tuning)
  *  \brief Applies DiSEqC settings to this node and any children.
  *  \param settings Configuration chain to apply.
  *  \param tuning Tuning parameters.
@@ -1014,13 +996,14 @@ DiSEqCDevDevice *DiSEqCDevDevice::CreateByType(DiSEqCDevTree &tree,
  *  \brief Determines if this device or any child will be sending a command
  *         for the given configuration chain.
  *  \param settings Configuration chain in effect.
+ *  \param tuning Tuning parameters.
  *  \return true if a command would be sent if Execute() were called.
  */
 
-/** \fn DiSEqCDevDevice::GetSelectedChild(const DiSEqCDevSettings&) const
+/** \fn DiSEqCDevDevice::GetSelectedChild(const DiSEqCDevSettings& settings) const
  *  \brief Retrieves the selected child for this configuration, if any.
  *  \param settings Configuration chain in effect.
- *  \return Child node object, or NULL if none.
+ *  \return Child node object, or nullptr if none.
  */
 
 /** \fn DiSEqCDevDevice::GetChildCount(void) const
@@ -1028,20 +1011,20 @@ DiSEqCDevDevice *DiSEqCDevDevice::CreateByType(DiSEqCDevTree &tree,
  *  \return Number of children
  */
 
-/** \fn DiSEqCDevDevice::GetChild(uint)
+/** \fn DiSEqCDevDevice::GetChild(uint ordinal)
  *  \brief Retrieves the nth child of this node.
  *  \param ordinal Child number (starting at 0).
- *  \return Pointer to device object, or NULL if no child.
+ *  \return Pointer to device object, or nullptr if no child.
  */
 
-/** \fn DiSEqCDevDevice::SetChild(uint,DiSEqCDevDevice*)
+/** \fn DiSEqCDevDevice::SetChild(uint ordinal,DiSEqCDevDevice* device)
  *  \brief Changes the nth child of this node.
  *  \param ordinal Child number (starting at 0).
- *  \param device New child device. (may be NULL)
+ *  \param device New child device. (may be nullptr)
  *  \return true if object was added to tree.
  */
 
-/** \fn DiSEqCDevDevice::GetVoltage(const DiSEqCDevSettings&,const DTVMultiplex&) const
+/** \fn DiSEqCDevDevice::GetVoltage(const DiSEqCDevSettings& settings,const DTVMultiplex& tuning) const
  *  \brief Retrives the desired voltage for this config.
  *  \param settings Configuration chain in effect.
  *  \param tuning Tuning parameters.
@@ -1061,7 +1044,7 @@ DiSEqCDevDevice *DiSEqCDevDevice::CreateByType(DiSEqCDevTree &tree,
 /** \fn DiSEqCDevDevice::FindDevice(uint)
  *   Returns a device by ID.
  *  \param dev_id Device ID to find.
- *  \return Pointer to device, or NULL if not found in this tree.
+ *  \return Pointer to device, or nullptr if not found in this tree.
  */
 
 //////////////////////////////////////// DiSEqCDevSwitch
@@ -1070,40 +1053,34 @@ DiSEqCDevDevice *DiSEqCDevDevice::CreateByType(DiSEqCDevTree &tree,
  *  \brief Switch class, including tone, legacy and DiSEqC switches.
  */
 
-const DiSEqCDevDevice::TypeTable DiSEqCDevSwitch::SwitchTypeTable[9] =
+const DiSEqCDevDevice::TypeTable DiSEqCDevSwitch::kSwitchTypeTable[9] =
 {
     { "legacy_sw21",  kTypeLegacySW21        },
     { "legacy_sw42",  kTypeLegacySW42        },
     { "legacy_sw64",  kTypeLegacySW64        },
-    { "tone",         kTypeTone          },
+    { "tone",         kTypeTone              },
     { "diseqc",       kTypeDiSEqCCommitted   },
     { "diseqc_uncom", kTypeDiSEqCUncommitted },
     { "voltage",      kTypeVoltage           },
     { "mini_diseqc",  kTypeMiniDiSEqC        },
-    { QString::null,  kTypeTone              },
+    { QString(),      kTypeTone              },
 };
 
 DiSEqCDevSwitch::DiSEqCDevSwitch(DiSEqCDevTree &tree, uint devid)
-    : DiSEqCDevDevice(tree, devid),
-      m_type(kTypeTone), m_address(DISEQC_ADR_SW_ALL),
-      m_num_ports(2)
+    : DiSEqCDevDevice(tree, devid)
 {
-    m_children.resize(m_num_ports);
+    m_children.resize(m_numPorts);
 
-    for (uint i = 0; i < m_num_ports; i++)
-        m_children[i] = NULL;
+    for (uint i = 0; i < m_numPorts; i++)
+        m_children[i] = nullptr;
 
-    Reset();
+    DiSEqCDevSwitch::Reset();
 }
 
 DiSEqCDevSwitch::~DiSEqCDevSwitch()
 {
-    dvbdev_vec_t::iterator it = m_children.begin();
-    for (; it != m_children.end(); ++it)
-    {
-        if (*it)
-            delete *it;
-    }
+    for (auto & child : m_children)
+        delete child;
 }
 
 bool DiSEqCDevSwitch::Execute(const DiSEqCDevSettings &settings,
@@ -1153,7 +1130,7 @@ bool DiSEqCDevSwitch::Execute(const DiSEqCDevSettings &settings,
             usleep(DISEQC_LONG_WAIT);
         }
 
-        m_last_pos = pos;
+        m_lastPos = pos;
     }
 
     // chain to child if the switch was successful
@@ -1165,14 +1142,13 @@ bool DiSEqCDevSwitch::Execute(const DiSEqCDevSettings &settings,
 
 void DiSEqCDevSwitch::Reset(void)
 {
-    m_last_pos = (uint) -1;
-    m_last_high_band = (uint) -1;
-    m_last_horizontal = (uint) -1;
-    dvbdev_vec_t::iterator it = m_children.begin();
-    for (; it != m_children.end(); ++it)
+    m_lastPos = (uint) -1;
+    m_lastHighBand = (uint) -1;
+    m_lastHorizontal = (uint) -1;
+    for (auto & child : m_children)
     {
-        if (*it)
-            (*it)->Reset();
+        if (child)
+            child->Reset();
     }
 }
 
@@ -1192,14 +1168,14 @@ DiSEqCDevDevice *DiSEqCDevSwitch::GetSelectedChild(const DiSEqCDevSettings &sett
     // sanity check switch position
     int pos = GetPosition(settings);
     if (pos < 0)
-        return NULL;
+        return nullptr;
 
     return m_children[pos];
 }
 
 uint DiSEqCDevSwitch::GetChildCount(void) const
 {
-    return m_num_ports;
+    return m_numPorts;
 }
 
 DiSEqCDevDevice *DiSEqCDevSwitch::GetChild(uint ordinal)
@@ -1207,7 +1183,7 @@ DiSEqCDevDevice *DiSEqCDevSwitch::GetChild(uint ordinal)
     if (ordinal < m_children.size())
         return m_children[ordinal];
 
-    return NULL;
+    return nullptr;
 }
 
 bool DiSEqCDevSwitch::SetChild(uint ordinal, DiSEqCDevDevice *device)
@@ -1243,12 +1219,8 @@ uint DiSEqCDevSwitch::GetVoltage(const DiSEqCDevSettings &settings,
 bool DiSEqCDevSwitch::Load(void)
 {
     // clear old children
-    dvbdev_vec_t::iterator it = m_children.begin();
-    for (; it != m_children.end(); ++it)
-    {
-        if (*it)
-            delete *it;
-    }
+    for (auto & child : m_children)
+        delete child;
 
     m_children.clear();
 
@@ -1265,15 +1237,15 @@ bool DiSEqCDevSwitch::Load(void)
         MythDB::DBError("DiSEqCDevSwitch::Load 1", query);
         return false;
     }
-    else if (query.next())
+    if (query.next())
     {
         m_type = SwitchTypeFromString(query.value(0).toString());
         m_address = query.value(1).toUInt();
-        m_num_ports = query.value(2).toUInt();
+        m_numPorts = query.value(2).toUInt();
         m_repeat = query.value(3).toUInt();
-        m_children.resize(m_num_ports);
-        for (uint i = 0; i < m_num_ports; i++)
-            m_children[i] = NULL;
+        m_children.resize(m_numPorts);
+        for (uint i = 0; i < m_numPorts; i++)
+            m_children[i] = nullptr;
     }
 
     // load children from db
@@ -1297,7 +1269,7 @@ bool DiSEqCDevSwitch::Load(void)
         {
             LOG(VB_GENERAL, LOG_ERR, LOC +
                 QString("Switch port out of range (%1 > %2)")
-                    .arg(ordinal + 1).arg(m_num_ports));
+                    .arg(ordinal + 1).arg(m_numPorts));
             delete child;
         }
     }
@@ -1346,7 +1318,7 @@ bool DiSEqCDevSwitch::Store(void) const
     query.bindValue(":DESC",    GetDescription());
     query.bindValue(":ADDRESS", m_address);
     query.bindValue(":TYPE",    type);
-    query.bindValue(":PORTS",   m_num_ports);
+    query.bindValue(":PORTS",   m_numPorts);
     query.bindValue(":REPEAT",  m_repeat);
 
     if (!query.exec())
@@ -1361,10 +1333,10 @@ bool DiSEqCDevSwitch::Store(void) const
 
     // chain to children
     bool success = true;
-    for (uint ch = 0; ch < m_children.size(); ch++)
+    for (auto *child : m_children)
     {
-        if (m_children[ch])
-            success &= m_children[ch]->Store();
+        if (child)
+            success &= child->Store();
     }
 
     return success;
@@ -1387,10 +1359,10 @@ void DiSEqCDevSwitch::SetNumPorts(uint num_ports)
     {
         m_children.resize(num_ports);
         for (uint ch = old_num; ch < num_ports; ch++)
-            m_children[ch] = NULL;
+            m_children[ch] = nullptr;
     }
 
-    m_num_ports = num_ports;
+    m_numPorts = num_ports;
 }
 
 bool DiSEqCDevSwitch::ExecuteLegacy(const DiSEqCDevSettings &settings,
@@ -1402,12 +1374,12 @@ bool DiSEqCDevSwitch::ExecuteLegacy(const DiSEqCDevSettings &settings,
     (void) pos;
 
 #if defined(USING_DVB) && defined(FE_DISHNETWORK_SEND_LEGACY_CMD)
-    static const unsigned char sw21_cmds[]   = { 0x34, 0x65, };
-    static const unsigned char sw42_cmds[]   = { 0x46, 0x17, };
-    static const unsigned char sw64_v_cmds[] = { 0x39, 0x4b, 0x0d, };
-    static const unsigned char sw64_h_cmds[] = { 0x1a, 0x5c, 0x2e, };
+    static const unsigned char kSw21Cmds[]  = { 0x34, 0x65, };
+    static const unsigned char kSw42Cmds[]  = { 0x46, 0x17, };
+    static const unsigned char kSw64VCmds[] = { 0x39, 0x4b, 0x0d, };
+    static const unsigned char kSw64HCmds[] = { 0x1a, 0x5c, 0x2e, };
 
-    const unsigned char *cmds = NULL;
+    const unsigned char *cmds = nullptr;
     unsigned char horizcmd = 0x00;
     uint num_ports = 0;
 
@@ -1421,20 +1393,20 @@ bool DiSEqCDevSwitch::ExecuteLegacy(const DiSEqCDevSettings &settings,
     switch (m_type)
     {
         case kTypeLegacySW21:
-            cmds = sw21_cmds;
+            cmds = kSw21Cmds;
             num_ports = 2;
             if (horizontal)
                 horizcmd = 0x80;
             break;
         case kTypeLegacySW42:
-            cmds = sw42_cmds;
+            cmds = kSw42Cmds;
             num_ports = 2;
             break;
         case kTypeLegacySW64:
             if (horizontal)
-                cmds = sw64_h_cmds;
+                cmds = kSw64HCmds;
             else
-                cmds = sw64_v_cmds;
+                cmds = kSw64VCmds;
             num_ports = 3;
             break;
         default:
@@ -1621,8 +1593,8 @@ bool DiSEqCDevSwitch::ShouldSwitch(const DiSEqCDevSettings &settings,
             horizontal  = lnb->IsHorizontal(tuning);
         }
 
-        if(high_band != m_last_high_band ||
-           horizontal != m_last_horizontal)
+        if(high_band != m_lastHighBand ||
+           horizontal != m_lastHorizontal)
             return true;
     }
     else if (kTypeLegacySW42 == m_type ||
@@ -1634,14 +1606,14 @@ bool DiSEqCDevSwitch::ShouldSwitch(const DiSEqCDevSettings &settings,
         if (lnb)
             horizontal  = lnb->IsHorizontal(tuning);
 
-        if (horizontal != m_last_horizontal)
+        if (horizontal != m_lastHorizontal)
             return true;
     }
     else if (kTypeVoltage == m_type ||
              kTypeTone == m_type)
         return true;
 
-    return m_last_pos != (uint)pos;
+    return m_lastPos != (uint)pos;
 }
 
 bool DiSEqCDevSwitch::ExecuteDiseqc(const DiSEqCDevSettings &settings,
@@ -1659,12 +1631,12 @@ bool DiSEqCDevSwitch::ExecuteDiseqc(const DiSEqCDevSettings &settings,
     }
 
     // check number of ports
-    if (((kTypeDiSEqCCommitted   == m_type) && (m_num_ports > 4)) ||
-        ((kTypeDiSEqCUncommitted == m_type) && (m_num_ports > 16)))
+    if (((kTypeDiSEqCCommitted   == m_type) && (m_numPorts > 4)) ||
+        ((kTypeDiSEqCUncommitted == m_type) && (m_numPorts > 16)))
     {
         LOG(VB_GENERAL, LOG_ERR, LOC +
             QString("Invalid number of ports for DiSEqC 1.x Switch (%1)")
-                .arg(m_num_ports));
+                .arg(m_numPorts));
         return false;
     }
 
@@ -1679,13 +1651,13 @@ bool DiSEqCDevSwitch::ExecuteDiseqc(const DiSEqCDevSettings &settings,
     data |= 0xf0;
 
     LOG(VB_CHANNEL, LOG_INFO, LOC + "Changing to DiSEqC switch port " +
-            QString("%1/%2").arg(pos + 1).arg(m_num_ports));
+            QString("%1/%2").arg(pos + 1).arg(m_numPorts));
 
     bool ret = m_tree.SendCommand(m_address, cmd, m_repeat, 1, &data);
     if(ret)
     {
-        m_last_high_band = high_band;
-        m_last_horizontal = horizontal;
+        m_lastHighBand = high_band;
+        m_lastHorizontal = horizontal;
     }
     return ret;
 }
@@ -1694,10 +1666,10 @@ int DiSEqCDevSwitch::GetPosition(const DiSEqCDevSettings &settings) const
 {
     int pos = (int) settings.GetValue(GetDeviceID());
 
-    if (pos >= (int)m_num_ports)
+    if (pos >= (int)m_numPorts)
     {
         LOG(VB_GENERAL, LOG_ERR, LOC + QString("Port %1 ").arg(pos + 1) +
-                QString("is not in range [0..%1)").arg(m_num_ports));
+                QString("is not in range [0..%1)").arg(m_numPorts));
 
         return -1;
     }
@@ -1717,8 +1689,8 @@ int DiSEqCDevSwitch::GetPosition(const DiSEqCDevSettings &settings) const
 
 static double GetCurTimeFloating(void)
 {
-    struct timeval curtime;
-    gettimeofday(&curtime, NULL);
+    struct timeval curtime {};
+    gettimeofday(&curtime, nullptr);
     return (double)curtime.tv_sec + (((double)curtime.tv_usec) / 1000000);
 }
 
@@ -1726,29 +1698,16 @@ static double GetCurTimeFloating(void)
  *  \brief Rotor class.
  */
 
-const DiSEqCDevDevice::TypeTable DiSEqCDevRotor::RotorTypeTable[] =
+const DiSEqCDevDevice::TypeTable DiSEqCDevRotor::kRotorTypeTable[] =
 {
     { "diseqc_1_2", kTypeDiSEqC_1_2 },
     { "diseqc_1_3", kTypeDiSEqC_1_3 },
-    { NULL, kTypeDiSEqC_1_3 }
+    { nullptr, kTypeDiSEqC_1_3 }
 };
-
-DiSEqCDevRotor::DiSEqCDevRotor(DiSEqCDevTree &tree, uint devid)
-    : DiSEqCDevDevice(tree, devid),
-      m_type(kTypeDiSEqC_1_3),
-      m_speed_hi(2.5),          m_speed_lo(1.9),
-      m_child(NULL),
-      m_last_position(0.0),     m_desired_azimuth(0.0),
-      m_reset(true),            m_move_time(0.0),
-      m_last_pos_known(false),  m_last_azimuth(0.0)
-{
-    Reset();
-}
 
 DiSEqCDevRotor::~DiSEqCDevRotor()
 {
-    if (m_child)
-        delete m_child;
+    delete m_child;
 }
 
 bool DiSEqCDevRotor::Execute(const DiSEqCDevSettings &settings,
@@ -1757,7 +1716,7 @@ bool DiSEqCDevRotor::Execute(const DiSEqCDevSettings &settings,
     bool success = true;
 
     double position = settings.GetValue(GetDeviceID());
-    if (m_reset || (position != m_last_position))
+    if (m_reset || (position != m_lastPosition))
     {
         switch (m_type)
         {
@@ -1774,7 +1733,7 @@ bool DiSEqCDevRotor::Execute(const DiSEqCDevSettings &settings,
                 break;
         }
 
-        m_last_position = position;
+        m_lastPosition = position;
         m_reset = false;
         if (success)
             // prevent tuning paramaters overiding rotor parameters
@@ -1800,7 +1759,7 @@ bool DiSEqCDevRotor::IsCommandNeeded(const DiSEqCDevSettings &settings,
 {
     double position = settings.GetValue(GetDeviceID());
 
-    if (m_reset || (position != m_last_position))
+    if (m_reset || (position != m_lastPosition))
         return true;
 
     if (m_child)
@@ -1809,7 +1768,7 @@ bool DiSEqCDevRotor::IsCommandNeeded(const DiSEqCDevSettings &settings,
     return false;
 }
 
-DiSEqCDevDevice *DiSEqCDevRotor::GetSelectedChild(const DiSEqCDevSettings&) const
+DiSEqCDevDevice *DiSEqCDevRotor::GetSelectedChild(const DiSEqCDevSettings& /*settings*/) const
 {
     return m_child;
 }
@@ -1820,9 +1779,8 @@ bool DiSEqCDevRotor::SetChild(uint ordinal, DiSEqCDevDevice *device)
         return false;
 
     DiSEqCDevDevice *old_child = m_child;
-    m_child = NULL;
-    if (old_child)
-        delete old_child;
+    m_child = nullptr;
+    delete old_child;
 
     m_child = device;
     if (m_child)
@@ -1838,9 +1796,9 @@ bool DiSEqCDevRotor::IsMoving(const DiSEqCDevSettings &settings) const
 {
     double position = settings.GetValue(GetDeviceID());
     double completed = GetProgress();
-    bool   moving   = (completed < 1.0) || (position != m_last_position);
+    bool   moving   = (completed < 1.0) || (position != m_lastPosition);
 
-    return (m_last_pos_known && moving);
+    return (m_lastPosKnown && moving);
 }
 
 uint DiSEqCDevRotor::GetVoltage(const DiSEqCDevSettings &settings,
@@ -1877,20 +1835,19 @@ bool DiSEqCDevRotor::Load(void)
         MythDB::DBError("DiSEqCDevRotor::Load 1", query);
         return false;
     }
-    else if (query.next())
+    if (query.next())
     {
         m_type     = RotorTypeFromString(query.value(0).toString());
-        m_speed_hi = query.value(2).toDouble();
-        m_speed_lo = query.value(3).toDouble();
+        m_speedHi  = query.value(2).toDouble();
+        m_speedLo  = query.value(3).toDouble();
         m_repeat   = query.value(4).toUInt();
 
         // form of "angle1=index1:angle2=index2:..."
         QString positions = query.value(1).toString();
         QStringList pos = positions.split(":", QString::SkipEmptyParts);
-        QStringList::const_iterator it = pos.begin();
-        for (; it != pos.end(); ++it)
+        foreach (auto & kv, pos)
         {
-            const QStringList eq = (*it).split("=", QString::SkipEmptyParts);
+            const QStringList eq = kv.split("=", QString::SkipEmptyParts);
             if (eq.size() == 2)
                 m_posmap[eq[0].toFloat()] = eq[1].toUInt();
         }
@@ -1900,7 +1857,7 @@ bool DiSEqCDevRotor::Load(void)
     if (m_child)
     {
         delete m_child;
-        m_child = NULL;
+        m_child = nullptr;
     }
 
     query.prepare(
@@ -1914,7 +1871,7 @@ bool DiSEqCDevRotor::Load(void)
         MythDB::DBError("DiSEqCDevRotor::Load 2", query);
         return false;
     }
-    else if (query.next())
+    if (query.next())
     {
         uint child_dev_id = query.value(0).toUInt();
         SetChild(0, CreateById(m_tree, child_dev_id));
@@ -1977,8 +1934,8 @@ bool DiSEqCDevRotor::Store(void) const
     query.bindValue(":ORDINAL", m_ordinal);
     query.bindValue(":DESC",    GetDescription());
     query.bindValue(":TYPE",    type);
-    query.bindValue(":HISPEED", m_speed_hi);
-    query.bindValue(":LOSPEED", m_speed_lo);
+    query.bindValue(":HISPEED", m_speedHi);
+    query.bindValue(":LOSPEED", m_speedLo);
     query.bindValue(":POSMAP",  posmap);
     query.bindValue(":REPEAT",  m_repeat);
 
@@ -2006,17 +1963,17 @@ bool DiSEqCDevRotor::Store(void) const
  */
 double DiSEqCDevRotor::GetProgress(void) const
 {
-    if (m_move_time == 0.0)
+    if (m_moveTime == 0.0)
         return 1.0;
 
     // calculate duration of move
     double speed    = ((m_tree.GetVoltage() == SEC_VOLTAGE_18) ?
-                       m_speed_hi : m_speed_lo);
-    double change   = abs(m_desired_azimuth - m_last_azimuth);
+                       m_speedHi : m_speedLo);
+    double change   = abs(m_desiredAzimuth - m_lastAzimuth);
     double duration = change / speed;
 
     // determine completion percentage
-    double time_since_move = GetCurTimeFloating() - m_move_time;
+    double time_since_move = GetCurTimeFloating() - m_moveTime;
     double completed = time_since_move / duration;
     if(completed > 1.0)
     {
@@ -2036,7 +1993,7 @@ double DiSEqCDevRotor::GetProgress(void) const
  */
 bool DiSEqCDevRotor::IsPositionKnown(void) const
 {
-    return m_last_pos_known;
+    return m_lastPosKnown;
 }
 
 uint_to_dbl_t DiSEqCDevRotor::GetPosMap(void) const
@@ -2058,7 +2015,8 @@ void DiSEqCDevRotor::SetPosMap(const uint_to_dbl_t &inv_posmap)
         m_posmap[*it] = it.key();
 }
 
-bool DiSEqCDevRotor::ExecuteRotor(const DiSEqCDevSettings&, const DTVMultiplex&,
+bool DiSEqCDevRotor::ExecuteRotor(const DiSEqCDevSettings& /*setttings*/,
+                                  const DTVMultiplex& /*tuning*/,
                                   double angle)
 {
     // determine stored position from position map
@@ -2077,7 +2035,8 @@ bool DiSEqCDevRotor::ExecuteRotor(const DiSEqCDevSettings&, const DTVMultiplex&,
                               m_repeat, 1, &index);
 }
 
-bool DiSEqCDevRotor::ExecuteUSALS(const DiSEqCDevSettings&, const DTVMultiplex&,
+bool DiSEqCDevRotor::ExecuteUSALS(const DiSEqCDevSettings& /*settings*/,
+                                  const DTVMultiplex& /*tuning*/,
                                   double angle)
 {
     double azimuth = CalculateAzimuth(angle);
@@ -2095,15 +2054,15 @@ bool DiSEqCDevRotor::ExecuteUSALS(const DiSEqCDevSettings&, const DTVMultiplex&,
                               m_repeat, 2, cmd);
 }
 
-double DiSEqCDevRotor::CalculateAzimuth(double angle) const
+double DiSEqCDevRotor::CalculateAzimuth(double angle)
 {
     // Azimuth Calculation references:
     // http://engr.nmsu.edu/~etti/3_2/3_2e.html
     // http://www.angelfire.com/trek/ismail/theory.html
 
     // Earth Station Latitude and Longitude in radians
-    double P  = gCoreContext->GetSetting("Latitude",  "").toFloat() * TO_RADS;
-    double Ue = gCoreContext->GetSetting("Longitude", "").toFloat() * TO_RADS;
+    double P  = gCoreContext->GetSetting("Latitude",  "").toDouble() * TO_RADS;
+    double Ue = gCoreContext->GetSetting("Longitude", "").toDouble() * TO_RADS;
 
     // Satellite Longitude in radians
     double Us = angle * TO_RADS;
@@ -2113,32 +2072,32 @@ double DiSEqCDevRotor::CalculateAzimuth(double angle) const
 
 double DiSEqCDevRotor::GetApproxAzimuth(void) const
 {
-    if (m_move_time == 0.0)
-        return m_last_azimuth;
+    if (m_moveTime == 0.0)
+        return m_lastAzimuth;
 
-    double change = m_desired_azimuth - m_last_azimuth;
-    return m_last_azimuth + (change * GetProgress());
+    double change = m_desiredAzimuth - m_lastAzimuth;
+    return m_lastAzimuth + (change * GetProgress());
 }
 
 void DiSEqCDevRotor::StartRotorPositionTracking(double azimuth)
 {
     // save time and angle of this command
-    m_desired_azimuth = azimuth;
+    m_desiredAzimuth = azimuth;
 
     // set last to approximate current position (or worst case if unknown)
-    if (m_last_pos_known || m_move_time > 0.0)
-        m_last_azimuth = GetApproxAzimuth();
+    if (m_lastPosKnown || m_moveTime > 0.0)
+        m_lastAzimuth = GetApproxAzimuth();
     else
-        m_last_azimuth = azimuth > 0.0 ? -75.0 : 75.0;
+        m_lastAzimuth = azimuth > 0.0 ? -75.0 : 75.0;
 
-    m_move_time = GetCurTimeFloating();
+    m_moveTime = GetCurTimeFloating();
 }
 
 void DiSEqCDevRotor::RotationComplete(void) const
 {
-    m_move_time = 0.0;
-    m_last_pos_known = true;
-    m_last_azimuth = m_desired_azimuth;
+    m_moveTime = 0.0;
+    m_lastPosKnown = true;
+    m_lastAzimuth = m_desiredAzimuth;
 }
 
 ////////////////////////////////////////
@@ -2147,27 +2106,16 @@ void DiSEqCDevRotor::RotationComplete(void) const
  *  \brief Unicable / SCR Class.
  */
 
-const DiSEqCDevDevice::TypeTable DiSEqCDevSCR::SCRPositionTable[3] =
+const DiSEqCDevDevice::TypeTable DiSEqCDevSCR::kSCRPositionTable[3] =
 {
     { "A",            kTypeScrPosA },
     { "B",            kTypeScrPosB },
-    { QString::null,  kTypeScrPosA },
+    { QString(),      kTypeScrPosA },
 };
-
-DiSEqCDevSCR::DiSEqCDevSCR(DiSEqCDevTree &tree, uint devid)
-    : DiSEqCDevDevice(tree, devid)
-    , m_scr_userband(0)
-    , m_scr_frequency(1400)
-    , m_scr_pin(-1)
-    , m_child(0)
-{
-    Reset();
-}
 
 DiSEqCDevSCR::~DiSEqCDevSCR()
 {
-    if (m_child)
-        delete m_child;
+    delete m_child;
 }
 
 void DiSEqCDevSCR::Reset(void)
@@ -2189,16 +2137,16 @@ bool DiSEqCDevSCR::Execute(const DiSEqCDevSettings &settings, const DTVMultiplex
     bool     high_band  = lnb->IsHighBand(tuning);
     bool     horizontal = lnb->IsHorizontal(tuning);
     uint32_t frequency  = lnb->GetIntermediateFrequency(settings, tuning);
-    uint t = (frequency / 1000 + m_scr_frequency + 2) / 4 - 350;
+    uint t = (frequency / 1000 + m_scrFrequency + 2) / 4 - 350;
 
     // retrieve position settings (value should be 0 or 1)
-    dvbdev_pos_t scr_position = (dvbdev_pos_t)int(settings.GetValue(GetDeviceID()));
+    auto scr_position = (dvbdev_pos_t)int(settings.GetValue(GetDeviceID()));
 
     // check parameters
-    if (m_scr_userband > 8)
+    if (m_scrUserband > 8)
     {
         LOG(VB_GENERAL, LOG_INFO, QString("SCR: Userband ID=%1 is out of standard range!")
-        .arg(m_scr_userband));
+        .arg(m_scrUserband));
     }
 
     if (t >= 1024)
@@ -2208,18 +2156,18 @@ bool DiSEqCDevSCR::Execute(const DiSEqCDevSettings &settings, const DTVMultiplex
     }
 
     LOG(VB_GENERAL, LOG_INFO, QString("SCR: Tuning to %1kHz, %2, %3 using UB=%4, FREQ=%5MHz, POS=%6%7")
-            .arg(tuning.frequency)
+            .arg(tuning.m_frequency)
             .arg(high_band ? "HiBand" : "LoBand")
             .arg(horizontal ? "H" : "V")
-            .arg(m_scr_userband)
-            .arg(m_scr_frequency)
+            .arg(m_scrUserband)
+            .arg(m_scrFrequency)
             .arg((scr_position) ? "B" : "A")
-            .arg((m_scr_pin >= 0 && m_scr_pin <= 255) ?
-                     QString(", PIN=%1").arg(m_scr_pin) : QString("")));
+            .arg((m_scrPin >= 0 && m_scrPin <= 255) ?
+                     QString(", PIN=%1").arg(m_scrPin) : QString("")));
 
     // build command
     unsigned char data[3];
-    data[0] = t >> 8 | m_scr_userband << 5;
+    data[0] = t >> 8 | m_scrUserband << 5;
     data[1] = t & 0x00FF;
 
     if (high_band)
@@ -2232,43 +2180,41 @@ bool DiSEqCDevSCR::Execute(const DiSEqCDevSettings &settings, const DTVMultiplex
         data[0] |= (1 << 4);
 
     // send command
-    if (m_scr_pin >= 0 && m_scr_pin <= 255)
+    if (m_scrPin >= 0 && m_scrPin <= 255)
     {
-        data[2] = m_scr_pin;
+        data[2] = m_scrPin;
         return SendCommand(DISEQC_CMD_ODU_MDU, m_repeat, 3, data);
-    } else {
-        return SendCommand(DISEQC_CMD_ODU, m_repeat, 2, data);
     }
+    return SendCommand(DISEQC_CMD_ODU, m_repeat, 2, data);
 }
 
 bool DiSEqCDevSCR::PowerOff(void) const
 {
     // check parameters
-    if (m_scr_userband > 8)
+    if (m_scrUserband > 8)
     {
         LOG(VB_GENERAL, LOG_INFO, QString("SCR: Userband ID=%1 is out of standard range!")
-        .arg(m_scr_userband));
+        .arg(m_scrUserband));
     }
 
     LOG(VB_CHANNEL, LOG_INFO, LOC + QString("SCR: Power off UB=%1%7")
-            .arg(m_scr_userband)
-            .arg((m_scr_pin >= 0 && m_scr_pin <= 255)
-                 ? QString(", PIN=%1").arg(m_scr_pin)
+            .arg(m_scrUserband)
+            .arg((m_scrPin >= 0 && m_scrPin <= 255)
+                 ? QString(", PIN=%1").arg(m_scrPin)
                  : QString("")));
 
     // build command
     unsigned char data[3];
-    data[0] = (uint8_t) (m_scr_userband << 5);
+    data[0] = (uint8_t) (m_scrUserband << 5);
     data[1] = 0x00;
 
     // send command
-    if (m_scr_pin >= 0 && m_scr_pin <= 255)
+    if (m_scrPin >= 0 && m_scrPin <= 255)
     {
-        data[2] = m_scr_pin;
+        data[2] = m_scrPin;
         return SendCommand(DISEQC_CMD_ODU_MDU, m_repeat, 3, data);
-    } else {
-        return SendCommand(DISEQC_CMD_ODU, m_repeat, 2, data);
     }
+    return SendCommand(DISEQC_CMD_ODU, m_repeat, 2, data);
 }
 
 bool DiSEqCDevSCR::SendCommand(uint cmd, uint repeats, uint data_len,
@@ -2299,7 +2245,7 @@ uint DiSEqCDevSCR::GetVoltage(const DiSEqCDevSettings &/*settings*/,
 
 uint32_t DiSEqCDevSCR::GetIntermediateFrequency(const uint32_t frequency) const
 {
-    uint t = (frequency / 1000 + m_scr_frequency + 2) / 4 - 350;
+    uint t = (frequency / 1000 + m_scrFrequency + 2) / 4 - 350;
     return ((t + 350) * 4) * 1000 - frequency;
 }
 
@@ -2319,11 +2265,11 @@ bool DiSEqCDevSCR::Load(void)
         MythDB::DBError("DiSEqCDevSCR::Load 1", query);
         return false;
     }
-    else if (query.next())
+    if (query.next())
     {
-        m_scr_userband  = query.value(0).toUInt();
-        m_scr_frequency = query.value(1).toUInt();
-        m_scr_pin       = query.value(2).toInt();
+        m_scrUserband   = query.value(0).toUInt();
+        m_scrFrequency  = query.value(1).toUInt();
+        m_scrPin        = query.value(2).toInt();
         m_repeat        = query.value(3).toUInt();
     }
 
@@ -2331,7 +2277,7 @@ bool DiSEqCDevSCR::Load(void)
     if (m_child)
     {
         delete m_child;
-        m_child = NULL;
+        m_child = nullptr;
     }
 
     query.prepare(
@@ -2345,7 +2291,7 @@ bool DiSEqCDevSCR::Load(void)
         MythDB::DBError("DiSEqCDevSCR::Load 2", query);
         return false;
     }
-    else if (query.next())
+    if (query.next())
     {
         uint child_dev_id = query.value(0).toUInt();
         SetChild(0, CreateById(m_tree, child_dev_id));
@@ -2392,9 +2338,9 @@ bool DiSEqCDevSCR::Store(void) const
 
     query.bindValue(":ORDINAL",   m_ordinal);
     query.bindValue(":DESC",      GetDescription());
-    query.bindValue(":USERBAND",  m_scr_userband);
-    query.bindValue(":FREQUENCY", m_scr_frequency);
-    query.bindValue(":PIN",       m_scr_pin);
+    query.bindValue(":USERBAND",  m_scrUserband);
+    query.bindValue(":FREQUENCY", m_scrFrequency);
+    query.bindValue(":PIN",       m_scrPin);
     query.bindValue(":REPEAT",    m_repeat);
 
     // update dev_id
@@ -2421,9 +2367,8 @@ bool DiSEqCDevSCR::SetChild(uint ordinal, DiSEqCDevDevice *device)
         return false;
 
     DiSEqCDevDevice *old_child = m_child;
-    m_child = NULL;
-    if (old_child)
-        delete old_child;
+    m_child = nullptr;
+    delete old_child;
 
     m_child = device;
     if (m_child)
@@ -2441,25 +2386,16 @@ bool DiSEqCDevSCR::SetChild(uint ordinal, DiSEqCDevDevice *device)
  *  \brief LNB Class.
  */
 
-const DiSEqCDevDevice::TypeTable DiSEqCDevLNB::LNBTypeTable[5] =
+const DiSEqCDevDevice::TypeTable DiSEqCDevLNB::kLNBTypeTable[5] =
 {
     { "fixed",        kTypeFixed                 },
     { "voltage",      kTypeVoltageControl        },
     { "voltage_tone", kTypeVoltageAndToneControl },
     { "bandstacked",  kTypeBandstacked           },
-    { QString::null,  kTypeVoltageAndToneControl },
+    { QString(),      kTypeVoltageAndToneControl },
 };
 
-DiSEqCDevLNB::DiSEqCDevLNB(DiSEqCDevTree &tree, uint devid)
-    : DiSEqCDevDevice(tree, devid),
-      m_type(kTypeVoltageAndToneControl), m_lof_switch(11700000),
-      m_lof_hi(10600000),       m_lof_lo(9750000),
-      m_pol_inv(false)
-{
-    Reset();
-}
-
-bool DiSEqCDevLNB::Execute(const DiSEqCDevSettings&, const DTVMultiplex &tuning)
+bool DiSEqCDevLNB::Execute(const DiSEqCDevSettings& /*settings*/, const DTVMultiplex &tuning)
 {
     // set tone for bandselect
     if (m_type == kTypeVoltageAndToneControl)
@@ -2468,7 +2404,7 @@ bool DiSEqCDevLNB::Execute(const DiSEqCDevSettings&, const DTVMultiplex &tuning)
     return true;
 }
 
-uint DiSEqCDevLNB::GetVoltage(const DiSEqCDevSettings&,
+uint DiSEqCDevLNB::GetVoltage(const DiSEqCDevSettings& /*settings*/,
                               const DTVMultiplex &tuning) const
 {
     uint voltage = SEC_VOLTAGE_18;
@@ -2499,13 +2435,13 @@ bool DiSEqCDevLNB::Load(void)
         MythDB::DBError("DiSEqCDevLNB::Load", query);
         return false;
     }
-    else if (query.next())
+    if (query.next())
     {
         m_type       = LNBTypeFromString(query.value(0).toString());
-        m_lof_switch = query.value(1).toInt();
-        m_lof_hi     = query.value(2).toInt();
-        m_lof_lo     = query.value(3).toInt();
-        m_pol_inv    = query.value(4).toUInt();
+        m_lofSwitch  = query.value(1).toInt();
+        m_lofHi      = query.value(2).toInt();
+        m_lofLo      = query.value(3).toInt();
+        m_polInv     = query.value(4).toBool();
         m_repeat     = query.value(5).toUInt();
     }
 
@@ -2556,10 +2492,10 @@ bool DiSEqCDevLNB::Store(void) const
     query.bindValue(":ORDINAL", m_ordinal);
     query.bindValue(":DESC",    GetDescription());
     query.bindValue(":TYPE",    type);
-    query.bindValue(":LOFSW",   m_lof_switch);
-    query.bindValue(":LOFLO",   m_lof_lo);
-    query.bindValue(":LOFHI",   m_lof_hi);
-    query.bindValue(":POLINV",  m_pol_inv);
+    query.bindValue(":LOFSW",   m_lofSwitch);
+    query.bindValue(":LOFLO",   m_lofLo);
+    query.bindValue(":LOFHI",   m_lofHi);
+    query.bindValue(":POLINV",  m_polInv);
     query.bindValue(":REPEAT",  m_repeat);
 
     // update dev_id
@@ -2587,7 +2523,7 @@ bool DiSEqCDevLNB::IsHighBand(const DTVMultiplex &tuning) const
     switch (m_type)
     {
         case kTypeVoltageAndToneControl:
-            return (tuning.frequency > m_lof_switch);
+            return (tuning.m_frequency > m_lofSwitch);
         case kTypeBandstacked:
             return IsHorizontal(tuning);
         default:
@@ -2604,25 +2540,21 @@ bool DiSEqCDevLNB::IsHighBand(const DTVMultiplex &tuning) const
  */
 bool DiSEqCDevLNB::IsHorizontal(const DTVMultiplex &tuning) const
 {
-    QString pol = tuning.polarity.toString().toLower();
+    QString pol = tuning.m_polarity.toString().toLower();
     return (pol == "h" || pol == "l") ^ IsPolarityInverted();
 }
 
-/** \fn DiSEqCDevLNB::GetIntermediateFrequency(const DiSEqCDevSettings&,
-                                               const DTVMultiplex&) const
- *  \brief Calculate proper intermediate frequency for the given settings
+/** \brief Calculate proper intermediate frequency for the given settings
  *         and tuning parameters.
  *  \param settings Configuration chain in effect.
  *  \param tuning Tuning parameters.
  *  \return Frequency for use with FE_SET_FRONTEND.
  */
 uint32_t DiSEqCDevLNB::GetIntermediateFrequency(
-    const DiSEqCDevSettings&, const DTVMultiplex &tuning) const
+    const DiSEqCDevSettings& /*settings*/, const DTVMultiplex &tuning) const
 {
-    (void) tuning;
-
-    uint64_t abs_freq = tuning.frequency;
-    uint lof = (IsHighBand(tuning)) ? m_lof_hi : m_lof_lo;
+    uint64_t abs_freq = tuning.m_frequency;
+    uint lof = (IsHighBand(tuning)) ? m_lofHi : m_lofLo;
 
     return (lof > abs_freq) ? (lof - abs_freq) : (abs_freq - lof);
 }

@@ -33,7 +33,7 @@ namespace
     template <typename T>
     void CopySecond(const T &src, QStringList &dest)
     {
-        for (typename T::const_iterator p = src.begin(); p != src.end(); ++p)
+        for (auto p = src.cbegin(); p != src.cend(); ++p)
         {
             dest.push_back((*p).second);
         }
@@ -41,12 +41,12 @@ namespace
 }
 
 template <>
-void CheckedSet(MythUIStateType *uiItem, const QString &state)
+void CheckedSet(MythUIStateType *uiItem, const QString &value)
 {
     if (uiItem)
     {
         uiItem->Reset();
-        uiItem->DisplayState(state);
+        uiItem->DisplayState(value);
     }
 }
 
@@ -56,12 +56,12 @@ void CheckedSet(MythUIType *container, const QString &itemName,
     if (container)
     {
         MythUIType *uit = container->GetChild(itemName);
-        MythUIText *tt = dynamic_cast<MythUIText *>(uit);
+        auto *tt = dynamic_cast<MythUIText *>(uit);
         if (tt)
             CheckedSet(tt, value);
         else
         {
-            MythUIStateType *st = dynamic_cast<MythUIStateType *>(uit);
+            auto *st = dynamic_cast<MythUIStateType *>(uit);
             CheckedSet(st, value);
         }
     }
@@ -77,13 +77,13 @@ void CheckedSet(MythUIImage *uiItem, const QString &filename)
     }
 }
 
-QStringList GetVideoDirsByHost(QString host)
+QStringList GetVideoDirsByHost(const QString& host)
 {
     QStringList tmp;
 
     QStringList tmp2 = StorageGroup::getGroupDirs("Videos", host);
-    for (QStringList::iterator p = tmp2.begin(); p != tmp2.end(); ++p)
-        tmp.append(*p);
+    foreach (auto & dir, tmp2)
+        tmp.append(dir);
 
     if (host.isEmpty())
     {
@@ -94,17 +94,15 @@ QStringList GetVideoDirsByHost(QString host)
         QStringList tmp3 = gCoreContext->GetSetting("VideoStartupDir",
                     DEFAULT_VIDEOSTARTUP_DIR).split(":", QString::SkipEmptyParts);
 #endif
-        for (QStringList::iterator p = tmp3.begin(); p != tmp3.end(); ++p)
+        foreach (auto & dir, tmp3)
         {
             bool matches = false;
-            QString newpath = *p;
+            QString newpath = dir;
             if (!newpath.endsWith("/"))
                 newpath.append("/");
 
-            for (QStringList::iterator q = tmp2.begin(); q != tmp2.end(); ++q)
+            foreach (auto comp, tmp2)
             {
-                QString comp = *q;
-
                 if (comp.endsWith(newpath))
                 {
                     matches = true;
@@ -112,7 +110,7 @@ QStringList GetVideoDirsByHost(QString host)
                 }
             }
             if (!matches)
-                tmp.append(QDir::cleanPath(*p));
+                tmp.append(QDir::cleanPath(dir));
         }
     }
 
@@ -156,14 +154,9 @@ QString GetDisplayUserRating(float userrating)
 QString GetDisplayLength(int length)
 {
     // The disambiguation string must be an empty string and not a 
-    // NULL to get extracted by the Qt tools.
-#if QT_VERSION < 0x050000
-    return QCoreApplication::translate("(Common)", "%n minute(s)", "", 
-               QCoreApplication::UnicodeUTF8, length);
-#else
+    // nullptr to get extracted by the Qt tools.
     return QCoreApplication::translate("(Common)", "%n minute(s)", "", 
                length);
-#endif
 }
 
 QString GetDisplayBrowse(bool browse)
@@ -171,11 +164,9 @@ QString GetDisplayBrowse(bool browse)
     QString ret;
 
     if (browse)
-        ret = QCoreApplication::translate("(Common)", 
-                                           "Yes");
+        ret = QCoreApplication::translate("(Common)", "Yes");
     else
-        ret = QCoreApplication::translate("(Common)", 
-                                           "No");
+        ret = QCoreApplication::translate("(Common)", "No");
 
     return ret;
 }
@@ -185,11 +176,9 @@ QString GetDisplayWatched(bool watched)
     QString ret;
 
     if (watched)
-        ret = QCoreApplication::translate("(Common)", 
-                                           "Yes");
+        ret = QCoreApplication::translate("(Common)", "Yes");
     else
-        ret = QCoreApplication::translate("(Common)", 
-                                           "No");
+        ret = QCoreApplication::translate("(Common)", "No");
 
     return ret;
 }
@@ -199,11 +188,15 @@ QString GetDisplayProcessed(bool processed)
     QString ret;
 
     if (processed)
+    {
         ret = QCoreApplication::translate("(VideoUtils)", 
                                            "Details Downloaded");
+    }
     else
+    {
         ret = QCoreApplication::translate("(VideoUtils)", 
                                            "Waiting for Detail Download");
+    }
 
     return ret;
 }

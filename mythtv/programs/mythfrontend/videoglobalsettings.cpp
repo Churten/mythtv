@@ -14,7 +14,7 @@ namespace
 // General Settings
 HostComboBoxSetting *VideoDefaultParentalLevel()
 {
-    HostComboBoxSetting *gc = new HostComboBoxSetting("VideoDefaultParentalLevel");
+    auto *gc = new HostComboBoxSetting("VideoDefaultParentalLevel");
 
     gc->setLabel(VideoGeneralSettings::tr("Starting Parental Level"));
 
@@ -43,7 +43,7 @@ const char *password_clue =
 
 HostTextEditSetting *VideoAdminPassword()
 {
-    HostTextEditSetting *gc = new HostTextEditSetting("VideoAdminPassword");
+    auto *gc = new HostTextEditSetting("VideoAdminPassword");
 
     gc->setLabel(VideoGeneralSettings::tr("Parental Level 4 PIN"));
 
@@ -58,7 +58,7 @@ HostTextEditSetting *VideoAdminPassword()
 
 HostTextEditSetting *VideoAdminPasswordThree()
 {
-    HostTextEditSetting *gc = new HostTextEditSetting("VideoAdminPasswordThree");
+    auto *gc = new HostTextEditSetting("VideoAdminPasswordThree");
 
     gc->setLabel(VideoGeneralSettings::tr("Parental Level 3 PIN"));
 
@@ -72,7 +72,7 @@ HostTextEditSetting *VideoAdminPasswordThree()
 
 HostTextEditSetting *VideoAdminPasswordTwo()
 {
-    HostTextEditSetting *gc = new HostTextEditSetting("VideoAdminPasswordTwo");
+    auto *gc = new HostTextEditSetting("VideoAdminPasswordTwo");
 
     gc->setLabel(VideoGeneralSettings::tr("Parental Level 2 PIN"));
 
@@ -86,7 +86,7 @@ HostTextEditSetting *VideoAdminPasswordTwo()
 
 HostCheckBoxSetting *VideoAggressivePC()
 {
-    HostCheckBoxSetting *gc = new HostCheckBoxSetting("VideoAggressivePC");
+    auto *gc = new HostCheckBoxSetting("VideoAggressivePC");
 
     gc->setLabel(VideoGeneralSettings::tr("Aggressive Parental Control"));
     gc->setValue(false);
@@ -101,7 +101,7 @@ HostCheckBoxSetting *VideoAggressivePC()
 
 HostTextEditSetting *VideoStartupDirectory()
 {
-    HostTextEditSetting *gc = new HostTextEditSetting("VideoStartupDir");
+    auto *gc = new HostTextEditSetting("VideoStartupDir");
 
     gc->setLabel(VideoGeneralSettings::tr("Directories that hold videos"));
 
@@ -117,7 +117,7 @@ HostTextEditSetting *VideoStartupDirectory()
 
 HostTextEditSetting *VideoArtworkDirectory()
 {
-    HostTextEditSetting *gc = new HostTextEditSetting("VideoArtworkDir");
+    auto *gc = new HostTextEditSetting("VideoArtworkDir");
 
     gc->setLabel(VideoGeneralSettings::tr("Directory that holds movie "
                                           "posters"));
@@ -133,7 +133,7 @@ HostTextEditSetting *VideoArtworkDirectory()
 
 HostTextEditSetting *VideoScreenshotDirectory()
 {
-    HostTextEditSetting *gc = new HostTextEditSetting("mythvideo.screenshotDir");
+    auto *gc = new HostTextEditSetting("mythvideo.screenshotDir");
 
     gc->setLabel(VideoGeneralSettings::tr("Directory that holds movie "
                                           "screenshots"));
@@ -149,7 +149,7 @@ HostTextEditSetting *VideoScreenshotDirectory()
 
 HostTextEditSetting *VideoBannerDirectory()
 {
-    HostTextEditSetting *gc = new HostTextEditSetting("mythvideo.bannerDir");
+    auto *gc = new HostTextEditSetting("mythvideo.bannerDir");
 
     gc->setLabel(VideoGeneralSettings::tr("Directory that holds movie/TV "
                                           "Banners"));
@@ -165,7 +165,7 @@ HostTextEditSetting *VideoBannerDirectory()
 
 HostTextEditSetting *VideoFanartDirectory()
 {
-    HostTextEditSetting *gc = new HostTextEditSetting("mythvideo.fanartDir");
+    auto *gc = new HostTextEditSetting("mythvideo.fanartDir");
 
     gc->setLabel(VideoGeneralSettings::tr("Directory that holds movie fanart"));
 
@@ -180,7 +180,7 @@ HostTextEditSetting *VideoFanartDirectory()
 
 HostTextEditSetting *TrailerDirectory()
 {
-    HostTextEditSetting *gc = new HostTextEditSetting("mythvideo.TrailersDir");
+    auto *gc = new HostTextEditSetting("mythvideo.TrailersDir");
 
     gc->setLabel(VideoGeneralSettings::tr("Directory that holds movie "
                                           "trailers"));
@@ -202,7 +202,7 @@ HostTextEditSetting *TrailerDirectory()
 
 HostComboBoxSetting *SetOnInsertDVD()
 {
-    HostComboBoxSetting *gc = new HostComboBoxSetting("DVDOnInsertDVD");
+    auto *gc = new HostComboBoxSetting("DVDOnInsertDVD");
 
     gc->setLabel(VideoGeneralSettings::tr("On DVD insertion"));
 
@@ -219,7 +219,7 @@ HostComboBoxSetting *SetOnInsertDVD()
 
 HostCheckBoxSetting *VideoTreeRemember()
 {
-    HostCheckBoxSetting *gc = new HostCheckBoxSetting("mythvideo.VideoTreeRemember");
+    auto *gc = new HostCheckBoxSetting("mythvideo.VideoTreeRemember");
 
     gc->setLabel(VideoGeneralSettings::tr("Video Tree remembers last selected "
                                           "position"));
@@ -231,52 +231,9 @@ HostCheckBoxSetting *VideoTreeRemember()
     return gc;
 }
 
-struct ConfigPage
-{
-    typedef std::vector<ConfigurationGroup *> PageList;
-
-  protected:
-    explicit ConfigPage(PageList &pl) : m_pl(pl)
-    {
-    }
-
-    void Add(ConfigurationGroup *page)
-    {
-        m_pl.push_back(page);
-    }
-
-  private:
-    ConfigPage(const ConfigPage &);
-    ConfigPage &operator=(const ConfigPage &);
-
-  private:
-    PageList &m_pl;
-};
-
-struct VConfigPage : public ConfigPage
-{
-    VConfigPage(PageList &pl, bool luselabel = true, bool luseframe  = true,
-                bool lzeroMargin = false, bool lzeroSpace = false) :
-        ConfigPage(pl)
-    {
-        m_vc_page = new VerticalConfigurationGroup(luselabel, luseframe,
-                                                   lzeroMargin, lzeroSpace);
-        Add(m_vc_page);
-    }
-
-    VerticalConfigurationGroup *operator->()
-    {
-        return m_vc_page;
-    }
-
-  private:
-    VerticalConfigurationGroup *m_vc_page;
-};
-
 HostCheckBoxSetting *RatingsToPL()
 {
-    HostCheckBoxSetting *r2pl =
-        new HostCheckBoxSetting("mythvideo.ParentalLevelFromRating");
+    auto *r2pl = new HostCheckBoxSetting("mythvideo.ParentalLevelFromRating");
 
     r2pl->setLabel(VideoGeneralSettings::tr("Enable automatic Parental "
                                             "Level from rating"));
@@ -288,7 +245,7 @@ HostCheckBoxSetting *RatingsToPL()
                                                "matching the rating "
                                                "below."));
 
-    typedef std::map<ParentalLevel::Level, QString> r2pl_map;
+    using r2pl_map = std::map<ParentalLevel::Level, QString>;
 
     r2pl_map r2pl_defaults;
 
@@ -306,7 +263,7 @@ HostCheckBoxSetting *RatingsToPL()
     for (ParentalLevel pl(ParentalLevel::plLowest);
          pl.GetLevel() <= ParentalLevel::plHigh && pl.good(); ++pl)
     {
-        HostTextEditSetting *hle = new HostTextEditSetting(QString("mythvideo.AutoR2PL%1")
+        auto *hle = new HostTextEditSetting(QString("mythvideo.AutoR2PL%1")
                                                            .arg(pl.GetLevel()));
 
         hle->setLabel(VideoGeneralSettings::tr("Level %1")
@@ -336,7 +293,6 @@ HostCheckBoxSetting *RatingsToPL()
 } // namespace
 
 VideoGeneralSettings::VideoGeneralSettings()
-    : GroupSetting()
 {
     setLabel(tr("General Settings"));
 
@@ -350,7 +306,7 @@ VideoGeneralSettings::VideoGeneralSettings()
     addChild(SetOnInsertDVD());
     addChild(VideoTreeRemember());
 
-    GroupSetting *pctrl = new GroupSetting();
+    auto *pctrl = new GroupSetting();
     pctrl->setLabel(tr("Parental Control Settings"));
     pctrl->addChild(VideoDefaultParentalLevel());
     pctrl->addChild(VideoAdminPassword());

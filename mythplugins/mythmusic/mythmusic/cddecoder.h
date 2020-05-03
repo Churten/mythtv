@@ -4,6 +4,7 @@
 #include "decoder.h"
 
 #include <mythconfig.h>
+#include "config.h"
 
 #if CONFIG_DARWIN
 #include <vector>
@@ -11,24 +12,29 @@ using std::vector;
 #endif
 
 #ifdef HAVE_CDIO
-# include <cdio/cdda.h>
-# include <cdio/paranoia.h>
+# ifdef HAVE_CDPARANOIA_SUBDIR
+#  include <cdio/paranoia/cdda.h>
+#  include <cdio/paranoia/paranoia.h>
+# else
+#  include <cdio/cdda.h>
+#  include <cdio/paranoia.h>
+# endif
 #endif
 
 class MusicMetadata;
 
 class CdDecoder : public Decoder
 {
-     Q_DECLARE_TR_FUNCTIONS(CdDecoder)
+     Q_DECLARE_TR_FUNCTIONS(CdDecoder);
 
   public:
-    CdDecoder(const QString &file, DecoderFactory *, AudioOutput *);
-    virtual ~CdDecoder();
+    CdDecoder(const QString &file, DecoderFactory *d, AudioOutput *o);
+    ~CdDecoder() override;
 
     // Decoder implementation
-    virtual bool initialize();
-    virtual void seek(double);
-    virtual void stop();
+    bool initialize() override; // Decoder
+    void seek(double pos) override; // Decoder
+    void stop() override; // Decoder
 
     MusicMetadata *getMetadata(void);
 
@@ -47,15 +53,15 @@ class CdDecoder : public Decoder
     void setCDSpeed(int speed);
 
   private:
-    void run();
+    void run() override; // MThread
 
     void writeBlock();
     void deinit();
 
-    volatile bool m_inited;
-    volatile bool m_user_stop;
+    volatile bool      m_inited      {false};
+    volatile bool      m_userStop    {false};
 
-    QString m_devicename;
+    QString            m_deviceName;
 
 #if CONFIG_DARWIN
     void lookupCDDB(const QString &hexID, uint tracks);
@@ -69,24 +75,29 @@ class CdDecoder : public Decoder
 #endif
     static QMutex& getCdioMutex();
 
-    DecoderEvent::Type m_stat;
-    char *m_output_buf;
-    std::size_t m_output_at;
+    DecoderEvent::Type m_stat        {DecoderEvent::Error};
+    char              *m_outputBuf   {nullptr};
+    std::size_t        m_outputAt    {0};
 
-    std::size_t m_bks, m_bksFrames, m_decodeBytes;
-    bool m_finish;
-    long m_freq, m_bitrate;
-    int m_chan;
-    double m_seekTime;
+    std::size_t        m_bks         {0};
+    std::size_t        m_bksFrames   {0};
+    std::size_t        m_decodeBytes {0};
+    bool               m_finish      {false};
+    long               m_freq        {0};
+    long               m_bitrate     {0};
+    int                m_chan        {0};
+    double             m_seekTime    {-1.0};
 
-    int m_settracknum;
-    int m_tracknum;
+    int                m_setTrackNum {-1};
+    int                m_trackNum    {0};
 
 #ifdef HAVE_CDIO
-    CdIo_t *m_cdio;
-    cdrom_drive_t *m_device;
-    cdrom_paranoia_t *m_paranoia;
-    lsn_t m_start, m_end, m_curpos;
+    CdIo_t            *m_cdio        {nullptr};
+    cdrom_drive_t     *m_device      {nullptr};
+    cdrom_paranoia_t  *m_paranoia    {nullptr};
+    lsn_t              m_start       {CDIO_INVALID_LSN};
+    lsn_t              m_end         {CDIO_INVALID_LSN};
+    lsn_t              m_curPos      {CDIO_INVALID_LSN};
 #endif
 };
 

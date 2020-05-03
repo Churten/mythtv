@@ -29,10 +29,10 @@ class WeatherScreen : public MythScreenType
 
   public:
     WeatherScreen(MythScreenStack *parent, ScreenListInfo *screenDefn, int id);
-    ~WeatherScreen();
+    ~WeatherScreen() override = default;
 
-    bool Create(void);
-    bool keyPressEvent(QKeyEvent *);
+    bool Create(void) override; // MythScreenType
+    bool keyPressEvent(QKeyEvent *event) override; // MythScreenType
 
     static WeatherScreen *loadScreen(MythScreenStack *parent,
                                          ScreenListInfo *screenDefn, int id);
@@ -52,12 +52,12 @@ class WeatherScreen : public MythScreenType
     void screenReady(WeatherScreen *);
 
   public slots:
-    virtual void newData(QString loc, units_t units, DataMap data);
+    virtual void newData(const QString& /*loc*/, units_t /*units*/, DataMap data);
 
   protected:
-    units_t m_units;
-    ScreenListInfo *m_screenDefn;
-    QString m_name;
+    units_t         m_units      {SI_UNITS};
+    ScreenListInfo *m_screenDefn {nullptr};
+    QString         m_name;
 
   protected:
     virtual QString prepareDataItem(const QString &key, const QString &value);
@@ -69,9 +69,9 @@ class WeatherScreen : public MythScreenType
   private:
     QMap<QString, QString> m_dataValueMap;
 
-    bool m_inuse;
-    bool m_prepared;
-    int m_id;
+    bool m_inuse    {false};
+    bool m_prepared {false};
+    int  m_id;
 };
 
 #endif

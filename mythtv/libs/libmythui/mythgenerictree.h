@@ -1,29 +1,32 @@
 #ifndef MYTHGENERICTREE_H_
 #define MYTHGENERICTREE_H_
 
+#include <utility>
+
+#include <QHash>
+#include <QList>
+#include <QMap>
+#include <QMetaType>
 #include <QString>
 #include <QStringList>
-#include <QList>
-#include <QVector>
-#include <QMetaType>
 #include <QVariant>
-#include <QMap>
-#include <QHash>
+#include <QVector>
 
 #include "mythuiexp.h"
-
 #include "mythuibuttonlist.h"
 
 class SortableMythGenericTreeList;
 
 class MUI_PUBLIC MythGenericTree
 {
-    typedef QVector<int> IntVector;
+    using IntVector = QVector<int>;
 
   public:
-    MythGenericTree(const QString &a_string = "", int an_int = 0,
+    explicit MythGenericTree(const QString &a_string = "", int an_int = 0,
                     bool selectable_flag = false);
     virtual ~MythGenericTree();
+
+    void ensureSortFields(void);
 
     MythGenericTree *addNode(const QString &a_string, int an_int = 0,
                              bool selectable_flag = false, bool visible = true);
@@ -39,7 +42,7 @@ class MUI_PUBLIC MythGenericTree
     void deleteNode(MythGenericTree *child);
 
     MythGenericTree *findLeaf();
-    MythGenericTree* findNode(QList<int> route_of_branches, int depth=-1);
+    MythGenericTree* findNode(QList<int> route_of_branches);
 
     MythGenericTree *nextSibling(int number_down);
     MythGenericTree *prevSibling(int number_up);
@@ -81,8 +84,8 @@ class MUI_PUBLIC MythGenericTree
     void DisplayStateFromMap(const InfoMap &infoMap);
     QString GetState(const QString &name="") const;
 
-    void SetData(QVariant data) { m_data = data; }
-    const QVariant GetData(void) const { return m_data; }
+    void SetData(QVariant data) { m_data = std::move(data); }
+    QVariant GetData(void) const { return m_data; }
 
     int childCount(void) const;
     uint visibleChildCount() const { return m_visibleCount; }
@@ -119,17 +122,17 @@ class MUI_PUBLIC MythGenericTree
     QMap<QString, TextProperties> m_strings;
     InfoMap m_imageFilenames;
     InfoMap m_states;
-    int m_int;
-    QVariant m_data;
-    uint m_visibleCount;
+    int      m_int                          {0};
+    QVariant m_data                         {0};
+    uint     m_visibleCount                 {0};
 
-    SortableMythGenericTreeList *m_subnodes;
+    SortableMythGenericTreeList *m_subnodes {nullptr};
 
-    MythGenericTree *m_selectedSubnode;
-    MythGenericTree *m_parent;
+    MythGenericTree *m_selectedSubnode      {nullptr};
+    MythGenericTree *m_parent               {nullptr};
 
-    bool m_selectable;
-    bool m_visible;
+    bool m_selectable                       {false};
+    bool m_visible                          {true};
 };
 
 Q_DECLARE_METATYPE(MythGenericTree*)

@@ -16,10 +16,10 @@ struct ExitPrompterPrivate
 {
     ExitPrompterPrivate()
     {
-        stk = GetMythMainWindow()->GetStack("popup stack");
+        m_stk = GetMythMainWindow()->GetStack("popup stack");
     }
 
-    MythScreenStack *stk;
+    MythScreenStack *m_stk;
 };
 
 ExitPrompter::ExitPrompter()
@@ -41,9 +41,7 @@ void ExitPrompter::masterPromptExit()
                            " master backend to populate the"
                            " database with guide information.");
 
-        MythConfirmationDialog *dia = new MythConfirmationDialog(m_d->stk,
-                                                                 label,
-                                                                 false);
+        auto *dia = new MythConfirmationDialog(m_d->m_stk, label, false);
         if (!dia->Create())
         {
             LOG(VB_GENERAL, LOG_ERR, "Can't create fill DB prompt?");
@@ -53,7 +51,7 @@ void ExitPrompter::masterPromptExit()
         else
         {
             dia->SetReturnEvent(this, "mythfillprompt");
-            m_d->stk->AddScreen(dia);
+            m_d->m_stk->AddScreen(dia);
         }
     }
     else
@@ -69,15 +67,16 @@ void ExitPrompter::handleExit()
     {
         problems.push_back(QString());
         problems.push_back(tr("Do you want to go back and fix this(these) "
-                              "problem(s)?", 0, problems.size()));
+                              "problem(s)?", nullptr, problems.size()));
 
-        MythDialogBox *dia = new MythDialogBox(problems.join("\n"),
-                                                m_d->stk, "exit prompt");
+        auto *dia = new MythDialogBox(problems.join("\n"),
+                                      m_d->m_stk, "exit prompt");
         if (!dia->Create())
         {
             LOG(VB_GENERAL, LOG_ERR, "Can't create Exit Prompt dialog?");
             delete dia;
             quit();
+            return;
         }
 
         dia->SetReturnEvent(this, "problemprompt");
@@ -86,7 +85,7 @@ void ExitPrompter::handleExit()
         dia->AddButton(tr("No, I know what I am doing"),
                 SLOT(masterPromptExit()));
                 
-        m_d->stk->AddScreen(dia);
+        m_d->m_stk->AddScreen(dia);
     }
     else
         masterPromptExit();
@@ -96,7 +95,7 @@ void ExitPrompter::customEvent(QEvent *event)
 {
     if (event->type() == DialogCompletionEvent::kEventType)
     {
-        DialogCompletionEvent *dce = (DialogCompletionEvent*)(event);
+        auto *dce = (DialogCompletionEvent*)(event);
 
         QString resultid= dce->GetId();
         int buttonnum = dce->GetResult();
@@ -134,7 +133,7 @@ void ExitPrompter::quit()
     else
     {
         // No need to run this if the backend has just restarted
-        if (gCoreContext->BackendIsRunning())
+        if (MythCoreContext::BackendIsRunning())
         {
             gCoreContext->SendMessage("CLEAR_SETTINGS_CACHE");
         }

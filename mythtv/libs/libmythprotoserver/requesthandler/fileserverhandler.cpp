@@ -3,9 +3,10 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include <QReadLocker>
 #include <QString>
 #include <QWriteLocker>
-#include <QReadLocker>
+#include <utility>
 
 #include "mythmiscutil.h"
 #include "mythdb.h"
@@ -13,6 +14,7 @@
 #include "mythsocket.h"
 #include "mythlogging.h"
 #include "programinfo.h"
+#include "recordinginfo.h"
 #include "storagegroup.h"
 #include "mythcorecontext.h"
 #include "mythdownloadmanager.h"
@@ -22,7 +24,7 @@
 #include "requesthandler/fileserverhandler.h"
 #include "requesthandler/fileserverutil.h"
 
-DeleteThread *deletethread = NULL;
+DeleteThread *deletethread = nullptr;
 
 void FileServerHandler::connectionClosed(MythSocket *socket)
 {
@@ -59,10 +61,10 @@ void FileServerHandler::connectionClosed(MythSocket *socket)
     }
 }
 
-QString FileServerHandler::LocalFilePath(const QUrl &url,
+QString FileServerHandler::LocalFilePath(const QString &path,
                                            const QString &wantgroup)
 {
-    QString lpath = url.path();
+    QString lpath = QString(path);
 
     if (lpath.section('/', -2, -2) == "channels")
     {
@@ -73,7 +75,8 @@ QString FileServerHandler::LocalFilePath(const QUrl &url,
         lpath = "";
 
         MSqlQuery query(MSqlQuery::InitCon());
-        query.prepare("SELECT icon FROM channel WHERE icon LIKE :FILENAME ;");
+        query.prepare("SELECT icon FROM channel "
+                      "WHERE icon LIKE :FILENAME ;");
         query.bindValue(":FILENAME", QString("%/") + file);
 
         if (query.exec() && query.next())
@@ -121,7 +124,7 @@ QString FileServerHandler::LocalFilePath(const QUrl &url,
             if (!wantgroup.isEmpty())
             {
                 sgroup.Init(wantgroup);
-                lpath = url.toString();
+                lpath = QString(path);
             }
             else
             {
@@ -135,7 +138,7 @@ QString FileServerHandler::LocalFilePath(const QUrl &url,
                 LOG(VB_FILE, LOG_INFO,
                         QString("LocalFilePath(%1 '%2'), found through "
                                 "exhaustive search at '%3'")
-                            .arg(url.toString()).arg(opath).arg(lpath));
+                            .arg(path).arg(opath).arg(lpath));
             }
             else
             {
@@ -157,13 +160,13 @@ QString FileServerHandler::LocalFilePath(const QUrl &url,
 
 void FileServerHandler::RunDeleteThread(void)
 {
-    if (deletethread != NULL)
+    if (deletethread != nullptr)
     {
 		if (deletethread->isRunning())
 			return;
 
         delete deletethread;
-        deletethread = NULL;
+        deletethread = nullptr;
     }
 
     deletethread = new DeleteThread();
@@ -177,8 +180,7 @@ bool FileServerHandler::HandleAnnounce(MythSocket *socket,
     {
         if (slist.size() >= 3)
         {
-            SocketHandler *handler =
-                new SocketHandler(socket, m_parent, commands[2]);
+            auto *handler = new SocketHandler(socket, m_parent, commands[2]);
 
             handler->BlockShutdown(true);
             handler->AllowStandardEvents(true);
@@ -206,7 +208,7 @@ bool FileServerHandler::HandleAnnounce(MythSocket *socket,
     if ((commands.size() < 3) || (commands.size() > 6))
         return false;
 
-    FileTransfer *ft    = NULL;
+    FileTransfer *ft    = nullptr;
     QString hostname    = "";
     QString filename    = "";
     bool writemode      = false;
@@ -216,16 +218,19 @@ bool FileServerHandler::HandleAnnounce(MythSocket *socket,
     {
       case 6:
         timeout_ms      = commands[5].toInt();
+        [[clang::fallthrough]];
       case 5:
-        usereadahead    = commands[4].toInt();
+        usereadahead    = (commands[4].toInt() != 0);
+        [[clang::fallthrough]];
       case 4:
-        writemode       = commands[3].toInt();
+        writemode       = (commands[3].toInt() != 0);
+        [[clang::fallthrough]];
       default:
         hostname        = commands[2];
     }
 
     QStringList::const_iterator it = slist.begin();
-    QUrl qurl           = *(++it);
+    QString path        = *(++it);
     QString wantgroup   = *(++it);
 
     QStringList checkfiles;
@@ -255,34 +260,33 @@ bool FileServerHandler::HandleAnnounce(MythSocket *socket,
             return true;
         }
 
-        QString basename = qurl.path();
-        if (basename.isEmpty())
+        if (path.isEmpty())
         {
             LOG(VB_GENERAL, LOG_ERR, QString("FileTransfer write "
-                    "filename is empty in url '%1'.")
-                    .arg(qurl.toString()));
+                    "filename is empty in path '%1'.")
+                    .arg(path));
 
             slist << "ERROR" << "filetransfer_filename_empty";
             socket->WriteStringList(slist);
             return true;
         }
 
-        if ((basename.contains("/../")) ||
-            (basename.startsWith("../")))
+        if ((path.contains("/../")) ||
+            (path.startsWith("../")))
         {
             LOG(VB_GENERAL, LOG_ERR, QString("FileTransfer write "
                     "filename '%1' does not pass sanity checks.")
-                    .arg(basename));
+                    .arg(path));
 
             slist << "ERROR" << "filetransfer_filename_dangerous";
             socket->WriteStringList(slist);
             return true;
         }
 
-        filename = dir + "/" + basename;
+        filename = dir + "/" + path;
     }
     else
-        filename = LocalFilePath(qurl, wantgroup);
+        filename = LocalFilePath(path, wantgroup);
 
     QFileInfo finfo(filename);
     if (finfo.isDir())
@@ -331,7 +335,7 @@ bool FileServerHandler::HandleAnnounce(MythSocket *socket,
           << QString::number(socket->GetSocketDescriptor())
           << QString::number(ft->GetFileSize());
 
-    if (checkfiles.size())
+    if (!checkfiles.empty())
     {
         QFileInfo fi(filename);
         QDir dir = fi.absoluteDir();
@@ -345,7 +349,7 @@ bool FileServerHandler::HandleAnnounce(MythSocket *socket,
 
     socket->WriteStringList(slist);
     m_parent->AddSocketHandler(ft);
-    ft->DecrRef(); ft = NULL;
+    ft->DecrRef(); ft = nullptr;
 
     return true;
 }
@@ -360,7 +364,7 @@ void FileServerHandler::connectionAnnounced(MythSocket *socket,
         if (slist.size() >= 3)
         {
             SocketHandler *handler = m_parent->GetConnectionBySocket(socket);
-            if (handler == NULL)
+            if (handler == nullptr)
                 return;
 
             QWriteLocker wlock(&m_fsLock);
@@ -384,6 +388,8 @@ bool FileServerHandler::HandleQuery(SocketHandler *socket, QStringList &commands
         handled = HandleQueryFreeSpaceList(socket);
     else if (command == "QUERY_FREE_SPACE_SUMMARY")
         handled = HandleQueryFreeSpaceSummary(socket);
+    else if (command == "QUERY_CHECKFILE")
+        handled = HandleQueryCheckFile(socket, slist);
     else if (command == "QUERY_FILE_EXISTS")
         handled = HandleQueryFileExists(socket, slist);
     else if (command == "QUERY_FILE_HASH")
@@ -558,7 +564,35 @@ QList<FileSystemInfo> FileServerHandler::QueryAllFileSystems(void)
 /**
  * \addtogroup myth_network_protocol
  * \par
- * QUERY_FILE_EXISTS \e filename \e storagegroup
+ * QUERY_CHECKFILE \e filename \e recordinginfo
+ */
+bool FileServerHandler::HandleQueryCheckFile(SocketHandler *socket,
+                                             QStringList &slist)
+{
+    QStringList::const_iterator it = slist.begin() + 2;
+    RecordingInfo recinfo(it, slist.end());
+
+    bool exists = false;
+
+    QString pburl;
+    if (recinfo.HasPathname())
+    {
+        pburl = GetPlaybackURL(&recinfo);
+        exists = QFileInfo(pburl).exists();
+        if (!exists)
+            pburl.clear();
+    }
+
+    QStringList res(QString::number(static_cast<int>(exists)));
+    res << pburl;
+    socket->WriteStringList(res);
+    return true;
+}
+
+
+/**
+ * \addtogroup myth_network_protocol
+ * \par QUERY_FILE_EXISTS \e filename \e storagegroup
  */
 bool FileServerHandler::HandleQueryFileExists(SocketHandler *socket,
                                               QStringList &slist)
@@ -596,7 +630,7 @@ bool FileServerHandler::HandleQueryFileExists(SocketHandler *socket,
             << fullname;
 
         // TODO: convert me to QFile
-        struct stat fileinfo;
+        struct stat fileinfo {};
         if (stat(fullname.toLocal8Bit().constData(), &fileinfo) >= 0)
         {
             res << QString::number(fileinfo.st_dev)
@@ -642,9 +676,11 @@ bool FileServerHandler::HandleQueryFileHash(SocketHandler *socket,
       case 4:
         if (!slist[3].isEmpty())
             hostname = slist[3];
+        [[clang::fallthrough]];
       case 3:
         if (!slist[2].isEmpty())
             storageGroup = slist[2];
+        [[clang::fallthrough]];
       case 2:
         filename = slist[1];
         if (filename.isEmpty() ||
@@ -702,13 +738,13 @@ bool FileServerHandler::HandleDeleteFile(SocketHandler *socket,
     return HandleDeleteFile(socket, slist[1], slist[2]);
 }
 
-bool FileServerHandler::DeleteFile(QString filename, QString storagegroup)
+bool FileServerHandler::DeleteFile(const QString& filename, const QString& storagegroup)
 {
-    return HandleDeleteFile( (SocketHandler *)NULL, filename, storagegroup);
+    return HandleDeleteFile(nullptr, filename, storagegroup);
 }
 
 bool FileServerHandler::HandleDeleteFile(SocketHandler *socket,
-                                QString filename, QString storagegroup)
+                                const QString& filename, const QString& storagegroup)
 {
     StorageGroup sgroup(storagegroup, "", false);
     QStringList res;
@@ -782,7 +818,7 @@ bool FileServerHandler::HandleGetFileList(SocketHandler *socket,
 
     bool fileNamesOnly = false;
     if (slist.size() == 5)
-        fileNamesOnly = slist[4].toInt();
+        fileNamesOnly = (slist[4].toInt() != 0);
     else if (slist.size() != 4)
     {
         LOG(VB_GENERAL, LOG_ERR, QString("Invalid Request. %1")
@@ -817,7 +853,7 @@ bool FileServerHandler::HandleGetFileList(SocketHandler *socket,
     else
     {
         // handle request on remote server
-        SocketHandler *remsock = NULL;
+        SocketHandler *remsock = nullptr;
         {
             QReadLocker rlock(&m_fsLock);
             if (m_fsMap.contains(wantHost))
@@ -881,7 +917,7 @@ bool FileServerHandler::HandleFileQuery(SocketHandler *socket,
     else
     {
         // handle request on remote server
-        SocketHandler *remsock = NULL;
+        SocketHandler *remsock = nullptr;
         {
             QReadLocker rlock(&m_fsLock);
             if (m_fsMap.contains(wantHost))
@@ -918,7 +954,7 @@ bool FileServerHandler::HandleQueryFileTransfer(SocketHandler *socket,
 
     QStringList res;
     int recnum = commands[1].toInt();
-    FileTransfer *ft;
+    FileTransfer *ft = nullptr;
 
     {
         QReadLocker rlock(&m_ftLock);
@@ -1005,7 +1041,7 @@ bool FileServerHandler::HandleQueryFileTransfer(SocketHandler *socket,
         }
         else
         {
-            bool fast = slist[2].toInt();
+            bool fast = slist[2].toInt() != 0;
             ft->SetTimeout(fast);
             res << "OK";
         }

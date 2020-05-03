@@ -1,6 +1,6 @@
 #include "icringbuffer.h"
 
-#include <stdio.h> // SEEK_SET
+#include <cstdio> // SEEK_SET
 
 #include <QScopedPointer>
 #include <QWriteLocker>
@@ -13,10 +13,10 @@
 
 
 ICRingBuffer::ICRingBuffer(const QString &url, RingBuffer *parent)
-  : RingBuffer(kRingBufferType), m_stream(NULL), m_parent(parent)
+  : RingBuffer(kRingBufferType), m_parent(parent)
 {
-    startreadahead = true;
-    OpenFile(url);
+    m_startReadAhead = true;
+    ICRingBuffer::OpenFile(url);
 }
 
 ICRingBuffer::~ICRingBuffer()
@@ -24,10 +24,10 @@ ICRingBuffer::~ICRingBuffer()
     KillReadAheadThread();
 
     delete m_stream;
-    m_stream = NULL;
+    m_stream = nullptr;
 
     delete m_parent;
-    m_parent = NULL;
+    m_parent = nullptr;
 }
 
 bool ICRingBuffer::IsOpen(void) const
@@ -35,7 +35,15 @@ bool ICRingBuffer::IsOpen(void) const
     return m_stream ? m_stream->IsOpen() : false;
 }
 
-bool ICRingBuffer::OpenFile(const QString &url, uint retry_ms)
+/** \fn ICRingBuffer::OpenFile(const QString &, uint)
+ *  \brief Opens a BBC NetStream for reading.
+ *
+ *  \param url         Url of the stream to read.
+ *  \param retry_ms    Ignored. This value is part of the API
+ *                     inherited from the parent class.
+ *  \return Returns true if the stream was opened.
+ */
+bool ICRingBuffer::OpenFile(const QString &url, uint /*retry_ms*/)
 {
     if (!NetStream::IsSupported(url))
     {
@@ -59,10 +67,10 @@ bool ICRingBuffer::OpenFile(const QString &url, uint retry_ms)
     if (m_parent)
         m_parent->Pause();
 
-    QWriteLocker locker(&rwlock);
+    QWriteLocker locker(&m_rwLock);
 
-    safefilename = url;
-    filename = url;
+    m_safeFilename = url;
+    m_filename = url;
 
     delete m_stream;
     m_stream = stream.take();
@@ -71,7 +79,7 @@ bool ICRingBuffer::OpenFile(const QString &url, uint retry_ms)
     // streams (e.g. radio @ 64Kbps) such that fill_min bytes are received
     // in a reasonable time period to enable decoders to peek the first few KB
     // to determine type & settings.
-    rawbitrate = 128; // remotefile
+    m_rawBitrate = 128; // remotefile
     CalcReadAheadThresh();
 
     locker.unlock();
@@ -91,18 +99,18 @@ long long ICRingBuffer::SeekInternal(long long pos, int whence)
     if (!m_stream)
         return -1;
 
-    poslock.lockForWrite();
+    m_posLock.lockForWrite();
 
-    long long ret;
+    long long ret = 0;
 
     // Optimize no-op seeks
-    if (readaheadrunning &&
-        ((whence == SEEK_SET && pos == readpos) ||
+    if (m_readAheadRunning &&
+        ((whence == SEEK_SET && pos == m_readPos) ||
          (whence == SEEK_CUR && pos == 0)))
     {
-        ret = readpos;
+        ret = m_readPos;
 
-        poslock.unlock();
+        m_posLock.unlock();
 
         return ret;
     }
@@ -126,27 +134,27 @@ long long ICRingBuffer::SeekInternal(long long pos, int whence)
     ret = m_stream->Seek(pos);
     if (ret >= 0)
     {
-        readpos = ret;
+        m_readPos = ret;
 
-        ignorereadpos = -1;
+        m_ignoreReadPos = -1;
 
-        if (readaheadrunning)
-            ResetReadAhead(readpos);
+        if (m_readAheadRunning)
+            ResetReadAhead(m_readPos);
 
-        readAdjust = 0;
+        m_readAdjust = 0;
     }
 
 err:
-    poslock.unlock();
+    m_posLock.unlock();
 
-    generalWait.wakeAll();
+    m_generalWait.wakeAll();
 
     return ret;
 }
 
 int ICRingBuffer::safe_read(void *data, uint sz)
 {
-    return m_stream ? m_stream->safe_read(data, sz, 1000) : (ateof = true, 0);
+    return m_stream ? m_stream->safe_read(data, sz, 1000) : (m_ateof = true, 0);
 }
 
 long long ICRingBuffer::GetRealFileSizeInternal(void) const
@@ -160,7 +168,7 @@ RingBuffer *ICRingBuffer::Take()
     RingBuffer *parent = m_parent;
     if (parent && IsOpen())
         parent->Unpause();
-    m_parent = 0;
+    m_parent = nullptr;
     return parent;
 }
 

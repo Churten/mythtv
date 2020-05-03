@@ -18,7 +18,8 @@ bool SourceUtil::HasDigitalChannel(uint sourceid)
     query.prepare(
         "SELECT mplexid, atsc_minor_chan, serviceid "
         "FROM channel "
-        "WHERE sourceid = :SOURCEID");
+        "WHERE deleted IS NULL AND "
+        "      sourceid = :SOURCEID");
     query.bindValue(":SOURCEID", sourceid);
 
     if (!query.exec())
@@ -54,11 +55,11 @@ QString SourceUtil::GetSourceName(uint sourceid)
     if (!query.exec())
     {
         MythDB::DBError("SourceUtil::GetSourceName()", query);
-        return QString::null;
+        return QString();
     }
-    else if (!query.next())
+    if (!query.next())
     {
-        return QString::null;
+        return QString();
     }
 
     return query.value(0).toString();
@@ -69,7 +70,8 @@ QString SourceUtil::GetChannelSeparator(uint sourceid)
     MSqlQuery query(MSqlQuery::InitCon());
     query.prepare("SELECT channum "
                   "FROM channel "
-                  "WHERE sourceid = :SOURCEID");
+                  "WHERE deleted IS NULL AND "
+                  "      sourceid = :SOURCEID");
     query.bindValue(":SOURCEID", sourceid);
 
     if (query.exec() && query.isActive() && query.size() > 0)
@@ -87,13 +89,13 @@ QString SourceUtil::GetChannelSeparator(uint sourceid)
         }
         QString sep = "_";
         uint max = counts["_"];
-        static const char *spacers[6] = { "", "-", "#", ".", "0", NULL };
-        for (uint i=0; (spacers[i] != NULL); ++i)
+        static const char *s_spacers[6] = { "", "-", "#", ".", "0", nullptr };
+        for (uint i=0; (s_spacers[i] != nullptr); ++i)
         {
-            if (counts[spacers[i]] > max)
+            if (counts[s_spacers[i]] > max)
             {
-                max = counts[spacers[i]];
-                sep = spacers[i];
+                max = counts[s_spacers[i]];
+                sep = s_spacers[i];
             }
         }
         return sep;
@@ -111,7 +113,8 @@ uint SourceUtil::GetChannelCount(uint sourceid)
     MSqlQuery query(MSqlQuery::InitCon());
     query.prepare("SELECT sum(1) "
                   "FROM channel "
-                  "WHERE sourceid = :SOURCEID");
+                  "WHERE deleted IS NULL AND "
+                  "      sourceid = :SOURCEID");
     query.bindValue(":SOURCEID", sourceid);
     if (query.exec() && query.isActive() && query.next())
         return query.value(0).toUInt();
@@ -209,19 +212,18 @@ bool SourceUtil::IsProperlyConnected(uint sourceid, bool strict)
 {
     QStringList types = get_inputtypes(sourceid);
     QMap<QString,uint> counts;
-    QStringList::const_iterator it = types.begin();
-    for (; it != types.end(); ++it)
+    foreach (const auto & type, types)
     {
-        counts[*it]++;
+        counts[type]++;
 
-        counts[CardUtil::IsEncoder(*it)    ? "ENCODER" : "NOT_ENCODER"]++;
-        counts[CardUtil::IsUnscanable(*it) ? "NO_SCAN" : "SCAN"]++;
+        counts[CardUtil::IsEncoder(type)    ? "ENCODER" : "NOT_ENCODER"]++;
+        counts[CardUtil::IsUnscanable(type) ? "NO_SCAN" : "SCAN"]++;
 
-        if (CardUtil::IsTuningAnalog(*it))
+        if (CardUtil::IsTuningAnalog(type))
             counts["ANALOG_TUNING"]++;
-        else if (CardUtil::IsTuningDigital(*it))
+        else if (CardUtil::IsTuningDigital(type))
             counts["DIGITAL_TUNING"]++;
-        else if (CardUtil::IsTuningVirtual(*it))
+        else if (CardUtil::IsTuningVirtual(type))
             counts["VIRTUAL_TUNING"]++;
     }
 
@@ -283,9 +285,8 @@ bool SourceUtil::IsEncoder(uint sourceid, bool strict)
     bool encoder = true;
 
     QStringList types = get_inputtypes(sourceid);
-    QStringList::const_iterator it = types.begin();
-    for (; it != types.end(); ++it)
-        encoder &= CardUtil::IsEncoder(*it);
+    foreach (const auto & type, types)
+        encoder &= CardUtil::IsEncoder(type);
 
     // Source is connected, go by input types for type determination
     if (!types.empty())
@@ -296,7 +297,8 @@ bool SourceUtil::IsEncoder(uint sourceid, bool strict)
     query.prepare(
         "SELECT atsc_minor_chan, serviceid "
         "FROM channel "
-        "WHERE sourceid = :SOURCEID");
+        "WHERE deleted IS NULL AND "
+        "      sourceid = :SOURCEID");
     query.bindValue(":SOURCEID", sourceid);
 
     bool has_any_chan = false;
@@ -306,7 +308,7 @@ bool SourceUtil::IsEncoder(uint sourceid, bool strict)
     {
         while (query.next())
         {
-            encoder &= !query.value(0).toInt() && !query.value(1).toInt();
+            encoder &= !query.value(0).toBool() && !query.value(1).toBool();
             has_any_chan = true;
         }
     }
@@ -318,9 +320,8 @@ bool SourceUtil::IsUnscanable(uint sourceid)
 {
     bool unscanable = true;
     QStringList types = get_inputtypes(sourceid);
-    QStringList::const_iterator it = types.begin();
-    for (; it != types.end(); ++it)
-        unscanable &= CardUtil::IsUnscanable(*it);
+    foreach (const auto & type, types)
+        unscanable &= CardUtil::IsUnscanable(type);
 
     return types.empty() || unscanable;
 }
@@ -329,10 +330,10 @@ bool SourceUtil::IsCableCardPresent(uint sourceid)
 {
     bool ccpresent = false;
     vector<uint> inputs = CardUtil::GetInputIDs(sourceid);
-    vector<uint>::iterator it = inputs.begin();
-    for (; it != inputs.end(); ++it)
+    for (uint & input : inputs)
     {
-        if (CardUtil::IsCableCardPresent(*it, CardUtil::GetRawInputType(*it)))
+        if (CardUtil::IsCableCardPresent(input, CardUtil::GetRawInputType(input))
+            || CardUtil::GetRawInputType(input) == "HDHOMERUN")
             ccpresent = true;
     }
 
@@ -359,7 +360,23 @@ bool SourceUtil::IsAnySourceScanable(void)
     return false;
 }
 
-bool SourceUtil::UpdateChannelsFromListings(uint sourceid, QString inputtype, bool wait)
+bool SourceUtil::IsSourceIDValid(uint sourceid)
+{
+    MSqlQuery query(MSqlQuery::InitCon());
+    query.prepare(
+        "SELECT sourceid FROM videosource WHERE sourceid = :SOURCEID");
+    query.bindValue(":SOURCEID", sourceid);
+
+    if (!query.exec() || !query.isActive())
+    {
+        MythDB::DBError("SourceUtil::IsSourceIDValid", query);
+        return false;
+    }
+
+    return query.next();
+}
+
+bool SourceUtil::UpdateChannelsFromListings(uint sourceid, const QString& inputtype, bool wait)
 {
     if (wait)
     {
@@ -399,18 +416,21 @@ bool SourceUtil::UpdateChannelsFromListings(uint sourceid, QString inputtype, bo
     return true;
 }
 
-bool SourceUtil::UpdateSource( uint sourceid, QString sourcename,
-                               QString grabber, QString userid,
-                               QString freqtable, QString lineupid,
-                               QString password, bool useeit,
-                               QString configpath, int nitid)
+bool SourceUtil::UpdateSource( uint sourceid, const QString& sourcename,
+                               const QString& grabber, const QString& userid,
+                               const QString& freqtable, const QString& lineupid,
+                               const QString& password, bool useeit,
+                               const QString& configpath, int nitid,
+                               uint bouquetid, uint regionid, uint scanfrequency)
 {
     MSqlQuery query(MSqlQuery::InitCon());
 
     query.prepare("UPDATE videosource SET name = :NAME, xmltvgrabber = :XMLTVGRABBER, "
                   "userid = :USERID, freqtable = :FREQTABLE, lineupid = :LINEUPID,"
                   "password = :PASSWORD, useeit = :USEEIT, configpath = :CONFIGPATH, "
-                  "dvb_nit_id = :NITID WHERE sourceid = :SOURCEID");
+                  "dvb_nit_id = :NITID, bouquet_id = :BOUQUETID, region_id = :REGIONID, "
+                  "scanfrequency = :SCANFREQUENCY "
+                  "WHERE sourceid = :SOURCEID");
 
     query.bindValue(":NAME", sourcename);
     query.bindValue(":XMLTVGRABBER", grabber);
@@ -419,9 +439,12 @@ bool SourceUtil::UpdateSource( uint sourceid, QString sourcename,
     query.bindValue(":LINEUPID", lineupid);
     query.bindValue(":PASSWORD", password);
     query.bindValue(":USEEIT", useeit);
-    query.bindValue(":CONFIGPATH", configpath);
+    query.bindValue(":CONFIGPATH", configpath.isEmpty() ? nullptr : configpath);
     query.bindValue(":NITID", nitid);
+    query.bindValue(":BOUQUETID", bouquetid);
+    query.bindValue(":REGIONID", regionid);
     query.bindValue(":SOURCEID", sourceid);
+    query.bindValue(":SCANFREQUENCY", scanfrequency);
 
     if (!query.exec() || !query.isActive())
     {
@@ -432,17 +455,19 @@ bool SourceUtil::UpdateSource( uint sourceid, QString sourcename,
     return true;
 }
 
-int SourceUtil::CreateSource( QString sourcename,
-                               QString grabber, QString userid,
-                               QString freqtable, QString lineupid,
-                               QString password, bool useeit,
-                               QString configpath, int nitid)
+int SourceUtil::CreateSource( const QString& sourcename,
+                               const QString& grabber, const QString& userid,
+                               const QString& freqtable, const QString& lineupid,
+                               const QString& password, bool useeit,
+                               const QString& configpath, int nitid,
+                               uint bouquetid, uint regionid, uint scanfrequency)
 {
     MSqlQuery query(MSqlQuery::InitCon());
 
     query.prepare("INSERT INTO videosource (name,xmltvgrabber,userid,freqtable,lineupid,"
-                  "password,useeit,configpath,dvb_nit_id) VALUES (:NAME, :XMLTVGRABBER, "
-                  ":USERID, :FREQTABLE, :LINEUPID, :PASSWORD, :USEEIT, :CONFIGPATH, :NITID)");
+                  "password,useeit,configpath,dvb_nit_id,bouquet_id,region_id, scanfrequency) "
+                  "VALUES (:NAME, :XMLTVGRABBER, :USERID, :FREQTABLE, :LINEUPID, :PASSWORD, "
+                  ":USEEIT, :CONFIGPATH, :NITID, :BOUQUETID, :REGIONID, :SCANFREQUENCY)");
 
     query.bindValue(":NAME", sourcename);
     query.bindValue(":XMLTVGRABBER", grabber);
@@ -451,8 +476,11 @@ int SourceUtil::CreateSource( QString sourcename,
     query.bindValue(":LINEUPID", lineupid);
     query.bindValue(":PASSWORD", password);
     query.bindValue(":USEEIT", useeit);
-    query.bindValue(":CONFIGPATH", configpath);
+    query.bindValue(":CONFIGPATH", configpath.isEmpty() ? nullptr : configpath);
     query.bindValue(":NITID", nitid);
+    query.bindValue(":BOUQUETID", bouquetid);
+    query.bindValue(":REGIONID", regionid);
+    query.bindValue(":SCANFREQUENCY", scanfrequency);
 
     if (!query.exec() || !query.isActive())
     {
@@ -481,24 +509,15 @@ bool SourceUtil::DeleteSource(uint sourceid)
     MSqlQuery query(MSqlQuery::InitCon());
 
     // Delete the channels associated with the source
-    query.prepare("DELETE FROM channel "
-                  "WHERE sourceid = :SOURCEID");
+    query.prepare("UPDATE channel "
+                  "SET deleted = NOW() "
+                  "WHERE deleted IS NULL AND "
+                  "      sourceid = :SOURCEID");
     query.bindValue(":SOURCEID", sourceid);
 
     if (!query.exec() || !query.isActive())
     {
         MythDB::DBError("Deleting Channels", query);
-        return false;
-    }
-
-    // Delete the multiplexes associated with the source
-    query.prepare("DELETE FROM dtv_multiplex "
-                  "WHERE sourceid = :SOURCEID");
-    query.bindValue(":SOURCEID", sourceid);
-
-    if (!query.exec() || !query.isActive())
-    {
-        MythDB::DBError("Deleting Multiplexes", query);
         return false;
     }
 

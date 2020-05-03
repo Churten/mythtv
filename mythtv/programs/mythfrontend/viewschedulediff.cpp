@@ -19,20 +19,6 @@
 
 using namespace std;
 
-ViewScheduleDiff::ViewScheduleDiff(MythScreenStack *parent, QString altTable,
-                                   int recordidDiff, QString title)
-        : MythScreenType(parent, "ViewScheduleDiff"),
-            m_inEvent(false), m_inFill(false),
-            m_altTable(altTable), m_title(title),
-            m_conflictList(NULL), m_titleText(NULL),
-            m_noChangesText(NULL), m_recordid(recordidDiff)
-{
-}
-
-ViewScheduleDiff::~ViewScheduleDiff()
-{
-}
-
 bool ViewScheduleDiff::Create()
 {
     if (!LoadWindowFromXML("schedule-ui.xml", "schedulediff", this))
@@ -81,10 +67,9 @@ bool ViewScheduleDiff::keyPressEvent(QKeyEvent *e)
 
     m_inEvent = true;
 
-    bool handled = false;
     QStringList actions;
 
-    handled = GetMythMainWindow()->TranslateKeyPress("TV Frontend", e, actions);
+    bool handled = GetMythMainWindow()->TranslateKeyPress("TV Frontend", e, actions);
 
     if (!handled && MythScreenType::keyPressEvent(e))
         handled = true;
@@ -94,7 +79,7 @@ bool ViewScheduleDiff::keyPressEvent(QKeyEvent *e)
     return handled;
 }
 
-void ViewScheduleDiff::showStatus(MythUIButtonListItem *item)
+void ViewScheduleDiff::showStatus(MythUIButtonListItem */*item*/)
 {
     ProgramInfo *pi = CurrentProgram();
     if (!pi)
@@ -114,10 +99,8 @@ void ViewScheduleDiff::showStatus(MythUIButtonListItem *item)
         message += " " + QObject::tr("The following programs will be recorded "
                                      "instead:") + "\n\n";
 
-        ProgramList::const_iterator it = m_recListAfter.begin();
-        for (; it != m_recListAfter.end(); ++it)
+        for (auto *pa : m_recListAfter)
         {
-            const ProgramInfo *pa = *it;
             if (pa->GetRecordingStartTime() >= pi->GetRecordingEndTime())
                 break;
             if (pa->GetRecordingEndTime() > pi->GetRecordingStartTime() &&
@@ -139,8 +122,8 @@ void ViewScheduleDiff::showStatus(MythUIButtonListItem *item)
 
     QString title = QObject::tr("Program Status");
     MythScreenStack *mainStack = GetMythMainWindow()->GetStack("main stack");
-    MythDialogBox   *dlg = new MythDialogBox(title, message, mainStack,
-                                             "statusdialog", true);
+    auto   *dlg = new MythDialogBox(title, message, mainStack,
+                                    "statusdialog", true);
 
     if (dlg->Create())
     {
@@ -157,22 +140,19 @@ static int comp_recstart(const ProgramInfo *a, const ProgramInfo *b)
     {
         if (a->GetRecordingStartTime() > b->GetRecordingStartTime())
             return 1;
-        else
-            return -1;
+        return -1;
     }
     if (a->GetRecordingEndTime() != b->GetRecordingEndTime())
     {
         if (a->GetRecordingEndTime() > b->GetRecordingEndTime())
             return 1;
-        else
-            return -1;
+        return -1;
     }
     if (a->GetChannelSchedulingID() != b->GetChannelSchedulingID())
     {
         if (a->GetChannelSchedulingID() < b->GetChannelSchedulingID())
             return 1;
-        else
-            return -1;
+        return -1;
     }
     if (a->GetRecordingPriority() != b->GetRecordingPriority() &&
         (a->GetRecordingStatus() == RecStatus::WillRecord ||
@@ -182,8 +162,7 @@ static int comp_recstart(const ProgramInfo *a, const ProgramInfo *b)
     {
         if (a->GetRecordingPriority() < b->GetRecordingPriority())
             return 1;
-        else
-            return -1;
+        return -1;
     }
     return 0;
 }
@@ -198,8 +177,9 @@ void ViewScheduleDiff::fillList(void)
     m_inFill = true;
 
     QString callsign;
-    QDateTime startts, recstartts;
-    bool dummy;
+    QDateTime startts;
+    QDateTime recstartts;
+    bool dummy = false;
 
     LoadFromScheduler(m_recListBefore, dummy);
     LoadFromScheduler(m_recListAfter,  dummy, m_altTable, m_recordid);
@@ -211,7 +191,7 @@ void ViewScheduleDiff::fillList(void)
 
     QDateTime now = MythDate::current();
 
-    ProgramList::iterator it = m_recListBefore.begin();
+    auto it = m_recListBefore.begin();
     while (it != m_recListBefore.end())
     {
         if ((*it)->GetRecordingEndTime() >= now ||
@@ -239,15 +219,15 @@ void ViewScheduleDiff::fillList(void)
         }
     }
 
-    ProgramList::iterator pb = m_recListBefore.begin();
-    ProgramList::iterator pa = m_recListAfter.begin();
+    auto pb = m_recListBefore.begin();
+    auto pa = m_recListAfter.begin();
     ProgramStruct s;
 
     m_recList.clear();
     while (pa != m_recListAfter.end() || pb != m_recListBefore.end())
     {
-        s.before = (pb != m_recListBefore.end()) ? *pb : NULL;
-        s.after  = (pa != m_recListAfter.end())  ? *pa : NULL;
+        s.m_before = (pb != m_recListBefore.end()) ? *pb : nullptr;
+        s.m_after  = (pa != m_recListAfter.end())  ? *pa : nullptr;
 
         if (pa == m_recListAfter.end())
         {
@@ -267,18 +247,18 @@ void ViewScheduleDiff::fillList(void)
                     break;
                 case -1: // pb BEFORE pa
                     ++pb;
-                    s.after = NULL;
+                    s.m_after = nullptr;
                     break;
                 case 1: // pa BEFORE pb
-                    s.before = NULL;
+                    s.m_before = nullptr;
                     ++pa;
                     break;
             }
         }
 
-        if (s.before && s.after &&
-            (s.before->GetInputID() == s.after->GetInputID()) &&
-            (s.before->GetRecordingStatus() == s.after->GetRecordingStatus()))
+        if (s.m_before && s.m_after &&
+            (s.m_before->GetInputID() == s.m_after->GetInputID()) &&
+            (s.m_before->GetRecordingStatus() == s.m_after->GetRecordingStatus()))
         {
             continue;
         }
@@ -291,15 +271,14 @@ void ViewScheduleDiff::fillList(void)
 
 void ViewScheduleDiff::updateUIList(void)
 {
-    for (uint i = 0; i < m_recList.size(); i++)
+    for (auto s : m_recList)
     {
-        class ProgramStruct s = m_recList[i];
-        class ProgramInfo *pginfo = s.after;
+        class ProgramInfo *pginfo = s.m_after;
         if (!pginfo)
-            pginfo = s.before;
+            pginfo = s.m_before;
 
-        MythUIButtonListItem *item = new MythUIButtonListItem(
-            m_conflictList, "", qVariantFromValue(pginfo));
+        auto *item = new MythUIButtonListItem(m_conflictList, "",
+                                              QVariant::fromValue(pginfo));
 
         InfoMap infoMap;
         pginfo->ToMap(infoMap);
@@ -309,19 +288,27 @@ void ViewScheduleDiff::updateUIList(void)
         item->DisplayState(state, "status");
         item->SetTextFromMap(infoMap, state);
 
-        if (s.before)
-            item->SetText(RecStatus::toString(s.before->GetRecordingStatus(),
-                                   s.before->GetInputID()), "statusbefore",
+        if (s.m_before)
+        {
+            item->SetText(RecStatus::toString(s.m_before->GetRecordingStatus(),
+                                   s.m_before->GetInputID()), "statusbefore",
                           state);
+        }
         else
+        {
             item->SetText("-", "statusbefore");
+        }
 
-        if (s.after)
-            item->SetText(RecStatus::toString(s.after->GetRecordingStatus(),
-                                   s.after->GetInputID()), "statusafter",
+        if (s.m_after)
+        {
+            item->SetText(RecStatus::toString(s.m_after->GetRecordingStatus(),
+                                   s.m_after->GetInputID()), "statusafter",
                           state);
+        }
         else
+        {
             item->SetText("-", "statusafter");
+        }
     }
 
     if (m_noChangesText)
@@ -338,7 +325,7 @@ void ViewScheduleDiff::updateInfo(MythUIButtonListItem *item)
     if (!item)
         return;
 
-    ProgramInfo *pginfo = item->GetData().value<ProgramInfo*> ();
+    auto *pginfo = item->GetData().value<ProgramInfo*> ();
     if (pginfo)
     {
         InfoMap infoMap;
@@ -351,12 +338,11 @@ ProgramInfo *ViewScheduleDiff::CurrentProgram()
 {
     int pos = m_conflictList->GetCurrentPos();
     if (pos >= (int)m_recList.size())
-        return NULL;
+        return nullptr;
 
     ProgramStruct s = m_recList[pos];
 
-    if (s.after)
-        return s.after;
-    else
-        return s.before;
+    if (s.m_after)
+        return s.m_after;
+    return s.m_before;
 }

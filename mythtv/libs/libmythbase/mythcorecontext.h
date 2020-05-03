@@ -29,7 +29,6 @@
 #define MYTH_APPNAME_MYTHMEDIASERVER "mythmediaserver"
 #define MYTH_APPNAME_MYTHMETADATALOOKUP "mythmetadatalookup"
 #define MYTH_APPNAME_MYTHUTIL "mythutil"
-#define MYTH_APPNAME_MYTHLOGSERVER "mythlogserver"
 #define MYTH_APPNAME_MYTHSCREENWIZARD "mythscreenwizard"
 #define MYTH_APPNAME_MYTHFFPROBE "mythffprobe"
 #define MYTH_APPNAME_MYTHEXTERNRECORDER "mythexternrecorder"
@@ -54,8 +53,8 @@ class MBASE_PUBLIC MythCoreContext : public QObject, public MythObservable, publ
 {
     Q_OBJECT
   public:
-    MythCoreContext(const QString &binversion, QObject *eventHandler);
-    virtual ~MythCoreContext();
+    MythCoreContext(const QString &binversion, QObject *guiContext);
+    ~MythCoreContext() override;
 
     bool Init(void);
 
@@ -71,8 +70,8 @@ class MBASE_PUBLIC MythCoreContext : public QObject, public MythObservable, publ
 
     MythSocket *ConnectCommandSocket(const QString &hostname, int  port,
                                      const QString &announcement,
-                                     bool *proto_mismatch = NULL,
-                                     bool gui = true, int maxConnTry = -1,
+                                     bool *proto_mismatch = nullptr,
+                                     int maxConnTry = -1,
                                      int setup_timeout = -1);
 
     MythSocket *ConnectEventSocket(const QString &hostname, int port);
@@ -84,11 +83,9 @@ class MBASE_PUBLIC MythCoreContext : public QObject, public MythObservable, publ
                            uint timeout_ms = kMythSocketLongTimeout,
                            bool error_dialog_desired = false);
 
-    QString GenMythURL(QString host = QString(), QString port = QString(),
-                       QString path = QString(), QString storageGroup = QString());
-
-    QString GenMythURL(QString host = QString(), int port = 0,
-                       QString path = QString(), QString storageGroup = QString());
+    static QString GenMythURL(const QString& host = QString(), int port = 0,
+                              QString path = QString(),
+                              const QString& storageGroup = QString());
 
     QString GetMasterHostPrefix(const QString &storageGroup = QString(),
                                 const QString &path = QString());
@@ -106,7 +103,7 @@ class MBASE_PUBLIC MythCoreContext : public QObject, public MythObservable, publ
     bool IsMasterHost(void);     ///< is this the same host as the master
     bool IsMasterHost(const QString &host); ///< is specified host the master
     bool IsMasterBackend(void);  ///< is this the actual MBE process
-    bool BackendIsRunning(void); ///< a backend process is running on this host
+    static bool BackendIsRunning(void); ///< a backend process is running on this host
 
     bool IsThisBackend(const QString &addr);    ///< is this address mapped to this backend host
     bool IsThisHost(const QString &addr); ///< is this address mapped to this host
@@ -146,20 +143,31 @@ class MBASE_PUBLIC MythCoreContext : public QObject, public MythObservable, publ
     QString GetSetting(const QString &key, const QString &defaultval = "");
     bool SaveSettingOnHost(const QString &key, const QString &newValue,
                            const QString &host);
+    void SaveBoolSetting(const QString &key, bool newValue)
+        { SaveSetting(key, static_cast<int>(newValue)); }
 
     // Convenience setting query methods
+    bool GetBoolSetting(const QString &key, bool defaultval = false);
     int GetNumSetting(const QString &key, int defaultval = 0);
+    int GetBoolSetting(const QString &key, int defaultval) = delete;
+    bool GetNumSetting(const QString &key, bool defaultvalue) = delete;
     double GetFloatSetting(const QString &key, double defaultval = 0.0);
     void GetResolutionSetting(const QString &type, int &width, int &height,
-                              double& forced_aspect, double &refreshrate,
+                              double& forced_aspect, double &refresh_rate,
                               int index=-1);
     void GetResolutionSetting(const QString &type, int &width, int &height,
                               int index=-1);
 
     QString GetSettingOnHost(const QString &key, const QString &host,
                              const QString &defaultval = "");
+    bool GetBoolSettingOnHost(const QString &key, const QString &host,
+                             bool defaultval = false);
     int GetNumSettingOnHost(const QString &key, const QString &host,
                             int defaultval = 0);
+    int GetBoolSettingOnHost(const QString &key, const QString &host,
+                             int defaultval) = delete;
+    bool GetNumSettingOnHost(const QString &key, const QString &host,
+                            bool defaultval = false) = delete;
     double GetFloatSettingOnHost(const QString &key, const QString &host,
                                  double defaultval = 0.0);
 
@@ -170,7 +178,7 @@ class MBASE_PUBLIC MythCoreContext : public QObject, public MythObservable, publ
     QString GetBackendServerIP6(void);
     QString GetBackendServerIP6(const QString &host);
     QString GetMasterServerIP(void);
-    int GetMasterServerPort(void);
+    static int GetMasterServerPort(void);
     int GetMasterServerStatusPort(void);
     int GetBackendServerPort(void);
     int GetBackendServerPort(const QString &host);
@@ -185,11 +193,11 @@ class MBASE_PUBLIC MythCoreContext : public QObject, public MythObservable, publ
                                   const QString &host = QString(),
                                   ResolveType type = ResolveAny,
                                   bool keepscope = false);
-    QString resolveAddress(const QString &host,
-                           ResolveType = ResolveAny,
-                           bool keepscope = false) const;
+    static QString resolveAddress(const QString &host,
+                                  ResolveType type = ResolveAny,
+                                  bool keepscope = false) ;
     bool CheckSubnet(const QAbstractSocket *socket);
-    bool CheckSubnet(const QHostAddress &addr);
+    bool CheckSubnet(const QHostAddress &peer);
 
     void ClearSettingsCache(const QString &myKey = QString(""));
     void ActivateSettingsCache(bool activate = true);
@@ -198,10 +206,11 @@ class MBASE_PUBLIC MythCoreContext : public QObject, public MythObservable, publ
 
     void dispatch(const MythEvent &event);
 
+    void InitPower(bool Create = true);
     void InitLocale(void);
     void ReInitLocale(void);
     MythLocale *GetLocale(void) const;
-    const QLocale GetQLocale(void);
+    QLocale GetQLocale(void);
     void SaveLocaleDefaults(void);
     QString GetLanguage(void);
     QString GetLanguageAndVariant(void);
@@ -217,7 +226,7 @@ class MBASE_PUBLIC MythCoreContext : public QObject, public MythObservable, publ
     MythSessionManager *GetSessionManager(void);
 
     // Plugin related methods
-    bool TestPluginVersion(const QString &name, const QString &libversion,
+    static bool TestPluginVersion(const QString &name, const QString &libversion,
                           const QString &pluginversion);
 
     void SetPluginManager(MythPluginManager *pmanager);
@@ -255,12 +264,13 @@ class MBASE_PUBLIC MythCoreContext : public QObject, public MythObservable, publ
     void TVPlaybackPlaying(void);
 
   private:
-    MythCoreContextPrivate *d;
+    Q_DISABLE_COPY(MythCoreContext)
+    MythCoreContextPrivate *d {nullptr}; // NOLINT(readability-identifier-naming)
 
-    void connected(MythSocket *sock)         { (void)sock; }
-    void connectionFailed(MythSocket *sock)  { (void)sock; }
-    void connectionClosed(MythSocket *sock);
-    void readyRead(MythSocket *sock);
+    void connected(MythSocket *sock) override { (void)sock; } //MythSocketCBs
+    void connectionFailed(MythSocket *sock) override { (void)sock; } //MythSocketCBs
+    void connectionClosed(MythSocket *sock) override; // MythSocketCBs
+    void readyRead(MythSocket *sock) override; // MythSocketCBs
 };
 
 /// This global variable contains the MythCoreContext instance for the app

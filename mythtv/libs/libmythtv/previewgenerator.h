@@ -21,7 +21,7 @@ class MythSocket;
 class QObject;
 class QEvent;
 
-typedef QMap<QString,QDateTime> FileTimeStampMap;
+using FileTimeStampMap = QMap<QString,QDateTime>;
 
 class MTV_PUBLIC PreviewGenerator : public QObject, public MThread
 {
@@ -36,7 +36,7 @@ class MTV_PUBLIC PreviewGenerator : public QObject, public MThread
     Q_OBJECT
 
   public:
-    typedef enum Mode
+    enum Mode
     {
         kNone           = 0x0,
         kLocal          = 0x1,
@@ -44,11 +44,11 @@ class MTV_PUBLIC PreviewGenerator : public QObject, public MThread
         kLocalAndRemote = 0x3,
         kForceLocal     = 0x5,
         kModeMask       = 0x7,
-    } Mode;
+    };
 
   public:
     PreviewGenerator(const ProgramInfo *pginfo,
-                     const QString     &token,
+                     QString            token,
                      Mode               mode = kLocal);
 
     void SetPreviewTime(long long time, bool in_seconds)
@@ -57,21 +57,21 @@ class MTV_PUBLIC PreviewGenerator : public QObject, public MThread
         { SetPreviewTime(seconds_in, true); }
     void SetPreviewTimeAsFrameNumber(long long frame_number)
         { SetPreviewTime(frame_number, false); }
-    void SetOutputFilename(const QString&);
+    void SetOutputFilename(const QString &fileName);
     void SetOutputSize(const QSize &size) { m_outSize = size; }
 
     QString GetToken(void) const { return m_token; }
 
-    void run(void); // MThread
+    void run(void) override; // MThread
     bool Run(void);
 
-    void AttachSignals(QObject*);
+    void AttachSignals(QObject *obj);
 
   public slots:
     void deleteLater();
 
   protected:
-    virtual ~PreviewGenerator();
+    ~PreviewGenerator() override;
     void TeardownAll(void);
 
     bool RemotePreviewRun(void);
@@ -99,7 +99,7 @@ class MTV_PUBLIC PreviewGenerator : public QObject, public MThread
     static QString CreateAccessibleFilename(
         const QString &pathname, const QString &outFileName);
 
-    virtual bool event(QEvent *e); // QObject
+    bool event(QEvent *e) override; // QObject
     bool SaveOutFile(const QByteArray &data, const QDateTime &dt);
 
   protected:
@@ -108,20 +108,20 @@ class MTV_PUBLIC PreviewGenerator : public QObject, public MThread
     ProgramInfo        m_programInfo;
 
     Mode               m_mode;
-    QObject           *m_listener;
+    QObject           *m_listener      {nullptr};
     QString            m_pathname;
 
     /// tells us whether to use time as seconds or frame number
-    bool               m_timeInSeconds;
+    bool               m_timeInSeconds {true};
     /// snapshot time in seconds or frame number, depending on timeInSeconds
-    long long          m_captureTime;
+    long long          m_captureTime   {-1};
     QString            m_outFileName;
-    QSize              m_outSize;
-    QString            m_outFormat;
+    QSize              m_outSize       {0,0};
+    QString            m_outFormat     {"PNG"};
 
     QString            m_token;
-    bool               m_gotReply;
-    bool               m_pixmapOk;
+    bool               m_gotReply      {false};
+    bool               m_pixmapOk      {false};
 };
 
 #endif // PREVIEW_GENERATOR_H_

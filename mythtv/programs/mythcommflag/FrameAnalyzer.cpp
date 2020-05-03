@@ -21,17 +21,15 @@ frameAnalyzerReportMap(const FrameAnalyzer::FrameMap *frameMap, float fps,
             ii != frameMap->end();
             ++ii)
     {
-        long long   bb, ee, len;
-
         /*
          * QMap'd as 0-based index, but display as 1-based index to match "Edit
          * Recording" OSD.
          */
-        bb = ii.key() + 1;
+        long long bb = ii.key() + 1;
         if (*ii)
         {
-            ee = bb + *ii;
-            len = ee - bb;
+            long long ee = bb + *ii;
+            long long len = ee - bb;
 
             LOG(VB_COMMFLAG, LOG_INFO, QString("%1: %2-%3 (%4-%5, %6)")
                     .arg(comment)
@@ -58,17 +56,15 @@ frameAnalyzerReportMapms(const FrameAnalyzer::FrameMap *frameMap, float fps,
             ii != frameMap->end();
             ++ii)
     {
-        long long   bb, ee, len;
-
         /*
          * QMap'd as 0-based index, but display as 1-based index to match "Edit
          * Recording" OSD.
          */
-        bb = ii.key() + 1;
+        long long bb = ii.key() + 1;
         if (*ii)
         {
-            ee = bb + *ii;
-            len = ee - bb;
+            long long ee = bb + *ii;
+            long long len = ee - bb;
 
             LOG(VB_COMMFLAG, LOG_INFO, QString("%1: %2-%3 (%4-%5, %6)")
                     .arg(comment)
@@ -91,10 +87,8 @@ long long
 frameAnalyzerMapSum(const FrameAnalyzer::FrameMap *frameMap)
 {
     long long sum = 0;
-    for (FrameAnalyzer::FrameMap::const_iterator ii = frameMap->begin();
-            ii != frameMap->end();
-            ++ii)
-        sum += *ii;
+    foreach (long long ii, *frameMap)
+        sum += ii;
     return sum;
 }
 
@@ -108,9 +102,8 @@ removeShortBreaks(FrameAnalyzer::FrameMap *breakMap, float fps, int minbreaklen,
      * Return whether or not any breaks were actually removed.
      */
     FrameAnalyzer::FrameMap::Iterator   bb;
-    bool                                removed;
 
-    removed = false;
+    bool removed = false;
 
     /* Don't remove the initial commercial break, no matter how short. */
     bb = breakMap->begin();
@@ -155,11 +148,10 @@ removeShortSegments(FrameAnalyzer::FrameMap *breakMap, long long nframes,
      *
      * Return whether or not any segments were actually removed.
      */
-    FrameAnalyzer::FrameMap::Iterator   bb, bbnext;
-    bool                                removed;
+    FrameAnalyzer::FrameMap::Iterator   bb;
+    FrameAnalyzer::FrameMap::Iterator   bbnext;
 
-    removed = false;
-
+    bool removed = false;
 
     for (bb = breakMap->begin(); bb != breakMap->end(); bb = bbnext)
     {

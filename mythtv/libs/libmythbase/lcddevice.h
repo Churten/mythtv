@@ -1,13 +1,17 @@
 #ifndef LCDDEVICE_H_
 #define LCDDEVICE_H_
 
+#include <utility>
+
+// Qt headers
+#include <QList>
+#include <QMutex>
 #include <QObject>
 #include <QStringList>
-#include <QMutex>
-#include <QList>
 
 class QTimer;
 
+// MythTV headers
 #include "mythbaseexp.h"
 
 enum CHECKED_STATE {CHECKED = 0, UNCHECKED, NOTCHECKABLE };
@@ -18,10 +22,10 @@ class MBASE_PUBLIC LCDMenuItem
 {
   public:
     LCDMenuItem(bool item_selected, CHECKED_STATE item_checked,
-                QString item_name, unsigned int item_indent  = 0,
+                QString  item_name, unsigned int item_indent  = 0,
                 bool item_scroll = false) :
             m_selected(item_selected),  m_checked(item_checked),
-            m_name(item_name),          m_scroll(item_scroll),
+            m_name(std::move(item_name)),          m_scroll(item_scroll),
             m_indent(item_indent),      m_scrollPosition(item_indent)
     {
     }
@@ -35,7 +39,7 @@ class MBASE_PUBLIC LCDMenuItem
 
     void setChecked(CHECKED_STATE value) { m_checked = value; }
     void setSelected(bool value) { m_selected = value; }
-    void setItemName(QString value) { m_name = value; }
+    void setItemName(const QString& value) { m_name = value; }
     void setScroll(bool value) { m_scroll = value; }
     void setIndent(unsigned int value) { m_indent = value; }
     void setScrollPos(unsigned int value) { m_scrollPosition = value; }
@@ -45,9 +49,9 @@ class MBASE_PUBLIC LCDMenuItem
     bool m_selected;
     CHECKED_STATE m_checked;
     QString m_name;
-    bool m_scroll;
-    unsigned int m_indent;
-    unsigned int m_scrollPosition;
+    bool m_scroll                 {false};
+    unsigned int m_indent         {0};
+    unsigned int m_scrollPosition {0};
 };
 
 enum TEXT_ALIGNMENT {ALIGN_LEFT, ALIGN_RIGHT, ALIGN_CENTERED };
@@ -55,12 +59,12 @@ enum TEXT_ALIGNMENT {ALIGN_LEFT, ALIGN_RIGHT, ALIGN_CENTERED };
 class MBASE_PUBLIC LCDTextItem
 {
   public:
-    LCDTextItem(unsigned int row, TEXT_ALIGNMENT align, const QString &text,
-                const QString &screen = "Generic", bool scroll = false,
-                const QString &widget = "textWidget") :
+    LCDTextItem(unsigned int row, TEXT_ALIGNMENT align, QString text,
+                QString screen = "Generic", bool scroll = false,
+                QString widget = "textWidget") :
                 m_itemRow(row),     m_itemAlignment(align),
-                m_itemText(text),   m_itemScreen(screen),
-                m_itemWidget(widget),   m_itemScrollable(scroll)
+                m_itemText(std::move(text)),   m_itemScreen(std::move(screen)),
+                m_itemWidget(std::move(widget)),   m_itemScrollable(scroll)
     {
     }
 
@@ -82,9 +86,9 @@ class MBASE_PUBLIC LCDTextItem
     unsigned int m_itemRow;
     TEXT_ALIGNMENT m_itemAlignment;
     QString m_itemText;
-    QString m_itemScreen;
-    QString m_itemWidget;
-    bool m_itemScrollable;
+    QString m_itemScreen     {"Generic"};
+    QString m_itemWidget     {"textWidget"};
+    bool    m_itemScrollable {false};
 };
 
 //only one active at a time
@@ -174,7 +178,7 @@ class MBASE_PUBLIC LCD : public QObject
     static bool m_enabled;
 
   public:
-   ~LCD();
+   ~LCD() override;
 
     enum {
         MUSIC_REPEAT_NONE  = 0,
@@ -204,7 +208,7 @@ class MBASE_PUBLIC LCD : public QObject
     void setAudioFormatLEDs(enum LCDAudioFormatSet acodec, bool on);
     void setVideoFormatLEDs(enum LCDVideoFormatSet vcodec, bool on);
     void setVideoSrcLEDs(enum LCDVideoSourceSet vsrc, bool on);
-    void setFunctionLEDs(enum LCDFunctionSet video, bool on);
+    void setFunctionLEDs(enum LCDFunctionSet func, bool on);
     void setTunerLEDs(enum LCDTunerSet tuner, bool on);
     void setVariousLEDs(enum LCDVariousFlags various, bool on);
 
@@ -227,7 +231,7 @@ class MBASE_PUBLIC LCD : public QObject
     // While watching Live/Recording/Pause Buffer, occasionaly describe how
     // much of the program has been seen (between 0.0 and 1.0)
     // (e.g. [current time - start time] / [end time - start time]  )
-    void setChannelProgress(const QString &time, float percentViewed);
+    void setChannelProgress(const QString &time, float value);
 
     // Show the Menu
     // QPtrList is a pointer to a bunch of menu items
@@ -244,7 +248,7 @@ class MBASE_PUBLIC LCD : public QObject
     /** \brief Update the generic progress bar.
         \param generic_progress a value between 0 and 1.0
     */
-    void setGenericProgress(float generic_progress);
+    void setGenericProgress(float value);
 
     /** \brief Update the generic screen to display a busy spinner.
         \note The LCD busy spinner only 'moves' when this is called
@@ -253,7 +257,7 @@ class MBASE_PUBLIC LCD : public QObject
     void setGenericBusy();
 
     // Do a music progress bar with the generic level between 0 and 1.0
-    void setMusicProgress(const QString &time, float generic_progress);
+    void setMusicProgress(const QString &time, float value);
 
     /** \brief Set music player's repeat properties
         \param repeat the state of repeat
@@ -269,7 +273,7 @@ class MBASE_PUBLIC LCD : public QObject
     void switchToVolume(const QString &app_name);
 
     // Do a progress bar with the volume level between 0 and 1.0
-    void setVolumeLevel(float volume_level);
+    void setVolumeLevel(float value);
 
     // If some other process should be getting all the LCDd screen time (e.g.
     // mythMusic) we can use this to try and prevent and screens from showing
@@ -299,10 +303,10 @@ signals:
     void sendToServer(const QString &someText);
 
   private:
-    bool startLCDServer(void);
+    static bool startLCDServer(void);
     void init();
     void handleKeyPress(const QString &keyPressed);
-    QString quotedString(const QString &string);
+    static QString quotedString(const QString &string);
     void describeServer();
 
   private slots:
@@ -310,39 +314,39 @@ signals:
     void Disconnected(void);
 
   private:
-    QTcpSocket *m_socket;
-    QMutex   m_socketLock;
-    QString  m_hostname;
-    uint     m_port;
-    bool     m_connected;
+    QTcpSocket *m_socket        {nullptr};
+    QMutex   m_socketLock       {QMutex::Recursive};
+    QString  m_hostname         {"localhost"};
+    uint     m_port             {6545};
+    bool     m_connected        {false};
 
-    QTimer *m_retryTimer;
-    QTimer *m_LEDTimer;
+    QTimer *m_retryTimer        {nullptr};
+    QTimer *m_ledTimer          {nullptr};
 
     QString m_sendBuffer;
     QString m_lastCommand;
 
-    int  m_lcdWidth;
-    int  m_lcdHeight;
+    int     m_lcdWidth          {0};
+    int     m_lcdHeight         {0};
 
-    bool m_lcdReady;
+    bool    m_lcdReady          {false};
 
-    bool m_lcdShowTime;
-    bool m_lcdShowMenu;
-    bool m_lcdShowGeneric;
-    bool m_lcdShowMusic;
-    bool m_lcdShowChannel;
-    bool m_lcdShowVolume;
-    bool m_lcdShowRecStatus;
-    bool m_lcdBacklightOn;
-    bool m_lcdHeartbeatOn;
-    int  m_lcdPopupTime;
+    bool    m_lcdShowTime       {false};
+    bool    m_lcdShowMenu       {false};
+    bool    m_lcdShowGeneric    {false};
+    bool    m_lcdShowMusic      {false};
+    bool    m_lcdShowChannel    {false};
+    bool    m_lcdShowVolume     {false};
+    bool    m_lcdShowRecStatus  {false};
+    bool    m_lcdBacklightOn    {false};
+    bool    m_lcdHeartbeatOn    {false};
+    int     m_lcdPopupTime      {0};
     QString m_lcdShowMusicItems;
     QString m_lcdKeyString;
 
-    int m_lcdLedMask;
+    int     m_lcdLedMask        {0};
 
-    int (*GetLEDMask)(void);
+    int (*m_getLEDMask)(void)   {nullptr};
 };
 
 #endif

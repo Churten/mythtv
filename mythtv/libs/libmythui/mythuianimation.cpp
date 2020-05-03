@@ -6,11 +6,12 @@
 
 QRect UIEffects::GetExtent(const QSize &size)
 {
-    int x = 0, y = 0;
-    int zoomedWidth = size.width() * hzoom;
-    int zoomedHeight = size.height() * vzoom;
+    int x = 0;
+    int y = 0;
+    int zoomedWidth = size.width() * m_hzoom;
+    int zoomedHeight = size.height() * m_vzoom;
 
-    switch (centre)
+    switch (m_centre)
     {
     case TopLeft:
     case Top:
@@ -26,7 +27,7 @@ QRect UIEffects::GetExtent(const QSize &size)
         y = size.height() - zoomedHeight / 2; break;
     }
 
-    switch (centre)
+    switch (m_centre)
     {
     case TopLeft:
     case Left:
@@ -42,14 +43,7 @@ QRect UIEffects::GetExtent(const QSize &size)
         x = size.width() - zoomedWidth / 2; break;
     }
 
-    return QRect(x, y, zoomedWidth, zoomedHeight);
-}
-
-MythUIAnimation::MythUIAnimation(MythUIType* parent, Trigger trigger, Type type)
-    : m_parent(parent), m_type(type), m_trigger(trigger),
-      m_centre(UIEffects::Middle), m_active(false), m_looped(false),
-      m_reversible(false)
-{
+    return {x, y, zoomedWidth, zoomedHeight};
 }
 
 void MythUIAnimation::Activate(void)
@@ -275,7 +269,7 @@ void MythUIAnimation::ParseSection(const QDomElement &element,
         else
             continue;
 
-        MythUIAnimation* a = new MythUIAnimation(parent, trigger, type);
+        auto* a = new MythUIAnimation(parent, trigger, type);
         a->setStartValue(start);
         a->setEndValue(end);
         a->setDuration(effectduration);
@@ -327,8 +321,8 @@ void MythUIAnimation::parsePosition(const QDomElement& element,
 void MythUIAnimation::parseZoom(const QDomElement& element,
                                 QVariant& startValue, QVariant& endValue)
 {
-    startValue = element.attribute("start", "0").toFloat() / 100.0;
-    endValue = element.attribute("end", "0").toFloat() /100.0;
+    startValue = element.attribute("start", "0").toFloat() / 100.0F;
+    endValue = element.attribute("end", "0").toFloat() /100.0F;
 }
 
 void MythUIAnimation::parseAngle(const QDomElement& element,

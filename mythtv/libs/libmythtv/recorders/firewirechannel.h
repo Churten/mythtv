@@ -17,39 +17,45 @@ class FirewireChannel : public DTVChannel
     friend class FirewireRecorder;
 
   public:
-    FirewireChannel(TVRec *parent, const QString &videodevice,
-                    const FireWireDBOptions &firewire_opts);
-    virtual ~FirewireChannel();
+    FirewireChannel(TVRec *parent, QString videodevice,
+                    FireWireDBOptions firewire_opts);
+    ~FirewireChannel() override;
+
+    FirewireChannel(const FirewireChannel &) = delete;            // not copyable
+    FirewireChannel &operator=(const FirewireChannel &) = delete; // not copyable
 
     // Commands
-    virtual bool Open(void);
-    virtual void Close(void);
+     bool Open(void) override; // ChannelBase
+    void Close(void) override; // ChannelBase
 
     using DTVChannel::Tune;
-    virtual bool Tune(const DTVMultiplex&) { return false; }
-    virtual bool Tune(const QString &freqid, int finetune);
-    virtual bool Retune(void);
+    bool Tune(const DTVMultiplex &/*tuning*/) override // DTVChannel
+        { return false; }
+    bool Tune(const QString &freqid, int finetune) override; // DTVChannel
+    bool Retune(void) override; // ChannelBase
 
     // Sets
     virtual bool SetPowerState(bool on);
 
     // Gets
-    virtual bool IsOpen(void) const { return isopen; }
-    virtual QString GetDevice(void) const;
+    bool IsOpen(void) const override // ChannelBase
+        { return m_isopen; }
+    QString GetDevice(void) const override; // ChannelBase
 
   protected:
-    virtual bool IsExternalChannelChangeSupported(void) { return true; }
+    bool IsExternalChannelChangeSupported(void) override // ChannelBase
+        { return true; }
 
   private:
     virtual FirewireDevice::PowerState GetPowerState(void) const;
-    virtual FirewireDevice *GetFirewireDevice(void) { return device; }
+    virtual FirewireDevice *GetFirewireDevice(void) { return m_device; }
 
   protected:
-    QString            videodevice;
-    FireWireDBOptions  fw_opts;
-    FirewireDevice    *device;
-    uint               current_channel;
-    bool               isopen;
+    QString            m_videodevice;
+    FireWireDBOptions  m_fw_opts;
+    FirewireDevice    *m_device          {nullptr};
+    uint               m_current_channel {0};
+    bool               m_isopen          {false};
 };
 
 #endif // _FIREWIRECHANNEL_H_

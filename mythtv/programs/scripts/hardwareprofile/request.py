@@ -21,15 +21,26 @@
 # providing the base url, user agent, and proxy information.
 # The object returned is slightly modified, with a shortcut to urlopen.
 
-import urllib2
-import urlparse
+from future import standard_library
+standard_library.install_aliases()
+from builtins import object
 
-class _Request( urllib2.Request ):
+try:
+    import urllib2 as urllib
+except ImportError:
+    import urllib.request as urllib
+
+try:
+    import urlparse as parse
+except ImportError:
+    from urllib import parse
+
+class _Request( urllib.Request ):
     timeout = None
     def open(self):
         if self.timeout:
-            return urllib2.urlopen(self, None, self.timeout)
-        return urllib2.urlopen(self)
+            return urllib.urlopen(self, None, self.timeout)
+        return urllib.urlopen(self)
 
 class _RequestFactory( object ):
     def __init__(self, baseurl, user_agent, timeout, proxy):
@@ -42,7 +53,7 @@ class _RequestFactory( object ):
         return self.new_request(*args, **kwargs)
 
     def new_request(self, url):
-        url = urlparse.urljoin(self.base_url, url)
+        url = parse.urljoin(self.base_url, url)
         req = _Request(url)
         req.timeout = self.timeout
         if self.proxy:

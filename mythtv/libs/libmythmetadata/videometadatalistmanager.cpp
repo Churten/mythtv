@@ -2,43 +2,44 @@
 
 #include "mythdb.h"
 #include "videometadatalistmanager.h"
+#include "mythsorthelper.h"
 
 class VideoMetadataListManagerImp
 {
   public:
-    typedef VideoMetadataListManager::VideoMetadataPtr VideoMetadataPtr;
-    typedef VideoMetadataListManager::metadata_list metadata_list;
+    using VideoMetadataPtr = VideoMetadataListManager::VideoMetadataPtr;
+    using metadata_list = VideoMetadataListManager::metadata_list;
 
   private:
-    typedef std::map<unsigned int, metadata_list::iterator> int_to_meta;
-    typedef std::map<QString, metadata_list::iterator> string_to_meta;
+    using int_to_meta = std::map<unsigned int, metadata_list::iterator>;
+    using string_to_meta = std::map<QString, metadata_list::iterator>;
 
   public:
     void setList(metadata_list &list)
     {
-        m_id_map.clear();
-        m_file_map.clear();
-        m_meta_list.swap(list);
+        m_idMap.clear();
+        m_fileMap.clear();
+        m_metaList.swap(list);
 
-        for (metadata_list::iterator p = m_meta_list.begin();
-             p != m_meta_list.end(); ++p)
+        for (auto p = m_metaList.begin(); p != m_metaList.end(); ++p)
         {
-            m_id_map.insert(int_to_meta::value_type((*p)->GetID(), p));
-            m_file_map.insert(
+            m_idMap.insert(int_to_meta::value_type((*p)->GetID(), p));
+            m_fileMap.insert(
                     string_to_meta::value_type((*p)->GetFilename(), p));
         }
     }
 
     const metadata_list &getList() const
     {
-        return m_meta_list;
+        return m_metaList;
     }
 
 
     VideoMetadataPtr byFilename(const QString &file_name) const
     {
-        string_to_meta::const_iterator p = m_file_map.find(file_name);
-        if (p != m_file_map.end())
+        //NOLINTNEXTLINE(modernize-use-auto)
+        string_to_meta::const_iterator p = m_fileMap.find(file_name);
+        if (p != m_fileMap.end())
         {
             return *(p->second);
         }
@@ -47,8 +48,9 @@ class VideoMetadataListManagerImp
 
     VideoMetadataPtr byID(unsigned int db_id) const
     {
-        int_to_meta::const_iterator p = m_id_map.find(db_id);
-        if (p != m_id_map.end())
+        //NOLINTNEXTLINE(modernize-use-auto)
+        int_to_meta::const_iterator p = m_idMap.find(db_id);
+        if (p != m_idMap.end())
         {
             return *(p->second);
         }
@@ -66,23 +68,22 @@ class VideoMetadataListManagerImp
     }
 
   private:
-    bool purge_entry(VideoMetadataPtr metadata)
+    bool purge_entry(const VideoMetadataPtr& metadata)
     {
         if (metadata)
         {
-            int_to_meta::iterator im = m_id_map.find(metadata->GetID());
+            auto im = m_idMap.find(metadata->GetID());
 
-            if (im != m_id_map.end())
+            if (im != m_idMap.end())
             {
-                metadata_list::iterator mdi = im->second;
+                auto mdi = im->second;
                 (*mdi)->DeleteFromDatabase();
 
-                m_id_map.erase(im);
-                string_to_meta::iterator sm =
-                        m_file_map.find(metadata->GetFilename());
-                if (sm != m_file_map.end())
-                    m_file_map.erase(sm);
-                m_meta_list.erase(mdi);
+                m_idMap.erase(im);
+                auto sm = m_fileMap.find(metadata->GetFilename());
+                if (sm != m_fileMap.end())
+                    m_fileMap.erase(sm);
+                m_metaList.erase(mdi);
                 return true;
             }
         }
@@ -91,9 +92,9 @@ class VideoMetadataListManagerImp
     }
 
   private:
-    metadata_list m_meta_list;
-    int_to_meta m_id_map;
-    string_to_meta m_file_map;
+    metadata_list  m_metaList;
+    int_to_meta    m_idMap;
+    string_to_meta m_fileMap;
 };
 
 VideoMetadataListManager::VideoMetadataListManager()
@@ -120,6 +121,10 @@ VideoMetadataListManager::loadOneFromDatabase(uint id)
     return VideoMetadataPtr(new VideoMetadata());
 }
 
+/// Load videometadata database into memory
+///
+/// Query consumed in VideoMetadataImp::fromDBRow
+///
 void VideoMetadataListManager::loadAllFromDatabase(metadata_list &items,
                                                    const QString &sql)
 {
@@ -184,30 +189,30 @@ bool VideoMetadataListManager::purgeByID(unsigned int db_id)
     return m_imp->purgeByID(db_id);
 }
 
-const QString meta_node::m_empty_path;
+const QString meta_node::kEmptyPath;
 
 const QString& meta_node::getPath() const
 {
-    return m_empty_path;
+    return kEmptyPath;
 }
 
 const QString& meta_node::getFQPath()
 {
-    if (m_fq_path.length())
-        return m_fq_path;
+    if (m_fqPath.length())
+        return m_fqPath;
 
-    if (m_parent && !m_path_root)
-        m_fq_path = m_parent->getFQPath() + "/" + getPath();
+    if (m_parent && !m_pathRoot)
+        m_fqPath = m_parent->getFQPath() + "/" + getPath();
     else
     {
         QString p = getPath();
         if (p.startsWith("myth://"))
-            m_fq_path = p;
+            m_fqPath = p;
         else
-            m_fq_path = ((p.length() && p[0] != '/') ? "/" : "") + p;
+            m_fqPath = ((p.length() && p[0] != '/') ? "/" : "") + p;
     }
 
-    return m_fq_path;
+    return m_fqPath;
 }
 
 void meta_node::setParent(meta_node *parent)
@@ -217,10 +222,10 @@ void meta_node::setParent(meta_node *parent)
 
 void meta_node::setPathRoot(bool is_root)
 {
-    m_path_root = is_root;
+    m_pathRoot = is_root;
 }
 
-const QString meta_data_node::m_meta_bug = "Bug";
+const QString meta_data_node::kMetaBug = "Bug";
 
 const QString& meta_data_node::getName() const
 {
@@ -229,7 +234,7 @@ const QString& meta_data_node::getName() const
         return m_data->GetTitle();
     }
 
-    return m_meta_bug;
+    return kMetaBug;
 }
 
 const VideoMetadata* meta_data_node::getData() const
@@ -244,14 +249,23 @@ VideoMetadata* meta_data_node::getData()
 
 meta_dir_node::meta_dir_node(const QString &path, const QString &name,
                             meta_dir_node *parent, bool is_path_root,
-                            const QString &host, const QString &prefix,
-                            const QVariant &data)
+                            QString host, QString prefix,
+                            QVariant data)
   : meta_node(parent, is_path_root), m_path(path), m_name(name),
-    m_host(host), m_prefix(prefix), m_data(data)
+    m_host(std::move(host)), m_prefix(std::move(prefix)), m_data(std::move(data))
 {
     if (!name.length())
         m_name = path;
+    ensureSortFields();
 }
+
+void meta_dir_node::ensureSortFields()
+{
+    std::shared_ptr<MythSortHelper>sh = getMythSortHelper();
+
+    if (m_sortPath.isEmpty() and not m_path.isEmpty())
+        m_sortPath = sh->doPathname(m_path);
+ }
 
 void meta_dir_node::setName(const QString &name)
 {
@@ -288,9 +302,16 @@ const QString &meta_dir_node::getPath() const
     return m_path;
 }
 
-void meta_dir_node::setPath(const QString &path)
+const QString &meta_dir_node::getSortPath() const
+{
+    return m_sortPath;
+}
+
+void meta_dir_node::setPath(const QString &path, const QString &sortPath)
 {
     m_path = path;
+    m_sortPath = sortPath;
+    ensureSortFields();
 }
 
 void meta_dir_node::SetData(const QVariant &data)
@@ -415,14 +436,13 @@ meta_data_list::const_iterator meta_dir_node::entries_end() const
 // have entries. TODO: cache this value
 bool meta_dir_node::has_entries() const
 {
-    bool ret = m_entries.size();
+    bool ret = !m_entries.empty();
 
     if (!ret)
     {
-        for (meta_dir_list::const_iterator p = m_subdirs.begin();
-        p != m_subdirs.end(); ++p)
+        for (const auto & subdir : m_subdirs)
         {
-            ret = (*p)->has_entries();
+            ret = subdir->has_entries();
             if (ret) break;
         }
     }

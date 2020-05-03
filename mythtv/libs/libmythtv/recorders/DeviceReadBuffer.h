@@ -17,7 +17,7 @@
 class DeviceReaderCB
 {
   protected:
-    virtual ~DeviceReaderCB() {}
+    virtual ~DeviceReaderCB() = default;
   public:
     virtual void ReaderPaused(int fd) = 0;
     virtual void PriorityEvent(int fd) = 0;
@@ -33,10 +33,10 @@ class DeviceReaderCB
 class DeviceReadBuffer : protected MThread
 {
   public:
-    DeviceReadBuffer(DeviceReaderCB *callback,
+    explicit DeviceReadBuffer(DeviceReaderCB *cb,
                      bool use_poll = true,
                      bool error_exit_on_poll_timeout = true);
-   ~DeviceReadBuffer();
+   ~DeviceReadBuffer() override;
 
     bool Setup(const QString &streamName,
                int streamfd,
@@ -61,68 +61,68 @@ class DeviceReadBuffer : protected MThread
     uint GetUsed(void) const;
 
   private:
-    virtual void run(void); // MThread
+    void run(void) override; // MThread
 
-    void SetPaused(bool);
+    void SetPaused(bool val);
     void IncrWritePointer(uint len);
     void IncrReadPointer(uint len);
 
     bool HandlePausing(void);
     bool Poll(void) const;
     void WakePoll(void) const;
-    uint WaitForUnused(uint bytes_needed) const;
-    uint WaitForUsed  (uint bytes_needed, uint max_wait /*ms*/) const;
+    uint WaitForUnused(uint needed) const;
+    uint WaitForUsed  (uint needed, uint max_wait /*ms*/) const;
 
     bool IsPauseRequested(void) const;
-    bool IsOpen(void) const { return _stream_fd >= 0; }
+    bool IsOpen(void) const { return m_streamFd >= 0; }
     void ClosePipes(void) const;
     uint GetUnused(void) const;
     uint GetContiguousUnused(void) const;
 
-    bool CheckForErrors(ssize_t read_len, size_t requested_len, uint &err_cnt);
+    bool CheckForErrors(ssize_t read_len, size_t requested_len, uint &errcnt);
     void ReportStats(void);
 
-    QString          videodevice;
-    int              _stream_fd;
-    mutable int      wake_pipe[2];
-    mutable long     wake_pipe_flags[2];
+    QString                 m_videoDevice;
+    int                     m_streamFd              {-1};
+    mutable int             m_wakePipe[2]           {-1,-1};
+    mutable long            m_wakePipeFlags[2]      {0,0};
 
-    DeviceReaderCB  *readerCB;
+    DeviceReaderCB         *m_readerCB              {nullptr};
 
     // Data for managing the device ringbuffer
-    mutable QMutex   lock;
-    volatile bool    dorun;
-    bool             eof;
-    mutable bool     error;
-    bool             request_pause;
-    bool             paused;
-    bool             using_poll;
-    bool             poll_timeout_is_error;
-    uint             max_poll_wait;
+    mutable QMutex          m_lock;
+    volatile bool           m_doRun                 {false};
+    bool                    m_eof                   {false};
+    mutable bool            m_error                 {false};
+    bool                    m_requestPause          {false};
+    bool                    m_paused                {false};
+    bool                    m_usingPoll             {true};
+    bool                    m_pollTimeoutIsError    {true};
+    uint                    m_maxPollWait           {2500 /*ms*/};
 
-    size_t           size;
-    size_t           used;
-    size_t           read_quanta;
-    size_t           dev_buffer_count;
-    size_t           dev_read_size;
-    size_t           readThreshold;
-    unsigned char   *buffer;
-    unsigned char   *readPtr;
-    unsigned char   *writePtr;
-    unsigned char   *endPtr;
+    size_t                  m_size                  {0};
+    size_t                  m_used                  {0};
+    size_t                  m_readQuanta            {0};
+    size_t                  m_devBufferCount        {1};
+    size_t                  m_devReadSize           {0};
+    size_t                  m_readThreshold         {0};
+    unsigned char          *m_buffer                {nullptr};
+    unsigned char          *m_readPtr               {nullptr};
+    unsigned char          *m_writePtr              {nullptr};
+    unsigned char          *m_endPtr                {nullptr};
 
-    mutable QWaitCondition dataWait;
-    QWaitCondition   runWait;
-    QWaitCondition   pauseWait;
-    QWaitCondition   unpauseWait;
+    mutable QWaitCondition  m_dataWait;
+    QWaitCondition          m_runWait;
+    QWaitCondition          m_pauseWait;
+    QWaitCondition          m_unpauseWait;
 
     // statistics
-    size_t           max_used;
-    size_t           avg_used;
-    size_t           avg_buf_write_cnt;
-    size_t           avg_buf_read_cnt;
-    size_t           avg_buf_sleep_cnt;
-    MythTimer        lastReport;
+    size_t                  m_maxUsed               {0};
+    size_t                  m_avgUsed               {0};
+    size_t                  m_avgBufWriteCnt        {0};
+    size_t                  m_avgBufReadCnt         {0};
+    size_t                  m_avgBufSleepCnt        {0};
+    MythTimer               m_lastReport;
 };
 
 #endif // _DEVICEREADBUFFER_H_

@@ -30,12 +30,12 @@ class MediaRenderer : public UPnp
 {
     protected:
 
-        //UPnpControl     *m_pUPnpControl;  // Do not delete (auto deleted)
-        UPnpCMGR        *m_pUPnpCMGR;     // Do not delete (auto deleted)
+      //UPnpControl     *m_pUPnpControl {nullptr};  // Do not delete (auto deleted)
+        UPnpCMGR        *m_pUPnpCMGR    {nullptr};  // Do not delete (auto deleted)
 
     public:
                  MediaRenderer();
-        virtual ~MediaRenderer();
+        ~MediaRenderer() override;
 
         DeviceLocation *GetDefaultMaster();
         void            SetDefaultMaster( DeviceLocation *pDeviceLoc,

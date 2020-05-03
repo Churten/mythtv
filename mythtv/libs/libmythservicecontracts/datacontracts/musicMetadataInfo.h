@@ -63,9 +63,7 @@ class SERVICE_PUBLIC MusicMetadataInfo : public QObject
 
         static inline void InitializeCustomTypes();
 
-    public:
-
-        MusicMetadataInfo(QObject *parent = 0)
+        Q_INVOKABLE MusicMetadataInfo(QObject *parent = nullptr)
                         : QObject         ( parent ),
                           m_Id            ( 0      ),
                           m_TrackNo       ( 0      ),
@@ -77,43 +75,31 @@ class SERVICE_PUBLIC MusicMetadataInfo : public QObject
         {
         }
 
-        MusicMetadataInfo( const MusicMetadataInfo &src )
+        void Copy( const MusicMetadataInfo *src )
         {
-            Copy( src );
-        }
-
-        void Copy( const MusicMetadataInfo &src )
-        {
-            m_Id                 = src.m_Id;
-            m_Artist             = src.m_Artist;
-            m_CompilationArtist  = src.m_CompilationArtist;
-            m_Album              = src.m_Album;
-            m_Title              = src.m_Title;
-            m_TrackNo            = src.m_TrackNo;
-            m_Genre              = src.m_Genre;
-            m_Year               = src.m_Year;
-            m_PlayCount          = src.m_PlayCount;
-            m_Length             = src.m_Length;
-            m_Rating             = src.m_Rating;
-            m_FileName           = src.m_FileName;
-            m_HostName           = src.m_HostName;
-            m_LastPlayed         = src.m_LastPlayed;
-            m_Compilation        = src.m_Compilation;
+            m_Id                 = src->m_Id;
+            m_Artist             = src->m_Artist;
+            m_CompilationArtist  = src->m_CompilationArtist;
+            m_Album              = src->m_Album;
+            m_Title              = src->m_Title;
+            m_TrackNo            = src->m_TrackNo;
+            m_Genre              = src->m_Genre;
+            m_Year               = src->m_Year;
+            m_PlayCount          = src->m_PlayCount;
+            m_Length             = src->m_Length;
+            m_Rating             = src->m_Rating;
+            m_FileName           = src->m_FileName;
+            m_HostName           = src->m_HostName;
+            m_LastPlayed         = src->m_LastPlayed;
+            m_Compilation        = src->m_Compilation;
         }
 };
 
-} // namespace DTC
-
-Q_DECLARE_METATYPE( DTC::MusicMetadataInfo  )
-Q_DECLARE_METATYPE( DTC::MusicMetadataInfo* )
-
-namespace DTC
-{
 inline void MusicMetadataInfo::InitializeCustomTypes()
 {
-    qRegisterMetaType< MusicMetadataInfo  >();
     qRegisterMetaType< MusicMetadataInfo* >();
 }
-}
+
+} // namespace DTC
 
 #endif

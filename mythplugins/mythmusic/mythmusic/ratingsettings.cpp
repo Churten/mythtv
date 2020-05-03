@@ -6,19 +6,6 @@
 
 #include "ratingsettings.h"
 
-RatingSettings::RatingSettings(MythScreenStack *parent, const char *name)
-        : MythScreenType(parent, name),
-        m_ratingWeight(NULL), m_playCountWeight(NULL),
-        m_lastPlayWeight(NULL), m_randomWeight(NULL),
-        m_saveButton(NULL), m_cancelButton(NULL)
-{
-}
-
-RatingSettings::~RatingSettings()
-{
-
-}
-
 bool RatingSettings::Create()
 {
     // Load the theme for this screen

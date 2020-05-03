@@ -24,19 +24,19 @@ using namespace std;
 #include <mythcommandlineparser.h>
 #include <mythlogging.h>
 
-GrabberDownloadThread *gdt = 0;
-RSSManager *rssMan = 0;
+GrabberDownloadThread *gdt = nullptr;
+RSSManager *rssMan = nullptr;
 
 class MPUBLIC MythFillNVCommandLineParser : public MythCommandLineParser
 {
   public:
     MythFillNVCommandLineParser(); 
-    void LoadArguments(void);
+    void LoadArguments(void) override; // MythCommandLineParser
 };
 
 MythFillNVCommandLineParser::MythFillNVCommandLineParser() :
     MythCommandLineParser("mythfillnetvision")
-{ LoadArguments(); }
+{ MythFillNVCommandLineParser::LoadArguments(); }
 
 void MythFillNVCommandLineParser::LoadArguments(void)
 {
@@ -71,14 +71,14 @@ int main(int argc, char *argv[])
 
     if (cmdline.toBool("showversion"))
     {
-        cmdline.PrintVersion();
+        MythFillNVCommandLineParser::PrintVersion();
         return GENERIC_EXIT_OK;
     }
 
     QCoreApplication a(argc, argv);
     QCoreApplication::setApplicationName("mythfillnetvision");
 
-    int retval;
+    int retval = GENERIC_EXIT_OK;
     if ((retval = cmdline.ConfigureLogging()) != GENERIC_EXIT_OK)
         return retval;
     
@@ -127,7 +127,7 @@ int main(int argc, char *argv[])
     {
         QEventLoop treeloop;
 
-        gdt = new GrabberDownloadThread(NULL);
+        gdt = new GrabberDownloadThread(nullptr);
         if (refreshall)
             gdt->refreshAll();
         gdt->start();
@@ -136,7 +136,7 @@ int main(int argc, char *argv[])
         treeloop.exec();
     }
 
-    if ((refreshall || refreshrss) && findAllDBRSS().count())
+    if ((refreshall || refreshrss) && !findAllDBRSS().empty())
     {
         QEventLoop rssloop;
 

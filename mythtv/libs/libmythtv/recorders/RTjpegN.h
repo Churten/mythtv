@@ -26,7 +26,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
 
 #include "mythconfig.h"
 #include "mythtvexp.h"
-#include <stdint.h>
+#include <cstdint>
 
 /*
  * Macros and definitions used internally to RTjpeg
@@ -48,7 +48,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
 #endif
 
 #if HAVE_STDINT_H
-#include <stdint.h>
+#include <cstdint>
 #endif
 
 #ifdef MMX
@@ -68,8 +68,8 @@ class RTjpeg
    ~RTjpeg();
    
     int SetQuality(int *quality);
-    int SetFormat(int *format);
-    int SetSize(int *w, int *h);
+    int SetFormat(const int *fmt);
+    int SetSize(const int *w, const int *h);
     int SetIntra(int *key, int *lm, int *cm);
 
     int Compress(int8_t *sp, uint8_t **planes);
@@ -78,11 +78,11 @@ class RTjpeg
     void SetNextKey(void);
 
 private:
-    int b2s(int16_t *data, int8_t *strm, uint8_t bt8);
-    int s2b(int16_t *data, int8_t *strm, uint8_t bt8, int32_t *qtbla);
+    static int b2s(const int16_t *data, int8_t *strm, uint8_t bt8);
+    static int s2b(int16_t *data, const int8_t *strm, uint8_t bt8, int32_t *qtbla);
 
     void QuantInit(void);
-    void Quant(int16_t *block, int32_t *qtbl);
+    static void Quant(int16_t *block, int32_t *qtbl);
    
     void DctInit(void);
     void DctY(uint8_t *idata, int rskip);
@@ -105,42 +105,42 @@ private:
     void decompress8(int8_t *sp, uint8_t **planes);
 
 #ifdef MMX
-    int bcomp(int16_t *rblock, int16_t *old, mmx_t *mask);
+    static int bcomp(int16_t *rblock, int16_t *old, mmx_t *mask);
 #else
-    int bcomp(int16_t *rblock, int16_t *old, uint16_t *mask);
+    static int bcomp(int16_t *rblock, int16_t *old, uint16_t *mask);
 #endif
     
-    int16_t block[64] MALIGN32;
-    int32_t ws[64*4] MALIGN32;
-    int32_t lqt[64] MALIGN32;
-    int32_t cqt[64] MALIGN32;
-    int32_t liqt[64] MALIGN32;
-    int32_t ciqt[64] MALIGN32;
-    int32_t lb8;
-    int32_t cb8;
-    int32_t Ywidth;
-    int32_t Cwidth;
-    int32_t Ysize;
-    int32_t Csize;
-    int16_t *old;
-    int16_t *old_start;
-    int key_count;
+    int16_t   m_block[64] MALIGN32 {0};
+    int32_t   m_ws[64*4]  MALIGN32 {0};
+    int32_t   m_lqt[64]   MALIGN32 {0};
+    int32_t   m_cqt[64]   MALIGN32 {0};
+    int32_t   m_liqt[64]  MALIGN32 {0};
+    int32_t   m_ciqt[64]  MALIGN32 {0};
+    int32_t   m_lB8                {0};
+    int32_t   m_cB8                {0};
+    int32_t   m_yWidth             {0};
+    int32_t   m_cWidth             {0};
+    int32_t   m_ySize              {0};
+    int32_t   m_cSize              {0};
+    int16_t  *m_old                {nullptr};
+    int16_t  *m_oldStart           {nullptr};
+    int       m_keyCount           {0};
 
-    int width;
-    int height;
-    int Q;
-    int f;
+    int       m_width              {0};
+    int       m_height             {0};
+    int       m_q                  {0};
+    int       m_f                  {0};
 #ifdef MMX
-    mmx_t lmask;
-    mmx_t cmask;
+    mmx_t     m_lMask              {};
+    mmx_t     m_cMask              {};
 #else
-    uint16_t lmask;
-    uint16_t cmask;
+    uint16_t  m_lMask              {0};
+    uint16_t  m_cMask              {0};
 #endif
-    int key_rate;
+    int       m_keyRate            {0};
 };
 
-typedef struct {
+struct RTjpeg_frameheader {
 	uint32_t framesize;
 	uint8_t headersize;
 	uint8_t version;
@@ -149,6 +149,6 @@ typedef struct {
 	uint8_t quality;
 	uint8_t key;
 	uint8_t data;
-} RTjpeg_frameheader;
+};
 
 #endif

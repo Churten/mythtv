@@ -17,6 +17,9 @@ class MBASE_PUBLIC MythDB
   public:
     MDBManager *GetDBManager(void);
 
+    MythDB(const MythDB &) = delete;            // not copyable
+    MythDB &operator=(const MythDB &) = delete; // not copyable
+
     static QString GetError(const QString &where, const MSqlQuery &query);
     static void DBError(const QString &where, const MSqlQuery &query);
     static QString DBErrorMessage(const QSqlError &err);
@@ -47,16 +50,18 @@ class MBASE_PUBLIC MythDB
 
     bool GetSettings(QMap<QString,QString> &_key_value_pairs);
 
-    QString GetSetting(     const QString &key, const QString &defaultval);
+    QString GetSetting(     const QString &_key, const QString &defaultval);
+    bool    GetBoolSetting( const QString &key, bool           defaultval);
     int     GetNumSetting(  const QString &key, int            defaultval);
     double  GetFloatSetting(const QString &key, double         defaultval);
 
     QString GetSetting(     const QString &key);
+    bool    GetBoolSetting( const QString &key);
     int     GetNumSetting(  const QString &key);
     double  GetFloatSetting(const QString &key);
 
     QString GetSettingOnHost(
-        const QString &key, const QString &host, const QString &defaultval);
+        const QString &_key, const QString &_host, const QString &defaultval);
     int     GetNumSettingOnHost(
         const QString &key, const QString &host, int            defaultval);
     double  GetFloatSettingOnHost(
@@ -67,10 +72,10 @@ class MBASE_PUBLIC MythDB
     double  GetFloatSettingOnHost(const QString &key, const QString &host);
 
     void GetResolutionSetting(const QString &type, int &width, int &height,
-                              double& forced_aspect, double &refreshrate,
-                              int index=-1);
-    void GetResolutionSetting(const QString &type, int &width, int &height,
-                              int index=-1);
+                              double &forced_aspect, double &refresh_rate,
+                              int index = -1);
+    void GetResolutionSetting(const QString &t, int &w, int &h,
+                              int i = -1);
 
     void WriteDelayedSettings(void);
 
@@ -89,7 +94,7 @@ class MBASE_PUBLIC MythDB
    ~MythDB();
 
   private:
-    MythDBPrivate *d;
+    MythDBPrivate *d {nullptr}; // NOLINT(readability-identifier-naming)
 };
 
  MBASE_PUBLIC  MythDB *GetMythDB();

@@ -87,13 +87,8 @@ ServerSideScripting::~ServerSideScripting()
 {
     Lock();
 
-    QMap<QString, ScriptInfo*>::iterator it = m_mapScripts.begin();
-
-    for (; it != m_mapScripts.end(); ++it)
-    {
-        if (*it)
-            delete (*it);
-    }
+    foreach (auto & script, m_mapScripts)
+        delete script;
 
     m_mapScripts.clear();
     Unlock();
@@ -136,7 +131,7 @@ void ServerSideScripting::RegisterMetaObjectType( const QString &sName,
 
 ScriptInfo *ServerSideScripting::GetLoadedScript( const QString &sFileName )
 {
-    ScriptInfo *pInfo = NULL;
+    ScriptInfo *pInfo = nullptr;
 
     Lock();
 
@@ -158,7 +153,7 @@ bool ServerSideScripting::EvaluatePage( QTextStream *pOutStream, const QString &
     try
     {
 
-        ScriptInfo *pInfo = NULL;
+        ScriptInfo *pInfo = nullptr;
 
         // ------------------------------------------------------------------
         // See if page has already been loaded
@@ -174,7 +169,7 @@ bool ServerSideScripting::EvaluatePage( QTextStream *pOutStream, const QString &
         QDateTime  dtLastModified = fileInfo.lastModified();
 
         Lock();
-        if ((pInfo == NULL) || (pInfo->m_dtTimeStamp != dtLastModified ))
+        if ((pInfo == nullptr) || (pInfo->m_dtTimeStamp != dtLastModified ))
         {
             QString      sCode = CreateMethodFromFile( sFileName );
 
@@ -192,7 +187,7 @@ bool ServerSideScripting::EvaluatePage( QTextStream *pOutStream, const QString &
                 return false;
             }
 
-            if (pInfo != NULL)
+            if (pInfo != nullptr)
             {
                 pInfo->m_oFunc       = func;
                 pInfo->m_dtTimeStamp = dtLastModified;
@@ -217,12 +212,11 @@ bool ServerSideScripting::EvaluatePage( QTextStream *pOutStream, const QString &
         QRegExp validChars = QRegExp("^([a-zA-Z]|_|\\$)(\\w|\\$)+$");
 
         QVariantMap params;
-        QMap<QString, QString>::const_iterator it = mapParams.begin();
         QString prevArrayName = "";
         QVariantMap array;
-        for (; it != mapParams.end(); ++it)
+        for (auto it = mapParams.cbegin(); it != mapParams.cend(); ++it)
         {
-            QString key = it.key();
+            const QString& key = it.key();
             QVariant value = QVariant(it.value());
 
             // PHP Style parameter array
@@ -271,7 +265,7 @@ bool ServerSideScripting::EvaluatePage( QTextStream *pOutStream, const QString &
         QStringMap mapHeaders = pRequest->m_mapHeaders;
 
         QVariantMap requestHeaders;
-        for (it = mapHeaders.begin(); it != mapHeaders.end(); ++it)
+        for (auto it = mapHeaders.begin(); it != mapHeaders.end(); ++it)
         {
             QString key = it.key();
             key = key.replace('-', '_'); // May be other valid chars in a request header that we need to replace
@@ -290,7 +284,7 @@ bool ServerSideScripting::EvaluatePage( QTextStream *pOutStream, const QString &
         QStringMap mapCookies = pRequest->m_mapCookies;
 
         QVariantMap requestCookies;
-        for (it = mapCookies.begin(); it != mapCookies.end(); ++it)
+        for (auto it = mapCookies.begin(); it != mapCookies.end(); ++it)
         {
             QString key = it.key();
             key = key.replace('-', '_'); // May be other valid chars in a request header that we need to replace
@@ -489,7 +483,7 @@ QString ServerSideScripting::CreateMethodFromFile( const QString &sFileName ) co
 //
 //////////////////////////////////////////////////////////////////////////////
 
-QString ServerSideScripting::ReadFileContents( const QString &sFileName ) const
+QString ServerSideScripting::ReadFileContents( const QString &sFileName )
 {
     QString  sCode;
     QFile    scriptFile( sFileName );
@@ -564,12 +558,10 @@ bool ServerSideScripting::ProcessLine( QTextStream &sCode,
             sLine.replace(patStr, QCoreApplication::translate("HtmlUI", repStr.toLocal8Bit().data()));
             return ProcessLine(sCode, sLine, bInCode, sTransBuffer);
         }
-        else
-        {
-            sTransBuffer = " ";
-            sTransBuffer.append(sLine.mid(nStartTransPos + 6).trimmed());
-            sLine = sLine.left(nStartTransPos);
-        }
+
+        sTransBuffer = " ";
+        sTransBuffer.append(sLine.mid(nStartTransPos + 6).trimmed());
+        sLine = sLine.left(nStartTransPos);
     }
 
     int  nStartPos       = 0;
@@ -642,10 +634,12 @@ bool ServerSideScripting::ProcessLine( QTextStream &sCode,
                                   << "\n";
                         }
                         else
+                        {
                             LOG(VB_GENERAL, LOG_ERR,
                                 QString("ServerSideScripting::ProcessLine 'import' - File not found: %1%2")
                                    .arg(m_sResRootPath)
                                    .arg(sFileName));
+                        }
                     }
                     else
                     {

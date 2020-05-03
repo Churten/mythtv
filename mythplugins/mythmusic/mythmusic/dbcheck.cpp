@@ -19,7 +19,7 @@ static bool doUpgradeMusicDatabaseSchema(QString &dbver);
 static bool UpdateDBVersionNumber(const QString &newnumber)
 {
 
-    if (!gCoreContext->SaveSettingOnHost("MusicDBSchemaVer",newnumber,NULL))
+    if (!gCoreContext->SaveSettingOnHost("MusicDBSchemaVer",newnumber,nullptr))
     {
         LOG(VB_GENERAL, LOG_ERR,
             QString("DB Error (Setting new DB version number): %1\n")
@@ -31,7 +31,7 @@ static bool UpdateDBVersionNumber(const QString &newnumber)
     return true;
 }
 
-static bool performActualUpdate(const QString updates[], QString version,
+static bool performActualUpdate(const QString updates[], const QString& version,
                                 QString &dbver)
 {
     MSqlQuery query(MSqlQuery::InitCon());
@@ -72,7 +72,7 @@ bool UpgradeMusicDatabaseSchema(void)
 #ifdef IGNORE_SCHEMA_VER_MISMATCH
     return true;
 #endif
-    SchemaUpgradeWizard *schema_wizard = NULL;
+    SchemaUpgradeWizard *schema_wizard = nullptr;
 
     // Suppress DB messages and turn of the settings cache,
     // These are likely to confuse the users and the code, respectively.
@@ -101,10 +101,10 @@ bool UpgradeMusicDatabaseSchema(void)
     if (schema_wizard->Compare() == 0) // DB schema is what we need it to be..
         goto upgrade_ok_exit;
 
-    if (schema_wizard->DBver.isEmpty())
+    if (schema_wizard->m_DBver.isEmpty())
     {
         // We need to create a database from scratch
-        if (doUpgradeMusicDatabaseSchema(schema_wizard->DBver))
+        if (doUpgradeMusicDatabaseSchema(schema_wizard->m_DBver))
             goto upgrade_ok_exit;
         else
             goto upgrade_error_exit;
@@ -122,7 +122,7 @@ bool UpgradeMusicDatabaseSchema(void)
             break;
     }
 
-    if (!doUpgradeMusicDatabaseSchema(schema_wizard->DBver))
+    if (!doUpgradeMusicDatabaseSchema(schema_wizard->m_DBver))
     {
         LOG(VB_GENERAL, LOG_ERR, "Database schema upgrade failed.");
         goto upgrade_error_exit;
@@ -205,7 +205,9 @@ static bool doUpgradeMusicDatabaseSchema(QString &dbver)
                        "filename NOT LIKE ('%://%');"))
         {
             int i = 0;
-            QString intid, name, newname;
+            QString intid;
+            QString name;
+            QString newname;
 
             MSqlQuery modify(MSqlQuery::InitCon());
             while (query.next())
@@ -342,6 +344,7 @@ static bool doUpgradeMusicDatabaseSchema(QString &dbver)
             "    INDEX (name)"
             ");",
 
+            // NOLINTNEXTLINE(bugprone-suspicious-missing-comma)
             "INSERT INTO smartplaylistcategory SET categoryid = 1, "
             "    name = \"Decades\";",
             "INSERT INTO smartplaylistcategory SET categoryid = 2, "
@@ -517,6 +520,7 @@ static bool doUpgradeMusicDatabaseSchema(QString &dbver)
             "RENAME TABLE smartplaylistitem TO music_smartplaylist_items;",
             "RENAME TABLE smartplaylistcategory TO music_smartplaylist_categories;",
             // Run necessary SQL to migrate the table structure
+            // NOLINTNEXTLINE(bugprone-suspicious-missing-comma)
             "CREATE TEMPORARY TABLE tmp_artists"
             "  SELECT DISTINCT artist FROM musicmetadata;",
             "INSERT INTO tmp_artists"
@@ -575,6 +579,7 @@ static bool doUpgradeMusicDatabaseSchema(QString &dbver)
         const QString updates[] =
         {
             "ALTER TABLE music_songs MODIFY lastplay DATETIME DEFAULT NULL;",
+            // NOLINTNEXTLINE(bugprone-suspicious-missing-comma)
             "CREATE TABLE music_directories (directory_id int(20) NOT NULL AUTO_INCREMENT "
             "PRIMARY KEY, path TEXT NOT NULL, "
             "parent_id INT(20) NOT NULL DEFAULT '0') ;",
@@ -637,11 +642,10 @@ static bool doUpgradeMusicDatabaseSchema(QString &dbver)
                 int id = query.value(0).toInt();
                 QString filename = query.value(1).toString();
                 int directoryID = query.value(2).toInt();
-                int type = IT_UNKNOWN;
                 MSqlQuery subquery(MSqlQuery::InitCon());
 
                 // guess the type from the filename
-                type = AlbumArtImages::guessImageType(filename);
+                int type = AlbumArtImages::guessImageType(filename);
 
                 // if type is still unknown check to see how many images are available in the dir
                 // and assume that if this is the only image it must be the front cover
@@ -731,7 +735,8 @@ static bool doUpgradeMusicDatabaseSchema(QString &dbver)
         const QString updates[] =
         {
             QString("ALTER DATABASE %1 DEFAULT CHARACTER SET latin1;")
-                    .arg(gContext->GetDatabaseParams().dbName),
+                    .arg(gContext->GetDatabaseParams().m_dbName),
+            // NOLINTNEXTLINE(bugprone-suspicious-missing-comma)
             "ALTER TABLE music_albumart"
             "  MODIFY filename varbinary(255) NOT NULL default '';",
             "ALTER TABLE music_albums"
@@ -780,7 +785,8 @@ static bool doUpgradeMusicDatabaseSchema(QString &dbver)
         const QString updates[] =
         {
             QString("ALTER DATABASE %1 DEFAULT CHARACTER SET utf8 COLLATE utf8_general_ci;")
-                    .arg(gContext->GetDatabaseParams().dbName),
+                    .arg(gContext->GetDatabaseParams().m_dbName),
+            // NOLINTNEXTLINE(bugprone-suspicious-missing-comma)
             "ALTER TABLE music_albumart"
             "  DEFAULT CHARACTER SET default,"
             "  MODIFY filename varchar(255) CHARACTER SET utf8 NOT NULL default '';",

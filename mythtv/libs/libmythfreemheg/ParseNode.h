@@ -30,7 +30,7 @@ class MHGroup;
 // Abstract base class for the text and binary parsers.
 class MHParseBase {
   public:
-    virtual ~MHParseBase() {}
+    virtual ~MHParseBase() = default;
     virtual MHParseNode *Parse() = 0;
 };
 
@@ -40,12 +40,12 @@ class MHParseNode
   public:
     enum NodeType { PNTagged, PNBool, PNInt, PNEnum, PNString, PNNull, PNSeq };
   protected:
-    MHParseNode(enum NodeType nt): m_nNodeType(nt) {}
+    explicit MHParseNode(enum NodeType nt): m_nNodeType(nt) {}
   public:
-    virtual ~MHParseNode() {}
+    virtual ~MHParseNode() = default;
     enum NodeType m_nNodeType;
 
-    void Failure(const char *p); // Report a parse failure.
+    static void Failure(const char *p); // Report a parse failure.
 
     // Destructors - extract data and raise an exception if the Node Type is wrong.
 
@@ -68,7 +68,7 @@ class MHParseNode
     // String
     void GetStringValue(MHOctetString &str);
 
-    void PrintMe(FILE *);
+    void PrintMe(FILE *f);
 };
 
 // Sequence of parse nodes.
@@ -84,8 +84,9 @@ class MHParseSequence: public MHParseNode, public MHOwnPtrSequence<MHParseNode>
 class MHPTagged: public MHParseNode
 {
   public:
-    MHPTagged(int nTag);
-    void AddArg(MHParseNode *pNode);
+    explicit MHPTagged(int nTag)
+        : MHParseNode(PNTagged), m_TagNo(nTag) {}
+    void AddArg(MHParseNode *pArg);
 
     int m_TagNo;
     MHParseSequence m_Args;
@@ -95,7 +96,7 @@ class MHPTagged: public MHParseNode
 class MHPInt: public MHParseNode
 {
   public:
-    MHPInt(int v): MHParseNode(PNInt), m_Value(v) {}
+    explicit MHPInt(int v): MHParseNode(PNInt), m_Value(v) {}
 
   public:
     int m_Value;
@@ -105,7 +106,7 @@ class MHPInt: public MHParseNode
 class MHPEnum: public MHParseNode
 {
   public:
-    MHPEnum(int v): MHParseNode(PNEnum), m_Value(v) {}
+    explicit MHPEnum(int v): MHParseNode(PNEnum), m_Value(v) {}
   public:
     int m_Value;
 };
@@ -114,7 +115,7 @@ class MHPEnum: public MHParseNode
 class MHPBool: public MHParseNode
 {
   public:
-    MHPBool(bool v): MHParseNode(PNBool),  m_Value(v) {}
+    explicit MHPBool(bool v): MHParseNode(PNBool),  m_Value(v) {}
 
   public:
     bool m_Value;
@@ -124,7 +125,7 @@ class MHPBool: public MHParseNode
 class MHPString: public MHParseNode
 {
   public:
-    MHPString(MHOctetString &pSrc): MHParseNode(PNString) { m_Value.Copy(pSrc); }
+    explicit MHPString(MHOctetString &pSrc): MHParseNode(PNString) { m_Value.Copy(pSrc); }
 
   public:
     MHOctetString m_Value;

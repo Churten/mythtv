@@ -22,7 +22,6 @@ MythUIVideo::MythUIVideo(MythUIType *parent, const QString &name)
     : MythUIType(parent, name)
 {
     m_image = GetMythPainter()->GetFormatImage();
-    m_backgroundColor = QColor(Qt::black);
 }
 
 MythUIVideo::~MythUIVideo()
@@ -30,7 +29,7 @@ MythUIVideo::~MythUIVideo()
     if (m_image)
     {
         m_image->DecrRef();
-        m_image = NULL;
+        m_image = nullptr;
     }
 }
 
@@ -42,7 +41,7 @@ void MythUIVideo::Reset(void)
     if (m_image)
     {
         m_image->DecrRef();
-        m_image = NULL;
+        m_image = nullptr;
     }
 
     m_image = GetMythPainter()->GetFormatImage();
@@ -85,8 +84,10 @@ void MythUIVideo::DrawSelf(MythPainter *p, int xoffset, int yoffset,
     if (!m_image || m_image->isNull())
         return;
 
-    if (m_image)
+    if (m_image) {
+        p->SetClipRect(clipRect);
         p->DrawImage(area.x(), area.y(), m_image, alphaMod);
+    }
 }
 
 /**
@@ -118,6 +119,6 @@ void MythUIVideo::CopyFrom(MythUIType *base)
  */
 void MythUIVideo::CreateCopy(MythUIType *parent)
 {
-    MythUIVideo *im = new MythUIVideo(parent, objectName());
+    auto *im = new MythUIVideo(parent, objectName());
     im->CopyFrom(this);
 }

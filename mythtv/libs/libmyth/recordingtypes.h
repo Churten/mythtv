@@ -16,7 +16,7 @@
 
 #include "mythexp.h"
 
-typedef enum RecordingTypes
+enum RecordingType
 {
     kNotRecording = 0,
     kSingleRecord = 1,
@@ -30,41 +30,43 @@ typedef enum RecordingTypes
     //kFindDailyRecord = 9, (Obsolete)
     //kFindWeeklyRecord = 10, (Obsolete)
     kTemplateRecord = 11
-} RecordingType; // note stored in uint8_t in ProgramInfo
-MPUBLIC QString toString(RecordingType);
-MPUBLIC QString toDescription(RecordingType);
-MPUBLIC QString toRawString(RecordingType);
-MPUBLIC QChar   toQChar( RecordingType);
-MPUBLIC RecordingType recTypeFromString(QString);
+}; // note stored in uint8_t in ProgramInfo
+MPUBLIC QString toString(RecordingType rectype);
+MPUBLIC QString toDescription(RecordingType rectype);
+MPUBLIC QString toRawString(RecordingType rectype);
+MPUBLIC QChar   toQChar( RecordingType rectype);
+MPUBLIC RecordingType recTypeFromString(const QString& type);
 
 MPUBLIC int RecTypePrecedence(RecordingType rectype);
 
-typedef enum RecordingDupInTypes
+enum RecordingDupInType
 {
+    kDupsUnset          = 0x00,
     kDupsInRecorded     = 0x01,
     kDupsInOldRecorded  = 0x02,
     kDupsInAll          = 0x0F,
     kDupsNewEpi         = 0x10
-} RecordingDupInType; // note stored in uint8_t in ProgramInfo
-MPUBLIC QString toString(RecordingDupInType);
-MPUBLIC QString toDescription(RecordingDupInType);
-MPUBLIC QString toRawString(RecordingDupInType);
-MPUBLIC RecordingDupInType dupInFromString(QString);
+}; // note stored in uint8_t in ProgramInfo
+MPUBLIC QString toString(RecordingDupInType rectype);
+MPUBLIC QString toDescription(RecordingDupInType rectype);
+MPUBLIC QString toRawString(RecordingDupInType rectype);
+MPUBLIC RecordingDupInType dupInFromString(const QString& type);
 
-typedef enum RecordingDupMethodType
+enum RecordingDupMethodType
 {
+    kDupCheckUnset    = 0x00,
     kDupCheckNone     = 0x01,
     kDupCheckSub      = 0x02,
     kDupCheckDesc     = 0x04,
     kDupCheckSubDesc  = 0x06,
     kDupCheckSubThenDesc = 0x08
-} RecordingDupMethodType; // note stored in uint8_t in ProgramInfo
-MPUBLIC QString toString(RecordingDupMethodType);
-MPUBLIC QString toDescription(RecordingDupMethodType);
-MPUBLIC QString toRawString(RecordingDupMethodType);
-MPUBLIC RecordingDupMethodType dupMethodFromString(QString);
+}; // note stored in uint8_t in ProgramInfo
+MPUBLIC QString toString(RecordingDupMethodType rectype);
+MPUBLIC QString toDescription(RecordingDupMethodType rectype);
+MPUBLIC QString toRawString(RecordingDupMethodType rectype);
+MPUBLIC RecordingDupMethodType dupMethodFromString(const QString& type);
 
-typedef enum RecSearchTypes
+enum RecSearchType
 {
     kNoSearch = 0,
     kPowerSearch,
@@ -72,10 +74,10 @@ typedef enum RecSearchTypes
     kKeywordSearch,
     kPeopleSearch,
     kManualSearch
-} RecSearchType;
-MPUBLIC QString toString(RecSearchType);
-MPUBLIC QString toRawString(RecSearchType);
-MPUBLIC RecSearchType searchTypeFromString(QString);
+};
+MPUBLIC QString toString(RecSearchType rectype);
+MPUBLIC QString toRawString(RecSearchType rectype);
+MPUBLIC RecSearchType searchTypeFromString(const QString& type);
 
 #endif
 

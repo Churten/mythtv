@@ -1,13 +1,14 @@
 
 #include "AppleRemote.h"
 
-#include <stdio.h>
-#include <unistd.h>
-#include <stdlib.h>
-#include <ctype.h>
+#include <cctype>
+#include <cstdio>
+#include <cstdlib>
 #include <sys/errno.h>
 #include <sys/sysctl.h>  // for sysctlbyname
 #include <sysexits.h>
+#include <unistd.h>
+
 #include <mach/mach.h>
 #include <mach/mach_error.h>
 #include <IOKit/IOKitLib.h>
@@ -21,7 +22,7 @@
 
 #include "mythlogging.h"
 
-AppleRemote*    AppleRemote::_instance = 0;
+AppleRemote*    AppleRemote::_instance = nullptr;
 
 
 #define REMOTE_SWITCH_COOKIE 19
@@ -32,24 +33,20 @@ AppleRemote*    AppleRemote::_instance = 0;
 
 #define LOC QString("AppleRemote::")
 
-typedef struct _ATV_IR_EVENT
+struct ATV_IR_EVENT
 {
     UInt32  time_ms32;
     UInt32  time_ls32;  // units of microsecond
     UInt32  unknown1;
     UInt32  keycode;
     UInt32  unknown2;
-} ATV_IR_EVENT;
+};
 
 static io_object_t _findAppleRemoteDevice(const char *devName);
 
-AppleRemote::Listener::~Listener()
-{
-}
-
 AppleRemote * AppleRemote::Get()
 {
-    if (_instance == 0)
+    if (_instance == nullptr)
         _instance = new AppleRemote();
 
     return _instance;
@@ -68,13 +65,13 @@ AppleRemote::~AppleRemote()
     }
     if (this == _instance)
     {
-        _instance = 0;
+        _instance = nullptr;
     }
 }
 
 bool AppleRemote::isListeningToRemote()
 {
-    return (hidDeviceInterface != NULL && !cookies.empty() && queue != NULL);
+    return (hidDeviceInterface != nullptr && !cookies.empty() && queue != nullptr);
 }
 
 void AppleRemote::setListener(AppleRemote::Listener* listener)
@@ -84,7 +81,7 @@ void AppleRemote::setListener(AppleRemote::Listener* listener)
 
 void AppleRemote::startListening()
 {
-    if (queue != NULL)   // already listening
+    if (queue != nullptr)   // already listening
         return;
 
     io_object_t hidDevice = _findAppleRemoteDevice("AppleIRController");
@@ -106,22 +103,22 @@ void AppleRemote::startListening()
 
 void AppleRemote::stopListening()
 {
-    if (queue != NULL)
+    if (queue != nullptr)
     {
         (*queue)->stop(queue);
         (*queue)->dispose(queue);
         (*queue)->Release(queue);
-        queue = NULL;
+        queue = nullptr;
     }
 
     if (!cookies.empty())
         cookies.clear();
 
-    if (hidDeviceInterface != NULL)
+    if (hidDeviceInterface != nullptr)
     {
         (*hidDeviceInterface)->close(hidDeviceInterface);
         (*hidDeviceInterface)->Release(hidDeviceInterface);
-        hidDeviceInterface = NULL;
+        hidDeviceInterface = nullptr;
     }
 }
 
@@ -147,7 +144,7 @@ static float GetATVversion()
     if ( macVersion > 0x1040 )  // Mac OS 10.5 or greater is
         return 0.0;             // definitely not an Apple TV
 
-    sysctlbyname("hw.model", &hw_model, &len, NULL, 0);
+    sysctlbyname("hw.model", &hw_model, &len, nullptr, 0);
 
     float  version = 0.0;
     if ( strstr(hw_model,"AppleTV1,1") )
@@ -174,16 +171,7 @@ static float GetATVversion()
 }
 
 // protected
-AppleRemote::AppleRemote() : MThread("AppleRemote"),
-                             openInExclusiveMode(true),
-                             hidDeviceInterface(0),
-                             queue(0),
-                             remoteId(0),
-                             _listener(0),
-                             mUsingNewAtv(false),
-                             mLastEvent(AppleRemote::Undefined),
-                             mEventCount(0),
-                             mKeyIsDown(false)
+AppleRemote::AppleRemote() : MThread("AppleRemote")
 {
     if ( GetATVversion() > 2.2 )
     {
@@ -289,7 +277,7 @@ void AppleRemote::_initCookieMap()
 
 static io_object_t _findAppleRemoteDevice(const char *devName)
 {
-    CFMutableDictionaryRef hidMatchDictionary = 0;
+    CFMutableDictionaryRef hidMatchDictionary = nullptr;
     io_iterator_t          hidObjectIterator = 0;
     io_object_t            hidDevice = 0;
     IOReturn               ioReturnValue;
@@ -310,7 +298,7 @@ static io_object_t _findAppleRemoteDevice(const char *devName)
 
     // IOServiceGetMatchingServices consumes a reference to the dictionary,
     // so we don't need to release the dictionary ref.
-    hidMatchDictionary = 0;
+    hidMatchDictionary = nullptr;
     return hidDevice;
 }
 
@@ -322,7 +310,7 @@ bool AppleRemote::_initCookies()
 
     handle  = (IOHIDDeviceInterface122**)hidDeviceInterface;
     success = (*handle)->copyMatchingElements(handle,
-                                              NULL,
+                                              nullptr,
                                               (CFArrayRef*)&elements);
 
     if (success == kIOReturnSuccess)
@@ -338,7 +326,7 @@ bool AppleRemote::_initCookies()
             object  = CFDictionaryGetValue(element,
                                            CFSTR(kIOHIDElementCookieKey));
 
-            if (object == 0 || CFGetTypeID(object) != CFNumberGetTypeID())
+            if (object == nullptr || CFGetTypeID(object) != CFNumberGetTypeID())
                 continue;
 
             if (!CFNumberGetValue((CFNumberRef)object,
@@ -357,7 +345,7 @@ bool AppleRemote::_initCookies()
 bool AppleRemote::_createDeviceInterface(io_object_t hidDevice)
 {
     IOReturn              ioReturnValue;
-    IOCFPlugInInterface** plugInInterface = NULL;
+    IOCFPlugInInterface** plugInInterface = nullptr;
     SInt32                score = 0;
 
 
@@ -380,7 +368,7 @@ bool AppleRemote::_createDeviceInterface(io_object_t hidDevice)
 
         (*plugInInterface)->Release(plugInInterface);
     }
-    return hidDeviceInterface != 0;
+    return hidDeviceInterface != nullptr;
 }
 
 bool AppleRemote::_openDevice()
@@ -431,7 +419,7 @@ bool AppleRemote::_openDevice()
     }
 
     ioReturnValue = (*queue)->setEventCallout(queue, QueueCallbackFunction,
-                                              this, NULL);
+                                              this, nullptr);
     if (ioReturnValue != KERN_SUCCESS)
     {
         LOG(VB_GENERAL, LOG_ERR, LOC +
@@ -547,7 +535,7 @@ void AppleRemote::_handleEventWithCookieString(std::string cookieString,
 // We need to simulate the key up and hold events
 
 void AppleRemote::_handleEventATV23(std::string cookieString,
-                                    SInt32      sumOfValues)
+                                    SInt32      /*sumOfValues*/)
 {
     std::map<std::string,AppleRemote::Event>::iterator ii;
     ii = cookieToButtonMapping.find(cookieString);

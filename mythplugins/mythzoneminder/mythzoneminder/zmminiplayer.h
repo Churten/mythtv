@@ -13,11 +13,11 @@ class MPUBLIC ZMMiniPlayer : public ZMLivePlayer
 
   public:
     explicit ZMMiniPlayer(MythScreenStack *parent);
-    ~ZMMiniPlayer();
+    ~ZMMiniPlayer() override;
 
-    bool Create(void);
-    bool keyPressEvent(QKeyEvent *);
-    void customEvent (QEvent* event);
+    bool Create(void) override; // ZMLivePlayer
+    bool keyPressEvent(QKeyEvent *event) override; // ZMLivePlayer
+    void customEvent (QEvent* event) override; // MythUIType
 
     void setAlarmMonitor(int monID) { m_alarmMonitor = monID; }
 
@@ -25,11 +25,11 @@ class MPUBLIC ZMMiniPlayer : public ZMLivePlayer
     void timerTimeout(void);
 
   private:
-    QTimer *m_displayTimer;
+    QTimer      *m_displayTimer {nullptr};
 
-    MythUIText  *m_monitorText;
-    MythUIText  *m_statusText;
-    MythUIImage *m_image;
+    MythUIText  *m_monitorText  {nullptr};
+    MythUIText  *m_statusText   {nullptr};
+    MythUIImage *m_image        {nullptr};
 };
 
 #endif

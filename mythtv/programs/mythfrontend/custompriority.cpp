@@ -27,12 +27,7 @@
 #include "viewschedulediff.h"
 
 CustomPriority::CustomPriority(MythScreenStack *parent, ProgramInfo *proginfo)
-              : MythScreenType(parent, "CustomPriority"),
-                m_ruleList(NULL),      m_clauseList(NULL),
-                m_titleEdit(NULL),     m_descriptionEdit(NULL),
-                m_prioritySpin(NULL),  m_addButton(NULL),
-                m_testButton(NULL),    m_installButton(NULL),
-                m_deleteButton(NULL),  m_cancelButton(NULL)
+              : MythScreenType(parent, "CustomPriority")
 {
     if (proginfo)
         m_pginfo = new ProgramInfo(*proginfo);
@@ -113,7 +108,7 @@ void CustomPriority::loadData()
     rule.priority = QString().setNum(1);
 
     new MythUIButtonListItem(m_ruleList, tr("<New priority rule>"),
-                             qVariantFromValue(rule));
+                             QVariant::fromValue(rule));
 
     MSqlQuery result(MSqlQuery::InitCon());
     result.prepare("SELECT priorityname, recpriority, selectclause "
@@ -121,7 +116,7 @@ void CustomPriority::loadData()
 
     if (result.exec())
     {
-        MythUIButtonListItem *item = NULL;
+        MythUIButtonListItem *item = nullptr;
         while (result.next())
         {
             QString trimTitle = result.value(0).toString();
@@ -132,7 +127,7 @@ void CustomPriority::loadData()
             rule.description = result.value(2).toString();
 
             item = new MythUIButtonListItem(m_ruleList, rule.title,
-                                            qVariantFromValue(rule));
+                                            QVariant::fromValue(rule));
 
             if (trimTitle == baseTitle)
                 m_ruleList->SetItemCurrent(item);
@@ -230,7 +225,7 @@ void CustomPriority::loadExampleRules()
     {
         it.next();
         new MythUIButtonListItem(m_clauseList, it.key(),
-                                 qVariantFromValue(it.value()));
+                                 QVariant::fromValue(it.value()));
     }
 }
 
@@ -353,7 +348,7 @@ bool CustomPriority::checkSyntax(void)
         QString qstr = QString("SELECT (%1) FROM (recordmatch, record, "
                                "program, channel, capturecard, "
                                "oldrecorded) WHERE NULL").arg(desc);
-        while (1)
+        while (true)
         {
             int i = qstr.indexOf("RECTABLE");
             if (i == -1) break;
@@ -459,7 +454,7 @@ void CustomPriority::testSchedule(void)
         ltitle = m_titleEdit->GetText();
 
     MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
-    ViewScheduleDiff *vsd = new ViewScheduleDiff(mainStack, ttable, 0, ltitle);
+    auto *vsd = new ViewScheduleDiff(mainStack, ttable, 0, ltitle);
 
     if (vsd->Create())
         mainStack->AddScreen(vsd);

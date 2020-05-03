@@ -13,53 +13,53 @@ extern "C" {
 class AVSubtitles
 {
   public:
-    AVSubtitles() : fixPosition(false) { }
-    MythDeque<AVSubtitle> buffers;
-    QMutex lock;
-    bool   fixPosition;
+    AVSubtitles() = default;
+    MythDeque<AVSubtitle> m_buffers;
+    QMutex                m_lock;
+    bool                  m_fixPosition {false};
 };
 
 class RawTextSubs
 {
   public:
-    RawTextSubs(void) { duration = 0; }
+    RawTextSubs(void) = default;
 
-    QStringList buffers;
-    uint64_t    duration;
-    QMutex      lock;
+    QStringList m_buffers;
+    uint64_t    m_duration {0};
+    QMutex      m_lock;
 };
 
 class SubtitleReader
 {
   public:
-    SubtitleReader();
+    SubtitleReader() = default;
     ~SubtitleReader();
 
     void EnableAVSubtitles(bool enable);
     void EnableTextSubtitles(bool enable);
     void EnableRawTextSubtitles(bool enable);
 
-    AVSubtitles* GetAVSubtitles(void) { return &m_AVSubtitles; }
-    bool AddAVSubtitle(const AVSubtitle& subtitle, bool fix_position,
+    AVSubtitles* GetAVSubtitles(void) { return &m_avSubtitles; }
+    bool AddAVSubtitle(AVSubtitle& subtitle, bool fix_position,
                        bool allow_forced);
     void ClearAVSubtitles(void);
-    void FreeAVSubtitle(const AVSubtitle &sub);
+    static void FreeAVSubtitle(AVSubtitle &sub);
 
-    TextSubtitles* GetTextSubtitles(void) { return &m_TextSubtitles; }
+    TextSubtitles* GetTextSubtitles(void) { return &m_textSubtitles; }
     bool HasTextSubtitles(void);
-    void LoadExternalSubtitles(const QString &videoFile, bool isInProgress);
+    void LoadExternalSubtitles(const QString &subtitleFileName, bool isInProgress);
 
     QStringList GetRawTextSubtitles(uint64_t &duration);
-    void AddRawTextSubtitle(QStringList list, uint64_t duration);
+    void AddRawTextSubtitle(const QStringList& list, uint64_t duration);
     void ClearRawTextSubtitles(void);
 
   private:
-    AVSubtitles   m_AVSubtitles;
-    bool          m_AVSubtitlesEnabled;
-    TextSubtitles m_TextSubtitles;
-    bool          m_TextSubtitlesEnabled;
-    RawTextSubs   m_RawTextSubtitles;
-    bool          m_RawTextSubtitlesEnabled;
+    AVSubtitles   m_avSubtitles;
+    bool          m_avSubtitlesEnabled      {false};
+    TextSubtitles m_textSubtitles;
+    bool          m_textSubtitlesEnabled    {false};
+    RawTextSubs   m_rawTextSubtitles;
+    bool          m_rawTextSubtitlesEnabled {false};
 };
 
 #endif // SUBTITLEREADER_H

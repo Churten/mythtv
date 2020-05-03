@@ -15,20 +15,20 @@ class ASISignalMonitor: public DTVSignalMonitor
   public:
     ASISignalMonitor(int db_cardnum, ASIChannel *_channel,
                      bool _release_stream = true, uint64_t _flags = 0);
-    virtual ~ASISignalMonitor();
+    ~ASISignalMonitor() override;
 
-    void Stop(void);
+    void Stop(void) override; // SignalMonitor
 
   protected:
     ASISignalMonitor(void);
     ASISignalMonitor(const ASISignalMonitor&);
 
-    virtual void UpdateValues(void);
+    void UpdateValues(void) override; // SignalMonitor
     ASIChannel *GetASIChannel(void);
 
   protected:
-    bool              streamHandlerStarted;
-    ASIStreamHandler *streamHandler;
+    bool              m_streamHandlerStarted {false};
+    ASIStreamHandler *m_streamHandler        {nullptr};
 };
 
 #endif // ASISIGNALMONITOR_H

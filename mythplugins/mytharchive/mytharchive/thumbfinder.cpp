@@ -24,14 +24,12 @@
  *
  */
 
-// c
-#include <sys/stat.h>
-#include <math.h>
-#include <errno.h>
-
 // c++
+#include <cerrno>
+#include <cmath>
 #include <cstdlib>
 #include <iostream>
+#include <sys/stat.h>
 
 // qt
 #include <QApplication>
@@ -55,6 +53,10 @@
 #include <mythuibuttonlist.h>
 #include <mythimage.h>
 #include <mythconfig.h>
+
+extern "C" {
+#include "libavutil/imgutils.h"
+}
 
 #ifndef INT64_C    // Used in FFmpeg headers to define some constants
 #define INT64_C(v)   (v ## LL)
@@ -84,29 +86,16 @@ int SeekAmountsCount = sizeof(SeekAmounts) / sizeof(SeekAmounts[0]);
 ThumbFinder::ThumbFinder(MythScreenStack *parent, ArchiveItem *archiveItem,
                          const QString &menuTheme)
             :MythScreenType(parent, "ThumbFinder"),
-    m_inputFC(NULL),        m_codecCtx(NULL),
-    m_codec(NULL),
-    m_fps(0.0),             m_outputbuf(NULL),
-    m_frameWidth(0),        m_frameHeight(0),
-    m_videostream(0),       m_currentSeek(0),
-    m_startTime(-1),        m_startPTS(-1),
-    m_currentPTS(-1),       m_firstIFramePTS(-1),
-    m_frameTime(0),         m_updateFrame(false),
-    m_finalDuration(0),     m_offset(0),
     m_archiveItem(archiveItem),
     m_thumbCount(getChapterCount(menuTheme)),
-    m_thumbDir(createThumbDir()),
-    m_frameButton(NULL),    m_saveButton(NULL),
-    m_cancelButton(NULL),   m_frameImage(NULL),
-    m_positionImage(NULL),  m_imageGrid(NULL),
-    m_seekAmountText(NULL), m_currentPosText(NULL)
+    m_thumbDir(createThumbDir())
 {
     // copy thumbList so we can abandon changes if required
     m_thumbList.clear();
-    for (int x = 0; x < m_archiveItem->thumbList.size(); x++)
+    foreach (auto item, m_archiveItem->thumbList)
     {
-        ThumbImage *thumb = new ThumbImage;
-        *thumb = *m_archiveItem->thumbList.at(x);
+        auto *thumb = new ThumbImage;
+        *thumb = *item;
         m_thumbList.append(thumb);
     }
 }
@@ -127,11 +116,8 @@ ThumbFinder::~ThumbFinder()
 
 bool ThumbFinder::Create(void)
 {
-    bool foundtheme = false;
-
     // Load the theme for this screen
-    foundtheme = LoadWindowFromXML("mythburn-ui.xml", "thumbfinder", this);
-
+    bool foundtheme = LoadWindowFromXML("mythburn-ui.xml", "thumbfinder", this);
     if (!foundtheme)
         return false;
 
@@ -173,9 +159,8 @@ bool ThumbFinder::keyPressEvent(QKeyEvent *event)
     if (GetFocusWidget()->keyPressEvent(event))
         return true;
 
-    bool handled = false;
     QStringList actions;
-    handled = GetMythMainWindow()->TranslateKeyPress("Archive", event, actions);
+    bool handled = GetMythMainWindow()->TranslateKeyPress("Archive", event, actions);
 
     for (int i = 0; i < actions.size() && !handled; i++)
     {
@@ -190,7 +175,7 @@ bool ThumbFinder::keyPressEvent(QKeyEvent *event)
 
         if (action == "ESCAPE")
         {
-            showMenu();
+            ShowMenu();
             return true;
         }
 
@@ -271,10 +256,8 @@ void ThumbFinder::loadCutList()
     ProgramInfo *progInfo = getProgramInfoForFile(m_archiveItem->filename);
 
     if (progInfo && m_archiveItem->hasCutlist)
-    {
         progInfo->QueryCutList(m_deleteMap);
-        delete progInfo;
-    }
+    delete progInfo;
 
     if (m_deleteMap.isEmpty())
     {
@@ -305,10 +288,10 @@ void ThumbFinder::savePressed()
          delete m_archiveItem->thumbList.takeFirst();
     m_archiveItem->thumbList.clear();
 
-    for (int x = 0; x < m_thumbList.size(); x++)
+    foreach (auto item, m_thumbList)
     {
-        ThumbImage *thumb = new ThumbImage;
-        *thumb = *m_thumbList.at(x);
+        auto *thumb = new ThumbImage;
+        *thumb = *item;
         m_archiveItem->thumbList.append(thumb);
     }
 
@@ -368,7 +351,7 @@ QString ThumbFinder::createThumbDir(void)
     if (!dir.exists())
     {
         dir.mkdir(thumbDir);
-        if( chmod(qPrintable(thumbDir), 0777) )
+        if( chmod(qPrintable(thumbDir), 0777) != 0 )
             LOG(VB_GENERAL, LOG_ERR, "ThumbFinder: Failed to change permissions"
                                      " on thumb directory: " + ENO);
     }
@@ -376,12 +359,12 @@ QString ThumbFinder::createThumbDir(void)
     QString path;
     for (int x = 1; dir.exists(); x++)
     {
-        path = QString(thumbDir + "/%1").arg(x);
+        path = thumbDir + QString("/%1").arg(x);
         dir.setPath(path);
     }
 
     dir.mkdir(path);
-    if( chmod(qPrintable(path), 0777) )
+    if( chmod(qPrintable(path), 0777) != 0 )
         LOG(VB_GENERAL, LOG_ERR, "ThumbFinder: Failed to change permissions on "
                                  "thumb directory: %1" + ENO);
 
@@ -419,14 +402,13 @@ void ThumbFinder::updateThumb(void)
 
 QString ThumbFinder::frameToTime(int64_t frame, bool addFrame)
 {
-    int hour, min, sec;
     QString str;
 
-    sec = (int) (frame / m_fps);
+    int sec = (int) (frame / m_fps);
     frame = frame - (int) (sec * m_fps);
-    min = sec / 60;
+    int min = sec / 60;
     sec %= 60;
-    hour = min / 60;
+    int hour = min / 60;
     min %= 60;
 
     if (addFrame)
@@ -460,7 +442,7 @@ bool ThumbFinder::getThumbImages()
     m_updateFrame = true;
     getFrameImage();
 
-    int chapterLen;
+    int chapterLen = 0;
     if (m_thumbCount)
         chapterLen = m_finalDuration / m_thumbCount;
     else
@@ -471,9 +453,9 @@ bool ThumbFinder::getThumbImages()
 
     // add title thumb
     m_frameFile = m_thumbDir + "/title.jpg";
-    ThumbImage *thumb = NULL;
+    ThumbImage *thumb = nullptr;
 
-    if (m_thumbList.size() > 0)
+    if (!m_thumbList.empty())
     {
         // use the thumb details in the thumbList if already available
         thumb = m_thumbList.at(0);
@@ -500,9 +482,9 @@ bool ThumbFinder::getThumbImages()
 
     for (int x = 1; x <= m_thumbCount; x++)
     {
-        m_frameFile = QString(m_thumbDir + "/chapter-%1.jpg").arg(x);
+        m_frameFile = m_thumbDir + QString("/chapter-%1.jpg").arg(x);
 
-        thumb = NULL;
+        thumb = nullptr;
 
         if (m_archiveItem->thumbList.size() > x)
         {
@@ -512,16 +494,13 @@ bool ThumbFinder::getThumbImages()
 
         if (!thumb)
         {
-            QString time;
-            int chapter, hour, min, sec;
+            int chapter = chapterLen * (x - 1);
+            int hour = chapter / 3600;
+            int min = (chapter % 3600) / 60;
+            int sec = chapter % 60;
+            QString time = QString::asprintf("%02d:%02d:%02d", hour, min, sec);
 
-            chapter = chapterLen * (x - 1);
-            hour = chapter / 3600;
-            min = (chapter % 3600) / 60;
-            sec = chapter % 60;
-            time = time.sprintf("%02d:%02d:%02d", hour, min, sec);
-
-            int64_t frame = (int64_t) (chapter * ceil(m_fps));
+            auto frame = (int64_t) (chapter * ceil(m_fps));
 
             // no thumb available create a new one
             thumb = new ThumbImage;
@@ -555,8 +534,6 @@ bool ThumbFinder::getThumbImages()
 
 bool ThumbFinder::initAVCodec(const QString &inFile)
 {
-    av_register_all();
-
     // Open recording
     LOG(VB_JOBQUEUE, LOG_INFO, QString("ThumbFinder: Opening '%1'")
             .arg(inFile));
@@ -568,7 +545,7 @@ bool ThumbFinder::initAVCodec(const QString &inFile)
     }
 
     // Getting stream information
-    int ret = avformat_find_stream_info(m_inputFC, NULL);
+    int ret = avformat_find_stream_info(m_inputFC, nullptr);
     if (ret < 0)
     {
         LOG(VB_GENERAL, LOG_ERR,
@@ -584,7 +561,7 @@ bool ThumbFinder::initAVCodec(const QString &inFile)
     for (uint i = 0; i < m_inputFC->nb_streams; i++)
     {
         AVStream *st = m_inputFC->streams[i];
-        if (m_inputFC->streams[i]->codec->codec_type == AVMEDIA_TYPE_VIDEO)
+        if (m_inputFC->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO)
         {
             m_startTime = -1;
             if (m_inputFC->streams[i]->start_time != (int) AV_NOPTS_VALUE)
@@ -597,8 +574,8 @@ bool ThumbFinder::initAVCodec(const QString &inFile)
             }
 
             m_videostream = i;
-            m_frameWidth = st->codec->width;
-            m_frameHeight = st->codec->height;
+            m_frameWidth = st->codecpar->width;
+            m_frameHeight = st->codecpar->height;
             if (st->r_frame_rate.den && st->r_frame_rate.num)
                 m_fps = av_q2d(st->r_frame_rate);
             else
@@ -614,7 +591,8 @@ bool ThumbFinder::initAVCodec(const QString &inFile)
     }
 
     // get the codec context for the video stream
-    m_codecCtx = m_inputFC->streams[m_videostream]->codec;
+    m_codecCtx = gCodecMap->getCodecContext
+        (m_inputFC->streams[m_videostream]);
     m_codecCtx->debug_mv = 0;
     m_codecCtx->debug = 0;
     m_codecCtx->workaround_bugs = 1;
@@ -629,7 +607,7 @@ bool ThumbFinder::initAVCodec(const QString &inFile)
     // get decoder for video stream
     m_codec = avcodec_find_decoder(m_codecCtx->codec_id);
 
-    if (m_codec == NULL)
+    if (m_codec == nullptr)
     {
         LOG(VB_GENERAL, LOG_ERR,
             "ThumbFinder: Couldn't find codec for video stream");
@@ -637,7 +615,7 @@ bool ThumbFinder::initAVCodec(const QString &inFile)
     }
 
     // open codec
-    if (avcodec_open2(m_codecCtx, m_codec, NULL) < 0)
+    if (avcodec_open2(m_codecCtx, m_codec, nullptr) < 0)
     {
         LOG(VB_GENERAL, LOG_ERR,
             "ThumbFinder: Couldn't open codec for video stream");
@@ -712,11 +690,9 @@ bool ThumbFinder::seekToFrame(int frame, bool checkPos)
 
 bool ThumbFinder::seekForward()
 {
-    int inc;
     int64_t currentFrame = (m_currentPTS - m_startPTS) / m_frameTime;
-    int64_t newFrame;
 
-    inc = SeekAmounts[m_currentSeek].amount;
+    int inc = SeekAmounts[m_currentSeek].amount;
 
     if (inc == -1)
         inc = 1;
@@ -740,7 +716,7 @@ bool ThumbFinder::seekForward()
     else
         inc = (int) (inc * ceil(m_fps));
 
-    newFrame = currentFrame + inc - m_offset;
+    int64_t newFrame = currentFrame + inc - m_offset;
     if (newFrame == currentFrame + 1)
         getFrameImage(false);
     else
@@ -751,11 +727,9 @@ bool ThumbFinder::seekForward()
 
 bool ThumbFinder::seekBackward()
 {
-    int inc;
-    int64_t newFrame;
     int64_t currentFrame = (m_currentPTS - m_startPTS) / m_frameTime;
 
-    inc = SeekAmounts[m_currentSeek].amount;
+    int inc = SeekAmounts[m_currentSeek].amount;
     if (inc == -1)
         inc = -1;
     else if (inc == -2)
@@ -779,7 +753,7 @@ bool ThumbFinder::seekBackward()
     else
         inc = (int) (-inc * ceil(m_fps));
 
-    newFrame = currentFrame + inc - m_offset;
+    int64_t newFrame = currentFrame + inc - m_offset;
     seekToFrame(newFrame);
 
     return true;
@@ -788,15 +762,14 @@ bool ThumbFinder::seekBackward()
 bool ThumbFinder::getFrameImage(bool needKeyFrame, int64_t requiredPTS)
 {
     AVPacket pkt;
-    AVPicture orig;
-    AVPicture retbuf;
-    memset(&orig, 0, sizeof(AVPicture));
-    memset(&retbuf, 0, sizeof(AVPicture));
+    AVFrame orig;
+    AVFrame retbuf;
+    memset(&orig, 0, sizeof(AVFrame));
+    memset(&retbuf, 0, sizeof(AVFrame));
 
     av_init_packet(&pkt);
 
-    int frameFinished = 0;
-    int keyFrame;
+    bool frameFinished = false;
     int frameCount = 0;
     bool gotKeyFrame = false;
 
@@ -806,9 +779,9 @@ bool ThumbFinder::getFrameImage(bool needKeyFrame, int64_t requiredPTS)
         {
             frameCount++;
 
-            keyFrame = pkt.flags & AV_PKT_FLAG_KEY;
+            int keyFrame = pkt.flags & AV_PKT_FLAG_KEY;
 
-            if (m_startPTS == -1 && pkt.dts != (int64_t)AV_NOPTS_VALUE)
+            if (m_startPTS == -1 && pkt.dts != AV_NOPTS_VALUE)
             {
                 m_startPTS = pkt.dts;
                 m_frameTime = pkt.duration;
@@ -827,9 +800,13 @@ bool ThumbFinder::getFrameImage(bool needKeyFrame, int64_t requiredPTS)
                 m_firstIFramePTS = pkt.dts;
 
             av_frame_unref(m_frame);
-            avcodec_decode_video2(m_codecCtx, m_frame, &frameFinished, &pkt);
-
-            if (requiredPTS != -1 && pkt.dts != (int64_t)AV_NOPTS_VALUE && pkt.dts < requiredPTS)
+            frameFinished = false;
+            int ret = avcodec_receive_frame(m_codecCtx, m_frame);
+            if (ret == 0)
+                frameFinished = true;
+            if (ret == 0 || ret == AVERROR(EAGAIN))
+                avcodec_send_packet(m_codecCtx, &pkt);
+            if (requiredPTS != -1 && pkt.dts != AV_NOPTS_VALUE && pkt.dts < requiredPTS)
                 frameFinished = false;
 
             m_currentPTS = pkt.dts;
@@ -840,8 +817,9 @@ bool ThumbFinder::getFrameImage(bool needKeyFrame, int64_t requiredPTS)
 
     if (frameFinished)
     {
-        avpicture_fill(&retbuf, m_outputbuf, AV_PIX_FMT_RGB32, m_frameWidth, m_frameHeight);
-        AVPicture *tmp = m_frame;
+        av_image_fill_arrays(retbuf.data, retbuf.linesize, m_outputbuf,
+            AV_PIX_FMT_RGB32, m_frameWidth, m_frameHeight, IMAGE_ALIGN);
+        AVFrame *tmp = m_frame;
 
         m_deinterlacer->DeinterlaceSingle(tmp, tmp);
 
@@ -874,21 +852,20 @@ bool ThumbFinder::getFrameImage(bool needKeyFrame, int64_t requiredPTS)
 
 void ThumbFinder::closeAVCodec()
 {
-    if (m_outputbuf)
-        delete[] m_outputbuf;
+    delete[] m_outputbuf;
 
     // close the codec
-    if (m_codecCtx)
-        avcodec_close(m_codecCtx);
+    gCodecMap->freeCodecContext
+        (m_inputFC->streams[m_videostream]);
 
     // close the video file
     m_inputFC.Close();
 }
 
-void ThumbFinder::showMenu()
+void ThumbFinder::ShowMenu()
 {
     MythScreenStack *popupStack = GetMythMainWindow()->GetStack("popup stack");
-    MythDialogBox *menuPopup = new MythDialogBox(tr("Menu"), popupStack, "actionmenu");
+    auto *menuPopup = new MythDialogBox(tr("Menu"), popupStack, "actionmenu");
 
     if (menuPopup->Create())
         popupStack->AddScreen(menuPopup);
@@ -905,7 +882,7 @@ void ThumbFinder::updatePositionBar(int64_t frame)
         return;
 
     QSize size = m_positionImage->GetArea().size();
-    QPixmap *pixmap = new QPixmap(size.width(), size.height());
+    auto *pixmap = new QPixmap(size.width(), size.height());
 
     QPainter p(pixmap);
     QBrush brush(Qt::green);
@@ -917,14 +894,12 @@ void ThumbFinder::updatePositionBar(int64_t frame)
     frm_dir_map_t::const_iterator it;
 
     brush.setColor(Qt::red);
-    double startdelta, enddelta;
 
     for (it = m_deleteMap.begin(); it != m_deleteMap.end(); ++it)
     {
+        double startdelta = size.width();
         if (it.key() != 0)
             startdelta = (m_archiveItem->duration * m_fps) / it.key();
-        else
-            startdelta = size.width();
 
         ++it;
         if (it == m_deleteMap.end())
@@ -933,10 +908,10 @@ void ThumbFinder::updatePositionBar(int64_t frame)
             break;
         }
 
+        double enddelta = size.width();
         if (it.key() != 0)
             enddelta = (m_archiveItem->duration * m_fps) / it.key();
-        else
-            enddelta = size.width();
+
         int start = (int) (size.width() / startdelta);
         int end = (int) (size.width() / enddelta);
         p.fillRect(start - 1, 0, end - start, size.height(), brush);
@@ -964,11 +939,11 @@ int ThumbFinder::calcFinalDuration()
         {
             frm_dir_map_t::const_iterator it;
 
-            int start, end, cutLen = 0;
+            int cutLen = 0;
 
             for (it = m_deleteMap.begin(); it != m_deleteMap.end(); ++it)
             {
-                start = it.key();
+                int start = it.key();
 
                 ++it;
                 if (it == m_deleteMap.end())
@@ -977,7 +952,7 @@ int ThumbFinder::calcFinalDuration()
                     break;
                 }
 
-                end = it.key();
+                int end = it.key();
                 cutLen += end - start;
             }
             return m_archiveItem->duration - (int) (cutLen / m_fps);

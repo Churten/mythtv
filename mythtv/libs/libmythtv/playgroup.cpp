@@ -13,14 +13,14 @@ class PlayGroupDBStorage : public SimpleDBStorage
   public:
     PlayGroupDBStorage(StandardSetting *_setting,
                        const PlayGroupConfig &_parent,
-                       QString          _name) :
-        SimpleDBStorage(_setting, "playgroup", _name), parent(_parent)
+                       const QString&   _name) :
+        SimpleDBStorage(_setting, "playgroup", _name), m_parent(_parent)
     {
     }
 
-    virtual QString GetWhereClause(MSqlBindings &bindings) const;
+    QString GetWhereClause(MSqlBindings &bindings) const override; // SimpleDBStorage
 
-    const PlayGroupConfig &parent;
+    const PlayGroupConfig &m_parent;
 };
 
 QString PlayGroupDBStorage::GetWhereClause(MSqlBindings &bindings) const
@@ -28,7 +28,7 @@ QString PlayGroupDBStorage::GetWhereClause(MSqlBindings &bindings) const
     QString nameTag(":WHERENAME");
     QString query("name = " + nameTag);
 
-    bindings.insert(nameTag, parent.getName());
+    bindings.insert(nameTag, m_parent.getName());
 
     return query;
 }
@@ -36,7 +36,7 @@ QString PlayGroupDBStorage::GetWhereClause(MSqlBindings &bindings) const
 class TitleMatch : public MythUITextEditSetting
 {
   public:
-    TitleMatch(const PlayGroupConfig& _parent):
+    explicit TitleMatch(const PlayGroupConfig& _parent):
         MythUITextEditSetting(new PlayGroupDBStorage(this, _parent, "titlematch"))
     {
         setLabel(PlayGroupConfig::tr("Title match (regex)"));
@@ -52,9 +52,9 @@ class TitleMatch : public MythUITextEditSetting
 class SkipAhead : public MythUISpinBoxSetting
 {
   public:
-    SkipAhead(const PlayGroupConfig& _parent):
+    explicit SkipAhead(const PlayGroupConfig& _parent):
         MythUISpinBoxSetting(new PlayGroupDBStorage(this, _parent, "skipahead"),
-                             0, 600, 5, true, PlayGroupConfig::tr("(default)"))
+                             0, 600, 5, 1, PlayGroupConfig::tr("(default)"))
 
     {
         setLabel(PlayGroupConfig::tr("Skip ahead (seconds)"));
@@ -66,9 +66,9 @@ class SkipAhead : public MythUISpinBoxSetting
 class SkipBack : public MythUISpinBoxSetting
 {
   public:
-    SkipBack(const PlayGroupConfig& _parent):
+    explicit SkipBack(const PlayGroupConfig& _parent):
         MythUISpinBoxSetting(new PlayGroupDBStorage(this, _parent, "skipback"),
-                             0, 600, 5, true, PlayGroupConfig::tr("(default)"))
+                             0, 600, 5, 1, PlayGroupConfig::tr("(default)"))
     {
         setLabel(PlayGroupConfig::tr("Skip back (seconds)"));
         setHelpText(PlayGroupConfig::tr("How many seconds to skip backward on "
@@ -79,9 +79,9 @@ class SkipBack : public MythUISpinBoxSetting
 class JumpMinutes : public MythUISpinBoxSetting
 {
   public:
-    JumpMinutes(const PlayGroupConfig& _parent):
+    explicit JumpMinutes(const PlayGroupConfig& _parent):
         MythUISpinBoxSetting(new PlayGroupDBStorage(this, _parent, "jump"),
-                             0, 30, 10, true, PlayGroupConfig::tr("(default)"))
+                             0, 30, 10, 1, PlayGroupConfig::tr("(default)"))
     {
         setLabel(PlayGroupConfig::tr("Jump amount (minutes)"));
         setHelpText(PlayGroupConfig::tr("How many minutes to jump forward or "
@@ -93,9 +93,9 @@ class JumpMinutes : public MythUISpinBoxSetting
 class TimeStretch : public MythUISpinBoxSetting
 {
   public:
-    TimeStretch(const PlayGroupConfig& _parent):
+    explicit TimeStretch(const PlayGroupConfig& _parent):
         MythUISpinBoxSetting(new PlayGroupDBStorage(this, _parent, "timestretch"),
-                             45, 200, 5, false,
+                             45, 200, 5, 0,
                              PlayGroupConfig::tr("(default)"))
     {
         setValue(45);
@@ -106,14 +106,14 @@ class TimeStretch : public MythUISpinBoxSetting
                                         "speed."));
     };
 
-    virtual void Load(void)
+    void Load(void) override // StandardSetting
     {
         StandardSetting::Load();
         if (intValue() < 50 || intValue() > 200)
             setValue(45);
     }
 
-    virtual void Save(void)
+    void Save(void) override // StandardSetting
     {
         if (intValue() < 50 || intValue() > 200)
             setValue(0);
@@ -121,7 +121,7 @@ class TimeStretch : public MythUISpinBoxSetting
     }
 };
 
-PlayGroupConfig::PlayGroupConfig(const QString &label, const QString &name,
+PlayGroupConfig::PlayGroupConfig(const QString &/*label*/, const QString &name,
                                  bool isNew)
     : m_isNew(isNew)
 {
@@ -265,7 +265,7 @@ int PlayGroup::GetSetting(const QString &name, const QString &field,
 
 
 PlayGroupEditor::PlayGroupEditor()
-    : m_addGroupButton(NULL)
+    : m_addGroupButton(nullptr)
 {
     setLabel(tr("Playback Groups"));
     m_addGroupButton = new ButtonStandardSetting(tr("Create New Playback Group"));
@@ -277,8 +277,8 @@ PlayGroupEditor::PlayGroupEditor()
 void PlayGroupEditor::CreateNewPlayBackGroup()
 {
     MythScreenStack *popupStack = GetMythMainWindow()->GetStack("popup stack");
-    MythTextInputDialog *settingdialog =
-        new MythTextInputDialog(popupStack, tr("Enter new group name"));
+    auto *settingdialog = new MythTextInputDialog(popupStack,
+                                                  tr("Enter new group name"));
 
     if (settingdialog->Create())
     {
@@ -318,7 +318,7 @@ void PlayGroupEditor::CreateNewPlayBackGroupSlot(const QString& name)
 
     addChild(new PlayGroupConfig(name, name, true));
 
-    emit settingsChanged(NULL);
+    emit settingsChanged(nullptr);
 }
 
 void PlayGroupEditor::Load()
@@ -336,5 +336,5 @@ void PlayGroupEditor::Load()
     GroupSetting::Load();
 
     //TODO select the new one or the edited one
-    emit settingsChanged(NULL);
+    emit settingsChanged(nullptr);
 }

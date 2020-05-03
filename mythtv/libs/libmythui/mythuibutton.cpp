@@ -22,12 +22,6 @@ MythUIButton::MythUIButton(MythUIType *parent, const QString &name)
     m_clickTimer = new QTimer();
     m_clickTimer->setSingleShot(true);
 
-    m_Pushed = false;
-    m_Lockable = false;
-
-    m_Text = NULL;
-    m_BackgroundState = NULL;
-
     connect(m_clickTimer, SIGNAL(timeout()), SLOT(UnPush()));
 
     connect(this, SIGNAL(TakingFocus()), SLOT(Select()));
@@ -95,7 +89,7 @@ void MythUIButton::Disable()
     SetState("disabled");
 }
 
-void MythUIButton::SetState(QString state)
+void MythUIButton::SetState(const QString& state)
 {
     if (m_state == state)
         return;
@@ -110,7 +104,7 @@ void MythUIButton::SetState(QString state)
 
     m_BackgroundState->DisplayState(m_state);
 
-    MythUIGroup *activeState = dynamic_cast<MythUIGroup *>
+    auto *activeState = dynamic_cast<MythUIGroup *>
                                (m_BackgroundState->GetCurrentState());
 
     if (activeState)
@@ -126,11 +120,11 @@ void MythUIButton::SetState(QString state)
 /**
  *  \copydoc MythUIType::keyPressEvent()
  */
-bool MythUIButton::keyPressEvent(QKeyEvent *e)
+bool MythUIButton::keyPressEvent(QKeyEvent *event)
 {
     QStringList actions;
     bool handled = false;
-    handled = GetMythMainWindow()->TranslateKeyPress("Global", e, actions);
+    handled = GetMythMainWindow()->TranslateKeyPress("Global", event, actions);
 
     for (int i = 0; i < actions.size() && !handled; i++)
     {
@@ -236,7 +230,7 @@ void MythUIButton::SetText(const QString &msg)
 
     m_Message = msg;
 
-    MythUIGroup *activeState = dynamic_cast<MythUIGroup *>
+    auto *activeState = dynamic_cast<MythUIGroup *>
                                (m_BackgroundState->GetCurrentState());
 
     if (activeState)
@@ -280,7 +274,7 @@ bool MythUIButton::ParseElement(
  */
 void MythUIButton::CreateCopy(MythUIType *parent)
 {
-    MythUIButton *button = new MythUIButton(parent, objectName());
+    auto *button = new MythUIButton(parent, objectName());
     button->CopyFrom(this);
 }
 
@@ -289,8 +283,7 @@ void MythUIButton::CreateCopy(MythUIType *parent)
  */
 void MythUIButton::CopyFrom(MythUIType *base)
 {
-    MythUIButton *button = dynamic_cast<MythUIButton *>(base);
-
+    auto *button = dynamic_cast<MythUIButton *>(base);
     if (!button)
     {
         LOG(VB_GENERAL, LOG_ERR, "Dynamic cast of base failed");

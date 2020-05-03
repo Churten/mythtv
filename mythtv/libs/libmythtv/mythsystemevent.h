@@ -30,15 +30,15 @@ class MTV_PUBLIC MythSystemEventHandler : public QObject
     MythSystemEventHandler();
 
     // Destructor
-   ~MythSystemEventHandler();
+   ~MythSystemEventHandler() override;
 
   private:
     // Helpers for converting incoming events to command lines
-    void SubstituteMatches(const QStringList &tokens, QString &command);
-    QString EventNameToSetting(const QString &name);
+    static void SubstituteMatches(const QStringList &tokens, QString &command);
+    static QString EventNameToSetting(const QString &name);
 
     // Custom Event Handler
-    void customEvent(QEvent *e);
+    void customEvent(QEvent *e) override; // QObject
 };
 
 /** \class MythSystemEventEditor
@@ -52,7 +52,7 @@ class MTV_PUBLIC MythSystemEventEditor : public RawSettingsEditor
     Q_OBJECT
 
   public:
-    MythSystemEventEditor(MythScreenStack *parent, const char *name = 0);
+    explicit MythSystemEventEditor(MythScreenStack *parent, const char *name = nullptr);
 };
 
 #endif

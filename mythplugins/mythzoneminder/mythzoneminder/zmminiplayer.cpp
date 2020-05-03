@@ -19,8 +19,7 @@ const int FRAME_UPDATE_TIME = 1000 / 10;  // try to update the frame 10 times a 
 
 ZMMiniPlayer::ZMMiniPlayer(MythScreenStack *parent)
           : ZMLivePlayer(parent, true),
-              m_displayTimer(new QTimer(this)), m_monitorText(NULL),
-              m_statusText(NULL), m_image(NULL)
+            m_displayTimer(new QTimer(this))
 {
     m_displayTimer->setSingleShot(true);
     connect(m_displayTimer, SIGNAL(timeout()), this, SLOT(timerTimeout()));
@@ -33,7 +32,7 @@ ZMMiniPlayer::~ZMMiniPlayer(void)
 
     // Timers are deleted by Qt
     m_displayTimer->disconnect();
-    m_displayTimer = NULL;
+    m_displayTimer = nullptr;
 
     if (LCD *lcd = LCD::Get())
         lcd->switchToTime ();
@@ -71,8 +70,7 @@ void ZMMiniPlayer::customEvent (QEvent* event)
 {
     if (event->type() == MythEvent::MythEventMessage)
     {
-        MythEvent *me = dynamic_cast<MythEvent*>(event);
-
+        auto *me = dynamic_cast<MythEvent*>(event);
         if (!me)
             return;
 
@@ -107,7 +105,7 @@ void ZMMiniPlayer::customEvent (QEvent* event)
         }
     }
 
-    QObject::customEvent(event);
+    ZMLivePlayer::customEvent(event);
 }
 
 bool ZMMiniPlayer::keyPressEvent(QKeyEvent *event)
@@ -119,9 +117,8 @@ bool ZMMiniPlayer::keyPressEvent(QKeyEvent *event)
     if (GetFocusWidget() && GetFocusWidget()->keyPressEvent(event))
         return true;
 
-    bool handled = false;
     QStringList actions;
-    handled = GetMythMainWindow()->TranslateKeyPress("Music", event, actions);
+    bool handled = GetMythMainWindow()->TranslateKeyPress("Music", event, actions);
 
     for (int i = 0; i < actions.size() && !handled; i++)
     {
@@ -145,9 +142,6 @@ bool ZMMiniPlayer::keyPressEvent(QKeyEvent *event)
     }
 
     if (!handled && ZMLivePlayer::keyPressEvent(event))
-        handled = true;
-
-    if (!handled && MythScreenType::keyPressEvent(event))
         handled = true;
 
     return handled;

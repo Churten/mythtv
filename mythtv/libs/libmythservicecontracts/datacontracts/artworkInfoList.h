@@ -34,27 +34,20 @@ class SERVICE_PUBLIC ArtworkInfoList : public QObject
 
     Q_PROPERTY( QVariantList ArtworkInfos     READ ArtworkInfos DESIGNABLE true )
 
-    PROPERTYIMP_RO_REF( QVariantList, ArtworkInfos )
+    PROPERTYIMP_RO_REF( QVariantList, ArtworkInfos );
 
     public:
 
         static inline void InitializeCustomTypes();
 
-    public:
-
-        ArtworkInfoList(QObject *parent = 0)
+        Q_INVOKABLE explicit ArtworkInfoList(QObject *parent = nullptr)
             : QObject         ( parent )
         {
         }
 
-        ArtworkInfoList( const ArtworkInfoList &src )
+        void Copy( const ArtworkInfoList *src )
         {
-            Copy( src );
-        }
-
-        void Copy( const ArtworkInfoList &src )
-        {
-            CopyListContents< ArtworkInfo >( this, m_ArtworkInfos, src.m_ArtworkInfos );
+            CopyListContents< ArtworkInfo >( this, m_ArtworkInfos, src->m_ArtworkInfos );
         }
 
         ArtworkInfo *AddNewArtworkInfo()
@@ -62,28 +55,23 @@ class SERVICE_PUBLIC ArtworkInfoList : public QObject
             // We must make sure the object added to the QVariantList has
             // a parent of 'this'
 
-            ArtworkInfo *pObject = new ArtworkInfo( this );
+            auto *pObject = new ArtworkInfo( this );
             m_ArtworkInfos.append( QVariant::fromValue<QObject *>( pObject ));
 
             return pObject;
         }
 
+    private:
+        Q_DISABLE_COPY(ArtworkInfoList);
 };
 
-} // namespace DTC
-
-Q_DECLARE_METATYPE( DTC::ArtworkInfoList  )
-Q_DECLARE_METATYPE( DTC::ArtworkInfoList* )
-
-namespace DTC
-{
 inline void ArtworkInfoList::InitializeCustomTypes()
 {
-    qRegisterMetaType< ArtworkInfoList  >();
     qRegisterMetaType< ArtworkInfoList* >();
 
     ArtworkInfo::InitializeCustomTypes();
 }
-}
+
+} // namespace DTC
 
 #endif

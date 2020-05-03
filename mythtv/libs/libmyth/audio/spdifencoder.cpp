@@ -21,19 +21,11 @@ extern "C" {
  *                         Use "adts" for ADTS encpsulation (AAC)
  *   AVCodecContext *ctx : CodecContext to be encaspulated
  */
-SPDIFEncoder::SPDIFEncoder(QString muxer, int codec_id)
-    : m_complete(false), m_oc(NULL), m_size(0)
+SPDIFEncoder::SPDIFEncoder(const QString& muxer, AVCodecID codec_id)
 {
-    memset(&m_buffer, 0, sizeof(m_buffer));
-
     QByteArray dev_ba     = muxer.toLatin1();
-    AVOutputFormat *fmt;
 
-    avcodeclock->lock();
-    av_register_all();
-    avcodeclock->unlock();
-
-    fmt = av_guess_format(dev_ba.constData(), NULL, NULL);
+    AVOutputFormat *fmt = av_guess_format(dev_ba.constData(), nullptr, nullptr);
     if (!fmt)
     {
         LOG(VB_AUDIO, LOG_ERR, LOC + "av_guess_format");
@@ -49,7 +41,7 @@ SPDIFEncoder::SPDIFEncoder(QString muxer, int codec_id)
     m_oc->oformat = fmt;
 
     m_oc->pb = avio_alloc_context(m_buffer, sizeof(m_buffer), 1,
-                                  this, NULL, funcIO, NULL);
+                                  this, nullptr, funcIO, nullptr);
     if (!m_oc->pb)
     {
         LOG(VB_AUDIO, LOG_ERR, LOC + "avio_alloc_context");
@@ -60,7 +52,7 @@ SPDIFEncoder::SPDIFEncoder(QString muxer, int codec_id)
     m_oc->pb->seekable    = 0;
     m_oc->flags          |= AVFMT_NOFILE | AVFMT_FLAG_IGNIDX;
 
-    const AVCodec *codec = avcodec_find_decoder(static_cast<AVCodecID>(codec_id));
+    const AVCodec *codec = avcodec_find_decoder(codec_id);
     if (!codec)
     {
         LOG(VB_AUDIO, LOG_ERR, LOC + "avcodec_find_decoder");
@@ -68,7 +60,7 @@ SPDIFEncoder::SPDIFEncoder(QString muxer, int codec_id)
         return;
     }
 
-    AVStream *stream = avformat_new_stream(m_oc, NULL);
+    AVStream *stream = avformat_new_stream(m_oc, nullptr);
     if (!stream)
     {
         LOG(VB_AUDIO, LOG_ERR, LOC + "avformat_new_stream");
@@ -81,7 +73,7 @@ SPDIFEncoder::SPDIFEncoder(QString muxer, int codec_id)
     stream->codecpar->codec_type  = codec->type;
     stream->codecpar->sample_rate = 48000; // dummy rate, so codecpar initialization doesn't fail.
 
-    if (avformat_write_header(m_oc, NULL) < 0)
+    if (avformat_write_header(m_oc, nullptr) < 0)
     {
         LOG(VB_AUDIO, LOG_ERR, LOC + "avformat_write_header");
         Destroy();
@@ -89,7 +81,7 @@ SPDIFEncoder::SPDIFEncoder(QString muxer, int codec_id)
     }
 
     LOG(VB_AUDIO, LOG_INFO, LOC + QString("Creating %1 encoder (for %2)")
-            .arg(muxer).arg(ff_codec_id_string((AVCodecID)codec_id)));
+            .arg(muxer).arg(ff_codec_id_string(codec_id)));
 
     m_complete = true;
 }
@@ -108,8 +100,8 @@ void SPDIFEncoder::WriteFrame(unsigned char *data, int size)
 {
     AVPacket packet;
     av_init_packet(&packet);
-    static int pts = 1; // to avoid warning "Encoder did not produce proper pts"
-    packet.pts  = pts++;
+    static int s_pts = 1; // to avoid warning "Encoder did not produce proper pts"
+    packet.pts     = s_pts++;
     packet.data    = data;
     packet.size    = size;
 
@@ -166,7 +158,7 @@ bool SPDIFEncoder::SetMaxHDRate(int rate)
  */
 int SPDIFEncoder::funcIO(void *opaque, unsigned char *buf, int size)
 {
-    SPDIFEncoder *enc = (SPDIFEncoder *)opaque;
+    auto *enc = (SPDIFEncoder *)opaque;
 
     memcpy(enc->m_buffer + enc->m_size, buf, size);
     enc->m_size += size;

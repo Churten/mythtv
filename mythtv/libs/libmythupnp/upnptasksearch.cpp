@@ -10,13 +10,14 @@
 //
 //////////////////////////////////////////////////////////////////////////////
 
-#include <stdlib.h>
 #include <chrono> // for milliseconds
+#include <cstdlib>
 #include <thread> // for sleep_for
 
-#include <QStringList>
-#include <QFile>
 #include <QDateTime>
+#include <QFile>
+#include <QStringList>
+#include <utility>
 
 #include "upnp.h"
 #include "upnptasksearch.h"
@@ -46,10 +47,10 @@ UPnpSearchTask::UPnpSearchTask( int          nServicePort,
                                 QString      sUDN ) :
     Task("UPnpSearchTask")
 {
-    m_PeerAddress = peerAddress;
+    m_peerAddress = std::move(peerAddress);
     m_nPeerPort   = nPeerPort;
-    m_sST         = sST;
-    m_sUDN        = sUDN;
+    m_sST         = std::move(sST);
+    m_sUDN        = std::move(sUDN);
     m_nServicePort= nServicePort;
     m_nMaxAge     = UPnp::GetConfiguration()->GetValue( "UPnP/SSDP/MaxAge" , 3600 );
 
@@ -59,17 +60,9 @@ UPnpSearchTask::UPnpSearchTask( int          nServicePort,
 //
 /////////////////////////////////////////////////////////////////////////////
 
-UPnpSearchTask::~UPnpSearchTask()  
-{ 
-}
-
-/////////////////////////////////////////////////////////////////////////////
-//
-/////////////////////////////////////////////////////////////////////////////
-
 void UPnpSearchTask::SendMsg( MSocketDevice  *pSocket,
-                              QString         sST,
-                              QString         sUDN )
+                              const QString&  sST,
+                              const QString&  sUDN )
 {
     QString sUSN;
 
@@ -98,24 +91,22 @@ void UPnpSearchTask::SendMsg( MSocketDevice  *pSocket,
                         .arg(sST) .arg(sUSN));
 
     LOG(VB_UPNP, LOG_DEBUG,
-        QString("UPnpSearchTask::SendMsg    m_PeerAddress = %1 Port=%2")
-                        .arg(m_PeerAddress.toString()) .arg(m_nPeerPort));
+        QString("UPnpSearchTask::SendMsg    m_peerAddress = %1 Port=%2")
+                        .arg(m_peerAddress.toString()) .arg(m_nPeerPort));
 #endif
 
-    for ( QList<QHostAddress>::Iterator it  = m_addressList.begin();
-                                it != m_addressList.end(); 
-                              ++it ) 
+    foreach (auto & addr, m_addressList)
     {
         QString ipaddress;
 
         // Avoid announcing the localhost address
-        if (*it == QHostAddress::LocalHost ||
-            *it == QHostAddress::LocalHostIPv6 ||
-            *it == QHostAddress::AnyIPv4 ||
-            *it == QHostAddress::AnyIPv6)
+        if (addr == QHostAddress::LocalHost ||
+            addr == QHostAddress::LocalHostIPv6 ||
+            addr == QHostAddress::AnyIPv4 ||
+            addr == QHostAddress::AnyIPv6)
             continue;
 
-        QHostAddress ip = *it;
+        QHostAddress ip = addr;
         // Descope the Link Local address. The scope is only valid
         // on the server sending the announcement, not the clients
         // that receive it
@@ -140,10 +131,10 @@ void UPnpSearchTask::SendMsg( MSocketDevice  *pSocket,
         // Send Packet to UDP Socket (Send same packet twice)
         // ------------------------------------------------------------------
 
-        pSocket->writeBlock( scPacket, scPacket.length(), m_PeerAddress,
+        pSocket->writeBlock( scPacket, scPacket.length(), m_peerAddress,
                              m_nPeerPort );
         std::this_thread::sleep_for( std::chrono::milliseconds( random() % 250 ));
-        pSocket->writeBlock( scPacket, scPacket.length(), m_PeerAddress,
+        pSocket->writeBlock( scPacket, scPacket.length(), m_peerAddress,
                              m_nPeerPort );
     }
 }
@@ -154,7 +145,7 @@ void UPnpSearchTask::SendMsg( MSocketDevice  *pSocket,
 
 void UPnpSearchTask::Execute( TaskQueue * /*pQueue*/ )
 {
-    MSocketDevice *pSocket = new MSocketDevice( MSocketDevice::Datagram );
+    auto *pSocket = new MSocketDevice( MSocketDevice::Datagram );
 
     // ----------------------------------------------------------------------
     // Refresh IP Address List in case of changes
@@ -185,7 +176,7 @@ void UPnpSearchTask::Execute( TaskQueue * /*pQueue*/ )
     }
 
     delete pSocket;
-    pSocket = NULL;
+    pSocket = nullptr;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -209,16 +200,15 @@ void UPnpSearchTask::ProcessDevice(
     // Loop for each service in this device and send the 1 required message
     // ------------------------------------------------------------------
 
-    UPnpServiceList::const_iterator sit = pDevice->m_listServices.begin();
-    for (; sit != pDevice->m_listServices.end(); ++sit)
+    for (auto sit = pDevice->m_listServices.cbegin();
+         sit != pDevice->m_listServices.cend(); ++sit)
         SendMsg(pSocket, (*sit)->m_sServiceType, pDevice->GetUDN());
 
     // ----------------------------------------------------------------------
     // Process any Embedded Devices
     // ----------------------------------------------------------------------
 
-    UPnpDeviceList::const_iterator dit = pDevice->m_listDevices.begin();
-    for (; dit != pDevice->m_listDevices.end(); ++dit)
-        ProcessDevice( pSocket, *dit);
+    foreach (auto device, pDevice->m_listDevices)
+        ProcessDevice( pSocket, device);
 }
 

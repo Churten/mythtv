@@ -18,17 +18,16 @@ class MythPainter;
 class MythImage;
 class QImage;
 class QWidget;
-class Settings;
 class QPixmap;
 class QSize;
 
-typedef enum ImageCacheMode
+enum ImageCacheMode
 {
     kCacheNormal          = 0x0,
     kCacheIgnoreDisk      = 0x1,
     kCacheCheckMemoryOnly = 0x2,
     kCacheForceStat       = 0x4,
-} ImageCacheMode;
+};
 
 struct MUI_PUBLIC MythUIMenuCallbacks
 {
@@ -59,38 +58,30 @@ class MUI_PUBLIC MythUIHelper
     void RemoveFromCacheByFile(const QString &fname);
     bool IsImageInCache(const QString &url);
     QString GetThemeCacheDir(void);
+    QString GetCacheDirByUrl(const QString& url);
 
     void IncludeInCacheSize(MythImage *im);
     void ExcludeFromCacheSize(MythImage *im);
 
-    Settings *qtconfig(void);
-
     bool IsScreenSetup(void);
-    bool IsTopScreenInitialized(void);
+    static bool IsTopScreenInitialized(void);
 
+    void UpdateScreenSettings(void);
     // which the user may have set to be different from the raw screen size
-    void GetScreenSettings(float &wmult, float &hmult);
-    void GetScreenSettings(int &width, float &wmult,
-                           int &height, float &hmult);
-    void GetScreenSettings(int &xbase, int &width, float &wmult,
-                           int &ybase, int &height, float &hmult);
-
-    // This returns the raw (drawable) screen size
-    void GetScreenBounds(int &xbase, int &ybase, int &width, int &height);
+    QRect GetScreenSettings(void);
+    void GetScreenSettings(QRect &Rect, float &XFactor, float &YFactor);
+    void GetScreenSettings(float &XFactor, float &YFactor);
 
     // Parse an X11 style command line (-geometry) string
     static void ParseGeometryOverride(const QString &geometry);
-    bool IsGeometryOverridden(void);
+    static bool IsGeometryOverridden(void);
+    static QRect GetGeometryOverride(void);
 
-    QPixmap *LoadScalePixmap(QString filename, bool fromcache = true) MDEPRECATED;
-    QImage *LoadScaleImage(QString filename, bool fromcache = true) MDEPRECATED;
     /// Returns a reference counted image from the cache.
     /// \note The reference count is set for one use call DecrRef() to delete.
-    MythImage *LoadCacheImage(QString srcfile, QString label,
+    MythImage *LoadCacheImage(QString srcfile, const QString& label,
                               MythPainter *painter,
                               ImageCacheMode cacheMode = kCacheNormal);
-
-    void ThemeWidget(QWidget *widget);
 
     QString FindThemeDir(const QString &themename, bool doFallback = true);
     QString FindMenuThemeDir(const QString &menuname);
@@ -100,18 +91,18 @@ class MUI_PUBLIC MythUIHelper
     QString GetMenuThemeDir(void);
     QList<ThemeInfo> GetThemes(ThemeType type);
 
-    bool FindThemeFile(QString &filename);
+    bool FindThemeFile(QString &path);
 
-    QFont GetBigFont(void);
-    QFont GetMediumFont(void);
-    QFont GetSmallFont(void);
+    static QFont GetBigFont(void);
+    static QFont GetMediumFont(void);
+    static QFont GetSmallFont(void);
 
     // event wrappers
-    void DisableScreensaver(void);
-    void RestoreScreensaver(void);
+    static void DisableScreensaver(void);
+    static void RestoreScreensaver(void);
     // Reset screensaver idle time, for input events that X doesn't see
     // (e.g., lirc)
-    void ResetScreensaver(void);
+    static void ResetScreensaver(void);
 
     // actually do it
     void DoDisableScreensaver(void);
@@ -130,13 +121,11 @@ class MUI_PUBLIC MythUIHelper
     static MythUIHelper *getMythUI(void);
     static void destroyMythUI(void);
 
-    void AddCurrentLocation(QString location);
+    void AddCurrentLocation(const QString& location);
     QString RemoveCurrentLocation(void);
     QString GetCurrentLocation(bool fullPath = false, bool mainStackOnly = true);
 
     MThreadPool *GetImageThreadPool(void);
-
-    double GetPixelAspectRatio(void) const;
     QSize GetBaseSize(void) const;
 
     void SetFontStretch(int stretch);
@@ -147,13 +136,13 @@ class MUI_PUBLIC MythUIHelper
    ~MythUIHelper();
 
   private:
-    void SetPalette(QWidget *widget);
     void InitializeScreenSettings(void);
 
     void ClearOldImageCache(void);
     void RemoveCacheDir(const QString &dirname);
+    static void PruneCacheDir(const QString& dirname);
 
-    MythUIHelperPrivate *d;
+    MythUIHelperPrivate *d {nullptr}; // NOLINT(readability-identifier-naming)
 
     QMutex m_locationLock;
     QStringList m_currentLocation;

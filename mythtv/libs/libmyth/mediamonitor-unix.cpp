@@ -37,7 +37,6 @@ using namespace std;
 // MythTV headers
 #include "mythmediamonitor.h"
 #include "mediamonitor-unix.h"
-#include "mythdialogs.h"
 #include "mythconfig.h"
 #include "mythcdrom.h"
 #include "mythhdd.h"
@@ -117,7 +116,7 @@ static void statError(const QString &methodName, const QString &devPath)
 
 MediaMonitorUnix::MediaMonitorUnix(QObject* par,
                                    unsigned long interval, bool allowEject)
-                : MediaMonitor(par, interval, allowEject), m_fifo(-1)
+                : MediaMonitor(par, interval, allowEject)
 {
     CheckFileSystemTable();
     CheckMountable();
@@ -144,7 +143,7 @@ void MediaMonitorUnix::deleteLater(void)
 bool MediaMonitorUnix::CheckFileSystemTable(void)
 {
 #ifndef Q_OS_ANDROID
-    struct fstab * mep = NULL;
+    struct fstab * mep = nullptr;
 
     // Attempt to open the file system descriptor entry.
     if (!setfsent())
@@ -154,15 +153,12 @@ bool MediaMonitorUnix::CheckFileSystemTable(void)
     }
 
     // Add all the entries
-    while ((mep = getfsent()) != NULL)
+    while ((mep = getfsent()) != nullptr)
         AddDevice(mep);
 
     endfsent();
 
-    if (m_Devices.isEmpty())
-        return false;
-
-    return true;
+    return !m_Devices.isEmpty();
 #else
     return false;
 #endif
@@ -216,12 +212,12 @@ bool MediaMonitorUnix::CheckMountable(void)
                 LOG(VB_GENERAL, LOG_WARNING, LOC +
                     "UDisks2 service found. Media Monitor does not support this yet!");
                 return false;
-            } else
-                continue;
+            }
+            continue;
         }
 
         // Enumerate devices
-        typedef QList<QDBusObjectPath> QDBusObjectPathList;
+        using QDBusObjectPathList = QList<QDBusObjectPath>;
         QDBusReply<QDBusObjectPathList> reply = iface.call("EnumerateDevices");
         if (!reply.isValid())
         {
@@ -241,25 +237,24 @@ bool MediaMonitorUnix::CheckMountable(void)
 
         // Parse the returned device array
         const QDBusObjectPathList& list(reply.value());
-        for (QDBusObjectPathList::const_iterator it = list.begin();
-            it != list.end(); ++it)
+        foreach (const auto & entry, list)
         {
-            if (!DeviceProperty(*it, "DeviceIsSystemInternal").toBool() &&
-                !DeviceProperty(*it, "DeviceIsPartitionTable").toBool() )
+            if (!DeviceProperty(entry, "DeviceIsSystemInternal").toBool() &&
+                !DeviceProperty(entry, "DeviceIsPartitionTable").toBool() )
             {
-                QString dev = DeviceProperty(*it, "DeviceFile").toString();
+                QString dev = DeviceProperty(entry, "DeviceFile").toString();
 
                 // ignore floppies, too slow
                 if (dev.startsWith("/dev/fd"))
                     continue;
 
-                MythMediaDevice* pDevice;
-                if (DeviceProperty(*it, "DeviceIsRemovable").toBool())
+                MythMediaDevice* pDevice = nullptr;
+                if (DeviceProperty(entry, "DeviceIsRemovable").toBool())
                     pDevice = MythCDROM::get(this, dev.toLatin1(), false, m_AllowEject);
                 else
                     pDevice = MythHDD::Get(this, dev.toLatin1(), false, false);
 
-                if (pDevice && !AddDevice(pDevice))
+                if (pDevice && !MediaMonitorUnix::AddDevice(pDevice))
                     pDevice->deleteLater();
             }
         }
@@ -280,14 +275,13 @@ bool MediaMonitorUnix::CheckMountable(void)
     sysfs.setFilter(QDir::Dirs | QDir::NoDotAndDotDot);
 
     QStringList devices = sysfs.entryList();
-
-    for (QStringList::iterator it = devices.begin(); it != devices.end(); ++it)
+    foreach (auto & device, devices)
     {
         // ignore floppies, too slow
-        if ((*it).startsWith("fd"))
+        if (device.startsWith("fd"))
             continue;
 
-        sysfs.cd(*it);
+        sysfs.cd(device);
         QString path = sysfs.absolutePath();
         if (CheckRemovable(path))
             FindPartitions(path, true);
@@ -350,15 +344,15 @@ QString MediaMonitorUnix::GetDeviceFile(const QString &sysfs)
     // Use libudev to determine the name
     ret.clear();
     struct udev *udev = udev_new();
-    if (udev != NULL)
+    if (udev != nullptr)
     {
         struct udev_device *device =
             udev_device_new_from_syspath(udev, sysfs.toLatin1().constData());
-        if (device != NULL)
+        if (device != nullptr)
         {
             const char *name = udev_device_get_devnode(device);
 
-            if (name != NULL)
+            if (name != nullptr)
                 ret = tr(name);
             else
             {
@@ -439,17 +433,16 @@ QStringList MediaMonitorUnix::GetCDROMBlockDevices(void)
     if (iface.isValid())
     {
         // Enumerate devices
-        typedef QList<QDBusObjectPath> QDBusObjectPathList;
+        using QDBusObjectPathList = QList<QDBusObjectPath>;
         QDBusReply<QDBusObjectPathList> reply = iface.call("EnumerateDevices");
         if (reply.isValid())
         {
             const QDBusObjectPathList& list(reply.value());
-            for (QDBusObjectPathList::const_iterator it = list.begin();
-                it != list.end(); ++it)
+            foreach (const auto & entry, list)
             {
-                if (DeviceProperty(*it, "DeviceIsRemovable").toBool())
+                if (DeviceProperty(entry, "DeviceIsRemovable").toBool())
                 {
-                    QString dev = DeviceProperty(*it, "DeviceFile").toString();
+                    QString dev = DeviceProperty(entry, "DeviceFile").toString();
                     if (dev.startsWith("/dev/"))
                         dev.remove(0,5);
                     l.push_back(dev);
@@ -580,25 +573,22 @@ bool MediaMonitorUnix::AddDevice(MythMediaDevice* pDevice)
         return false;
     }
 
-    dev_t new_rdev;
-    struct stat sb;
-
+    struct stat sb {};
     if (stat(path.toLocal8Bit().constData(), &sb) < 0)
     {
         statError(":AddDevice()", path);
         return false;
     }
-    new_rdev = sb.st_rdev;
+    dev_t new_rdev = sb.st_rdev;
 
     //
     // Check if this is a duplicate of a device we have already added
     //
-    QList<MythMediaDevice*>::const_iterator itr = m_Devices.begin();
-    for (; itr != m_Devices.end(); ++itr)
+    foreach (auto & device, m_Devices)
     {
-        if (stat((*itr)->getDevicePath().toLocal8Bit().constData(), &sb) < 0)
+        if (stat(device->getDevicePath().toLocal8Bit().constData(), &sb) < 0)
         {
-            statError(":AddDevice()", (*itr)->getDevicePath());
+            statError(":AddDevice()", device->getDevicePath());
             return false;
         }
 
@@ -608,7 +598,7 @@ bool MediaMonitorUnix::AddDevice(MythMediaDevice* pDevice)
                      LOC + ":AddDevice() - not adding " + path +
                      "\n                        "
                      "because it appears to be a duplicate of " +
-                     (*itr)->getDevicePath());
+                     device->getDevicePath());
             return false;
         }
     }
@@ -638,8 +628,8 @@ bool MediaMonitorUnix::AddDevice(struct fstab * mep)
     LOG(VB_GENERAL, LOG_DEBUG, "AddDevice - " + devicePath);
 #endif
 
-    MythMediaDevice* pDevice = NULL;
-    struct stat sbuf;
+    MythMediaDevice* pDevice = nullptr;
+    struct stat sbuf {};
 
     bool is_supermount = false;
     bool is_cdrom = false;
@@ -684,10 +674,10 @@ bool MediaMonitorUnix::AddDevice(struct fstab * mep)
     }
     else
     {
-        char *dev = 0;
+        char *dev = nullptr;
         int len = 0;
         dev = strstr(mep->fs_mntops, SUPER_OPT_DEV);
-        if (dev == NULL)
+        if (dev == nullptr)
             return false;
 
         dev += sizeof(SUPER_OPT_DEV)-1;
@@ -712,7 +702,7 @@ bool MediaMonitorUnix::AddDevice(struct fstab * mep)
         pDevice->setMountPath(mep->fs_file);
         if (pDevice->testMedia() == MEDIAERR_OK)
         {
-            if (AddDevice(pDevice))
+            if (MediaMonitorUnix::AddDevice(pDevice))
                 return true;
         }
         pDevice->deleteLater();
@@ -726,7 +716,7 @@ bool MediaMonitorUnix::AddDevice(struct fstab * mep)
 /*
  * DBus UDisk AddDevice handler
  */
-void MediaMonitorUnix::deviceAdded( QDBusObjectPath o)
+void MediaMonitorUnix::deviceAdded( const QDBusObjectPath& o)
 {
     LOG(VB_MEDIA, LOG_INFO, LOC + ":deviceAdded " + o.path());
 
@@ -735,7 +725,7 @@ void MediaMonitorUnix::deviceAdded( QDBusObjectPath o)
     {
         QString dev = DeviceProperty(o, "DeviceFile").toString();
 
-        MythMediaDevice* pDevice;
+        MythMediaDevice* pDevice = nullptr;
         if (DeviceProperty(o, "DeviceIsRemovable").toBool())
             pDevice = MythCDROM::get(this, dev.toLatin1(), false, m_AllowEject);
         else
@@ -749,7 +739,7 @@ void MediaMonitorUnix::deviceAdded( QDBusObjectPath o)
 /*
  * DBus UDisk RemoveDevice handler
  */
-void MediaMonitorUnix::deviceRemoved( QDBusObjectPath o)
+void MediaMonitorUnix::deviceRemoved( const QDBusObjectPath& o)
 {
     LOG(VB_MEDIA, LOG_INFO, LOC + "deviceRemoved " + o.path());
 #if 0 // This fails because the DeviceFile has just been deleted
@@ -786,7 +776,7 @@ bool MediaMonitorUnix::FindPartitions(const QString &dev, bool checkPartitions)
     LOG(VB_MEDIA, LOG_DEBUG,
              LOC + ":FindPartitions(" + dev +
              QString(",%1").arg(checkPartitions ? " true" : " false" ) + ")");
-    MythMediaDevice* pDevice = NULL;
+    MythMediaDevice* pDevice = nullptr;
 
     if (checkPartitions)
     {
@@ -796,17 +786,16 @@ bool MediaMonitorUnix::FindPartitions(const QString &dev, bool checkPartitions)
 
         bool found_partitions = false;
         QStringList parts = sysfs.entryList();
-        for (QStringList::iterator pit = parts.begin();
-             pit != parts.end(); ++pit)
+        foreach (auto & part, parts)
         {
             // skip some sysfs dirs that are _not_ sub-partitions
-            if (*pit == "device" || *pit == "holders" || *pit == "queue"
-                                 || *pit == "slaves"  || *pit == "subsystem"
-                                 || *pit == "bdi"     || *pit == "power")
+            if (part == "device" || part == "holders" || part == "queue"
+                                 || part == "slaves"  || part == "subsystem"
+                                 || part == "bdi"     || part == "power")
                 continue;
 
             found_partitions |= FindPartitions(
-                sysfs.absoluteFilePath(*pit), false);
+                sysfs.absoluteFilePath(part), false);
         }
 
         // no partitions on block device, use main device
@@ -867,21 +856,19 @@ void MediaMonitorUnix::CheckDeviceNotifications(void)
         size = read(m_fifo, buffer, 255);
     }
     const QStringList list = qBuffer.split('\n', QString::SkipEmptyParts);
-
-    QStringList::const_iterator it = list.begin();
-    for (; it != list.end(); ++it)
+    foreach (const auto & notif, list)
     {
-        if ((*it).startsWith("add"))
+        if (notif.startsWith("add"))
         {
-            QString dev = (*it).section(' ', 1, 1);
+            QString dev = notif.section(' ', 1, 1);
             LOG(VB_MEDIA, LOG_INFO, "Udev add " + dev);
 
             if (CheckRemovable(dev))
                 FindPartitions(dev, true);
         }
-        else if ((*it).startsWith("remove"))
+        else if (notif.startsWith("remove"))
         {
-            QString dev = (*it).section(' ', 2, 2);
+            QString dev = notif.section(' ', 2, 2);
             LOG(VB_MEDIA, LOG_INFO, "Udev remove " + dev);
             RemoveDevice(dev);
         }

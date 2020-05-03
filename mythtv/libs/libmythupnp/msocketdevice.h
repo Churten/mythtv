@@ -61,7 +61,7 @@ public:
     explicit MSocketDevice(Type type = Stream);
     MSocketDevice(Type type, Protocol protocol, int dummy);
     MSocketDevice(int socket, Type type);
-    virtual ~MSocketDevice();
+    ~MSocketDevice() override;
 
     bool  isValid() const;
     Type  type() const;
@@ -72,58 +72,58 @@ public:
     int   socket() const;
     virtual void setSocket(int socket, Type type);
 
-    bool  open(OpenMode mode);
+    bool  open(OpenMode mode) override; // QIODevice
     bool  open(int mode)
     {
-        return open((OpenMode)mode);
+        return MSocketDevice::open((OpenMode)mode);
     }
 
-    void  close();
-    bool  flush();
+    void  close() override; // QIODevice
+    static bool  flush();
 
     // Implementation of QIODevice abstract virtual functions
-    qint64  size() const;
-    qint64  pos() const;
-    bool  seek(qint64);
-    bool  atEnd() const;
+    qint64  size() const override; // QIODevice
+    qint64  pos() const override; // QIODevice
+    bool  seek(qint64 /*pos*/) override; // QIODevice
+    bool  atEnd() const override; // QIODevice
 
     bool  blocking() const;
-    virtual void setBlocking(bool);
+    virtual void setBlocking(bool enable);
 
     bool  broadcast() const;
-    virtual void setBroadcast(bool);
+    virtual void setBroadcast(bool enable);
 
     bool  addressReusable() const;
-    virtual void setAddressReusable(bool);
+    virtual void setAddressReusable(bool enable);
 
     int   receiveBufferSize() const;
-    virtual void setReceiveBufferSize(uint);
+    virtual void setReceiveBufferSize(uint size);
     int   sendBufferSize() const;
-    virtual void setSendBufferSize(uint);
+    virtual void setSendBufferSize(uint size);
 
     bool  keepalive() const;
-    virtual void setKeepalive(bool);
+    virtual void setKeepalive(bool enable);
 
-    virtual bool connect(const QHostAddress &, quint16);
+    virtual bool connect(const QHostAddress &addr, quint16 port);
 
-    virtual bool bind(const QHostAddress &, quint16);
+    virtual bool bind(const QHostAddress &address, quint16 port);
     virtual bool listen(int backlog);
     virtual int  accept();
 
-    qint64  bytesAvailable() const;
-    qint64  waitForMore(int msecs, bool *timeout = 0) const;
+    qint64  bytesAvailable() const override; // QIODevice
+    qint64  waitForMore(int msecs, bool *timeout = nullptr) const;
     virtual qint64 writeBlock(const char *data, quint64 len,
                               const QHostAddress & host, quint16 port);
     inline qint64  writeBlock(const char *data, quint64 len)
     {
-        return qint64(write(data, qint64(len)));
+        return write(data, len);
     }
 
     inline qint64 readBlock(char *data, quint64 maxlen)
     {
         // read() does not correctly handle zero-byte udp packets
         // so call readData() directly which does
-        return maxlen ? qint64(read(data, qint64(maxlen))) : qint64(readData(data, qint64(maxlen)));
+        return maxlen ? read(data, maxlen) : readData(data, maxlen);
     }
 
     virtual quint16  port() const;
@@ -147,7 +147,7 @@ public:
     };
     Error  error() const;
 
-    inline bool isSequential() const
+    inline bool isSequential() const override // QIODevice
     {
         return true;
     }
@@ -156,23 +156,23 @@ public:
 
 protected:
     void setError(Error err);
-    qint64 readData(char *data, qint64 maxlen);
-    qint64 writeData(const char *data, qint64 len);
+    qint64 readData(char *data, qint64 maxlen) override; // QIODevice
+    qint64 writeData(const char *data, qint64 len) override; // QIODevice
 
 private:
-    int fd;
-    Type t;
-    quint16 p;
-    QHostAddress a;
-    quint16 pp;
-    QHostAddress pa;
-    MSocketDevice::Error e;
-    MSocketDevicePrivate * d;
+    int                   m_fd {-1};
+    Type                  m_t;
+    quint16               m_p  {0};
+    QHostAddress          m_a;
+    quint16               m_pp {0};
+    QHostAddress          m_pa;
+    MSocketDevice::Error  m_e {NoError};
+    MSocketDevicePrivate *d{nullptr}; // NOLINT(readability-identifier-naming)
 
     enum Option { Broadcast, ReceiveBuffer, ReuseAddress, SendBuffer, Keepalive };
 
-    int   option(Option) const;
-    virtual void setOption(Option, int);
+    int   option(Option opt) const;
+    virtual void setOption(Option opt, int v);
 
     void  fetchConnectionParameters();
 #if defined(Q_OS_WIN32) || defined(Q_OS_WINCE)

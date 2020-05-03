@@ -16,8 +16,8 @@
 
 #define REUSE_CONNECTION 1
 
-MBASE_PUBLIC bool TestDatabase(QString dbHostName,
-                               QString dbUserName,
+MBASE_PUBLIC bool TestDatabase(const QString& dbHostName,
+                               const QString& dbUserName,
                                QString dbPassword,
                                QString dbName = "mythconverg",
                                int     dbPort = 3306);
@@ -28,7 +28,7 @@ class MSqlDatabase
   friend class MDBManager;
   friend class MSqlQuery;
   public:
-    explicit MSqlDatabase(const QString &name);
+    explicit MSqlDatabase(QString name);
    ~MSqlDatabase(void);
 
     bool OpenDatabase(bool skipdb = false);
@@ -54,7 +54,7 @@ class MBASE_PUBLIC MDBManager
 {
   friend class MSqlQuery;
   public:
-    MDBManager(void);
+    MDBManager(void) = default;
     ~MDBManager(void);
 
     void CloseDatabases(void);
@@ -65,37 +65,37 @@ class MBASE_PUBLIC MDBManager
     void pushConnection(MSqlDatabase *db);
 
     MSqlDatabase *getSchedCon(void);
-    MSqlDatabase *getDDCon(void);
+    MSqlDatabase *getChannelCon(void);
 
   private:
-    MSqlDatabase *getStaticCon(MSqlDatabase **dbcon, QString name);
+    MSqlDatabase *getStaticCon(MSqlDatabase **dbcon, const QString& name);
 
     QMutex m_lock;
-    typedef QList<MSqlDatabase*> DBList;
+    using DBList = QList<MSqlDatabase*>;
     QHash<QThread*, DBList> m_pool; // protected by m_lock
 #if REUSE_CONNECTION
     QHash<QThread*, MSqlDatabase*> m_inuse; // protected by m_lock
-    QHash<QThread*, int> m_inuse_count; // protected by m_lock
+    QHash<QThread*, int> m_inuseCount; // protected by m_lock
 #endif
 
-    int m_nextConnID;
-    int m_connCount;
+    int m_nextConnID         {0};
+    int m_connCount          {0};
 
-    MSqlDatabase *m_schedCon;
-    MSqlDatabase *m_DDCon;
-    QHash<QThread*, DBList> m_static_pool;
+    MSqlDatabase *m_schedCon {nullptr};
+    MSqlDatabase *m_channelCon {nullptr};
+    QHash<QThread*, DBList> m_staticPool;
 };
 
 /// \brief MSqlDatabase Info, used by MSqlQuery. Do not use directly.
-typedef struct _MSqlQueryInfo
+struct MSqlQueryInfo
 {
-    MSqlDatabase *db;
+    MSqlDatabase *db      {nullptr};
     QSqlDatabase qsqldb;
-    bool returnConnection;
-} MSqlQueryInfo;
+    bool returnConnection {false};
+};
 
 /// \brief typedef for a map of string -> string bindings for generic queries.
-typedef QMap<QString, QVariant> MSqlBindings;
+using MSqlBindings = QMap<QString, QVariant>;
 
 /// \brief Add the entries in addfrom to the map in output
  MBASE_PUBLIC  void MSqlAddMoreBindings(MSqlBindings &output, MSqlBindings &addfrom);
@@ -124,7 +124,7 @@ typedef QMap<QString, QVariant> MSqlBindings;
  */
 class MBASE_PUBLIC MSqlQuery : private QSqlQuery
 {
-    MBASE_PUBLIC friend void MSqlEscapeAsAQuery(QString&, MSqlBindings&);
+    MBASE_PUBLIC friend void MSqlEscapeAsAQuery(QString& query, MSqlBindings& bindings);
   public:
     /// \brief Get DB connection from pool
     explicit MSqlQuery(const MSqlQueryInfo &qi);
@@ -151,7 +151,7 @@ class MBASE_PUBLIC MSqlQuery : private QSqlQuery
 
     /// \brief Wrap QSqlQuery::seek(int,bool)
     //         so we can display the query results
-    bool seek(int, bool relative = false);
+    bool seek(int where, bool relative = false);
 
     /// \brief Wrap QSqlQuery::exec(const QString &query) so we can display SQL
     bool exec(const QString &query);
@@ -159,7 +159,23 @@ class MBASE_PUBLIC MSqlQuery : private QSqlQuery
     /// \brief QSqlQuery::prepare() is not thread safe in Qt <= 3.3.2
     bool prepare(const QString &query);
 
+    /// \brief Add a single binding
     void bindValue(const QString &placeholder, const QVariant &val);
+
+    /// \brief Add a single binding, taking care not to set a NULL value.
+    ///
+    /// Most of Qt5 treats an uninitialized (i.e. null) string and an
+    /// empty string as the same thing, but not the QSqlQuery code.
+    /// This means that an uninitialized QString() and an explicitly
+    /// initialized to empty QString("") both represent an empty
+    /// string everywhere in Qt except in the QSqlQuery code.  This
+    /// function adds the same behavior to SQL queries, by checking
+    /// and substituting a QString("") where necessary.  This function
+    /// should be used for any database string field that has been
+    /// declared "NOT NULL" so that MythTV won't throw an errors
+    /// complaining about trying to set a NULL value in a SQL column
+    /// that's marked "non-NULL".
+    void bindValueNoNull(const QString &placeholder, const QVariant &val);
 
     /// \brief Add all the bindings in the passed in bindings
     void bindValues(const MSqlBindings &bindings);
@@ -196,19 +212,19 @@ class MBASE_PUBLIC MSqlQuery : private QSqlQuery
     /// \brief Checks DB connection + login (login info via Mythcontext)
     static bool testDBConnection();
 
-    typedef enum
+    enum ConnectionReuse
     {
         kDedicatedConnection,
         kNormalConnection,
-    } ConnectionReuse;
+    };
     /// \brief Only use this in combination with MSqlQuery constructor
-    static MSqlQueryInfo InitCon(ConnectionReuse = kNormalConnection);
+    static MSqlQueryInfo InitCon(ConnectionReuse _reuse = kNormalConnection);
 
     /// \brief Returns dedicated connection. (Required for using temporary SQL tables.)
     static MSqlQueryInfo SchedCon();
 
     /// \brief Returns dedicated connection. (Required for using temporary SQL tables.)
-    static MSqlQueryInfo DDCon();
+    static MSqlQueryInfo ChannelCon();
 
   private:
     // Only QSql::In is supported as a param type and only named params...
@@ -219,13 +235,10 @@ class MBASE_PUBLIC MSqlQuery : private QSqlQuery
     bool seekDebug(const char *type, bool result,
                    int where, bool relative) const;
 
-    MSqlDatabase *m_db;
-    bool m_isConnected;
-    bool m_returnConnection;
-    QString m_last_prepared_query; // holds a copy of the last prepared query
-#ifdef DEBUG_QT4_PORT
-    QRegExp m_testbindings;
-#endif
+    MSqlDatabase *m_db               {nullptr};
+    bool          m_isConnected      {false};
+    bool          m_returnConnection {false};
+    QString       m_lastPreparedQuery; // holds a copy of the last prepared query
 };
 
 #endif

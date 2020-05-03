@@ -14,8 +14,9 @@
 #include "mythevent.h"
 #include "mythlogging.h"
 #include "upnptaskcache.h"
+#include "portchecker.h"
 
-SSDPCache* SSDPCache::g_pSSDPCache = NULL;
+SSDPCache* SSDPCache::g_pSSDPCache = nullptr;
 
 int SSDPCacheEntries::g_nAllocated = 0;       // Debugging only
 
@@ -43,37 +44,36 @@ void SSDPCacheEntries::Clear(void)
 {
     QMutexLocker locker(&m_mutex);
 
-    EntryMap::iterator it = m_mapEntries.begin();
-    for (; it != m_mapEntries.end(); ++it)
+    foreach (auto & entry, m_mapEntries)
     {
-        if ((*it))
-            (*it)->DecrRef();
+        if (entry)
+            entry->DecrRef();
     }
 
     m_mapEntries.clear();
 }
 
-/// Finds the Device in the cache, returns NULL when absent
-/// \note Caller must call DecrRef on non-NULL DeviceLocation when done with it.
+/// Finds the Device in the cache, returns nullptr when absent
+/// \note Caller must call DecrRef on non-nullptr DeviceLocation when done with it.
 DeviceLocation *SSDPCacheEntries::Find(const QString &sUSN)
 {
     QMutexLocker locker(&m_mutex);
 
     EntryMap::iterator it = m_mapEntries.find(GetNormalizedUSN(sUSN));
-    DeviceLocation *pEntry = (it != m_mapEntries.end()) ? *it : NULL;
+    DeviceLocation *pEntry = (it != m_mapEntries.end()) ? *it : nullptr;
     if (pEntry)
         pEntry->IncrRef();
 
     return pEntry;
 }
 
-/// Returns random entry in cache, returns NULL when list is empty
-/// \note Caller must call DecrRef on non-NULL DeviceLocation when done with it.
+/// Returns random entry in cache, returns nullptr when list is empty
+/// \note Caller must call DecrRef on non-nullptr DeviceLocation when done with it.
 DeviceLocation *SSDPCacheEntries::GetFirst(void)
 {
     QMutexLocker locker(&m_mutex);
     if (m_mapEntries.empty())
-        return NULL;
+        return nullptr;
     DeviceLocation *loc = *m_mapEntries.begin();
     loc->IncrRef();
     return loc;
@@ -85,8 +85,7 @@ void SSDPCacheEntries::GetEntryMap(EntryMap &map)
 {
     QMutexLocker locker(&m_mutex);
 
-    EntryMap::const_iterator it = m_mapEntries.begin();
-    for (; it != m_mapEntries.end(); ++it)
+    for (auto it = m_mapEntries.cbegin(); it != m_mapEntries.cend(); ++it)
     {
         (*it)->IncrRef();
         map.insert(it.key(), *it);
@@ -107,7 +106,7 @@ void SSDPCacheEntries::Insert(const QString &sUSN, DeviceLocation *pEntry)
     QString usn = GetNormalizedUSN(sUSN);
 
     EntryMap::iterator it = m_mapEntries.find(usn);
-    if ((it != m_mapEntries.end()) && (*it != NULL))
+    if ((it != m_mapEntries.end()) && (*it != nullptr))
         (*it)->DecrRef();
 
     m_mapEntries[usn] = pEntry;
@@ -148,7 +147,7 @@ uint SSDPCacheEntries::RemoveStale(const TaskTime &ttNow)
     EntryMap::iterator it = m_mapEntries.begin();
     while (it != m_mapEntries.end())
     {
-        if (*it == NULL)
+        if (*it == nullptr)
         {
             it = m_mapEntries.erase(it);
         }
@@ -178,19 +177,18 @@ QTextStream &SSDPCacheEntries::OutputXML(
 {
     QMutexLocker locker(&m_mutex);
 
-    EntryMap::const_iterator it  = m_mapEntries.begin();
-    for (; it != m_mapEntries.end(); ++it)
+    foreach (auto entry, m_mapEntries)
     {
-        if (*it == NULL)
+        if (entry == nullptr)
             continue;
 
         // Note: IncrRef,DecrRef not required since SSDPCacheEntries
         // holds one reference to each entry and we are holding m_mutex.
-        os << "<Service usn='" << (*it)->m_sUSN 
-           << "' expiresInSecs='" << (*it)->ExpiresInSecs()
-           << "' url='" << (*it)->m_sLocation << "' />" << endl;
+        os << "<Service usn='" << entry->m_sUSN
+           << "' expiresInSecs='" << entry->ExpiresInSecs()
+           << "' url='" << entry->m_sLocation << "' />" << endl;
 
-        if (pnEntryCount != NULL)
+        if (pnEntryCount != nullptr)
             (*pnEntryCount)++;
     }
 
@@ -202,17 +200,16 @@ void SSDPCacheEntries::Dump(uint &nEntryCount) const
 {
     QMutexLocker locker(&m_mutex);
 
-    EntryMap::const_iterator it  = m_mapEntries.begin();
-    for (; it != m_mapEntries.end(); ++it)
+    foreach (auto entry, m_mapEntries)
     {
-        if (*it == NULL)
+        if (entry == nullptr)
             continue;
 
         // Note: IncrRef,DecrRef not required since SSDPCacheEntries
         // holds one reference to each entry and we are holding m_mutex.
         LOG(VB_UPNP, LOG_DEBUG, QString(" * \t\t%1\t | %2\t | %3 ")
-                .arg((*it)->m_sUSN) .arg((*it)->ExpiresInSecs())
-                .arg((*it)->m_sLocation));
+                .arg(entry->m_sUSN) .arg(entry->ExpiresInSecs())
+                .arg(entry->m_sLocation));
 
         nEntryCount++;
     }
@@ -254,7 +251,7 @@ SSDPCache::SSDPCache()
     // Add Task to keep SSDPCache purged of stale entries.
     // ----------------------------------------------------------------------
 
-    SSDPCacheTask *task = new SSDPCacheTask();
+    auto *task = new SSDPCacheTask();
     TaskQueue::Instance()->AddTask(task);
     task->DecrRef();
 }      
@@ -281,37 +278,36 @@ void SSDPCache::Clear(void)
 {
     QMutexLocker locker(&m_mutex);
 
-    SSDPCacheEntriesMap::iterator it  = m_cache.begin();
-    for (; it != m_cache.end(); ++it)
+    foreach (auto & it, m_cache)
     {
-        if (*it)
-            (*it)->DecrRef();
+        if (it)
+            it->DecrRef();
     }
 
     m_cache.clear();
 }
 
-/// Finds the SSDPCacheEntries in the cache, returns NULL when absent
-/// \note Caller must call DecrRef on non-NULL when done with it.
+/// Finds the SSDPCacheEntries in the cache, returns nullptr when absent
+/// \note Caller must call DecrRef on non-nullptr when done with it.
 SSDPCacheEntries *SSDPCache::Find(const QString &sURI)
 {
     QMutexLocker locker(&m_mutex);
 
     SSDPCacheEntriesMap::iterator it = m_cache.find(sURI);
-    if (it != m_cache.end() && (*it != NULL))
+    if (it != m_cache.end() && (*it != nullptr))
         (*it)->IncrRef();
 
-    return (it != m_cache.end()) ? *it : NULL;
+    return (it != m_cache.end()) ? *it : nullptr;
 }
 
-/// Finds the Device in the cache, returns NULL when absent
-/// \note Caller must call DecrRef on non-NULL when done with it.
+/// Finds the Device in the cache, returns nullptr when absent
+/// \note Caller must call DecrRef on non-nullptr when done with it.
 DeviceLocation *SSDPCache::Find(const QString &sURI, const QString &sUSN)
 {
-    DeviceLocation   *pEntry   = NULL;
+    DeviceLocation   *pEntry   = nullptr;
     SSDPCacheEntries *pEntries = Find(sURI);
 
-    if (pEntries != NULL)
+    if (pEntries != nullptr)
     {
         pEntry = pEntries->Find(sUSN);
         pEntries->DecrRef();
@@ -334,18 +330,18 @@ void SSDPCache::Add( const QString &sURI,
     // --------------------------------------------------------------
 
     TaskTime ttExpires;
-    gettimeofday        ( (&ttExpires), NULL );
+    gettimeofday        ( (&ttExpires), nullptr );
     AddSecondsToTaskTime(  ttExpires, sExpiresInSecs );
 
     // --------------------------------------------------------------
     // Get a Pointer to a Entries QDict... (Create if not found)
     // --------------------------------------------------------------
 
-    SSDPCacheEntries *pEntries = NULL;
+    SSDPCacheEntries *pEntries = nullptr;
     {
         QMutexLocker locker(&m_mutex);
         SSDPCacheEntriesMap::iterator it = m_cache.find(sURI);
-        if (it == m_cache.end() || (*it == NULL))
+        if (it == m_cache.end() || (*it == nullptr))
         {
             pEntries = new SSDPCacheEntries();
             it = m_cache.insert(sURI, pEntries);
@@ -359,19 +355,49 @@ void SSDPCache::Add( const QString &sURI,
     // --------------------------------------------------------------
 
     DeviceLocation *pEntry = pEntries->Find(sUSN);
-    if (pEntry == NULL)
+    if (pEntry == nullptr)
     {
-        pEntry = new DeviceLocation(sURI, sUSN, sLocation, ttExpires);
-        pEntries->Insert(sUSN, pEntry);
-        NotifyAdd(sURI, sUSN, sLocation);
+        QUrl url = sLocation;
+        QString host = url.host();
+        QString hostport = QString("%1:%2").arg(host).arg(url.port(80));
+        // Check if the port can be reached. If not we won't use it.
+        // Keep a cache of good and bad URLs found so as not to
+        // overwhelm the thread will portchecker requests.
+        // Allow up to 3 atempts before a port is finally treated as bad.
+        if (m_badUrlList.count(hostport) < 3)
+        {
+            bool isGoodUrl = false;
+            if (m_goodUrlList.contains(hostport))
+                isGoodUrl = true;
+            else
+            {
+                PortChecker checker;
+                if (checker.checkPort(host, url.port(80), 5000))
+                {
+                    m_goodUrlList.append(hostport);
+                    isGoodUrl=true;
+                }
+                else
+                    m_badUrlList.append(hostport);
+            }
+            // Only add if the device can be connected
+            if (isGoodUrl)
+            {
+                pEntry = new DeviceLocation(sURI, sUSN, sLocation, ttExpires);
+                pEntries->Insert(sUSN, pEntry);
+                NotifyAdd(sURI, sUSN, sLocation);
+            }
+        }
     }
     else
     {
-        pEntry->m_sLocation = sLocation;
-        pEntry->m_ttExpires = ttExpires;
+        // Only accept locations that have been tested when added.
+        if (pEntry->m_sLocation == sLocation)
+            pEntry->m_ttExpires = ttExpires;
     }
 
-    pEntry->DecrRef();
+    if (pEntry)
+        pEntry->DecrRef();
     pEntries->DecrRef();
 }
      
@@ -393,7 +419,7 @@ void SSDPCache::Remove( const QString &sURI, const QString &sUSN )
     {
         SSDPCacheEntries *pEntries = *it;
 
-        if (pEntries != NULL)
+        if (pEntries != nullptr)
         {
             pEntries->IncrRef();
 
@@ -427,7 +453,7 @@ int SSDPCache::RemoveStale()
     TaskTime     ttNow;
     QStringList  lstKeys;
 
-    gettimeofday( (&ttNow), NULL );
+    gettimeofday( (&ttNow), nullptr );
 
     Lock();
 
@@ -435,13 +461,11 @@ int SSDPCache::RemoveStale()
     // Iterate through all Type URI's and build list of stale entries keys
     // ----------------------------------------------------------------------
 
-    for (SSDPCacheEntriesMap::Iterator it  = m_cache.begin();
-                                       it != m_cache.end();
-                                     ++it )
+    for (auto it = m_cache.begin(); it != m_cache.end(); ++it )
     {
         SSDPCacheEntries *pEntries = *it;
 
-        if (pEntries != NULL)
+        if (pEntries != nullptr)
         {
             pEntries->IncrRef();
 
@@ -461,11 +485,9 @@ int SSDPCache::RemoveStale()
     // (This avoids issues when removing from a QMap while iterating it)
     // ----------------------------------------------------------------------
 
-    for ( QStringList::Iterator itKey = lstKeys.begin();
-                                itKey != lstKeys.end();
-                              ++itKey ) 
+    foreach (auto & key, lstKeys)
     {
-        SSDPCacheEntriesMap::iterator it = m_cache.find( *itKey );
+        SSDPCacheEntriesMap::iterator it = m_cache.find( key );
         if (it == m_cache.end())
             continue;
 
@@ -522,15 +544,14 @@ QTextStream &SSDPCache::OutputXML(
 {
     QMutexLocker locker(&m_mutex);
 
-    if (pnDevCount != NULL)
+    if (pnDevCount != nullptr)
         *pnDevCount   = 0;
-    if (pnEntryCount != NULL)
+    if (pnEntryCount != nullptr)
         *pnEntryCount = 0;
 
-    SSDPCacheEntriesMap::const_iterator it = m_cache.begin();
-    for (; it != m_cache.end(); ++it)
+    for (auto it = m_cache.cbegin(); it != m_cache.cend(); ++it)
     {
-        if (*it != NULL)
+        if (*it != nullptr)
         {
             os << "<Device uri='" << it.key() << "'>" << endl;
 
@@ -538,12 +559,12 @@ QTextStream &SSDPCache::OutputXML(
 
             (*it)->OutputXML(os, &tmp);
 
-            if (pnEntryCount != NULL)
+            if (pnEntryCount != nullptr)
                 *pnEntryCount += tmp;
 
             os << "</Device>" << endl;
 
-            if (pnDevCount != NULL)
+            if (pnDevCount != nullptr)
                 (*pnDevCount)++;
         }
     }
@@ -571,10 +592,9 @@ void SSDPCache::Dump(void)
                             "---------------------------------------");
 
     uint nCount = 0;
-    SSDPCacheEntriesMap::const_iterator it  = m_cache.begin();
-    for (; it != m_cache.end(); ++it)
+    for (auto it  = m_cache.cbegin(); it != m_cache.cend(); ++it)
     {
-        if (*it != NULL)
+        if (*it != nullptr)
         {
             LOG(VB_UPNP, LOG_DEBUG, it.key());
             (*it)->Dump(nCount);

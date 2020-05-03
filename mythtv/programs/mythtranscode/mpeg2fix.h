@@ -35,6 +35,7 @@ extern "C"
 // MythTV
 #include "transcodedefs.h"
 #include "programtypes.h"
+#include "mythavutil.h"
 
 enum MPFListType {
     MPF_TYPE_CUTLIST = 0,
@@ -49,22 +50,22 @@ class MPEG2frame
     void ensure_size(int size);
     void set_pkt(AVPacket *newpkt);
 
-    AVPacket pkt;
-    bool isSequence;
-    bool isGop;
-    uint8_t *framePos;
-    uint8_t *gopPos;
-    mpeg2_sequence_t mpeg2_seq;
-    mpeg2_gop_t mpeg2_gop;
-    mpeg2_picture_t mpeg2_pic;
+    AVPacket          m_pkt        {};
+    bool              m_isSequence {false};
+    bool              m_isGop      {false};
+    uint8_t          *m_framePos   {nullptr};
+    uint8_t          *m_gopPos     {nullptr};
+    mpeg2_sequence_t  m_mpeg2_seq;
+    mpeg2_gop_t       m_mpeg2_gop;
+    mpeg2_picture_t   m_mpeg2_pic;
 };
 
-typedef struct {
+struct poq_idx_t {
     int64_t newPTS;
     int64_t pos_pts;
     int framenum;
     bool type;
-} poq_idx_t;
+};
 
 class PTSOffsetQueue
 {
@@ -75,43 +76,43 @@ class PTSOffsetQueue
     int64_t Get(int idx, AVPacket *pkt);
     int64_t UpdateOrigPTS(int idx, int64_t &origPTS, AVPacket *pkt);
   private:
-    QMap<int, QList<poq_idx_t> > offset;
-    QMap<int, QList<poq_idx_t> > orig;
-    QList<int> keyList;
-    int vid_id;
+    QMap<int, QList<poq_idx_t> > m_offset;
+    QMap<int, QList<poq_idx_t> > m_orig;
+    QList<int> m_keyList;
+    int m_vidId;
 };
 
 //container for all multiplex related variables
 class MPEG2replex
 {
   public:
-    MPEG2replex();
+    MPEG2replex() = default;
     ~MPEG2replex();
     void Start();
     int WaitBuffers();
-    int done;
-    QString outfile;
-    int otype;
-    ringbuffer vrbuf;
-    ringbuffer extrbuf[N_AUDIO];
-    ringbuffer index_vrbuf;
-    ringbuffer index_extrbuf[N_AUDIO];
-    int ext_count;
-    int exttype[N_AUDIO];
-    int exttypcnt[N_AUDIO];
+    int             m_done                    {0};
+    QString         m_outfile;
+    int             m_otype                   {0};
+    ringbuffer      m_vrBuf                   {};
+    ringbuffer      m_extrbuf[N_AUDIO]        {};
+    ringbuffer      m_indexVrbuf              {};
+    ringbuffer      m_indexExtrbuf[N_AUDIO]   {};
+    int             m_extCount                {0};
+    int             m_exttype[N_AUDIO]        {0};
+    int             m_exttypcnt[N_AUDIO]      {0};
 
-    pthread_mutex_t mutex;
-    pthread_cond_t cond;
-    audio_frame_t extframe[N_AUDIO];
-    sequence_t seq_head;
+    pthread_mutex_t m_mutex                   {};
+    pthread_cond_t  m_cond                    {};
+    audio_frame_t   m_extframe[N_AUDIO]       {};
+    sequence_t      m_seq_head                {};
 
   private:
-    multiplex_t *mplex;
+    multiplex_t    *m_mplex                   {nullptr};
 };
 
-typedef QList<MPEG2frame *> FrameList;
-typedef QQueue<MPEG2frame *> FrameQueue;
-typedef QMap<int, FrameList *> FrameMap;
+using FrameList  = QList<MPEG2frame *>;
+using FrameQueue = QQueue<MPEG2frame *>;
+using FrameMap   = QMap<int, FrameList *>;
 
 class MPEG2fixup
 {
@@ -119,14 +120,14 @@ class MPEG2fixup
     MPEG2fixup(const QString &inf, const QString &outf,
                frm_dir_map_t *deleteMap, const char *fmt, int norp,
                int fixPTS, int maxf, bool showprog, int otype,
-               void (*update_func)(float) = NULL, int (*check_func)() = NULL);
+               void (*update_func)(float) = nullptr, int (*check_func)() = nullptr);
     ~MPEG2fixup();
     int Start();
-    void AddRangeList(QStringList cutlist, int type);
-    void ShowRangeMap(frm_dir_map_t *mapPtr, QString msg);
+    void AddRangeList(const QStringList& rangelist, int type);
+    static void ShowRangeMap(frm_dir_map_t *mapPtr, QString msg);
     int BuildKeyframeIndex(QString &file, frm_pos_map_t &posMap, frm_pos_map_t &durMap);
 
-    void SetAllAudio(bool keep) { allaudio = keep; }
+    void SetAllAudio(bool keep) { m_allAudio = keep; }
 
     static void dec2x33(int64_t *pts1, int64_t pts2);
     static void inc2x33(int64_t *pts1, int64_t pts2);
@@ -137,29 +138,29 @@ class MPEG2fixup
 
   protected:
     static void *ReplexStart(void *data);
-    MPEG2replex rx;
+    MPEG2replex m_rx;
 
   private:
-    int FindMPEG2Header(uint8_t *buf, int size, uint8_t code);
+    static int FindMPEG2Header(const uint8_t *buf, int size, uint8_t code);
     void InitReplex();
     void FrameInfo(MPEG2frame *f);
     int AddFrame(MPEG2frame *f);
-    bool InitAV(QString inputfile, const char *type, int64_t offset);
+    bool InitAV(const QString& inputfile, const char *type, int64_t offset);
     void ScanAudio();
     int ProcessVideo(MPEG2frame *vf, mpeg2dec_t *dec);
-    void WriteFrame(QString filename, MPEG2frame *f);
-    void WriteFrame(QString filename, AVPacket *pkt);
-    void WriteYUV(QString filename, const mpeg2_info_t *info);
-    void WriteData(QString filename, uint8_t *data, int size);
-    bool BuildFrame(AVPacket *pkt, QString fname);
+    void WriteFrame(const QString& filename, MPEG2frame *f);
+    void WriteFrame(const QString& filename, AVPacket *pkt);
+    static void WriteYUV(const QString& filename, const mpeg2_info_t *info);
+    static void WriteData(const QString& filename, uint8_t *data, int size);
+    bool BuildFrame(AVPacket *pkt, const QString& fname);
     MPEG2frame *GetPoolFrame(AVPacket *pkt);
     MPEG2frame *GetPoolFrame(MPEG2frame *f);
     int GetFrame(AVPacket *pkt);
     bool FindStart();
-    void SetRepeat(MPEG2frame *vf, int nb_fields, bool topff);
-    void SetRepeat(uint8_t *ptr, int size, int fields, bool topff);
+    static void SetRepeat(MPEG2frame *vf, int nb_fields, bool topff);
+    static void SetRepeat(uint8_t *ptr, int size, int fields, bool topff);
     MPEG2frame *FindFrameNum(int frameNum);
-    void RenumberFrames(int frame_pos, int delta);
+    void RenumberFrames(int start_pos, int delta);
     void StoreSecondary();
     int  PlaybackSecondary();
     MPEG2frame *DecodeToFrame(int frameNum, int skip_reset);
@@ -167,17 +168,17 @@ class MPEG2fixup
     int InsertFrame(int frameNum, int64_t deltaPTS,
                      int64_t ptsIncrement, int64_t initPTS);
     void AddSequence(MPEG2frame *frame1, MPEG2frame *frame2);
-    FrameList ReorderDTStoPTS(FrameList *dtsOrder, int pos);
+    static FrameList ReorderDTStoPTS(FrameList *dtsOrder, int pos);
     void InitialPTSFixup(MPEG2frame *curFrame, int64_t &origvPTS,
                          int64_t &PTSdiscrep, int numframes, bool fix);
-    void SetFrameNum(uint8_t *ptr, int num);
+    static void SetFrameNum(uint8_t *ptr, int num);
     static int GetFrameNum(const MPEG2frame *frame)
     {
-        return frame->mpeg2_pic.temporal_reference;
+        return frame->m_mpeg2_pic.temporal_reference;
     }
     static int GetFrameTypeN(const MPEG2frame *frame)
     {
-        return frame->mpeg2_pic.flags & PIC_MASK_CODING_TYPE;
+        return frame->m_mpeg2_pic.flags & PIC_MASK_CODING_TYPE;
     }
     static char GetFrameTypeT(const MPEG2frame *frame)
     {
@@ -187,78 +188,78 @@ class MPEG2fixup
     }
     static int GetNbFields(const MPEG2frame *frame)
     {
-        return frame->mpeg2_pic.nb_fields;
+        return frame->m_mpeg2_pic.nb_fields;
     }
     int GetStreamType(int id) const
     {
-        return (inputFC->streams[id]->codec->codec_id == AV_CODEC_ID_AC3) ?
+        return (m_inputFC->streams[id]->codecpar->codec_id == AV_CODEC_ID_AC3) ?
                AV_CODEC_ID_AC3 : AV_CODEC_ID_MP2;
     }
     AVCodecContext *getCodecContext(uint id)
     {
-        if (id >= inputFC->nb_streams)
-            return NULL;
-        return inputFC->streams[id]->codec;
+        if (id >= m_inputFC->nb_streams)
+            return nullptr;
+        return gCodecMap->getCodecContext(m_inputFC->streams[id]);
     }
     AVCodecParserContext *getCodecParserContext(uint id)
     {
-        if (id >= inputFC->nb_streams)
-            return NULL;
-        return inputFC->streams[id]->parser;
+        if (id >= m_inputFC->nb_streams)
+            return nullptr;
+        return m_inputFC->streams[id]->parser;
     }
 
-    void dumpList(FrameList *list);
+    static void dumpList(FrameList *list);
 
-    int (*check_abort)();
-    void (*update_status)(float percent_done);
+    int (*m_checkAbort)()                      {nullptr};
+    void (*m_updateStatus)(float percent_done) {nullptr};
 
-    FrameList vSecondary;
-    bool use_secondary;
+    FrameList     m_vSecondary;
+    bool          m_useSecondary  {false};
 
-    FrameList vFrame;
-    FrameMap  aFrame;
-    FrameQueue framePool;
-    FrameQueue unreadFrames;
-    int displayFrame;
-    mpeg2dec_t *header_decoder;
-    mpeg2dec_t *img_decoder;
+    FrameList     m_vFrame;
+    FrameMap      m_aFrame;
+    FrameQueue    m_framePool;
+    FrameQueue    m_unreadFrames;
+    int           m_displayFrame    {0};
+    mpeg2dec_t   *m_headerDecoder   {nullptr};
+    mpeg2dec_t   *m_imgDecoder      {nullptr};
 
-    frm_dir_map_t delMap;
-    frm_dir_map_t saveMap;
+    frm_dir_map_t m_delMap;
+    frm_dir_map_t m_saveMap;
 
-    pthread_t thread;
+    pthread_t     m_thread          {};
 
-    AVFormatContext *inputFC;
-    AVFrame *picture;
+    AVFormatContext *m_inputFC      {nullptr};
+    AVFrame         *m_picture      {nullptr};
 
-    int vid_id;
-    int ext_count;
-    QMap <int, int> aud_map;
-    int aud_stream_count;
-    int64_t ptsIncrement;
-    int64_t ptsOffset;  //was initPTS
-    bool mkvfile;
+    int             m_vidId         {-1};
+    int             m_extCount      {0};
+    QMap <int, int> m_audMap;
+    int64_t         m_ptsIncrement  {0};
+    bool            m_mkvFile       {false};
 
-    int discard;
+    bool            m_discard       {false};
     //control options
-    int no_repeat, fix_PTS, maxframes;
-    QString infile;
-    const char *format;
-    bool allaudio;
+    int             m_noRepeat;
+    int             m_fixPts;
+    int             m_maxFrames;
+    QString         m_infile;
+    const char     *m_format        {nullptr};
+    bool            m_allAudio      {false};
 
     //complete?
-    bool file_end;
-    bool real_file_end;
+    bool            m_fileEnd       {false};
+    bool            m_realFileEnd   {false};
 
     //progress indicators
-    QDateTime statustime;
-    bool showprogress;
-    uint64_t filesize;
-    int framenum;
-    int status_update_time;
-    uint64_t last_written_pos;
-    uint16_t inv_zigzag_direct16[64];
-    bool zigzag_init;
+    QDateTime       m_statusTime;
+    bool            m_showProgress          {false};
+    uint64_t        m_fileSize              {0};
+    int             m_frameNum              {0};
+    int             m_statusUpdateTime      {5};
+    uint64_t        m_lastWrittenPos        {0};
+    uint16_t        m_invZigzagDirect16[64] {};
+    bool            m_zigzagInit            {false};
 };
 
 #ifdef NO_MYTH

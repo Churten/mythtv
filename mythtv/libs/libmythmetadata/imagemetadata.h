@@ -9,11 +9,15 @@
 #ifndef IMAGEMETADATA_H
 #define IMAGEMETADATA_H
 
+#include <utility>
+
+// Qt headers
 #include <QCoreApplication> // for tr()
+#include <QDateTime>
 #include <QStringBuilder>
 #include <QStringList>
-#include <QDateTime>
 
+// MythTV headers
 #include "mythmetaexp.h"
 
 
@@ -65,7 +69,7 @@ public:
 
     //! Encode original & current orientation to a single Db field
     int Composite() { return m_current * 10 + m_file; }
-    int Transform(int);
+    int Transform(int transform);
     int GetCurrent(bool compensate);
     QString Description();
 
@@ -74,9 +78,9 @@ public:
 private:
     static QString AsText(int orientation);
 
-    int Apply(int);
+    int Apply(int transform);
 
-    typedef QHash<int, QHash<int, int> > Matrix;
+    using Matrix = QHash<int, QHash<int, int> >;
 
     //! True when using Qt 5.4.1 with its deviant orientation behaviour
     static const bool krunningQt541;
@@ -94,17 +98,17 @@ private:
 //! Abstract class for image metadata
 class META_PUBLIC ImageMetaData
 {
-    Q_DECLARE_TR_FUNCTIONS(ImageMetaData)
+    Q_DECLARE_TR_FUNCTIONS(ImageMetaData);
 public:
     static ImageMetaData* FromPicture(const QString &filePath);
     static ImageMetaData* FromVideo(const QString &filePath);
 
-    virtual ~ImageMetaData() {}
+    virtual ~ImageMetaData() = default;
 
     //! Unique separator to delimit fields within a string
     static const QString kSeparator;
 
-    //! Encodes metadata into a string as <tag name><tag label><tag value>
+    //! Encodes metadata into a string as \<tag name\>\<tag label\>\<tag value\>
     static QString ToString(const QString &name, const QString &label, const QString &value)
     { return name % kSeparator % label % kSeparator % value; }
 
@@ -112,17 +116,18 @@ public:
     static QStringList FromString(const QString &str)
     { return str.split(kSeparator); }
 
-    typedef QMap<QString, QStringList> TagMap;
+    using TagMap = QMap<QString, QStringList>;
     static TagMap ToMap(const QStringList &tags);
 
     virtual bool        IsValid()                                = 0;
     virtual QStringList GetAllTags()                             = 0;
-    virtual int         GetOrientation(bool *exists = NULL)      = 0;
-    virtual QDateTime   GetOriginalDateTime(bool *exists = NULL) = 0;
-    virtual QString     GetComment(bool *exists = NULL)          = 0;
+    virtual int         GetOrientation(bool *exists = nullptr)      = 0;
+    virtual QDateTime   GetOriginalDateTime(bool *exists = nullptr) = 0;
+    virtual QString     GetComment(bool *exists = nullptr)          = 0;
 
 protected:
-    explicit ImageMetaData(const QString &filePath) : m_filePath(filePath) {}
+    explicit ImageMetaData(QString filePath)
+        : m_filePath(std::move(filePath)) {}
 
     //! Image filepath
     QString m_filePath;

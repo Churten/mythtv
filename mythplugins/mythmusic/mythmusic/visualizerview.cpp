@@ -27,16 +27,10 @@ VisualizerView::VisualizerView(MythScreenStack *parent, MythScreenType *parentSc
     m_currentView = MV_VISUALIZER;
 }
 
-VisualizerView::~VisualizerView()
-{
-}
-
 bool VisualizerView::Create(void)
 {
-    bool err = false;
-
     // Load the theme for this screen
-    err = LoadWindowFromXML("music-ui.xml", "visualizerview", this);
+    bool err = LoadWindowFromXML("music-ui.xml", "visualizerview", this);
 
     if (!err)
         return false;
@@ -71,9 +65,8 @@ bool VisualizerView::keyPressEvent(QKeyEvent *event)
     if (GetFocusWidget() && GetFocusWidget()->keyPressEvent(event))
         return true;
 
-    bool handled = false;
     QStringList actions;
-    handled = GetMythMainWindow()->TranslateKeyPress("Music", event, actions);
+    bool handled = GetMythMainWindow()->TranslateKeyPress("Music", event, actions);
 
     for (int i = 0; i < actions.size() && !handled; i++)
     {
@@ -91,9 +84,6 @@ bool VisualizerView::keyPressEvent(QKeyEvent *event)
     if (!handled && MusicCommon::keyPressEvent(event))
         handled = true;
 
-    if (!handled && MythScreenType::keyPressEvent(event))
-        handled = true;
-
     return handled;
 }
 
@@ -101,15 +91,15 @@ void VisualizerView::ShowMenu(void)
 {
     QString label = tr("Actions");
 
-    MythMenu *menu = new MythMenu(label, this, "menu");
+    auto *menu = new MythMenu(label, this, "menu");
 
-    menu->AddItem(tr("Change Visualizer"), NULL, createVisualizerMenu());
+    menu->AddItem(tr("Change Visualizer"), nullptr, createVisualizerMenu());
     menu->AddItem(tr("Show Track Info"), SLOT(showTrackInfoPopup()));
-    menu->AddItem(tr("Other Options"), NULL, createMainMenu());
+    menu->AddItem(tr("Other Options"), nullptr, createMainMenu());
 
     MythScreenStack *popupStack = GetMythMainWindow()->GetStack("popup stack");
 
-    MythDialogBox *menuPopup = new MythDialogBox(menu, popupStack, "actionmenu");
+    auto *menuPopup = new MythDialogBox(menu, popupStack, "actionmenu");
 
     if (menuPopup->Create())
         popupStack->AddScreen(menuPopup);
@@ -121,7 +111,7 @@ void VisualizerView::showTrackInfoPopup(void)
 {
     MythScreenStack *popupStack = GetMythMainWindow()->GetStack("popup stack");
 
-    TrackInfoPopup *popup = new TrackInfoPopup(popupStack, gPlayer->getCurrentMetadata());
+    auto *popup = new TrackInfoPopup(popupStack, gPlayer->getCurrentMetadata());
 
     if (!popup->Create())
     {
@@ -135,14 +125,7 @@ void VisualizerView::showTrackInfoPopup(void)
 //---------------------------------------------------------
 // TrackInfoPopup
 //---------------------------------------------------------
-#define MUSICINFOPOPUPTIME 8 * 1000
-
-TrackInfoPopup::TrackInfoPopup(MythScreenStack *parent, MusicMetadata *metadata)
-         : MythScreenType(parent, "trackinfopopup", false)
-{
-    m_metadata = metadata;
-    m_displayTimer = NULL;
-}
+#define MUSICINFOPOPUPTIME (8 * 1000)
 
 TrackInfoPopup::~TrackInfoPopup(void)
 {
@@ -150,15 +133,13 @@ TrackInfoPopup::~TrackInfoPopup(void)
     {
         m_displayTimer->stop();
         delete m_displayTimer;
-        m_displayTimer = NULL;
+        m_displayTimer = nullptr;
     }
 }
 
 bool TrackInfoPopup::Create(void)
 {
-    bool err = false;
-
-    err = LoadWindowFromXML("music-ui.xml", "trackinfo_popup", this);
+    bool err = LoadWindowFromXML("music-ui.xml", "trackinfo_popup", this);
 
     if (!err)
         return false;

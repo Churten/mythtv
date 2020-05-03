@@ -31,15 +31,13 @@ class SERVICE_PUBLIC BuildInfo : public QObject
 
     PROPERTYIMP( QString , Version   )
     PROPERTYIMP( bool    , LibX264   )
-    PROPERTYIMP( bool    , LibDNS_SD )
+    PROPERTYIMP( bool    , LibDNS_SD );
 
     public:
 
         static inline void InitializeCustomTypes();
 
-    public:
-
-        BuildInfo(QObject *parent = 0)
+        Q_INVOKABLE BuildInfo(QObject *parent = nullptr)
             : QObject    ( parent ),
               m_Version  ( ""     ),
               m_LibX264  ( false  ),
@@ -47,33 +45,24 @@ class SERVICE_PUBLIC BuildInfo : public QObject
         {
         }
 
-        BuildInfo( const BuildInfo &src )
+        void Copy( const BuildInfo *src )
         {
-            Copy( src );
+            m_Version   = src->m_Version  ;
+            m_LibX264   = src->m_LibX264  ;
+            m_LibDNS_SD = src->m_LibDNS_SD;
         }
 
-        void Copy( const BuildInfo &src )
-        {
-            m_Version   = src.m_Version  ;
-            m_LibX264   = src.m_LibX264  ;
-            m_LibDNS_SD = src.m_LibDNS_SD;
-        }
+    private:
+        Q_DISABLE_COPY(BuildInfo);
 };
 
-typedef BuildInfo* BuildInfoPtr;
+using BuildInfoPtr = BuildInfo*;
 
-} // namespace DTC
-
-Q_DECLARE_METATYPE( DTC::BuildInfo  )
-Q_DECLARE_METATYPE( DTC::BuildInfo* )
-
-namespace DTC
-{
 inline void BuildInfo::InitializeCustomTypes()
 {
-    qRegisterMetaType< BuildInfo  >();
     qRegisterMetaType< BuildInfo* >();
 }
-}
+
+} // namespace DTC
 
 #endif

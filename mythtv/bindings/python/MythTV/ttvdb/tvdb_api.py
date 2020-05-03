@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 # encoding:utf-8
 # author:dbr/Ben
 # project:tvdb_api
@@ -16,6 +15,8 @@ import tempfile
 import warnings
 import logging
 import datetime
+from MythTV.utility import levenshtein
+
 
 """Simple-to-use Python interface to The TVDB's API (thetvdb.com)
 
@@ -28,6 +29,7 @@ u'Cabin Fever'
 """
 __author__ = "dbr/Ben"
 __version__ = "2.0-dev"
+
 
 IS_PY2 = sys.version_info[0] == 2
 
@@ -549,7 +551,8 @@ class Tvdb:
                  userkey=None,
                  forceConnect=False,
                  dvdorder=False,
-                 dvd_order_sids=None):
+                 dvd_order_sids=None,
+                 sort_series=True):
 
         """interactive (True/False):
             When True, uses built-in console UI is used to select the correct show.
@@ -635,6 +638,11 @@ class Tvdb:
 
         dvd_order_sids (Set):
             SIDs for which DVD order should be used for season and episode numbers
+
+        sort_series (bool):
+            If true, sort the series list for best match to search term.
+            If false, use the sort order returned by theTVDB.com
+            The default is true.
         """
 
         global lastTimeout
@@ -672,6 +680,8 @@ class Tvdb:
         self.config['search_all_languages'] = search_all_languages
 
         self.config['dvdorder'] = dvdorder
+
+        self.config['sort_series'] = sort_series
 
         if cache is True:
             self.session = requests_cache.CachedSession(
@@ -748,6 +758,7 @@ class Tvdb:
         self.config['api_url'] = "https://api.thetvdb.com"
 
         self.config['url_getSeries'] = u"%(api_url)s/search/series?name=%%s" % self.config
+        self.config['url_getSeriesById'] = u"%(api_url)s/search/series?id=%%s" % self.config
 
         self.config['url_epInfo'] = u"%(api_url)s/series/%%s/episodes" % self.config
         self.config['url_epDetail'] = u"%(api_url)s/episodes/%%s" % self.config
@@ -900,13 +911,16 @@ class Tvdb:
             self.shows[sid] = Show()
         self.shows[sid].data[key] = value
 
-    def search(self, series):
+    def search(self, series, by_id=False):
         """This searches TheTVDB.com for the series name
         and returns the result list
         """
         series = url_quote(series.encode("utf-8"))
         log().debug("Searching for show %s" % series)
-        seriesEt = self._getetsrc(self.config['url_getSeries'] % (series))
+        if by_id:
+            seriesEt = self._getetsrc(self.config['url_getSeriesById'] % (series))
+        else:
+            seriesEt = self._getetsrc(self.config['url_getSeries'] % (series))
         if not seriesEt:
             log().debug('Series result returned zero')
             raise tvdb_shownotfound("Show-name search returned zero results (cannot find show on TVDB)")
@@ -920,7 +934,7 @@ class Tvdb:
 
         return allSeries
 
-    def _getSeries(self, series):
+    def _getSeries(self, series, by_id=False):
         """This searches TheTVDB.com for the series name,
         If a custom_ui UI is configured, it uses this to select the correct
         series. If not, and interactive == True, ConsoleUI is used, if not
@@ -938,6 +952,12 @@ class Tvdb:
             else:
                 log().debug('Interactively selecting show using ConsoleUI')
                 ui = ConsoleUI(config=self.config)
+
+        if self.config['sort_series']:
+            series_lowercase = series.lower()
+            for s in allSeries:
+                s[u'match_similarity'] = levenshtein(series_lowercase, s[u'seriesName'].lower())
+            allSeries.sort(key=lambda s: s[u'match_similarity'])
 
         return ui.selectSeries(allSeries)
 
@@ -1071,7 +1091,7 @@ class Tvdb:
 
                 self._setShowData(sid, tag, value)
         # set language
-        if language == None:
+        if language is None:
             language = self.config['language']
         self._setShowData(sid, u'language', language)
 
@@ -1170,7 +1190,20 @@ class Tvdb:
                 self._getShowData(key, self.config['language'])
             return self.shows[key]
 
-        sid = self._nameToSid(key)
+        try:
+            # check it just in case the number string is a show
+            sid = self._nameToSid(key)
+        except tvdb_shownotfound as e:
+            try:
+                # check if it's an id key and fetch the data if necessary
+                int(key)
+                if key not in self.shows:
+                    self._getShowData(key, self.config['language'])
+                return self.shows[key]
+            except ValueError:
+                # return the original show not found exception
+                raise e
+
         log().debug('Got series id %s' % sid)
         return self.shows[sid]
 

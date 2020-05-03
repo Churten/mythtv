@@ -3,7 +3,7 @@
 #define _PRIVATE_TABLES_H_
 
 #include <QString>
-#include <stdint.h>  // uint32_t
+#include <cstdint>  // uint32_t
 #include "mpegtables.h"
 #include "dvbdescriptors.h"
 
@@ -29,7 +29,7 @@ class PremiereContentInformationTable : public PSIPTable
     uint DescriptorsLength() const
         { return ((psipdata()[7] & 0x0F) << 8) | psipdata()[8]; }
 
-    uint EventCount(void) const
+    static uint EventCount(void)
         { return 1; }
 
     // descriptor length        x   9.0
@@ -39,7 +39,7 @@ class PremiereContentInformationTable : public PSIPTable
     static bool IsEIT(uint table_id);
 
   private:
-    mutable vector<const unsigned char*> _ptrs; // used to parse
+    mutable vector<const unsigned char*> m_ptrs; // used to parse
 };
 
 class PremiereContentPresentationTable : public PSIPTable

@@ -24,15 +24,15 @@ class SceneChangeDetector;
 namespace commDetector2 {
 
 QString debugDirectory(int chanid, const QDateTime& recstartts);
-void createDebugDirectory(QString dirname, QString comment);
+void createDebugDirectory(const QString& dirname, const QString& comment);
 QString frameToTimestamp(long long frameno, float fps);
 QString frameToTimestampms(long long frameno, float fps);
 QString strftimeval(const struct timeval *tv);
 
 };  /* namespace */
 
-typedef vector<FrameAnalyzer*>    FrameAnalyzerItem;
-typedef vector<FrameAnalyzerItem> FrameAnalyzerList;
+using FrameAnalyzerItem = vector<FrameAnalyzer*>;
+using FrameAnalyzerList = vector<FrameAnalyzerItem>;
 
 class CommDetector2 : public CommDetectorBase
 {
@@ -40,47 +40,51 @@ class CommDetector2 : public CommDetectorBase
     CommDetector2(
         SkipType commDetectMethod,
         bool showProgress, bool fullSpeed, MythPlayer* player,
-        int chanid, const QDateTime& startts, const QDateTime& endts,
-        const QDateTime& recstartts, const QDateTime& recendts, bool useDB);
-    virtual bool go(void);
-    virtual void GetCommercialBreakList(frm_dir_map_t &comms);
-    virtual void recordingFinished(long long totalFileSize);
-    virtual void requestCommBreakMapUpdate(void);
-    virtual void PrintFullMap(
-        ostream &out, const frm_dir_map_t *comm_breaks, bool verbose) const;
+        int chanid, QDateTime startts, QDateTime endts,
+        QDateTime recstartts, QDateTime recendts, bool useDB);
+    bool go(void) override; // CommDetectorBase
+    void GetCommercialBreakList(frm_dir_map_t &marks) override; // CommDetectorBase
+    void recordingFinished(long long totalFileSize) override; // CommDetectorBase
+    void requestCommBreakMapUpdate(void) override; // CommDetectorBase
+    void PrintFullMap(ostream &out, const frm_dir_map_t *comm_breaks,
+                      bool verbose) const override; // CommDetectorBase
 
   private:
-    virtual ~CommDetector2() {}
+    ~CommDetector2() override = default;
 
-    void reportState(int elapsed_sec, long long frameno, long long nframes,
+    void reportState(int elapsedms, long long frameno, long long nframes,
             unsigned int passno, unsigned int npasses);
     int computeBreaks(long long nframes);
 
   private:
-    enum SkipTypes          commDetectMethod;
-    bool                    showProgress;
-    bool                    fullSpeed;
-    MythPlayer             *player;
-    QDateTime               startts, endts, recstartts, recendts;
+    SkipType                     m_commDetectMethod;
+    bool                         m_showProgress            {false};
+    bool                         m_fullSpeed               {false};
+    MythPlayer                  *m_player                  {nullptr};
+    QDateTime                    m_startts;
+    QDateTime                    m_endts;
+    QDateTime                    m_recstartts;
+    QDateTime                    m_recendts;
 
-    bool                    isRecording;        /* current state */
-    bool                    sendBreakMapUpdates;
-    bool                    breakMapUpdateRequested;
-    bool                    finished;
+                                 /* current state */
+    bool                         m_isRecording             {false};
+    bool                         m_sendBreakMapUpdates     {false};
+    bool                         m_breakMapUpdateRequested {false};
+    bool                         m_finished                {false};
 
-    long long               currentFrameNumber;
-    FrameAnalyzerList       frameAnalyzers;     /* one list per scan of file */
-    FrameAnalyzerList::iterator currentPass;
-    FrameAnalyzerItem       finishedAnalyzers;
+    long long                    m_currentFrameNumber      {0};
+    FrameAnalyzerList            m_frameAnalyzers; /* one list per scan of file */
+    FrameAnalyzerList::iterator  m_currentPass;
+    FrameAnalyzerItem            m_finishedAnalyzers;
 
-    FrameAnalyzer::FrameMap breaks;
+    FrameAnalyzer::FrameMap      m_breaks;
 
-    TemplateFinder          *logoFinder;
-    TemplateMatcher         *logoMatcher;
-    BlankFrameDetector      *blankFrameDetector;
-    SceneChangeDetector     *sceneChangeDetector;
+    TemplateFinder              *m_logoFinder              {nullptr};
+    TemplateMatcher             *m_logoMatcher             {nullptr};
+    BlankFrameDetector          *m_blankFrameDetector      {nullptr};
+    SceneChangeDetector         *m_sceneChangeDetector     {nullptr};
 
-    QString                 debugdir;
+    QString                      m_debugdir;
 };
 
 #endif  /* !_COMMDETECTOR2_H_ */

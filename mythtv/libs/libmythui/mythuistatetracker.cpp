@@ -7,7 +7,7 @@
 #include "mythuistatetracker.h"
 #include "mythuiactions.h"
 
-MythUIStateTracker* MythUIStateTracker::gUIState = NULL;
+MythUIStateTracker* MythUIStateTracker::gUIState = nullptr;
 QMutex* MythUIStateTracker::gUIStateLock = new QMutex();
 
 MythUIStateTracker* MythUIStateTracker::GetMythUIStateTracker(void)
@@ -24,7 +24,6 @@ void MythUIStateTracker::SetState(QVariantMap &newstate)
     MythUIStateTracker* uistate = MythUIStateTracker::GetMythUIStateTracker();
     gUIStateLock->lock();
     uistate->m_state = newstate;
-    uistate->m_state.detach();
     uistate->m_lastUpdated = QTime::currentTime();
     gUIStateLock->unlock();
 }
@@ -34,7 +33,6 @@ void MythUIStateTracker::GetState(QVariantMap &state)
     MythUIStateTracker* uistate = MythUIStateTracker::GetMythUIStateTracker();
     gUIStateLock->lock();
     state = uistate->m_state;
-    state.detach();
     gUIStateLock->unlock();
 }
 
@@ -46,7 +44,7 @@ void MythUIStateTracker::GetFreshState(QVariantMap &state)
         return;
     }
 
-    MythEvent *e = new MythEvent(ACTION_GETSTATUS);
+    auto *e = new MythEvent(ACTION_GETSTATUS);
     qApp->postEvent(GetMythMainWindow(), e);
 
     int tries = 0;

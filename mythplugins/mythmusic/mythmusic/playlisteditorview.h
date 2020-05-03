@@ -1,6 +1,9 @@
 #ifndef PLAYLISTEDITORVIEW_H_
 #define PLAYLISTEDITORVIEW_H_
 
+// c++
+#include <utility>
+
 // qt
 #include <QEvent>
 #include <QVector>
@@ -28,7 +31,7 @@ class MPUBLIC MusicButtonItem : public MythUIButtonListItem, public QObject
         MythUIButtonListItem(lbtype, text, image, checkable, state, showArrow, listPosition) {}
 
     MusicButtonItem(MythUIButtonList *lbtype, const QString& text, QVariant data, int listPosition = -1) :
-        MythUIButtonListItem(lbtype, text, data, listPosition) {}
+        MythUIButtonListItem(lbtype, text, std::move(data), listPosition) {}
 };
 
 class MPUBLIC MusicGenericTree : public MythGenericTree
@@ -36,9 +39,9 @@ class MPUBLIC MusicGenericTree : public MythGenericTree
   public:
     MusicGenericTree(MusicGenericTree *parent, const QString &name,
                      const QString &action = "",
-                     MythUIButtonListItem::CheckState state = MythUIButtonListItem::CantCheck,
+                     MythUIButtonListItem::CheckState check = MythUIButtonListItem::CantCheck,
                      bool showArrow = true);
-    virtual ~MusicGenericTree();
+    ~MusicGenericTree() override = default;
 
     QString getAction(void) const { return m_action; }
 
@@ -47,17 +50,16 @@ class MPUBLIC MusicGenericTree : public MythGenericTree
 
     void setDrawArrow(bool flag);
 
-    MythUIButtonListItem *CreateListButton(MythUIButtonList *list);
+    MythUIButtonListItem *CreateListButton(MythUIButtonList *list) override; // MythGenericTree
 
   protected:
     QString  m_action;
-    QPointer<MusicButtonItem> m_buttonItem;
-    MythUIButtonListItem::CheckState m_check;
-    bool     m_showArrow;
-    //bool     m_active;
+    QPointer<MusicButtonItem> m_buttonItem {nullptr};
+    MythUIButtonListItem::CheckState m_check {MythUIButtonListItem::CantCheck};
+    bool     m_showArrow {true};
 };
 
-Q_DECLARE_METATYPE(MusicGenericTree*)
+Q_DECLARE_METATYPE(MusicGenericTree*);
 
 class PlaylistEditorView : public MusicCommon
 {
@@ -65,21 +67,21 @@ class PlaylistEditorView : public MusicCommon
   public:
     PlaylistEditorView(MythScreenStack *parent, MythScreenType *parentScreen,
                        const QString &layout, bool restorePosition = false);
-    ~PlaylistEditorView(void);
+    ~PlaylistEditorView(void) override;
 
-    bool Create(void);
-    bool keyPressEvent(QKeyEvent *);
+    bool Create(void) override; // MythScreenType
+    bool keyPressEvent(QKeyEvent *event) override; // MusicCommon
 
     void saveTreePosition(void);
 
-    virtual void ShowMenu(void);
+    void ShowMenu(void) override; // MusicCommon
 
   protected:
-    void customEvent(QEvent *event);
+    void customEvent(QEvent *event) override; // MusicCommon
 
   private slots:
     void treeItemClicked(MythUIButtonListItem *item);
-    void treeItemVisible(MythUIButtonListItem *item);
+    static void treeItemVisible(MythUIButtonListItem *item);
     void treeNodeChanged(MythGenericTree *node);
     void smartPLChanged(const QString &category, const QString &name);
     void deleteSmartPlaylist(bool ok);
@@ -88,14 +90,14 @@ class PlaylistEditorView : public MusicCommon
   private:
     void filterTracks(MusicGenericTree *node);
 
-    void getPlaylists(MusicGenericTree *node);
-    void getPlaylistTracks(MusicGenericTree *node, int playlistID);
+    static void getPlaylists(MusicGenericTree *node);
+    static void getPlaylistTracks(MusicGenericTree *node, int playlistID);
 
-    void getSmartPlaylistCategories(MusicGenericTree *node);
-    void getSmartPlaylists(MusicGenericTree *node);
-    void getSmartPlaylistTracks(MusicGenericTree *node, int playlistID);
+    static void getSmartPlaylistCategories(MusicGenericTree *node);
+    static void getSmartPlaylists(MusicGenericTree *node);
+    static void getSmartPlaylistTracks(MusicGenericTree *node, int playlistID);
 
-    void getCDTracks(MusicGenericTree *node);
+    static void getCDTracks(MusicGenericTree *node);
 
     void updateSelectedTracks(void);
     void updateSelectedTracks(MusicGenericTree *node);
@@ -110,13 +112,13 @@ class PlaylistEditorView : public MusicCommon
 
   private:
     QString                 m_layout;
-    bool                    m_restorePosition;
-    MusicGenericTree       *m_rootNode;
+    bool                    m_restorePosition {false};
+    MusicGenericTree       *m_rootNode        {nullptr};
     QList<MetadataPtrList*> m_deleteList;
 
-    MythUIButtonTree *m_playlistTree;
-    MythUIText       *m_breadcrumbsText;
-    MythUIText       *m_positionText;
+    MythUIButtonTree *m_playlistTree          {nullptr};
+    MythUIText       *m_breadcrumbsText       {nullptr};
+    MythUIText       *m_positionText          {nullptr};
 };
 
 #endif

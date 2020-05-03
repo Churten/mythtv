@@ -20,10 +20,7 @@ PrePostRollFlagger::PrePostRollFlagger(SkipType commDetectMethod,
                             const QDateTime& recordingStopsAt_in):
     ClassicCommDetector( commDetectMethod,  showProgress,  fullSpeed,
         player,          startedAt_in,      stopsAt_in,
-        recordingStartedAt_in,              recordingStopsAt_in),
-        myTotalFrames(0),                   closestAfterPre(0),
-        closestBeforePre(0),                closestAfterPost(0),
-        closestBeforePost(0)
+        recordingStartedAt_in,              recordingStopsAt_in)
 {
 }
 
@@ -37,10 +34,10 @@ bool PrePostRollFlagger::go()
     int secsSince = 0;
     int requiredBuffer = 120;
     int requiredHeadStart = requiredBuffer;
-    bool wereRecording = stillRecording;
+    bool wereRecording = m_stillRecording;
 
-    secsSince = startedAt.secsTo(MythDate::current());
-    while (stillRecording && (secsSince < requiredHeadStart))
+    secsSince = m_startedAt.secsTo(MythDate::current());
+    while (m_stillRecording && (secsSince < requiredHeadStart))
     {
         emit statusUpdate(QCoreApplication::translate("(mythcommflag)",
             "Waiting to pass preroll + head start"));
@@ -50,98 +47,98 @@ bool PrePostRollFlagger::go()
             return false;
 
         std::this_thread::sleep_for(std::chrono::seconds(5));
-        secsSince = startedAt.secsTo(MythDate::current());
+        secsSince = m_startedAt.secsTo(MythDate::current());
     }
 
-    if (player->OpenFile() < 0)
+    if (m_player->OpenFile() < 0)
         return false;
 
     Init();
 
 
     // Don't bother flagging short ~realtime recordings
-    if ((wereRecording) && (!stillRecording) && (secsSince < requiredHeadStart))
+    if ((wereRecording) && (!m_stillRecording) && (secsSince < requiredHeadStart))
         return false;
 
-    aggressiveDetection =
-        gCoreContext->GetNumSetting("AggressiveCommDetect", 1);
+    m_aggressiveDetection =
+        gCoreContext->GetBoolSetting("AggressiveCommDetect", true);
 
-    if (!player->InitVideo())
+    if (!m_player->InitVideo())
     {
         LOG(VB_GENERAL, LOG_ERR,
             "NVP: Unable to initialize video for FlagCommercials.");
         return false;
     }
-    player->EnableSubtitles(false);
+    m_player->EnableSubtitles(false);
 
     emit breathe();
     if (m_bStop)
         return false;
 
-    QTime flagTime;
+    QElapsedTimer flagTime;
     flagTime.start();
 
-    if (recordingStopsAt < MythDate::current() )
-        myTotalFrames = player->GetTotalFrameCount();
+    if (m_recordingStopsAt < MythDate::current() )
+        m_myTotalFrames = m_player->GetTotalFrameCount();
     else
-        myTotalFrames = (long long)(player->GetFrameRate() *
-                        (recordingStartedAt.secsTo(recordingStopsAt)));
+        m_myTotalFrames = (long long)(m_player->GetFrameRate() *
+                        (m_recordingStartedAt.secsTo(m_recordingStopsAt)));
 
 
 
-    if (showProgress)
+    if (m_showProgress)
     {
-        if (myTotalFrames)
+        if (m_myTotalFrames)
             cerr << "  0%/      ";
         else
             cerr << "     0/      ";
         cerr.flush();
     }
 
-    float aspect = player->GetVideoAspect();
+    float aspect = m_player->GetVideoAspect();
 
     SetVideoParams(aspect);
 
     emit breathe();
 
-    long long stopFrame = preRoll + fps * 120; //look up to 2 minutes past
+    long long stopFrame = m_preRoll + m_fps * 120; //look up to 2 minutes past
     long long framesToProcess = 0;
-    if(preRoll)
+    if(m_preRoll)
         framesToProcess += stopFrame;
-    if(postRoll)
+    if(m_postRoll)
         //guess two minutes before
-        framesToProcess += myTotalFrames - postRoll + fps * 120;
+        framesToProcess += m_myTotalFrames - m_postRoll + m_fps * 120;
 
 
     long long framesProcessed = 0;
-    if(preRoll > 0)
+    if(m_preRoll > 0)
     {
         //check from preroll after
         LOG(VB_COMMFLAG, LOG_INFO,
             QString("Finding closest after preroll(%1-%2)")
-                .arg(preRoll).arg(stopFrame));
+                .arg(m_preRoll).arg(stopFrame));
 
-        closestAfterPre = findBreakInrange(preRoll, stopFrame, framesToProcess,
+        m_closestAfterPre = findBreakInrange(m_preRoll, stopFrame, framesToProcess,
                                            framesProcessed, flagTime, false);
 
         LOG(VB_COMMFLAG, LOG_INFO, QString("Closest after preroll: %1")
-                .arg(closestAfterPre));
+                .arg(m_closestAfterPre));
 
 
         //check before preroll
         long long startFrame = 0;
-        if(closestAfterPre)
-            startFrame = preRoll - (closestAfterPre - preRoll) - 1;
+        if(m_closestAfterPre)
+            startFrame = m_preRoll - (m_closestAfterPre - m_preRoll) - 1;
 
         LOG(VB_COMMFLAG, LOG_INFO, QString("Finding before preroll (%1-%2)")
-                .arg(startFrame).arg(preRoll));
-        closestBeforePre = findBreakInrange(startFrame, preRoll,
+                .arg(startFrame).arg(m_preRoll));
+        m_closestBeforePre = findBreakInrange(startFrame, m_preRoll,
                                             framesToProcess, framesProcessed,
                                             flagTime, true);
         LOG(VB_COMMFLAG, LOG_INFO, QString("Closest before preroll: %1")
-                .arg(closestBeforePre));
+                .arg(m_closestBeforePre));
 
-        if(closestBeforePre || closestAfterPre)
+        if(m_closestBeforePre || m_closestAfterPre)
             emit gotNewCommercialBreakList();
 
         // for better processing percent
@@ -149,9 +146,9 @@ bool PrePostRollFlagger::go()
 
     }
 
-    if(stillRecording)
+    if(m_stillRecording)
     {
-        while (MythDate::current() <= recordingStopsAt)
+        while (MythDate::current() <= m_recordingStopsAt)
         {
             emit breathe();
             if (m_bStop)
@@ -160,48 +157,48 @@ bool PrePostRollFlagger::go()
                 "Waiting for recording to finish"));
             std::this_thread::sleep_for(std::chrono::seconds(5));
         }
-        stillRecording = false;
-         myTotalFrames = player->GetTotalFrameCount();
+        m_stillRecording = false;
+         m_myTotalFrames = m_player->GetTotalFrameCount();
     }
 
-    if(postRoll > 0)
+    if(m_postRoll > 0)
     {
         //check from preroll after
-        long long postRollStartLoc = myTotalFrames - postRoll;
+        long long postRollStartLoc = m_myTotalFrames - m_postRoll;
         LOG(VB_COMMFLAG, LOG_INFO,
             QString("Finding closest after postroll(%1-%2)")
-                .arg(postRollStartLoc).arg(myTotalFrames));
-        closestAfterPost = findBreakInrange(postRollStartLoc, myTotalFrames,
+                .arg(postRollStartLoc).arg(m_myTotalFrames));
+        m_closestAfterPost = findBreakInrange(postRollStartLoc, m_myTotalFrames,
                                             framesToProcess, framesProcessed,
                                             flagTime, false);
         LOG(VB_COMMFLAG, LOG_INFO, QString("Closest after postRoll: %1")
-                .arg(closestAfterPost));
+                .arg(m_closestAfterPost));
 
         //check before preroll
         long long startFrame = 0;
-        if(closestAfterPost)
+        if(m_closestAfterPost)
             startFrame = postRollStartLoc
-                         - (closestAfterPost - postRollStartLoc) - 1;
+                         - (m_closestAfterPost - postRollStartLoc) - 1;
 
         LOG(VB_COMMFLAG, LOG_INFO,
             QString("finding closest before preroll(%1-%2)")
                 .arg(startFrame).arg(postRollStartLoc));
-        closestBeforePost = findBreakInrange(startFrame, postRollStartLoc,
+        m_closestBeforePost = findBreakInrange(startFrame, postRollStartLoc,
                                              framesToProcess, framesProcessed,
                                              flagTime, true);
         LOG(VB_COMMFLAG, LOG_INFO, QString("Closest before postroll: %1")
-                .arg(closestBeforePost));
+                .arg(m_closestBeforePost));
 
-        framesToProcess = framesProcessed;
+//      framesToProcess = framesProcessed;
     }
 
-    if (showProgress)
+    if (m_showProgress)
     {
         //float elapsed = flagTime.elapsed() / 1000.0;
 
-        //float flagFPS = (elapsed > 0.0f) ? (framesProcessed / elapsed) : 0.0f;
+        //float flagFPS = (elapsed > 0.0F) ? (framesProcessed / elapsed) : 0.0F;
 
-        if (myTotalFrames)
+        if (m_myTotalFrames)
             cerr << "\b\b\b\b\b\b      \b\b\b\b\b\b";
         else
             cerr << "\b\b\b\b\b\b\b\b\b\b\b\b\b             "
@@ -217,11 +214,9 @@ long long PrePostRollFlagger::findBreakInrange(long long startFrame,
                                                long long stopFrame,
                                                long long totalFrames,
                                                long long &framesProcessed,
-                                             QTime &flagTime, bool findLast)
+                                               QElapsedTimer&flagTime, bool findLast)
 {
-    float flagFPS;
     int requiredBuffer = 30;
-    long long currentFrameNumber;
     int prevpercent = -1;
 
     if(startFrame > 0)
@@ -229,25 +224,25 @@ long long PrePostRollFlagger::findBreakInrange(long long startFrame,
     else
         startFrame = 0;
 
-    player->DiscardVideoFrame(player->GetRawVideoFrame(0));
+    m_player->DiscardVideoFrame(m_player->GetRawVideoFrame(0));
 
     long long tmpStartFrame = startFrame;
-    VideoFrame* f = player->GetRawVideoFrame(tmpStartFrame);
-    float aspect = player->GetVideoAspect();
-    currentFrameNumber = f->frameNumber;
+    VideoFrame* f = m_player->GetRawVideoFrame(tmpStartFrame);
+    float aspect = m_player->GetVideoAspect();
+    long long currentFrameNumber = f->frameNumber;
     LOG(VB_COMMFLAG, LOG_INFO, QString("Starting with frame %1")
             .arg(currentFrameNumber));
-    player->DiscardVideoFrame(f);
+    m_player->DiscardVideoFrame(f);
 
     long long foundFrame = 0;
 
-    while (player->GetEof() == kEofStateNone)
+    while (m_player->GetEof() == kEofStateNone)
     {
-        struct timeval startTime;
-        if (stillRecording)
-            gettimeofday(&startTime, NULL);
+        struct timeval startTime {};
+        if (m_stillRecording)
+            gettimeofday(&startTime, nullptr);
 
-        VideoFrame* currentFrame = player->GetRawVideoFrame();
+        VideoFrame* currentFrame = m_player->GetRawVideoFrame();
         currentFrameNumber = currentFrame->frameNumber;
 
         if(currentFrameNumber % 1000 == 0)
@@ -258,11 +253,11 @@ long long PrePostRollFlagger::findBreakInrange(long long startFrame,
 
         if(currentFrameNumber > stopFrame || (!findLast && foundFrame))
         {
-            player->DiscardVideoFrame(currentFrame);
+            m_player->DiscardVideoFrame(currentFrame);
             break;
         }
 
-        double newAspect = currentFrame->aspect;
+        float newAspect = currentFrame->aspect;
         if (newAspect != aspect)
         {
             SetVideoParams(aspect);
@@ -271,13 +266,13 @@ long long PrePostRollFlagger::findBreakInrange(long long startFrame,
 
         if (((currentFrameNumber % 500) == 0) ||
             (((currentFrameNumber % 100) == 0) &&
-             (stillRecording)))
+             (m_stillRecording)))
         {
             emit breathe();
             if (m_bStop)
             {
-                player->DiscardVideoFrame(currentFrame);
-                return false;
+                m_player->DiscardVideoFrame(currentFrame);
+                return 0;
             }
         }
 
@@ -288,30 +283,26 @@ long long PrePostRollFlagger::findBreakInrange(long long startFrame,
         }
 
         // sleep a little so we don't use all cpu even if we're niced
-        if (!fullSpeed && !stillRecording)
+        if (!m_fullSpeed && !m_stillRecording)
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
         if (((currentFrameNumber % 500) == 0) ||
-            ((showProgress || stillRecording) &&
+            ((m_showProgress || m_stillRecording) &&
              ((currentFrameNumber % 100) == 0)))
         {
             float elapsed = flagTime.elapsed() / 1000.0;
 
+            float flagFPS = 0.0F;
             if (elapsed)
                 flagFPS = framesProcessed / elapsed;
-            else
-                flagFPS = 0.0;
 
-            int percentage;
+            int percentage = 0;
             if (stopFrame)
                 percentage = framesProcessed * 100 / totalFrames;
-            else
-                percentage = 0;
-
             if (percentage > 100)
                 percentage = 100;
 
-            if (showProgress)
+            if (m_showProgress)
             {
                 if (stopFrame)
                 {
@@ -331,13 +322,17 @@ long long PrePostRollFlagger::findBreakInrange(long long startFrame,
             }
 
             if (stopFrame)
+            {
                 emit statusUpdate(QCoreApplication::translate("(mythcommflag)",
                     "%1% Completed @ %2 fps.")
                         .arg(percentage).arg(flagFPS));
+            }
             else
+            {
                 emit statusUpdate(QCoreApplication::translate("(mythcommflag)",
                     "%1 Frames Completed @ %2 fps.")
                         .arg((long)currentFrameNumber).arg(flagFPS));
+            }
 
             if (percentage % 10 == 0 && prevpercent != percentage)
             {
@@ -349,22 +344,22 @@ long long PrePostRollFlagger::findBreakInrange(long long startFrame,
 
         ProcessFrame(currentFrame, currentFrameNumber);
 
-        if(frameInfo[currentFrameNumber].flagMask &
+        if (m_frameInfo[currentFrameNumber].flagMask &
            (COMM_FRAME_SCENE_CHANGE | COMM_FRAME_BLANK))
         {
             foundFrame = currentFrameNumber;
         }
 
-        if (stillRecording)
+        if (m_stillRecording)
         {
             int secondsRecorded =
-                recordingStartedAt.secsTo(MythDate::current());
-            int secondsFlagged = (int)(framesProcessed / fps);
+                m_recordingStartedAt.secsTo(MythDate::current());
+            int secondsFlagged = (int)(framesProcessed / m_fps);
             int secondsBehind = secondsRecorded - secondsFlagged;
-            long usecPerFrame = (long)(1.0 / player->GetFrameRate() * 1000000);
+            long usecPerFrame = (long)(1.0F / m_player->GetFrameRate() * 1000000);
 
-            struct timeval endTime;
-            gettimeofday(&endTime, NULL);
+            struct timeval endTime {};
+            gettimeofday(&endTime, nullptr);
 
             long long usecSleep =
                       usecPerFrame -
@@ -373,7 +368,7 @@ long long PrePostRollFlagger::findBreakInrange(long long startFrame,
 
             if (secondsBehind > requiredBuffer)
             {
-                if (fullSpeed)
+                if (m_fullSpeed)
                     usecSleep = 0;
                 else
                     usecSleep = (long)(usecSleep * 0.25);
@@ -385,7 +380,7 @@ long long PrePostRollFlagger::findBreakInrange(long long startFrame,
                 std::this_thread::sleep_for(std::chrono::microseconds(usecSleep));
         }
 
-        player->DiscardVideoFrame(currentFrame);
+        m_player->DiscardVideoFrame(currentFrame);
         framesProcessed++;
     }
     return foundFrame;
@@ -398,20 +393,20 @@ void PrePostRollFlagger::GetCommercialBreakList(frm_dir_map_t &marks)
     marks.clear();
 
     long long end = 0;
-    if(closestAfterPre && closestBeforePre)
+    if(m_closestAfterPre && m_closestBeforePre)
     {
         //choose closest
-        if(closestAfterPre - preRoll < preRoll - closestBeforePre)
-            end = closestAfterPre;
+        if(m_closestAfterPre - m_preRoll < m_preRoll - m_closestBeforePre)
+            end = m_closestAfterPre;
         else
-            end = closestBeforePre;
+            end = m_closestBeforePre;
     }
-    else if(closestBeforePre)
-        end = closestBeforePre;
-    else if(closestAfterPre)
-        end = closestAfterPre;
+    else if(m_closestBeforePre)
+        end = m_closestBeforePre;
+    else if(m_closestAfterPre)
+        end = m_closestAfterPre;
     else
-        end = preRoll;
+        end = m_preRoll;
 
     if(end)
     {
@@ -420,24 +415,24 @@ void PrePostRollFlagger::GetCommercialBreakList(frm_dir_map_t &marks)
     }
 
     long long start = 0;
-    if(closestAfterPost && closestBeforePost)
+    if(m_closestAfterPost && m_closestBeforePost)
     {
         //choose closest
-        if(closestAfterPost - postRoll < postRoll - closestBeforePost)
-            start = closestAfterPost;
+        if(m_closestAfterPost - m_postRoll < m_postRoll - m_closestBeforePost)
+            start = m_closestAfterPost;
         else
-            start = closestBeforePost;
+            start = m_closestBeforePost;
     }
-    else if(closestBeforePost)
-        start = closestBeforePost;
-    else if(closestAfterPost)
-        start = closestAfterPost;
-    else if(postRoll)
-        start = myTotalFrames - postRoll;
+    else if(m_closestBeforePost)
+        start = m_closestBeforePost;
+    else if(m_closestAfterPost)
+        start = m_closestAfterPost;
+    else if(m_postRoll)
+        start = m_myTotalFrames - m_postRoll;
 
     if(start)
     {
         marks[start] = MARK_COMM_START;
-        marks[myTotalFrames] = MARK_COMM_END;
+        marks[m_myTotalFrames] = MARK_COMM_END;
     }
 }

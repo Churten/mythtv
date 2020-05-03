@@ -9,34 +9,34 @@
 #include "mythmetaexp.h"
 #include "metadatacommon.h"
 
-typedef struct {
+struct ThumbnailData {
     QString title;
     QVariant data;
     QString url;
-} ThumbnailData;
+};
 
 class META_PUBLIC ImageDLEvent : public QEvent
 {
   public:
     explicit ImageDLEvent(MetadataLookup *lookup) :
                  QEvent(kEventType),
-                 item(lookup)
+                 m_item(lookup)
     {
-        if (item)
+        if (m_item)
         {
-            item->IncrRef();
+            m_item->IncrRef();
         }
     }
-    ~ImageDLEvent()
+    ~ImageDLEvent() override
     {
-        if (item)
+        if (m_item)
         {
-            item->DecrRef();
-            item = NULL;
+            m_item->DecrRef();
+            m_item = nullptr;
         }
     }
 
-    MetadataLookup *item;
+    MetadataLookup *m_item {nullptr};
 
     static Type kEventType;
 };
@@ -46,23 +46,23 @@ class META_PUBLIC ImageDLFailureEvent : public QEvent
   public:
     explicit ImageDLFailureEvent(MetadataLookup *lookup) :
                  QEvent(kEventType),
-                 item(lookup)
+                 m_item(lookup)
     {
-        if (item)
+        if (m_item)
         {
-            item->IncrRef();
+            m_item->IncrRef();
         }
     }
-    ~ImageDLFailureEvent()
+    ~ImageDLFailureEvent() override
     {
-        if (item)
+        if (m_item)
         {
-            item->DecrRef();
-            item = NULL;
+            m_item->DecrRef();
+            m_item = nullptr;
         }
     }
 
-    MetadataLookup *item;
+    MetadataLookup *m_item {nullptr};
 
     static Type kEventType;
 };
@@ -72,14 +72,14 @@ class META_PUBLIC ThumbnailDLEvent : public QEvent
   public:
     explicit ThumbnailDLEvent(ThumbnailData *data) :
                  QEvent(kEventType),
-                 thumb(data) {}
-    ~ThumbnailDLEvent()
+                 m_thumb(data) {}
+    ~ThumbnailDLEvent() override
     {
-        delete thumb;
-        thumb = NULL;
+        delete m_thumb;
+        m_thumb = nullptr;
     }
 
-    ThumbnailData *thumb;
+    ThumbnailData *m_thumb {nullptr};
 
     static Type kEventType;
 };
@@ -88,8 +88,9 @@ class META_PUBLIC MetadataImageDownload : public MThread
 {
   public:
 
-    explicit MetadataImageDownload(QObject *parent);
-    ~MetadataImageDownload();
+    explicit MetadataImageDownload(QObject *parent)
+        : MThread("MetadataImageDownload"), m_parent(parent) {}
+    ~MetadataImageDownload() override;
 
     void addThumb(QString title, QString url, QVariant data);
     void addDownloads(MetadataLookup *lookup);
@@ -97,7 +98,7 @@ class META_PUBLIC MetadataImageDownload : public MThread
 
   protected:
 
-    void run();
+    void run() override; // MThread
 
   private:
 
@@ -109,13 +110,13 @@ class META_PUBLIC MetadataImageDownload : public MThread
     QMutex                     m_mutex;
 };
 
-META_PUBLIC QString getDownloadFilename(QString title, QString url);
+META_PUBLIC QString getDownloadFilename(const QString& title, const QString& url);
 META_PUBLIC QString getDownloadFilename(VideoArtworkType type, MetadataLookup *lookup,
-                                    QString url);
+                                    const QString& url);
 
 META_PUBLIC QString getLocalWritePath(MetadataType metadatatype, VideoArtworkType type);
-META_PUBLIC QString getStorageGroupURL(VideoArtworkType type, QString host);
-META_PUBLIC QString getLocalStorageGroupPath(VideoArtworkType type, QString host);
+META_PUBLIC QString getStorageGroupURL(VideoArtworkType type, const QString& host);
+META_PUBLIC QString getLocalStorageGroupPath(VideoArtworkType type, const QString& host);
 META_PUBLIC QString getStorageGroupName(VideoArtworkType type);
 
 META_PUBLIC void cleanThumbnailCacheDir(void);

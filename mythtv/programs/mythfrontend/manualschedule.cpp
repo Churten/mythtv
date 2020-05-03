@@ -34,12 +34,6 @@ ManualSchedule::ManualSchedule(MythScreenStack *parent)
 {
     m_nowDateTime = MythDate::current();
     m_startDateTime = m_nowDateTime;
-
-    m_daysahead = 0;
-    m_titleEdit = NULL;
-    m_channelList = m_startdateList = NULL;
-    m_recordButton = m_cancelButton = NULL;
-    m_durationSpin = m_starthourSpin = m_startminuteSpin = NULL;
 }
 
 bool ManualSchedule::Create(void)
@@ -68,20 +62,25 @@ bool ManualSchedule::Create(void)
         return false;
     }
 
+    QString startchan = gCoreContext->GetSetting("DefaultTVChannel", "");
     QString chanorder = gCoreContext->GetSetting("ChannelOrdering", "channum");
     ChannelInfoList channels = ChannelUtil::GetChannels(0, true, "channum,callsign");
     ChannelUtil::SortChannels(channels, chanorder);
 
-    for (uint i = 0; i < channels.size(); i++)
+    for (size_t i = 0; i < channels.size(); i++)
     {
         QString chantext = channels[i].GetFormatted(ChannelInfo::kChannelLong);
 
-        MythUIButtonListItem *item =
-                            new MythUIButtonListItem(m_channelList, chantext);
+        auto *item = new MythUIButtonListItem(m_channelList, chantext);
         InfoMap infomap;
         channels[i].ToMap(infomap);
         item->SetTextFromMap(infomap);
-        m_chanids.push_back(channels[i].chanid);
+        if (channels[i].m_chanNum == startchan)
+        {
+            m_channelList->SetItemCurrent(i);
+            startchan = "";
+        }
+        m_chanids.push_back(channels[i].m_chanId);
     }
 
     for (uint index = 0; index <= 60; index++)
@@ -137,9 +136,9 @@ void ManualSchedule::connectSignals()
 
 void ManualSchedule::disconnectSignals()
 {
-    disconnect(m_startdateList, 0, this, 0);
-    disconnect(m_starthourSpin, 0, this, 0);
-    disconnect(m_startminuteSpin, 0, this, 0);
+    disconnect(m_startdateList, nullptr, this, nullptr);
+    disconnect(m_starthourSpin, nullptr, this, nullptr);
+    disconnect(m_startminuteSpin, nullptr, this, nullptr);
 }
 
 void ManualSchedule::hourRollover(void)
@@ -217,12 +216,12 @@ void ManualSchedule::recordClicked(void)
                   m_chanids[m_channelList->GetCurrentPos()],
                   m_startDateTime, endts);
 
-    RecordingRule *record = new RecordingRule();
+    auto *record = new RecordingRule();
     record->LoadByProgram(&p);
     record->m_searchType = kManualSearch;
 
     MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
-    ScheduleEditor *schededit = new ScheduleEditor(mainStack, record);
+    auto *schededit = new ScheduleEditor(mainStack, record);
     if (schededit->Create())
     {
         mainStack->AddScreen(schededit);

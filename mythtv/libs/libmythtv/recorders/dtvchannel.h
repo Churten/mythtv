@@ -7,10 +7,8 @@
 #ifndef _DTVCHANNEL_H_
 #define _DTVCHANNEL_H_
 
-// POSIX headers
-#include <stdint.h>
-
 // C++ headers
+#include <cstdint>
 #include <vector>
 using namespace std;
 
@@ -36,14 +34,20 @@ class TVRec;
 class DTVChannel : public ChannelBase
 {
   public:
-    explicit DTVChannel(TVRec *parent);
-    virtual ~DTVChannel();
+    explicit DTVChannel(TVRec *parent) : ChannelBase(parent) {}
+    ~DTVChannel() override;
 
     // Commands
-    virtual bool SetChannelByString(const QString &chan);
+    bool SetChannelByString(const QString &chan) override; // ChannelBase
+
+    /* Allow 'MPTS' format to be set, so we know when to process the
+       full, unfiltered MPTS from the transport stream. */
+    void SetFormat(const QString & format) override // ChannelBase
+        { m_tvFormat = format; }
+    QString GetFormat(void) { return m_tvFormat; }
 
     /// \brief To be used by the channel scanner and possibly the EIT scanner.
-    virtual bool TuneMultiplex(uint mplexid, QString inputname);
+    virtual bool TuneMultiplex(uint mplexid, const QString& inputname);
     /// \brief This performs the actual frequency tuning and in some cases
     ///        input switching.
     ///
@@ -52,7 +56,7 @@ class DTVChannel : public ChannelBase
     /// will need to implement this when adding support for new hardware.
     virtual bool Tune(const DTVMultiplex &tuning) = 0;
     /// \brief Performs IPTV Tuning. Only implemented by IPTVChannel.
-    virtual bool Tune(const IPTVTuningData&, bool /*scanning*/) { return false; }
+    virtual bool Tune(const IPTVTuningData &/*tuning*/, bool /*scanning*/) { return false; }
     /// \brief Leave it up to the implementation to map the channnum
     /// appropriately.
     ///
@@ -69,7 +73,7 @@ class DTVChannel : public ChannelBase
     /// This is only called when there is no frequency set. This is used
     /// to implement "Channel Numbers" in analog tuning scenarios and to
     /// implement "Virtual Channels" in the OCUR and Firewire tuners.
-    virtual bool Tune(const QString &freqid, int finetune)
+    bool Tune(const QString &freqid, int finetune) override // ChannelBase
     {
         (void) freqid; (void) finetune;
         return false;
@@ -85,23 +89,23 @@ class DTVChannel : public ChannelBase
 
     /// \brief Returns program number in PAT, -1 if unknown.
     int GetProgramNumber(void) const
-        { return currentProgramNum; };
+        { return m_currentProgramNum; };
 
     /// \brief Returns major channel, 0 if unknown.
     uint GetMajorChannel(void) const
-        { return currentATSCMajorChannel; };
+        { return m_currentATSCMajorChannel; };
 
     /// \brief Returns minor channel, 0 if unknown.
     uint GetMinorChannel(void) const
-        { return currentATSCMinorChannel; };
+        { return m_currentATSCMinorChannel; };
 
     /// \brief Returns DVB original_network_id, 0 if unknown.
     uint GetOriginalNetworkID(void) const
-        { return currentOriginalNetworkID; };
+        { return m_currentOriginalNetworkID; };
 
     /// \brief Returns DVB transport_stream_id, 0 if unknown.
     uint GetTransportID(void) const
-        { return currentTransportID; };
+        { return m_currentTransportID; };
 
     /// \brief Returns PSIP table standard: MPEG, DVB, ATSC, or OpenCable
     QString GetSIStandard(void) const;
@@ -120,8 +124,8 @@ class DTVChannel : public ChannelBase
     void RegisterForMaster(const QString &key);
     void DeregisterForMaster(const QString &key);
     static DTVChannel *GetMasterLock(const QString &key);
-    typedef DTVChannel* DTVChannelP;
-    static void ReturnMasterLock(DTVChannelP&);
+    using DTVChannelP = DTVChannel*;
+    static void ReturnMasterLock(DTVChannelP &chan);
 
     /// \brief Returns true if this is the first of a number of multi-rec devs
     virtual bool IsMaster(void) const { return false; }
@@ -130,49 +134,51 @@ class DTVChannel : public ChannelBase
 
     virtual bool IsIPTV(void) const { return false; }
 
-    bool HasGeneratedPAT(void) const { return genPAT != NULL; }
-    bool HasGeneratedPMT(void) const { return genPMT != NULL; }
-    const ProgramAssociationTable *GetGeneratedPAT(void) const {return genPAT;}
-    const ProgramMapTable         *GetGeneratedPMT(void) const {return genPMT;}
+    bool HasGeneratedPAT(void) const { return m_genPAT != nullptr; }
+    bool HasGeneratedPMT(void) const { return m_genPMT != nullptr; }
+    const ProgramAssociationTable *GetGeneratedPAT(void) const {return m_genPAT;}
+    const ProgramMapTable         *GetGeneratedPMT(void) const {return m_genPMT;}
 
     // Sets
 
     /// \brief Sets tuning mode: "mpeg", "dvb", "atsc", etc.
-    void SetTuningMode(const QString &tuningmode);
+    void SetTuningMode(const QString &tuning_mode);
 
     void SaveCachedPids(const pid_cache_t &pid_cache) const;
 
   protected:
     /// \brief Sets PSIP table standard: MPEG, DVB, ATSC, or OpenCable
-    void SetSIStandard(const QString&);
+    void SetSIStandard(const QString &si_std);
     void SetDTVInfo(uint atsc_major, uint atsc_minor,
                     uint dvb_orig_netid,
                     uint mpeg_tsid, int mpeg_pnum);
     void ClearDTVInfo(void) { SetDTVInfo(0, 0, 0, 0, -1); }
     /// \brief Checks tuning for problems, and tries to fix them.
     virtual void CheckOptions(DTVMultiplex &/*tuning*/) const {}
-    virtual void HandleScriptEnd(bool ok);
+    void HandleScriptEnd(bool ok) override; // ChannelBase
 
   protected:
-    mutable QMutex dtvinfo_lock;
+    mutable QMutex m_dtvinfo_lock;
 
-    DTVTunerType tunerType;
-    QString sistandard; ///< PSIP table standard: MPEG, DVB, ATSC, OpenCable
-    QString tuningMode;
-    int     currentProgramNum;
-    uint    currentATSCMajorChannel;
-    uint    currentATSCMinorChannel;
-    uint    currentTransportID;
-    uint    currentOriginalNetworkID;
+    DTVTunerType   m_tunerType {DTVTunerType::kTunerTypeUnknown};
+                   /// PSIP table standard: MPEG, DVB, ATSC, OpenCable
+    QString        m_sistandard               {"mpeg"};
+    QString        m_tuningMode;
+    QString        m_tvFormat;
+    int            m_currentProgramNum        {-1};
+    uint           m_currentATSCMajorChannel  {0};
+    uint           m_currentATSCMinorChannel  {0};
+    uint           m_currentTransportID       {0};
+    uint           m_currentOriginalNetworkID {0};
 
     /// This is a generated PAT for RAW pid tuning
-    ProgramAssociationTable *genPAT;
+    ProgramAssociationTable *m_genPAT {nullptr};
     /// This is a generated PMT for RAW pid tuning
-    ProgramMapTable         *genPMT;
+    ProgramMapTable         *m_genPMT {nullptr};
 
-    typedef QMap<QString,QList<DTVChannel*> > MasterMap;
-    static QReadWriteLock    master_map_lock;
-    static MasterMap         master_map;
+    using MasterMap = QMap<QString,QList<DTVChannel*> >;
+    static QReadWriteLock    s_master_map_lock;
+    static MasterMap         s_master_map;
 };
 
 #endif // _DTVCHANNEL_H_

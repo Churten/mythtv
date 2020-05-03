@@ -17,11 +17,11 @@ class AudioBuffer
     char *data(void) { return (char *)m_buffer; }
     int   size(void) { return m_size; }
 
-    uint8_t    *m_buffer;
-    int         m_size;
-    int         m_realsize;
-    int         m_frames;
-    long long   m_time;
+    uint8_t    *m_buffer   {nullptr};
+    int         m_size     {0};
+    int         m_realsize {ABLOCK_SIZE};
+    int         m_frames   {0};
+    long long   m_time     {-1};
 };
 
 /**
@@ -33,53 +33,52 @@ class AudioReencodeBuffer : public AudioOutput
   public:
     AudioReencodeBuffer(AudioFormat audio_format, int audio_channels,
                         bool passthru);
-    ~AudioReencodeBuffer();
+    ~AudioReencodeBuffer() override;
 
-    virtual void      Reconfigure(const AudioSettings &settings);
-    virtual void      SetEffDsp(int dsprate);
-    virtual void      Reset(void);
-    virtual bool      AddFrames(void *buffer, int frames, int64_t timecode);
-    virtual bool      AddData(void *buffer, int len, int64_t timecode,
-                              int frames);
+    void      Reconfigure(const AudioSettings &settings) override; // AudioOutput
+    void      SetEffDsp(int dsprate) override; // AudioOutput
+    void      Reset(void) override; // AudioOutput
+    bool      AddFrames(void *buffer, int frames, int64_t timecode) override; // AudioOutput
+    bool      AddData(void *buffer, int len, int64_t timecode,
+                      int frames) override; // AudioOutput
     AudioBuffer      *GetData(long long time);
     long long         GetSamples(long long time);
-    virtual void      SetTimecode(int64_t timecode);
-    virtual bool      IsPaused(void) const          { return false; }
-    virtual void      Pause(bool paused)            { (void)paused; }
-    virtual void      PauseUntilBuffered(void)      { }
-    virtual void      Drain(void)                   { }
-    virtual int64_t   GetAudiotime(void)            { return m_last_audiotime; }
-    virtual int       GetVolumeChannel(int) const   { return 100; }
-    virtual void      SetVolumeChannel(int, int)    { }
-    virtual void      SetVolumeAll(int)             { }
-    virtual uint      GetCurrentVolume(void) const  { return 100; }
-    virtual void      SetCurrentVolume(int)         { }
-    virtual void      AdjustCurrentVolume(int)      { }
-    virtual void      SetMute(bool)                 { }
-    virtual void      ToggleMute(void)              { }
-    virtual MuteState GetMuteState(void) const      { return kMuteOff; }
+    void      SetTimecode(int64_t timecode) override; // AudioOutput
+    bool      IsPaused(void) const override         { return false; } // AudioOutput
+    void      Pause(bool paused) override           { (void)paused; } // AudioOutput
+    void      PauseUntilBuffered(void) override     { } // AudioOutput
+    void      Drain(void) override                  { } // AudioOutput
+    int64_t   GetAudiotime(void) override           { return m_last_audiotime; } // AudioOutput
+    int       GetVolumeChannel(int /*channel*/) const override  { return 100; } // VolumeBase
+    void      SetVolumeChannel(int /*channel*/, int /*volume*/) override   { } // VolumeBase
+    uint      GetCurrentVolume(void) const override { return 100; } // VolumeBase
+    void      SetCurrentVolume(int /*value*/) override { } // VolumeBase
+    void      AdjustCurrentVolume(int /*change*/) override { } // VolumeBase
+    virtual void      SetMute(bool /*mute  */)      { }
+    void      ToggleMute(void) override             { } // VolumeBase
+    MuteState GetMuteState(void) const override     { return kMuteOff; } // VolumeBase
     virtual MuteState IterateMutedChannels(void)    { return kMuteOff; }
-    virtual void      SetSWVolume(int new_volume, bool save) { return; }
-    virtual int       GetSWVolume(void)             { return 100; }
-    virtual bool      CanPassthrough(int, int, int, int) const
+    void      SetSWVolume(int /*new_volume*/, bool /*save*/) override       { } // VolumeBase
+    int       GetSWVolume(void) override            { return 100; } // VolumeBase
+    bool      CanPassthrough(int /*samplerate*/, int /*channels*/, AVCodecID /*codec*/, int /*profile*/) const override // AudioOutput
                       { return m_initpassthru; }
 
     //  These are pure virtual in AudioOutput, but we don't need them here
-    virtual void      bufferOutputData(bool)        { return; }
-    virtual int       readOutputData(unsigned char*, int ) { return 0; }
+    void      bufferOutputData(bool /*y*/) override       { } // AudioOutput
+    int       readOutputData(unsigned char */*read_buffer*/, int /*max_length*/) override { return 0; } // AudioOutput
 
-    int                  m_channels;
-    int                  m_bytes_per_frame;
-    int                  m_eff_audiorate;
-    long long            m_last_audiotime;
-    bool                 m_passthru;
-    int                  m_audioFrameSize;
+    int                  m_channels        {-1};
+    int                  m_bytes_per_frame {-1};
+    int                  m_eff_audiorate   {-1};
+    long long            m_last_audiotime  {0};
+    bool                 m_passthru        {false};
+    int                  m_audioFrameSize  {0};
 
   private:
-    bool                 m_initpassthru;
+    bool                 m_initpassthru    {false};
     QMutex               m_bufferMutex;
     QList<AudioBuffer *> m_bufferList;
-    AudioBuffer         *m_saveBuffer;
+    AudioBuffer         *m_saveBuffer      {nullptr};
 };
 
 #endif

@@ -61,7 +61,7 @@ bool SourceManager::findScriptsDB()
             // findScripts() -- run when entering setup
             continue;
         }
-        ScriptInfo *si = new ScriptInfo;
+        auto *si = new ScriptInfo;
         si->id = db.value(0).toInt();
         si->name = db.value(1).toString();
         si->updateTimeout = db.value(2).toUInt() * 1000;
@@ -92,11 +92,11 @@ bool SourceManager::findScripts()
     QString busymessage = tr("Searching for scripts");
 
     MythScreenStack *popupStack = GetMythMainWindow()->GetStack("weather stack");
-    if (popupStack == NULL)
+    if (popupStack == nullptr)
         popupStack = GetMythMainWindow()->GetStack("popup stack");
 
-    MythUIBusyDialog *busyPopup = new MythUIBusyDialog(busymessage, popupStack,
-                                                       "mythweatherbusydialog");
+    auto *busyPopup = new MythUIBusyDialog(busymessage, popupStack,
+                                           "mythweatherbusydialog");
 
     if (busyPopup->Create())
     {
@@ -105,7 +105,7 @@ bool SourceManager::findScripts()
     else
     {
         delete busyPopup;
-        busyPopup = NULL;
+        busyPopup = nullptr;
     }
 
     qApp->processEvents();
@@ -145,7 +145,7 @@ bool SourceManager::findScripts()
     if (busyPopup)
     {
         busyPopup->Close();
-        busyPopup = NULL;
+        busyPopup = nullptr;
     }
 
     return m_scripts.count() > 0;
@@ -195,10 +195,10 @@ void SourceManager::setupSources()
 
 ScriptInfo *SourceManager::getSourceByName(const QString &name)
 {
-    ScriptInfo *src = 0;
-    for (int x = 0; x < m_scripts.size(); x++)
+    ScriptInfo *src = nullptr;
+    foreach (auto script, m_scripts)
     {
-        src = m_scripts.at(x);
+        src = script;
         if (src->name == name)
         {
             return src;
@@ -210,14 +210,14 @@ ScriptInfo *SourceManager::getSourceByName(const QString &name)
         LOG(VB_GENERAL, LOG_ERR, "No Source found for " + name);
     }
 
-    return NULL;
+    return nullptr;
 }
 
 QStringList SourceManager::getLocationList(ScriptInfo *si, const QString &str)
 {
     if (!m_scripts.contains(si))
         return QStringList();
-    WeatherSource *ws = new WeatherSource(si);
+    auto *ws = new WeatherSource(si);
 
     QStringList locationList(ws->getLocationList(str));
 
@@ -230,10 +230,8 @@ WeatherSource *SourceManager::needSourceFor(int id, const QString &loc,
                                             units_t units)
 {
     // matching source exists?
-    WeatherSource *src;
-    for (int x = 0; x < m_sources.size(); x++)
+    foreach (auto src, m_sources)
     {
-        src = m_sources.at(x);
         if (src->getId() == id && src->getLocale() == loc &&
             src->getUnits() == units)
         {
@@ -242,13 +240,11 @@ WeatherSource *SourceManager::needSourceFor(int id, const QString &loc,
     }
 
     // no matching source, make one
-    ScriptInfo *si;
-    for (int x = 0; x < m_scripts.size(); x++)
+    foreach (auto si, m_scripts)
     {
-        si = m_scripts.at(x);
         if (si->id == id)
         {
-            WeatherSource *ws = new WeatherSource(si);
+            auto *ws = new WeatherSource(si);
             ws->setLocale(loc);
             ws->setUnits(units);
             m_sources.append(ws);
@@ -259,35 +255,25 @@ WeatherSource *SourceManager::needSourceFor(int id, const QString &loc,
     LOG(VB_GENERAL, LOG_ERR, LOC +
         QString("NeedSourceFor: Unable to find source for %1, %2, %3")
             .arg(id).arg(loc).arg(units));
-    return NULL;
+    return nullptr;
 }
 
 void SourceManager::startTimers()
 {
-    WeatherSource *src;
-    for (int x = 0; x < m_sources.size(); x++)
-    {
-        src = m_sources.at(x);
+    foreach (auto src, m_sources)
         src->startUpdateTimer();
-    }
 }
 
 void SourceManager::stopTimers()
 {
-    WeatherSource *src;
-    for (int x = 0; x < m_sources.size(); x++)
-    {
-        src = m_sources.at(x);
+    foreach (auto src, m_sources)
         src->stopUpdateTimer();
-    }
 }
 
 void SourceManager::doUpdate(bool forceUpdate)
 {
-    WeatherSource *src;
-    for (int x = 0; x < m_sources.size(); x++)
+    foreach (auto src, m_sources)
     {
-        src = m_sources.at(x);
         if (src->inUse())
             src->startUpdate(forceUpdate);
     }
@@ -296,15 +282,11 @@ void SourceManager::doUpdate(bool forceUpdate)
 bool SourceManager::findPossibleSources(QStringList types,
                                         QList<ScriptInfo *> &sources)
 {
-    ScriptInfo *si;
-    bool handled;
-    for (int x = 0; x < m_scripts.size(); x++)
+    foreach (auto si, m_scripts)
     {
-        si = m_scripts.at(x);
         QStringList stypes = si->types;
-        handled = true;
-        int i;
-        for (i = 0; i < types.count() && handled; ++i)
+        bool handled = true;
+        for (int i = 0; i < types.count() && handled; ++i)
         {
             handled = stypes.contains(types[i]);
         }
@@ -312,10 +294,7 @@ bool SourceManager::findPossibleSources(QStringList types,
             sources.append(si);
     }
 
-    if (sources.count())
-        return true;
-
-    return false;
+    return sources.count() != 0;
 }
 
 bool SourceManager::connectScreen(uint id, WeatherScreen *screen)
@@ -378,12 +357,10 @@ void SourceManager::recurseDirs( QDir dir )
     dir.setFilter(QDir::Executable | QDir::Files | QDir::Dirs |
                   QDir::NoDotAndDotDot);
     QFileInfoList files = dir.entryInfoList();
-    QFileInfo file;
 
-    for (int x = 0; x < files.size(); x++)
+    for (const auto & file : files)
     {
         qApp->processEvents();
-        file = files.at(x);
         if (file.isDir())
         {
             QDir recurseTo(file.filePath());
@@ -401,6 +378,4 @@ void SourceManager::recurseDirs( QDir dir )
             }
         }
     }
-
-    return;
 }

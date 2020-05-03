@@ -1,76 +1,74 @@
 #ifndef MYTHMAINWINDOW_INT
 #define MYTHMAINWINDOW_INT
 
+// Qt
 #include <QWidget>
 
-#if defined( USE_OPENGL_PAINTER ) || defined( _WIN32 )
-#  include <QGLWidget>
-#endif
+// MythTV
+#include "mythrender_base.h"
 
 class MythMainWindow;
 class MythMainWindowPrivate;
 
-#ifdef USE_OPENGL_PAINTER
-#include "mythrender_opengl.h"
+class MythPainterWindow : public QWidget
+{
+  public:
+    MythPainterWindow(MythMainWindow *MainWin);
+    MythRender* GetRenderDevice(void) { return m_render; }
+    bool        RenderIsShared (void) { return m_render && m_render->IsShared(); }
 
-#ifdef USE_OPENGL_QT5
-#include <QWidget>
-typedef QWidget MythPainterWindowWidget;
-#else
-#include <QGLWidget>
-typedef QGLWidget MythPainterWindowWidget;
-#endif
-#ifdef USING_MINGW
-#include <QGLWidget>
-#endif
+  protected:
+    MythRender* m_render { nullptr };
+};
 
-class MythPainterWindowGL : public MythPainterWindowWidget
+#ifdef USING_OPENGL
+#include "mythrenderopengl.h"
+class MythPainterWindowGL : public MythPainterWindow
 {
     Q_OBJECT
 
   public:
-    MythPainterWindowGL(MythMainWindow *win, MythMainWindowPrivate *priv,
-                        MythRenderOpenGL *rend);
-#ifdef USE_OPENGL_QT5
-    ~MythPainterWindowGL();
-    QPaintEngine *paintEngine() const;
-#endif
+    MythPainterWindowGL(MythMainWindow *MainWin, MythMainWindowPrivate *MainWinPriv);
+    ~MythPainterWindowGL() override;
+    bool IsValid(void);
+    QPaintEngine *paintEngine() const override;
 
-    void paintEvent(QPaintEvent *e);
+    // QWidget
+    void paintEvent(QPaintEvent *e) override;
 
-    MythMainWindow *parent;
-    MythMainWindowPrivate *d;
-    MythRenderOpenGL *render;
+    MythMainWindow *m_parent { nullptr };
+    MythMainWindowPrivate *d { nullptr };
+    bool m_valid { false };
 };
 #endif
 
 #ifdef _WIN32
-// FIXME - this only really needs a QWidget but the background overpaints the
-//         main window (setAutoFillBackground(false) does not seem to help)
-class MythPainterWindowD3D9 : public QGLWidget
+class MythPainterWindowD3D9 : public MythPainterWindow
 {
     Q_OBJECT
 
   public:
     MythPainterWindowD3D9(MythMainWindow *win, MythMainWindowPrivate *priv);
 
-    void paintEvent(QPaintEvent *e);
+    // QWidget
+    void paintEvent(QPaintEvent *e) override;
 
-    MythMainWindow *parent;
+    MythMainWindow *m_parent;
     MythMainWindowPrivate *d;
 };
 #endif
 
-class MythPainterWindowQt : public QWidget
+class MythPainterWindowQt : public MythPainterWindow
 {
     Q_OBJECT
 
   public:
-    MythPainterWindowQt(MythMainWindow *win, MythMainWindowPrivate *priv);
+    MythPainterWindowQt(MythMainWindow *MainWin, MythMainWindowPrivate *MainWinPriv);
 
-    void paintEvent(QPaintEvent *e);
+    // QWidget
+    void paintEvent(QPaintEvent *e) override;
 
-    MythMainWindow *parent;
+    MythMainWindow *m_parent;
     MythMainWindowPrivate *d;
 };
 

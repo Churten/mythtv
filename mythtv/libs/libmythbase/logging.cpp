@@ -5,7 +5,6 @@
 #include <QList>
 #include <QQueue>
 #include <QHash>
-#include <QCoreApplication>
 #include <QFileInfo>
 #include <QStringList>
 #include <QMap>
@@ -27,22 +26,23 @@ using namespace std;
 #include "exitcodes.h"
 #include "compat.h"
 
-#define SYSLOG_NAMES
-#ifndef _WIN32
-#include <syslog.h>
-#endif
-#include <stdarg.h>
-#include <string.h>
+#include <csignal>
+#include <cstdarg>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <stdlib.h>
-#include <fcntl.h>
-#include <stdio.h>
-#include <unistd.h>
+#include <utility>
 #if HAVE_GETTIMEOFDAY
 #include <sys/time.h>
 #endif
-#include <signal.h>
+#define SYSLOG_NAMES
+#ifndef _WIN32
+#include <mythsyslog.h>
+#endif
+#include <unistd.h>
 
 // Various ways to get to thread's tid
 #if defined(linux)
@@ -56,11 +56,6 @@ extern "C" {
 #include <mach/mach.h>
 #endif
 
-#ifndef NOLOGSERVER
-// nzmqt
-#include "nzmqt.hpp"
-#endif
-
 // QJson
 #include "qjsonwrapper/Json.h"
 
@@ -72,7 +67,7 @@ static QMutex                  logQueueMutex;
 static QQueue<LoggingItem *>   logQueue;
 static QRegExp                 logRegExp = QRegExp("[%]{1,2}");
 
-static LoggerThread           *logThread = NULL;
+static LoggerThread           *logThread = nullptr;
 static QMutex                  logThreadMutex;
 static QHash<uint64_t, char *> logThreadHash;
 
@@ -82,23 +77,22 @@ static QHash<uint64_t, int64_t> logThreadTidHash;
 static bool                    logThreadFinished = false;
 static bool                    debugRegistration = false;
 
-typedef struct {
-    bool    propagate;
-    int     quiet;
-    int     facility;
-    bool    dblog;
-    QString path;
-    bool    noserver;
-} LogPropagateOpts;
+struct LogPropagateOpts {
+    bool    m_propagate;
+    int     m_quiet;
+    int     m_facility;
+    bool    m_dblog;
+    QString m_path;
+};
 
-LogPropagateOpts        logPropagateOpts;
+LogPropagateOpts        logPropagateOpts {false, 0, 0, true, ""};
 QString                 logPropagateArgs;
 QStringList             logPropagateArgList;
 
 #define TIMESTAMP_MAX 30
 #define MAX_STRING_LENGTH (LOGLINE_MAX+120)
 
-LogLevel_t logLevel = (LogLevel_t)LOG_INFO;
+LogLevel_t logLevel = LOG_INFO;
 
 bool verboseInitialized = false;
 VerboseMap verboseMap;
@@ -126,8 +120,8 @@ void verboseHelp(void);
 void loggingGetTimeStamp(qlonglong *epoch, uint *usec)
 {
 #if HAVE_GETTIMEOFDAY
-    struct timeval  tv;
-    gettimeofday(&tv, NULL);
+    struct timeval tv {};
+    gettimeofday(&tv, nullptr);
     *epoch = tv.tv_sec;
     if (usec)
         *usec  = tv.tv_usec;
@@ -143,29 +137,14 @@ void loggingGetTimeStamp(qlonglong *epoch, uint *usec)
 #endif
 }
 
-LoggingItem::LoggingItem() :
-        ReferenceCounter("LoggingItem", false),
-        m_pid(-1), m_tid(-1), m_threadId(-1), m_usec(0), m_line(0),
-        m_type(kMessage), m_level((LogLevel_t)LOG_INFO), m_facility(0), m_epoch(0),
-        m_file(NULL), m_function(NULL), m_threadName(NULL), m_appName(NULL),
-        m_table(NULL), m_logFile(NULL)
-{
-    m_message[0]='\0';
-    m_message[LOGLINE_MAX]='\0';
-}
-
 LoggingItem::LoggingItem(const char *_file, const char *_function,
                          int _line, LogLevel_t _level, LoggingType _type) :
-        ReferenceCounter("LoggingItem", false), m_pid(-1),
+        ReferenceCounter("LoggingItem", false),
         m_threadId((uint64_t)(QThread::currentThreadId())),
-        m_line(_line), m_type(_type), m_level(_level), m_facility(0),
-        m_file(strdup(_file)), m_function(strdup(_function)),
-        m_threadName(NULL), m_appName(NULL), m_table(NULL), m_logFile(NULL)
+        m_line(_line), m_type(_type), m_level(_level),
+        m_file(strdup(_file)), m_function(strdup(_function))
 {
     loggingGetTimeStamp(&m_epoch, &m_usec);
-
-    m_message[0]='\0';
-    m_message[LOGLINE_MAX]='\0';
     setThreadTid();
 }
 
@@ -198,18 +177,18 @@ QByteArray LoggingItem::toByteArray(void)
 /// \return C-string of the thread name
 char *LoggingItem::getThreadName(void)
 {
-    static const char  *unknown = "thread_unknown";
+    static constexpr char kSUnknown[] = "thread_unknown";
 
     if( m_threadName )
         return m_threadName;
 
     QMutexLocker locker(&logThreadMutex);
-    return logThreadHash.value(m_threadId, (char *)unknown);
+    return logThreadHash.value(m_threadId, (char *)kSUnknown);
 }
 
 /// \brief Get the thread ID of the thread that produced the LoggingItem
 /// \return Thread ID of the producing thread, cast to a 64-bit signed integer
-/// \notes In different platforms, the actual value returned here will vary.
+/// \note  In different platforms, the actual value returned here will vary.
 ///        The intention is to get a thread ID that will map well to what is
 ///        shown in gdb.
 int64_t LoggingItem::getThreadTid(void)
@@ -222,7 +201,7 @@ int64_t LoggingItem::getThreadTid(void)
 /// \brief Set the thread ID of the thread that produced the LoggingItem.  This
 ///        code is actually run in the thread in question as part of the call
 ///        to LOG()
-/// \notes In different platforms, the actual value returned here will vary.
+/// \note  In different platforms, the actual value returned here will vary.
 ///        The intention is to get a thread ID that will map well to what is
 ///        shown in gdb.
 void LoggingItem::setThreadTid(void)
@@ -237,7 +216,7 @@ void LoggingItem::setThreadTid(void)
 #if defined(Q_OS_ANDROID)
         m_tid = (int64_t)gettid();
 #elif defined(linux)
-        m_tid = (int64_t)syscall(SYS_gettid);
+        m_tid = syscall(SYS_gettid);
 #elif defined(__FreeBSD__)
         long lwpid;
         int dummy = thr_self( &lwpid );
@@ -254,33 +233,26 @@ void LoggingItem::setThreadTid(void)
 ///        and deregistration if the VERBOSE_THREADS environment variable is
 ///        set.
 LoggerThread::LoggerThread(QString filename, bool progress, bool quiet,
-                           QString table, int facility, bool noserver) :
+                           QString table, int facility) :
     MThread("Logger"),
     m_waitNotEmpty(new QWaitCondition()),
     m_waitEmpty(new QWaitCondition()),
-    m_aborted(false), m_initialWaiting(true),
-    m_filename(filename), m_progress(progress),
-    m_quiet(quiet), m_appname(QCoreApplication::applicationName()),
-    m_tablename(table), m_facility(facility), m_pid(getpid()), m_epoch(0),
-    m_zmqContext(NULL), m_zmqSocket(NULL), m_initialTimer(NULL),
-    m_heartbeatTimer(NULL), m_noserver(noserver)
+    m_filename(std::move(filename)), m_progress(progress), m_quiet(quiet),
+    m_tablename(std::move(table)), m_facility(facility), m_pid(getpid())
 {
     char *debug = getenv("VERBOSE_THREADS");
-    if (debug != NULL)
+    if (debug != nullptr)
     {
         LOG(VB_GENERAL, LOG_NOTICE,
             "Logging thread registration/deregistration enabled!");
         debugRegistration = true;
     }
-    m_locallogs = (m_appname == MYTH_APPNAME_MYTHLOGSERVER);
 
-#ifdef NOLOGSERVER
-    if (!m_noserver && !logServerStart())
+    if (!logForwardStart())
     {
         LOG(VB_GENERAL, LOG_ERR,
             "Failed to start LogServer thread");
     }
-#endif
     moveToThread(qthread());
 }
 
@@ -289,13 +261,8 @@ LoggerThread::~LoggerThread()
 {
     stop();
     wait();
+    logForwardStop();
 
-#ifdef NOLOGSERVER
-    if (!m_noserver)
-    {
-        logServerStop();
-    }
-#endif
     delete m_waitNotEmpty;
     delete m_waitEmpty;
 }
@@ -314,83 +281,13 @@ void LoggerThread::run(void)
 
     bool dieNow = false;
 
-    if (!m_noserver)
-    {
-#ifndef NOLOGSERVER
-        try
-        {
-            if (m_locallogs)
-            {
-                logServerWait();
-                m_zmqContext = logServerThread->getZMQContext();
-            }
-            else
-            {
-                m_zmqContext = nzmqt::createDefaultContext(NULL);
-                m_zmqContext->start();
-            }
-
-            if (!m_zmqContext)
-            {
-                m_aborted = true;
-                dieNow = true;
-            }
-            else
-            {
-                qRegisterMetaType<QList<QByteArray> >("QList<QByteArray>");
-
-                m_zmqSocket =
-                    m_zmqContext->createSocket(nzmqt::ZMQSocket::TYP_DEALER, this);
-                connect(m_zmqSocket,
-                        SIGNAL(messageReceived(const QList<QByteArray>&)),
-                        SLOT(messageReceived(const QList<QByteArray>&)),
-                        Qt::QueuedConnection);
-
-                if (m_locallogs)
-                    m_zmqSocket->connectTo("inproc://mylogs");
-                else
-                    m_zmqSocket->connectTo("tcp://127.0.0.1:35327");
-            }
-        }
-        catch (nzmqt::ZMQException &e)
-        {
-            cerr << "Exception during logging socket setup: " << e.what() << endl;
-            m_aborted = true;
-            dieNow = true;
-        }
-
-        if (!m_aborted)
-        {
-            if (!m_locallogs)
-            {
-                m_initialWaiting = true;
-                pingLogServer();
-
-                // wait up to 150ms for mythlogserver to respond
-                m_initialTimer = new MythSignalingTimer(this,
-                                                        SLOT(initialTimeout()));
-                m_initialTimer->start(150);
-            }
-            else
-                LOG(VB_GENERAL, LOG_INFO, "Added logging to mythlogserver locally");
-
-            loggingGetTimeStamp(&m_epoch, NULL);
-
-            m_heartbeatTimer = new MythSignalingTimer(this, SLOT(checkHeartBeat()));
-            m_heartbeatTimer->start(1000);
-        }
-    #else
-        logServerWait();
-    #endif
-    }
-
     QMutexLocker qLock(&logQueueMutex);
 
     while (!m_aborted || !logQueue.isEmpty())
     {
         qLock.unlock();
         qApp->processEvents(QEventLoop::AllEvents, 10);
-        qApp->sendPostedEvents(NULL, QEvent::DeferredDelete);
+        qApp->sendPostedEvents(nullptr, QEvent::DeferredDelete);
 
         qLock.relock();
         if (logQueue.isEmpty())
@@ -417,139 +314,16 @@ void LoggerThread::run(void)
     // thread tries to deregister, and we wait for it.
     logThreadFinished = true;
 
-#ifndef NOLOGSERVER
-    if (m_initialTimer)
-    {
-        m_initialTimer->stop();
-        delete m_initialTimer;
-        m_initialTimer = NULL;
-    }
-
-    if (m_heartbeatTimer)
-    {
-        m_heartbeatTimer->stop();
-        delete m_heartbeatTimer;
-        m_heartbeatTimer = NULL;
-    }
-
-    if (m_zmqSocket)
-    {
-        m_zmqSocket->setLinger(0);
-        m_zmqSocket->close();
-    }
-
-    if (!m_locallogs)
-        delete m_zmqContext;
-#endif
-
     RunEpilog();
 
+    // cppcheck-suppress knownConditionTrueFalse
     if (dieNow)
     {
         qApp->processEvents();
     }
 }
 
-/// \brief  Handles the initial startup timeout when waiting for the log server
-///         to show signs of life
-void LoggerThread::initialTimeout(void)
-{
-#ifndef NOLOGSERVER
-    if (m_initialTimer)
-    {
-        m_initialTimer->stop();
-        delete m_initialTimer;
-        m_initialTimer = NULL;
-    }
-
-    if (m_initialWaiting)
-    {
-        // Got no response from mythlogserver, let's assume it's dead and
-        // start it up
-        launchLogServer();
-    }
-
-    LOG(VB_GENERAL, LOG_INFO, "Added logging to mythlogserver at TCP:35327");
-#endif
-}
-
-/// \brief  Handles heartbeat checking once a second.  If the server is not
-///         heard from for at least 5s, restart it
-void LoggerThread::checkHeartBeat(void)
-{
-#ifndef NOLOGSERVER
-    static bool launched = false;
-    qlonglong epoch;
-
-    loggingGetTimeStamp(&epoch, NULL);
-    qlonglong age = (epoch - m_epoch) % 30;
-
-    if (age == 5)
-    {
-        if (!launched)
-        {
-            launchLogServer();
-            launched = true;
-        }
-    }
-    else
-    {
-        launched = false;
-    }
-#endif
-}
-
-/// \brief  Send a ping to the log server
-void LoggerThread::pingLogServer(void)
-{
-#ifndef NOLOGSERVER
-    // cout << "pong" << endl;
-    m_zmqSocket->sendMessage(QByteArray(""));
-#endif
-}
-
-/// \brief  Launches the logging server daemon
-void LoggerThread::launchLogServer(void)
-{
-#ifndef NOLOGSERVER
-    m_initialWaiting = false;
-    if (!m_locallogs)
-    {
-        LOG(VB_GENERAL, LOG_INFO, "Starting mythlogserver");
-
-        MythSystemMask mask = MythSystemMask(kMSDontBlockInputDevs |
-                                             kMSDontDisableDrawing |
-                                             kMSRunShell);
-        QStringList args;
-        args << "--daemon" << logPropagateArgs;
-
-        MythSystemLegacy ms(GetAppBinDir() + "mythlogserver", args, mask);
-        ms.Run();
-        ms.Wait(0);
-    }
-#endif
-}
-
-/// \brief  Handles messages received back from mythlogserver via ZeroMQ.
-///         This is particularly used to receive the acknowledgement of the
-///         kInitializing message which contains the filename of the log to
-///         create and whether to log to db and syslog.  If this is not
-///         received during startup, it is assumed that mythlogserver needs
-///         to be started.  Also, the server will hit us with an empty message
-///         when it hasn't heard from us within a second.  After no responses
-///         from us for 5s, the logs will be closed.
-/// \param  msg    The message received (can be multi-part)
-void LoggerThread::messageReceived(const QList<QByteArray> &msg)
-{
-    m_initialWaiting = false;
-    // cout << "ping" << endl;
-    loggingGetTimeStamp(&m_epoch, NULL);
-    pingLogServer();
-}
-
-
-/// \brief  Handles each LoggingItem, generally by handing it off to
-///         mythlogserver via ZeroMQ.  There is a special case for
+/// \brief  Handles each LoggingItem.  There is a special case for
 ///         thread registration and deregistration which are also included in
 ///         the logging queue to keep the thread names in sync with the log
 ///         messages.
@@ -573,8 +347,8 @@ void LoggerThread::handleItem(LoggingItem *item)
             snprintf(item->m_message, LOGLINE_MAX,
                      "Thread 0x%" PREFIX64 "X (%" PREFIX64
                      "d) registered as \'%s\'",
-                     (long long unsigned int)item->m_threadId,
-                     (long long int)item->m_tid,
+                     item->m_threadId,
+                     item->m_tid,
                      logThreadHash[item->m_threadId]);
         }
     }
@@ -599,7 +373,7 @@ void LoggerThread::handleItem(LoggingItem *item)
                 snprintf(item->m_message, LOGLINE_MAX,
                          "Thread 0x%" PREFIX64 "X (%" PREFIX64
                          "d) deregistered as \'%s\'",
-                         (long long unsigned int)item->m_threadId,
+                         item->m_threadId,
                          (long long int)tid,
                          logThreadHash[item->m_threadId]);
             }
@@ -608,26 +382,19 @@ void LoggerThread::handleItem(LoggingItem *item)
         }
     }
 
-    if (m_noserver)
-    {
-        return;
-    }
-
     if (item->m_message[0] != '\0')
     {
-#ifndef NOLOGSERVER
-        // Send it to mythlogserver
-        if (!logThreadFinished && m_zmqSocket)
-            m_zmqSocket->sendMessage(item->toByteArray());
-#else
-        if (logServerThread)
-        {
-            QList<QByteArray> list;
-            list.append(QByteArray());
-            list.append(item->toByteArray());
-            logServerThread->receivedMessage(list);
-        }
-#endif
+        /// TODO: This converts the LoggingItem to json for sending to
+        /// the log server.  Now that the log server is gone, it just
+        /// passed the json to the logForwardThread, where it will
+        /// eventually be converted back to a LoggingItem.  It should
+        /// be possible to eliminate the double conversion now that
+        /// the log server is gone and all logging happens in one
+        /// process.
+        QList<QByteArray> list;
+        list.append(QByteArray());
+        list.append(item->toByteArray());
+        logForwardMessage(list);
     }
 }
 
@@ -635,10 +402,6 @@ void LoggerThread::handleItem(LoggingItem *item)
 /// \param item LoggingItem containing the log message to process
 bool LoggerThread::logConsole(LoggingItem *item)
 {
-    char                line[MAX_STRING_LENGTH];
-    char                usPart[9];
-    char                timestamp[TIMESTAMP_MAX];
-
     if (m_quiet || (m_progress && item->m_level > LOG_ERR))
         return false;
 
@@ -647,38 +410,87 @@ bool LoggerThread::logConsole(LoggingItem *item)
 
     item->IncrRef();
 
+#ifndef Q_OS_ANDROID
+    char                line[MAX_STRING_LENGTH];
+
     if (item->m_type & kStandardIO)
-        snprintf( line, MAX_STRING_LENGTH, "%s", item->m_message );
+    {
+        snprintf(line, MAX_STRING_LENGTH, "%s", item->m_message);
+    }
     else
     {
+        char usPart[9];
+        char timestamp[TIMESTAMP_MAX];
         time_t epoch = item->epoch();
-        struct tm tm;
+        struct tm tm {};
         localtime_r(&epoch, &tm);
-
-        strftime( timestamp, TIMESTAMP_MAX-8, "%Y-%m-%d %H:%M:%S",
-                  (const struct tm *)&tm );
-        snprintf( usPart, 9, ".%06d", (int)(item->m_usec) );
-        strcat( timestamp, usPart );
-        char shortname;
+        strftime(timestamp, TIMESTAMP_MAX-8, "%Y-%m-%d %H:%M:%S",
+                 static_cast<const struct tm *>(&tm));
+        snprintf(usPart, 9, ".%06d", static_cast<int>(item->m_usec));
+        strcat(timestamp, usPart);
+        char shortname = '-';
 
         {
             QMutexLocker locker(&loglevelMapMutex);
-            LoglevelDef *lev = loglevelMap.value(item->m_level, NULL);
-            if (!lev)
-                shortname = '-';
-            else
+            LoglevelDef *lev = loglevelMap.value(item->m_level, nullptr);
+            if (lev != nullptr)
                 shortname = lev->shortname;
         }
 
-        snprintf( line, MAX_STRING_LENGTH, "%s %c  %s\n", timestamp,
-                  shortname, item->m_message );
+#if CONFIG_DEBUGTYPE
+        if(item->tid())
+        {
+            snprintf(line, MAX_STRING_LENGTH, "%s %c [%d/%" PREFIX64 "d] %s %s:%d:%s  %s\n", timestamp,
+                     shortname, item->pid(), item->tid(), item->rawThreadName(),
+                     item->m_file, item->m_line, item->m_function, item->m_message);
+        }
+        else
+        {
+            snprintf(line, MAX_STRING_LENGTH, "%s %c [%d] %s %s:%d:%s  %s\n", timestamp,
+                     shortname, item->pid(), item->rawThreadName(),
+                     item->m_file, item->m_line, item->m_function, item->m_message);
+        }
+#else
+        snprintf(line, MAX_STRING_LENGTH, "%s %c  %s\n", timestamp,
+                  shortname, item->m_message);
+#endif
     }
 
-#ifdef Q_OS_ANDROID
-    __android_log_print(ANDROID_LOG_INFO, "mfe", line);
+    (void)write(1, line, strlen(line));
+
+#else // Q_OS_ANDROID
+
+    android_LogPriority aprio;
+    switch (item->m_level)
+    {
+    case LOG_EMERG:
+        aprio = ANDROID_LOG_FATAL;
+    case LOG_ALERT:
+    case LOG_CRIT:
+    case LOG_ERR:
+        aprio = ANDROID_LOG_ERROR;
+        break;
+    case LOG_WARNING:
+        aprio = ANDROID_LOG_WARN;
+        break;
+    case LOG_NOTICE:
+    case LOG_INFO:
+        aprio = ANDROID_LOG_INFO;
+        break;
+    case LOG_DEBUG:
+        aprio = ANDROID_LOG_DEBUG;
+        break;
+    case LOG_UNKNOWN:
+    default:
+        aprio = ANDROID_LOG_UNKNOWN;
+        break;
+    }
+#if CONFIG_DEBUGTYPE
+    __android_log_print(aprio, "mfe", "%s:%d:%s  %s", item->m_file,
+                        item->m_line, item->m_function, item->m_message);
 #else
-    int result = write( 1, line, strlen(line) );
-    (void)result;
+    __android_log_print(aprio, "mfe", "%s", item->m_message);
+#endif
 #endif
 
     item->DecrRef();
@@ -703,9 +515,9 @@ void LoggerThread::stop(void)
 /// \return true if the queue is empty, false otherwise
 bool LoggerThread::flush(int timeoutMS)
 {
-    QTime t;
+    QElapsedTimer t;
     t.start();
-    while (!m_aborted && !logQueue.isEmpty() && t.elapsed() < timeoutMS)
+    while (!m_aborted && !logQueue.isEmpty() && !t.hasExpired(timeoutMS))
     {
         m_waitNotEmpty->wakeAll();
         int left = timeoutMS - t.elapsed();
@@ -741,7 +553,7 @@ LoggingItem *LoggingItem::create(const char *_file,
                                  int _line, LogLevel_t _level,
                                  LoggingType _type)
 {
-    LoggingItem *item = new LoggingItem(_file, _function, _line, _level, _type);
+    auto *item = new LoggingItem(_file, _function, _line, _level, _type);
 
     return item;
 }
@@ -751,7 +563,7 @@ LoggingItem *LoggingItem::create(QByteArray &buf)
     // Deserialize buffer
     QVariant variant = QJsonWrapper::parseJson(buf);
 
-    LoggingItem *item = new LoggingItem;
+    auto *item = new LoggingItem;
     QJsonWrapper::qvariant2qobject(variant.toMap(), item);
 
     return item;
@@ -783,7 +595,7 @@ void LogPrintLine( uint64_t mask, LogLevel_t level, const char *file, int line,
     if (!item)
         return;
 
-    char *formatcopy = NULL;
+    char *formatcopy = nullptr;
     if( fromQString && strchr(format, '%') )
     {
         QString string(format);
@@ -840,68 +652,54 @@ void logPropagateCalc(void)
     logPropagateArgs = " --verbose " + mask;
     logPropagateArgList << "--verbose" << mask;
 
-    if (logPropagateOpts.propagate)
+    if (logPropagateOpts.m_propagate)
     {
-        logPropagateArgs += " --logpath " + logPropagateOpts.path;
-        logPropagateArgList << "--logpath" << logPropagateOpts.path;
+        logPropagateArgs += " --logpath " + logPropagateOpts.m_path;
+        logPropagateArgList << "--logpath" << logPropagateOpts.m_path;
     }
 
     QString name = logLevelGetName(logLevel);
     logPropagateArgs += " --loglevel " + name;
     logPropagateArgList << "--loglevel" << name;
 
-    for (int i = 0; i < logPropagateOpts.quiet; i++)
+    for (int i = 0; i < logPropagateOpts.m_quiet; i++)
     {
         logPropagateArgs += " --quiet";
         logPropagateArgList << "--quiet";
     }
 
-    if (logPropagateOpts.dblog)
+    if (logPropagateOpts.m_dblog)
     {
         logPropagateArgs += " --enable-dblog";
         logPropagateArgList << "--enable-dblog";
     }
 
 #if !defined(_WIN32) && !defined(Q_OS_ANDROID)
-    if (logPropagateOpts.facility >= 0)
+    if (logPropagateOpts.m_facility >= 0)
     {
-        const CODE *syslogname;
-
+        const CODE *syslogname = nullptr;
         for (syslogname = &facilitynames[0];
              (syslogname->c_name &&
-              syslogname->c_val != logPropagateOpts.facility); syslogname++);
+              syslogname->c_val != logPropagateOpts.m_facility); syslogname++);
 
         logPropagateArgs += QString(" --syslog %1").arg(syslogname->c_name);
         logPropagateArgList << "--syslog" << syslogname->c_name;
     }
 #if CONFIG_SYSTEMD_JOURNAL
-    else if (logPropagateOpts.facility == SYSTEMD_JOURNAL_FACILITY)
+    else if (logPropagateOpts.m_facility == SYSTEMD_JOURNAL_FACILITY)
     {
         logPropagateArgs += " --systemd-journal";
         logPropagateArgList << "--systemd-journal";
     }
 #endif
 #endif
-
-    if (logPropagateOpts.noserver)
-    {
-        logPropagateArgs += " --disable-mythlogserver";
-        logPropagateArgList << "--disable-mythlogserver";
-    }
 }
 
 /// \brief Check if we are propagating a "--quiet"
 /// \return true if --quiet is being propagated
 bool logPropagateQuiet(void)
 {
-    return logPropagateOpts.quiet;
-}
-
-/// \brief Check if we are propagating a "--disable-mythlogserver"
-/// \return true if --disable-mythlogserver is being propagated
-bool logPropagateNoServer(void)
-{
-    return logPropagateOpts.noserver;
+    return logPropagateOpts.m_quiet;
 }
 
 /// \brief  Entry point to start logging for the application.  This will
@@ -916,8 +714,8 @@ bool logPropagateNoServer(void)
 /// \param  dblog       true if database logging is requested
 /// \param  propagate   true if the logfile path needs to be propagated to child
 ///                     processes.
-void logStart(QString logfile, int progress, int quiet, int facility,
-              LogLevel_t level, bool dblog, bool propagate, bool noserver)
+void logStart(const QString& logfile, int progress, int quiet, int facility,
+              LogLevel_t level, bool dblog, bool propagate)
 {
     if (logThread && logThread->isRunning())
         return;
@@ -926,17 +724,16 @@ void logStart(QString logfile, int progress, int quiet, int facility,
     LOG(VB_GENERAL, LOG_NOTICE, QString("Setting Log Level to LOG_%1")
              .arg(logLevelGetName(logLevel).toUpper()));
 
-    logPropagateOpts.propagate = propagate;
-    logPropagateOpts.quiet = quiet;
-    logPropagateOpts.facility = facility;
-    logPropagateOpts.dblog = dblog;
-    logPropagateOpts.noserver = noserver;
+    logPropagateOpts.m_propagate = propagate;
+    logPropagateOpts.m_quiet = quiet;
+    logPropagateOpts.m_facility = facility;
+    logPropagateOpts.m_dblog = dblog;
 
     if (propagate)
     {
         QFileInfo finfo(logfile);
         QString path = finfo.path();
-        logPropagateOpts.path = path;
+        logPropagateOpts.m_path = path;
     }
 
     logPropagateCalc();
@@ -944,7 +741,7 @@ void logStart(QString logfile, int progress, int quiet, int facility,
     QString table = dblog ? QString("logging") : QString("");
 
     if (!logThread)
-        logThread = new LoggerThread(logfile, progress, quiet, table, facility, noserver);
+        logThread = new LoggerThread(logfile, progress, quiet, table, facility);
 
     logThread->start();
 }
@@ -957,7 +754,7 @@ void logStop(void)
         logThread->stop();
         logThread->wait();
         delete logThread;
-        logThread = NULL;
+        logThread = nullptr;
     }
 }
 
@@ -973,7 +770,7 @@ void loggingRegisterThread(const QString &name)
     QMutexLocker qLock(&logQueueMutex);
 
     LoggingItem *item = LoggingItem::create(__FILE__, __FUNCTION__,
-                                            __LINE__, (LogLevel_t)LOG_DEBUG,
+                                            __LINE__, LOG_DEBUG,
                                             kRegistering);
     if (item)
     {
@@ -992,7 +789,7 @@ void loggingDeregisterThread(void)
     QMutexLocker qLock(&logQueueMutex);
 
     LoggingItem *item = LoggingItem::create(__FILE__, __FUNCTION__, __LINE__,
-                                            (LogLevel_t)LOG_DEBUG,
+                                            LOG_DEBUG,
                                             kDeregistering);
     if (item)
         logQueue.enqueue(item);
@@ -1002,28 +799,26 @@ void loggingDeregisterThread(void)
 /// \brief  Map a syslog facility name back to the enumerated value
 /// \param  facility    QString containing the facility name
 /// \return Syslog facility as enumerated type.  Negative if not found.
-int syslogGetFacility(QString facility)
+int syslogGetFacility(const QString& facility)
 {
 #ifdef _WIN32
     LOG(VB_GENERAL, LOG_NOTICE,
         "Windows does not support syslog, disabling" );
+    Q_UNUSED(facility);
     return( -2 );
 #elif defined(Q_OS_ANDROID)
     LOG(VB_GENERAL, LOG_NOTICE,
         "Android does not support syslog, disabling" );
-    return( -2 );
-#elif defined(Q_OS_ANDROID)
-    LOG(VB_GENERAL, LOG_NOTICE,
-        "Android does not support syslog, disabling" );
+    Q_UNUSED(facility);
     return( -2 );
 #else
-    const CODE *name;
-    int i;
+    const CODE *name = nullptr;
+    int i = 0;
     QByteArray ba = facility.toLocal8Bit();
     char *string = (char *)ba.constData();
 
     for (i = 0, name = &facilitynames[0];
-         name->c_name && strcmp(name->c_name, string); i++, name++);
+         name->c_name && (strcmp(name->c_name, string) != 0); i++, name++);
 
     return( name->c_val );
 #endif
@@ -1032,7 +827,7 @@ int syslogGetFacility(QString facility)
 /// \brief  Map a log level name back to the enumerated value
 /// \param  level   QString containing the log level name
 /// \return Log level as enumerated type.  LOG_UNKNOWN if not found.
-LogLevel_t logLevelGet(QString level)
+LogLevel_t logLevelGet(const QString& level)
 {
     QMutexLocker locker(&loglevelMapMutex);
     if (!verboseInitialized)
@@ -1042,10 +837,8 @@ LogLevel_t logLevelGet(QString level)
         locker.relock();
     }
 
-    for (LoglevelMap::iterator it = loglevelMap.begin();
-         it != loglevelMap.end(); ++it)
+    foreach (auto item, loglevelMap)
     {
-        LoglevelDef *item = (*it);
         if ( item->name == level.toLower() )
             return (LogLevel_t)item->value;
     }
@@ -1081,17 +874,15 @@ QString logLevelGetName(LogLevel_t level)
 /// \param  helptext    Descriptive text for --verbose help output
 void verboseAdd(uint64_t mask, QString name, bool additive, QString helptext)
 {
-    VerboseDef *item = new VerboseDef;
+    auto *item = new VerboseDef;
 
     item->mask = mask;
-    name.detach();
     // VB_GENERAL -> general
     name.remove(0, 3);
     name = name.toLower();
     item->name = name;
     item->additive = additive;
-    helptext.detach();
-    item->helpText = helptext;
+    item->helpText = std::move(helptext);
 
     verboseMap.insert(name, item);
 }
@@ -1103,10 +894,9 @@ void verboseAdd(uint64_t mask, QString name, bool additive, QString helptext)
 /// \param  shortname   one-letter short name for output into logs
 void loglevelAdd(int value, QString name, char shortname)
 {
-    LoglevelDef *item = new LoglevelDef;
+    auto *item = new LoglevelDef;
 
     item->value = value;
-    name.detach();
     // LOG_CRIT -> crit
     name.remove(0, 4);
     name = name.toLower();
@@ -1186,10 +976,9 @@ void verboseHelp(void)
 /// \brief  Parse the --verbose commandline argument and set the verbose level
 /// \param  arg the commandline argument following "--verbose"
 /// \return an exit code.  GENERIC_EXIT_OK if all is well.
-int verboseArgParse(QString arg)
+int verboseArgParse(const QString& arg)
 {
     QString option;
-    int     idx;
 
     if (!verboseInitialized)
         verboseInit();
@@ -1208,10 +997,9 @@ int verboseArgParse(QString arg)
     QStringList verboseOpts = arg.split(QRegExp("[^\\w:]+",
                                                 Qt::CaseInsensitive,
                                                 QRegExp::RegExp2));
-    for (QStringList::Iterator it = verboseOpts.begin();
-         it != verboseOpts.end(); ++it )
+    foreach (auto & opt, verboseOpts)
     {
-        option = (*it).toLower();
+        option = opt.toLower();
         bool reverseOption = false;
         QString optionLevel;
 
@@ -1226,7 +1014,7 @@ int verboseArgParse(QString arg)
             verboseHelp();
             return GENERIC_EXIT_INVALID_CMDLINE;
         }
-        else if (option == "important")
+        if (option == "important")
         {
             cerr << "The \"important\" log mask is no longer valid.\n";
         }
@@ -1250,7 +1038,8 @@ int verboseArgParse(QString arg)
         }
         else
         {
-            if ((idx = option.indexOf(':')) != -1)
+            int idx = option.indexOf(':');
+            if (idx != -1)
             {
                 optionLevel = option.mid(idx + 1);
                 option = option.left(idx);

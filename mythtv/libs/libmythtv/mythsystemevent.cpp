@@ -2,12 +2,14 @@
 #include <QApplication>
 #include <QFileInfo>
 #include <QRunnable>
+#include <utility>
 
 #include "mythcorecontext.h"
 #include "mthreadpool.h"
 #include "mythsystemlegacy.h"
 #include "mythsystemevent.h"
 #include "programinfo.h"
+#include "cardutil.h"
 #include "remoteutil.h"
 #include "exitcodes.h"
 #include "mythlogging.h"
@@ -32,21 +34,17 @@ class SystemEventThread : public QRunnable
      *  \param cmd       Command line to run for this System Event
      *  \param eventName Optional System Event name for this command
      */
-    SystemEventThread(const QString &cmd, QString eventName = "")
-      : m_command(cmd), m_event(eventName) {};
+    explicit SystemEventThread(QString cmd, QString eventName = "")
+      : m_command(std::move(cmd)), m_event(std::move(eventName)) {};
 
     /** \fn SystemEventThread::run()
      *  \brief Runs the System Event handler command
      *
      *  Overrides QRunnable::run()
      */
-    void run(void)
+    void run(void) override // QRunnable
     {
         uint flags = kMSDontBlockInputDevs;
-
-        m_event.detach();
-        m_command.detach();
-
         uint result = myth_system(m_command, flags);
 
         LOG(VB_GENERAL,
@@ -135,7 +133,9 @@ void MythSystemEventHandler::SubstituteMatches(const QStringList &tokens,
             (*it == "HOSTNAME") ||
             (*it == "SECS") ||
             (*it == "SENDER") ||
-            (*it == "PATH"))
+            (*it == "PATH") ||
+            (*it == "VIDEODEVICE") ||
+            (*it == "VBIDEVICE"))
         {
             QString token = *it;
 
@@ -185,29 +185,32 @@ void MythSystemEventHandler::SubstituteMatches(const QStringList &tokens,
 
     command.replace(QString("%ARGS%"), args);
 
-    ProgramInfo pginfo(chanid, recstartts);
-    bool pginfo_loaded = pginfo.GetChanID();
-    if (!pginfo_loaded)
-    {
-        RecordingInfo::LoadStatus status;
-        pginfo = RecordingInfo(chanid, recstartts, false, 0, &status);
-        pginfo_loaded = RecordingInfo::kFoundProgram == status;
-    }
-
-    if (pginfo_loaded)
-    {
-        pginfo.SubstituteMatches(command);
-    }
+    // 1st, try loading RecordingInfo / ProgramInfo
+    RecordingInfo recinfo(chanid, recstartts);
+    bool loaded = recinfo.GetChanID();
+    if (loaded)
+        recinfo.SubstituteMatches(command);
     else
     {
-        command.replace(QString("%CHANID%"), QString::number(chanid));
-        command.replace(QString("%STARTTIME%"),
-                        MythDate::toString(recstartts, MythDate::kFilename));
-        command.replace(QString("%STARTTIMEISO%"),
-                        recstartts.toString(Qt::ISODate));
+        // 2rd Try searching for RecordingInfo
+        RecordingInfo::LoadStatus status = RecordingInfo::kNoProgram;
+        RecordingInfo recinfo2(chanid, recstartts, false, 0, &status);
+        if (status == RecordingInfo::kFoundProgram)
+            recinfo2.SubstituteMatches(command);
+        else
+        {
+            // 3th just use what we know
+            command.replace(QString("%CHANID%"), QString::number(chanid));
+            command.replace(QString("%STARTTIME%"),
+                            MythDate::toString(recstartts,
+                                               MythDate::kFilename));
+            command.replace(QString("%STARTTIMEISO%"),
+                            recstartts.toString(Qt::ISODate));
+        }
     }
 
     command.replace(QString("%VERBOSELEVEL%"), QString("%1").arg(verboseMask));
+    command.replace("%VERBOSEMODE%", QString("%1").arg(logPropagateArgs));
 
     LOG(VB_FILE, LOG_DEBUG, LOC + QString("SubstituteMatches: AFTER : %1")
                                             .arg(command));
@@ -256,9 +259,11 @@ QString MythSystemEventHandler::EventNameToSetting(const QString &name)
  */
 void MythSystemEventHandler::customEvent(QEvent *e)
 {
-    if ((MythEvent::Type)(e->type()) == MythEvent::MythEventMessage)
+    if (e->type() == MythEvent::MythEventMessage)
     {
-        MythEvent *me = (MythEvent *)e;
+        auto *me = dynamic_cast<MythEvent *>(e);
+        if (me == nullptr)
+            return;
         QString msg = me->Message().simplified();
 
         if (msg == "CLEAR_SETTINGS_CACHE")
@@ -293,7 +298,7 @@ void MythSystemEventHandler::customEvent(QEvent *e)
         {
             SubstituteMatches(tokens, cmd);
 
-            SystemEventThread *eventThread = new SystemEventThread(cmd);
+            auto *eventThread = new SystemEventThread(cmd);
             MThreadPool::globalInstance()->startReserved(
                 eventThread, "SystemEvent");
         }
@@ -307,8 +312,7 @@ void MythSystemEventHandler::customEvent(QEvent *e)
             LOG(VB_GENERAL, LOG_INFO, LOC +
                 QString("Starting thread for command '%1'").arg(cmd));
 
-            SystemEventThread *eventThread =
-                new SystemEventThread(cmd, tokens[1]);
+            auto *eventThread = new SystemEventThread(cmd, tokens[1]);
             MThreadPool::globalInstance()->startReserved(
                 eventThread, "SystemEvent");
         }
@@ -327,12 +331,16 @@ void SendMythSystemRecEvent(const QString &msg, const RecordingInfo *pginfo)
 {
     if (pginfo)
     {
+        uint cardid = pginfo->GetInputID();
         gCoreContext->SendSystemEvent(
-            QString("%1 CARDID %2 CHANID %3 STARTTIME %4 RECSTATUS %5")
-            .arg(msg).arg(pginfo->GetInputID())
+            QString("%1 CARDID %2 CHANID %3 STARTTIME %4 RECSTATUS %5 "
+                    "VIDEODEVICE %6 VBIDEVICE %7")
+            .arg(msg).arg(cardid)
             .arg(pginfo->GetChanID())
             .arg(pginfo->GetRecordingStartTime(MythDate::ISODate))
-            .arg(pginfo->GetRecordingStatus()));
+            .arg(pginfo->GetRecordingStatus())
+            .arg(CardUtil::GetVideoDevice(cardid))
+            .arg(CardUtil::GetVBIDevice(cardid)));
     }
     else
     {
@@ -350,14 +358,18 @@ void SendMythSystemRecEvent(const QString &msg, const RecordingInfo *pginfo)
 void SendMythSystemPlayEvent(const QString &msg, const ProgramInfo *pginfo)
 {
     if (pginfo)
+    {
         gCoreContext->SendSystemEvent(
             QString("%1 HOSTNAME %2 CHANID %3 STARTTIME %4")
                     .arg(msg).arg(gCoreContext->GetHostName())
                     .arg(pginfo->GetChanID())
                     .arg(pginfo->GetRecordingStartTime(MythDate::ISODate)));
+    }
     else
+    {
         LOG(VB_GENERAL, LOG_ERR, LOC + "SendMythSystemPlayEvent() called with "
                                        "empty ProgramInfo");
+    }
 }
 
 /****************************************************************************/

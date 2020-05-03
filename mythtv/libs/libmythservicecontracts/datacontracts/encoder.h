@@ -52,15 +52,13 @@ class SERVICE_PUBLIC Encoder : public QObject
 
     PROPERTYIMP_PTR( Program    , Recording      )
 
-    PROPERTYIMP_RO_REF( QVariantList, Inputs     )
+    PROPERTYIMP_RO_REF( QVariantList, Inputs     );
 
     public:
 
         static inline void InitializeCustomTypes();
 
-    public:
-
-        Encoder(QObject *parent = 0) 
+        Q_INVOKABLE Encoder(QObject *parent = nullptr)
             : QObject         ( parent ),
               m_Id            ( 0      ),
               m_Local         ( true   ),
@@ -68,30 +66,25 @@ class SERVICE_PUBLIC Encoder : public QObject
               m_State         ( 0      ),
               m_SleepStatus   ( 0      ),
               m_LowOnFreeSpace( false  ),
-              m_Recording     ( NULL   )  
+              m_Recording     ( nullptr )
         { 
         }
-        
-        Encoder( const Encoder &src )
-        {
-            Copy( src );
-        }
 
-        void Copy( const Encoder &src )
+        void Copy( const Encoder *src )
         {
-            m_Id            = src.m_Id            ;
-            m_HostName      = src.m_HostName      ;
-            m_Local         = src.m_Local         ;
-            m_Connected     = src.m_Connected     ;
-            m_State         = src.m_State         ;
-            m_SleepStatus   = src.m_SleepStatus   ;
-            m_LowOnFreeSpace= src.m_LowOnFreeSpace;
-            m_Recording     = NULL                ;
+            m_Id            = src->m_Id            ;
+            m_HostName      = src->m_HostName      ;
+            m_Local         = src->m_Local         ;
+            m_Connected     = src->m_Connected     ;
+            m_State         = src->m_State         ;
+            m_SleepStatus   = src->m_SleepStatus   ;
+            m_LowOnFreeSpace= src->m_LowOnFreeSpace;
+            m_Recording     = nullptr                ;
         
-            if ( src.m_Recording != NULL)
-                Recording()->Copy( *(src.m_Recording) );
+            if ( src->m_Recording != nullptr)
+                Recording()->Copy( src->m_Recording );
 
-            CopyListContents< Input >( this, m_Inputs, src.m_Inputs );
+            CopyListContents< Input >( this, m_Inputs, src->m_Inputs );
         }
 
         Input *AddNewInput()
@@ -105,23 +98,17 @@ class SERVICE_PUBLIC Encoder : public QObject
             return pObject;
         }
 
-
+    private:
+        Q_DISABLE_COPY(Encoder);
 };
 
-} // namespace DTC
-
-Q_DECLARE_METATYPE( DTC::Encoder  )
-Q_DECLARE_METATYPE( DTC::Encoder* )
-
-namespace DTC
-{
 inline void Encoder::InitializeCustomTypes()
 {
-    qRegisterMetaType< Encoder  >();
     qRegisterMetaType< Encoder* >();
 
     Program::InitializeCustomTypes();
 }
-}
+
+} // namespace DTC
 
 #endif

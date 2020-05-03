@@ -23,8 +23,17 @@
 #ifndef H264PARSER_H
 #define H264PARSER_H
 
+// OMG this is a hack.  Buried several layers down in FFmpeg includes
+// is an include of unistd.h that using GCC will foricibly redefine
+// NULL back to the wrong value.  (Maybe just on ARM?)  Include
+// unistd.h up front so that the subsequent inclusions will be
+// skipped, and then define NULL to the right value.
+#include <unistd.h>
+#undef NULL
+#define NULL nullptr
+
 #include <QString>
-#include <stdint.h>
+#include <cstdint>
 #include "mythconfig.h"
 #include "compat.h" // for uint on Darwin, MinGW
 
@@ -34,6 +43,9 @@
 
 // copied from libavutil/internal.h
 extern "C" {
+// Grr. NULL keeps getting redefined back to 0
+#undef NULL
+#define NULL nullptr
 #include "libavutil/common.h" // for AV_GCC_VERSION_AT_LEAST()
 }
 #ifndef av_alias
@@ -45,6 +57,9 @@ extern "C" {
 #endif
 
 extern "C" {
+// Grr. NULL keeps getting redefined back to 0
+#undef NULL
+#define NULL nullptr
 #include "libavcodec/get_bits.h"
 }
 
@@ -115,32 +130,31 @@ class H264Parser {
 
     H264Parser(void);
     H264Parser(const H264Parser& rhs);
-    ~H264Parser(void) {delete [] rbsp_buffer;}
+    ~H264Parser(void) {delete [] m_rbspBuffer;}
 
     uint32_t addBytes(const uint8_t  *bytes,
-                      const uint32_t  byte_count,
-                      const uint64_t  stream_offset);
+                      uint32_t  byte_count,
+                      uint64_t  stream_offset);
     void Reset(void);
 
-    QString NAL_type_str(uint8_t type);
+    static QString NAL_type_str(uint8_t type);
 
-    bool stateChanged(void) const { return state_changed; }
+    bool stateChanged(void) const { return m_stateChanged; }
 
-    uint8_t lastNALtype(void) const { return nal_unit_type; }
+    uint8_t lastNALtype(void) const { return m_nalUnitType; }
 
     frame_type FieldType(void) const
         {
-            if (bottom_field_flag == -1)
+            if (m_bottomFieldFlag == -1)
                 return FRAME;
-            else
-                return bottom_field_flag ? FIELD_BOTTOM : FIELD_TOP;
+            return m_bottomFieldFlag ? FIELD_BOTTOM : FIELD_TOP;
         }
 
-    bool onFrameStart(void) const { return on_frame; }
-    bool onKeyFrameStart(void) const { return on_key_frame; }
+    bool onFrameStart(void) const { return m_onFrame; }
+    bool onKeyFrameStart(void) const { return m_onKeyFrame; }
 
-    uint pictureWidth(void) const { return pic_width; }
-    uint pictureHeight(void) const { return pic_height; }
+    uint pictureWidth(void) const { return m_picWidth; }
+    uint pictureHeight(void) const { return m_picHeight; }
     uint pictureWidthCropped(void) const;
     uint pictureHeightCropped(void) const;
 
@@ -149,13 +163,14 @@ class H264Parser {
     uint aspectRatio(void) const;
     double frameRate(void) const;
     void getFrameRate(FrameRate &result) const;
+    uint  getRefFrames(void) const;
 
-    uint64_t frameAUstreamOffset(void) const {return frame_start_offset;}
-    uint64_t keyframeAUstreamOffset(void) const {return keyframe_start_offset;}
-    uint64_t SPSstreamOffset(void) const {return SPS_offset;}
+    uint64_t frameAUstreamOffset(void) const {return m_frameStartOffset;}
+    uint64_t keyframeAUstreamOffset(void) const {return m_keyframeStartOffset;}
+    uint64_t SPSstreamOffset(void) const {return m_spsOffset;}
 
     // == NAL_type AU_delimiter: primary_pic_type = 5
-    static int isKeySlice(uint slice_type)
+    static bool isKeySlice(uint slice_type)
         {
             return (slice_type == SLICE_I   ||
                     slice_type == SLICE_SI  ||
@@ -170,31 +185,31 @@ class H264Parser {
                     nal_type == SLICE_IDR);
         }
 
-    void use_I_forKeyframes(bool val) { I_is_keyframe = val; }
-    bool using_I_forKeyframes(void) const { return I_is_keyframe; }
+    void use_I_forKeyframes(bool val) { m_iIsKeyframe = val; }
+    bool using_I_forKeyframes(void) const { return m_iIsKeyframe; }
 
-    uint32_t GetTimeScale(void) const { return timeScale; }
+    uint32_t GetTimeScale(void) const { return m_timeScale; }
 
-    uint32_t GetUnitsInTick(void) const { return unitsInTick; }
+    uint32_t GetUnitsInTick(void) const { return m_unitsInTick; }
 
     void parse_SPS(uint8_t *sps, uint32_t sps_size,
                    bool& interlaced, int32_t& max_ref_frames);
 
-    void reset_SPS(void) { seen_sps = false; }
-    bool seen_SPS(void) const { return seen_sps; }
+    void reset_SPS(void) { m_seenSps = false; }
+    bool seen_SPS(void) const { return m_seenSps; }
 
-    bool found_AU(void) const { return AU_pending; }
+    bool found_AU(void) const { return m_auPending; }
 
   private:
     enum constants {EXTENDED_SAR = 255};
 
     inline void set_AU_pending(void)
         {
-            if (!AU_pending)
+            if (!m_auPending)
             {
-                AU_pending = true;
-                AU_offset = pkt_offset;
-                au_contains_keyframe_message = false;
+                m_auPending = true;
+                m_auOffset = m_pktOffset;
+                m_auContainsKeyframeMessage = false;
             }
         }
 
@@ -209,59 +224,79 @@ class H264Parser {
     void decode_SEI(GetBitContext * gb);
     void vui_parameters(GetBitContext * gb);
 
-    bool       AU_pending;
-    bool       state_changed;
-    bool       seen_sps;
-    bool       au_contains_keyframe_message;
-    bool       is_keyframe;
-    bool       I_is_keyframe;
+    bool       m_auPending                   {false};
+    bool       m_stateChanged                {false};
+    bool       m_seenSps                     {false};
+    bool       m_auContainsKeyframeMessage   {false};
+    bool       m_isKeyframe                  {false};
+    bool       m_iIsKeyframe                 {true};
 
-    uint32_t   sync_accumulator;
-    uint8_t   *rbsp_buffer;
-    uint32_t   rbsp_buffer_size;
-    uint32_t   rbsp_index;
-    uint32_t   consecutive_zeros;
-    bool       have_unfinished_NAL;
+    uint32_t   m_syncAccumulator             {0xffffffff};
+    uint8_t   *m_rbspBuffer                  {nullptr};
+    uint32_t   m_rbspBufferSize              {188 * 2};
+    uint32_t   m_rbspIndex                   {0};
+    uint32_t   m_consecutiveZeros            {0};
+    bool       m_haveUnfinishedNAL           {false};
 
-    int        prev_frame_num, frame_num;
-    uint       slice_type;
-    int        prev_pic_parameter_set_id, pic_parameter_set_id;
-    int8_t     prev_field_pic_flag, field_pic_flag;
-    int8_t     prev_bottom_field_flag, bottom_field_flag;
-    uint8_t    prev_nal_ref_idc, nal_ref_idc;
-    uint8_t    prev_pic_order_cnt_type, pic_order_cnt_type;
-    int        prev_pic_order_cnt_lsb, pic_order_cnt_lsb;
-    int        prev_delta_pic_order_cnt_bottom, delta_pic_order_cnt_bottom;
-    int        prev_delta_pic_order_cnt[2], delta_pic_order_cnt[2];
-    uint8_t    prev_nal_unit_type, nal_unit_type;
-    uint       prev_idr_pic_id, idr_pic_id;
+    int        m_prevFrameNum                {-1};
+    int        m_frameNum                    {-1};
+    uint       m_sliceType                   {SLICE_UNDEF};
+    int        m_prevPicParameterSetId       {-1};
+    int        m_picParameterSetId           {-1};
+    int8_t     m_prevFieldPicFlag            {-1};
+    int8_t     m_fieldPicFlag                {-1};
+    int8_t     m_prevBottomFieldFlag         {-1};
+    int8_t     m_bottomFieldFlag             {-1};
+    uint8_t    m_prevNALRefIdc               {111}; // != [0|1|2|3]
+    uint8_t    m_nalRefIdc                   {111}; // != [0|1|2|3]
+    uint8_t    m_prevPicOrderCntType         {0};
+    uint8_t    m_picOrderCntType             {0};
+    int        m_prevPicOrderCntLsb          {0};
+    int        m_picOrderCntLsb              {0};
+    int        m_prevDeltaPicOrderCntBottom  {0};
+    int        m_deltaPicOrderCntBottom      {0};
+    int        m_prevDeltaPicOrderCnt[2]     {0};
+    int        m_deltaPicOrderCnt[2]         {0};
+    uint8_t    m_prevNalUnitType             {UNKNOWN};
+    uint8_t    m_nalUnitType                 {UNKNOWN};
+    uint       m_prevIdrPicId                {65536};
+    uint       m_idrPicId                    {65536};
 
-    uint       log2_max_frame_num, log2_max_pic_order_cnt_lsb;
-    uint       seq_parameter_set_id;
+    uint       m_log2MaxFrameNum             {0};
+    uint       m_log2MaxPicOrderCntLsb       {0};
+    uint       m_seqParameterSetId           {0};
 
-    uint8_t    delta_pic_order_always_zero_flag;
-    uint8_t    separate_colour_plane_flag;
-    int8_t     frame_mbs_only_flag;
-    int8_t     pic_order_present_flag;
-    int8_t     redundant_pic_cnt_present_flag;
-    int8_t     chroma_format_idc;
+    uint8_t    m_deltaPicOrderAlwaysZeroFlag {0};
+    uint8_t    m_separateColourPlaneFlag     {0};
+    int8_t     m_frameMbsOnlyFlag            {-1};
+    int8_t     m_picOrderPresentFlag         {-1};
+    int8_t     m_redundantPicCntPresentFlag  {0};
+    int8_t     m_chromaFormatIdc             {1};
 
-    uint       num_ref_frames;
-    uint       redundant_pic_cnt;
-//    uint       pic_width_in_mbs, pic_height_in_map_units;
-    uint       pic_width, pic_height;
-    uint       frame_crop_left_offset;
-    uint       frame_crop_right_offset;
-    uint       frame_crop_top_offset;
-    uint       frame_crop_bottom_offset;
-    uint8_t    aspect_ratio_idc;
-    uint       sar_width, sar_height;
-    uint32_t   unitsInTick, timeScale;
-    bool       fixedRate;
+    uint       m_numRefFrames                {0};
+    uint       m_redundantPicCnt             {0};
+//  uint       m_picWidthInMbs               {0};
+//  uint       m_picHeightInMapUnits         {0};
+    uint       m_picWidth                    {0};
+    uint       m_picHeight                   {0};
+    uint       m_frameCropLeftOffset         {0};
+    uint       m_frameCropRightOffset        {0};
+    uint       m_frameCropTopOffset          {0};
+    uint       m_frameCropBottomOffset       {0};
+    uint8_t    m_aspectRatioIdc              {0};
+    uint       m_sarWidth                    {0};
+    uint       m_sarHeight                   {0};
+    uint32_t   m_unitsInTick                 {0};
+    uint32_t   m_timeScale                   {0};
+    bool       m_fixedRate                   {false};
 
-    uint64_t   pkt_offset, AU_offset, frame_start_offset, keyframe_start_offset;
-    uint64_t   SPS_offset;
-    bool       on_frame, on_key_frame;
+    uint64_t   m_pktOffset                   {0};
+    uint64_t   m_auOffset                    {0};
+    uint64_t   m_frameStartOffset            {0};
+    uint64_t   m_keyframeStartOffset         {0};
+    uint64_t   m_spsOffset                   {0};
+    bool       m_onFrame                     {false};
+    bool       m_onKeyFrame                  {false};
 };
 
 #endif /* H264PARSER_H */

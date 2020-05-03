@@ -31,7 +31,7 @@ QHash<QString,QStringList> Frontend::gActionDescriptions = QHash<QString,QString
 
 DTC::FrontendStatus* Frontend::GetStatus(void)
 {
-    DTC::FrontendStatus *status = new DTC::FrontendStatus();
+    auto *status = new DTC::FrontendStatus();
     MythUIStateTracker::GetFreshState(status->State());
 
     status->setName(gCoreContext->GetHostName());
@@ -90,7 +90,7 @@ bool Frontend::SendAction(const QString &Action, const QString &Value,
     if (!IsValidAction(Action))
         return false;
 
-    static const QStringList value_actions =
+    static const QStringList kValueActions =
         QStringList() << ACTION_HANDLEMEDIA  << ACTION_SETVOLUME <<
                          ACTION_SETAUDIOSYNC << ACTION_SETBRIGHTNESS <<
                          ACTION_SETCONTRAST  << ACTION_SETCOLOUR <<
@@ -98,9 +98,10 @@ bool Frontend::SendAction(const QString &Action, const QString &Value,
                          ACTION_SWITCHTITLE  << ACTION_SWITCHANGLE <<
                          ACTION_SEEKABSOLUTE;
 
-    if (!Value.isEmpty() && value_actions.contains(Action))
+    if (!Value.isEmpty() && kValueActions.contains(Action))
     {
-        MythEvent* me = new MythEvent(Action, QStringList(Value));
+        MythUIHelper::ResetScreensaver();
+        auto* me = new MythEvent(Action, QStringList(Value));
         qApp->postEvent(GetMythMainWindow(), me);
         return true;
     }
@@ -115,12 +116,13 @@ bool Frontend::SendAction(const QString &Action, const QString &Value,
 
         QStringList args;
         args << QString::number(Width) << QString::number(Height);
-        MythEvent* me = new MythEvent(Action, args);
+        auto* me = new MythEvent(Action, args);
         qApp->postEvent(GetMythMainWindow(), me);
         return true;
     }
 
-    QKeyEvent* ke = new QKeyEvent(QEvent::KeyPress, 0, Qt::NoModifier, Action);
+    MythUIHelper::ResetScreensaver();
+    auto* ke = new QKeyEvent(QEvent::KeyPress, 0, Qt::NoModifier, Action);
     qApp->postEvent(GetMythMainWindow(), (QEvent*)ke);
     return true;
 }
@@ -147,9 +149,9 @@ bool Frontend::PlayRecording(int RecordedId, int ChanId,
         MythEvent me(message);
         gCoreContext->dispatch(me);
 
-        QTime timer;
+        QElapsedTimer timer;
         timer.start();
-        while ((timer.elapsed() < 10000) &&
+        while (!timer.hasExpired(10000) &&
                (GetMythUI()->GetCurrentLocation().toLower() == "playback"))
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
@@ -158,15 +160,15 @@ bool Frontend::PlayRecording(int RecordedId, int ChanId,
     {
         GetMythMainWindow()->JumpTo("TV Recording Playback");
 
-        QTime timer;
+        QElapsedTimer timer;
         timer.start();
-        while ((timer.elapsed() < 10000) &&
+        while (!timer.hasExpired(10000) &&
                (GetMythUI()->GetCurrentLocation().toLower() != "playbackbox"))
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
         timer.start();
-        while ((timer.elapsed() < 10000) &&
-               (!GetMythUI()->IsTopScreenInitialized()))
+        while (!timer.hasExpired(10000) &&
+               (!MythUIHelper::IsTopScreenInitialized()))
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 
@@ -198,7 +200,7 @@ bool Frontend::PlayVideo(const QString &Id, bool UseBookmark)
         return false;
     }
 
-    bool ok;
+    bool ok = false;
     quint64 id = Id.toUInt(&ok);
     if (!ok)
     {
@@ -239,7 +241,7 @@ bool Frontend::PlayVideo(const QString &Id, bool UseBookmark)
          << QString::number(metadata->GetID())
          << QString::number(UseBookmark);
 
-    MythEvent *me = new MythEvent(ACTION_HANDLEMEDIA, args);
+    auto *me = new MythEvent(ACTION_HANDLEMEDIA, args);
     qApp->postEvent(GetMythMainWindow(), me);
 
     return true;
@@ -251,9 +253,9 @@ QStringList Frontend::GetContextList(void)
     return gActionDescriptions.keys();
 }
 
-DTC::FrontendActionList* Frontend::GetActionList(const QString &Context)
+DTC::FrontendActionList* Frontend::GetActionList(const QString &lContext)
 {
-    DTC::FrontendActionList *list = new DTC::FrontendActionList();
+    auto *list = new DTC::FrontendActionList();
 
     InitialiseActions();
 
@@ -261,7 +263,7 @@ DTC::FrontendActionList* Frontend::GetActionList(const QString &Context)
     while (contexts.hasNext())
     {
         contexts.next();
-        if (!Context.isEmpty() && contexts.key() != Context)
+        if (!lContext.isEmpty() && contexts.key() != lContext)
             continue;
 
         // TODO can we keep the context data with QMap<QString, QStringList>?
@@ -300,12 +302,12 @@ bool Frontend::IsValidAction(const QString &Action)
 
 void Frontend::InitialiseActions(void)
 {
-    static bool initialised = false;
-    if (initialised)
+    static bool s_initialised = false;
+    if (s_initialised)
         return;
 
-    initialised = true;
-    KeyBindings *bindings = new KeyBindings(gCoreContext->GetHostName());
+    s_initialised = true;
+    auto *bindings = new KeyBindings(gCoreContext->GetHostName());
     if (bindings)
     {
         QStringList contexts = bindings->GetContexts();
@@ -334,10 +336,10 @@ void Frontend::InitialiseActions(void)
 
 bool Frontend::SendKey(const QString &sKey)
 {
-    int keyCode;
-    int ret = false;
-    QObject *keyDest = NULL;
-    QKeyEvent *event = NULL;
+    int keyCode = 0;
+    bool ret = false;
+    QObject *keyDest = nullptr;
+    QKeyEvent *event = nullptr;
     QMap <QString, int> keyMap;
     QString keyText;
     QString msg;
@@ -423,9 +425,6 @@ bool Frontend::SendKey(const QString &sKey)
         return ret;
     }
 
-    if (GetMythMainWindow()->currentWidget())
-        keyDest = GetMythMainWindow()->currentWidget()->focusWidget();
-
     if (keyMap.contains(sKey.toLower()))
     {
         keyCode = keyMap[sKey.toLower()];
@@ -433,7 +432,7 @@ bool Frontend::SendKey(const QString &sKey)
     }
     else if (sKey.size() == 1)
         {
-            keyCode = (int) sKey.toLatin1().data()[0] & 0x7f;
+            keyCode = (int) sKey.toLatin1()[0] & 0x7f;
             ret = true;
         }
     else
@@ -441,7 +440,7 @@ bool Frontend::SendKey(const QString &sKey)
 
     if (ret)
     {
-        GetMythUI()->ResetScreensaver();
+        MythUIHelper::ResetScreensaver();
 
         event = new QKeyEvent(QEvent::KeyPress, keyCode, Qt::NoModifier,
                               keyText);

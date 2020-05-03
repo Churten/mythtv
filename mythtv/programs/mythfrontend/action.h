@@ -23,9 +23,11 @@
 #ifndef ACTION_H
 #define ACTION_H
 
+#include <utility>
+
 // Qt headers
-#include <QStringList>
 #include <QHash>
+#include <QStringList>
 
 /** \class Action
  *  \brief An action (for this plugin) consists of a description,
@@ -39,11 +41,8 @@ class Action
 {
   public:
     /// \brief Create a new empty action.
-    explicit Action(const QString &description) : m_description(description)
-    {
-        m_description.detach();
-    }
-    Action(const QString &description, const QString &keys);
+    explicit Action(QString description) : m_description(std::move(description)) {}
+    Action(QString description, const QString &keys);
 
     // Commands
     bool AddKey(const QString &key);
@@ -57,20 +56,10 @@ class Action
 
     // Gets
     /// \brief Returns the action description. (note: not threadsafe)
-    QString     GetDescription(void) const
-    {
-        QString desc = m_description;
-        desc.detach();
-        return desc;
-    }
+    QString     GetDescription(void) const { return m_description; }
     /// \brief Returns the key sequence(s) that trigger this action.
     ///        (note: not threadsafe)
-    QStringList GetKeys(void)        const
-    {
-        QStringList keys = m_keys;
-        keys.detach();
-        return keys;
-    }
+    QStringList GetKeys(void)        const { return m_keys; }
     /// \brief Returns comma delimited string of key bindings
     QString     GetKeyString(void)   const { return m_keys.join(","); }
     /// \brief Returns true iff the action has no keys
@@ -85,7 +74,7 @@ class Action
     QString     m_description; ///< The actions description.
     QStringList m_keys;        ///< The keys bound to the action.
 };
-typedef QHash<QString, Action*> Context;
+using Context = QHash<QString, Action*>;
 
 /** \class ActionID
  *  \brief A class that uniquely identifies an action.
@@ -102,35 +91,16 @@ class ActionID
      *  \param context The action's context
      *  \param action The action's name
      */
-    ActionID(const QString &context, const QString &action)
-        : m_context(context), m_action(action)
-    {
-        m_context.detach();
-        m_action.detach();
-    }
-
-    ActionID(const ActionID &other)
-        : m_context(other.m_context), m_action(other.m_action)
-    {
-        m_context.detach();
-        m_action.detach();
-    }
+    ActionID(QString context, QString action)
+        : m_context(std::move(context)), m_action(std::move(action)) {}
+    ActionID(const ActionID&) = default;
+    ActionID& operator=(const ActionID&) = default;
 
     /// \brief Returns the context name.
-    QString GetContext(void) const
-    {
-        QString tmp = m_context;
-        tmp.detach();
-        return tmp;
-    }
+    QString GetContext(void) const { return m_context; }
 
     /// \brief Returns the action name.
-    QString GetAction(void)  const
-    {
-        QString tmp = m_action;
-        tmp.detach();
-        return tmp;
-    }
+    QString GetAction(void)  const { return m_action; }
 
     bool operator==(const ActionID &other) const
     {
@@ -142,6 +112,6 @@ class ActionID
     QString m_context;
     QString m_action;
 };
-typedef QList<ActionID> ActionList;
+using ActionList = QList<ActionID>;
 
 #endif /* ACTION_H */

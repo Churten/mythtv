@@ -45,7 +45,7 @@ class OrdDict( dict ):
             del self[name]
 
     def __delitem__(self, key):
-        dict.__delitem(self, key)
+        dict.__delitem__(self, key)
         self._field_order.remove(key)
 
     def __iter__(self):
@@ -99,9 +99,9 @@ class DictData( OrdDict ):
     _field_type = None
     _trans = [  int,
                 locale.atof,
-                bool,
+                lambda x: bool(int(x)),
                 lambda x: x,
-                lambda x: datetime.fromtimestamp(x, datetime.UTCTZ())\
+                lambda x: datetime.fromtimestamp(x if x != '4294967295' else '0', datetime.UTCTZ())\
                                   .astimezone(datetime.localTZ()),
                 lambda x: date(*[int(y) for y in x.split('-')]),
                 lambda x: datetime.fromRfc(x, datetime.UTCTZ())\

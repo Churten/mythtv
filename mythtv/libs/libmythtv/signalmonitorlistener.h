@@ -7,7 +7,7 @@
 #include "mythtvexp.h"
 #include "signalmonitorvalue.h"
 
-typedef enum {
+enum SignalMonitorMessageType {
     kAllGood,
     kStatusChannelTuned,
     kStatusSignalLock,
@@ -16,12 +16,12 @@ typedef enum {
     kStatusBitErrorRate,
     kStatusUncorrectedBlocks,
     kStatusRotorPosition,
-} SignalMonitorMessageType;
+};
 
 class MTV_PUBLIC SignalMonitorListener
 {
   protected:
-    virtual ~SignalMonitorListener() { }
+    virtual ~SignalMonitorListener() = default;
 
   public:
     /** \brief Signal to be sent when you have a lock on all values.
@@ -57,7 +57,7 @@ class MTV_PUBLIC SignalMonitorListener
 class MTV_PUBLIC DVBSignalMonitorListener : public SignalMonitorListener
 {
   protected:
-    virtual ~DVBSignalMonitorListener() { }
+    ~DVBSignalMonitorListener() override = default;
 
   public:
     virtual void StatusSignalToNoise(    const SignalMonitorValue&) = 0;

@@ -34,22 +34,6 @@
 #include "mythuibuttonlist.h"
 #include "mythuibutton.h"
 
-ChannelScannerGUIScanPane::ChannelScannerGUIScanPane(
-    bool lock, bool strength,
-    bool snr, bool rotorpos,
-    MythScreenStack *parent)
-    : MythScreenType(parent, "channelscanner"),
-      m_showSignalLock(lock),      m_showSignalStrength(strength),
-      m_showSignalNoise(snr),      m_showRotorPos(rotorpos),
-      m_signalStrengthBar(NULL),   m_signalNoiseBar(NULL),
-      m_rotatorPositionBar(NULL),  m_progressBar(NULL),
-      m_statusText(NULL),          m_scanProgressText(NULL),
-      m_signalLockedText(NULL),    m_signalStrengthText(NULL),
-      m_signalNoiseText(NULL),     m_rotatorPositionText(NULL),
-      m_progressText(NULL),        m_log(NULL)
-{
-}
-
 bool ChannelScannerGUIScanPane::Create()
 {
     if (!XMLParseBase::LoadWindowFromXML("config-ui.xml", "channelscanner",
@@ -112,7 +96,7 @@ bool ChannelScannerGUIScanPane::Create()
     m_statusText->SetText(tr("Tuning"));
     m_progressBar->SetTotal(65535);
 
-    MythUIButton *exitButton = NULL;
+    MythUIButton *exitButton = nullptr;
     UIUtilW::Assign(this, exitButton, "exit");
     if (exitButton)
         connect(exitButton, SIGNAL(Clicked()), SLOT(Close()));
@@ -125,7 +109,7 @@ bool ChannelScannerGUIScanPane::Create()
 void ChannelScannerGUIScanPane::SetStatusRotorPosition(int value)
 {
     if (m_rotatorPositionText)
-        m_rotatorPositionText->SetText(tr("%1%")
+        m_rotatorPositionText->SetText(QString("%1%")
                                .arg(static_cast<uint>(value * 100 / 65535)));
     if (m_rotatorPositionBar)
         m_rotatorPositionBar->SetUsed(value);
@@ -134,7 +118,7 @@ void ChannelScannerGUIScanPane::SetStatusRotorPosition(int value)
 void ChannelScannerGUIScanPane::SetStatusSignalToNoise(int value)
 {
     if (m_signalNoiseText)
-        m_signalNoiseText->SetText(tr("%1%")
+        m_signalNoiseText->SetText(QString("%1%")
                                .arg(static_cast<uint>(value * 100 / 65535)));
     if (m_signalNoiseBar)
         m_signalNoiseBar->SetUsed(value);
@@ -143,7 +127,7 @@ void ChannelScannerGUIScanPane::SetStatusSignalToNoise(int value)
 void ChannelScannerGUIScanPane::SetStatusSignalStrength(int value)
 {
     if (m_signalStrengthText)
-        m_signalStrengthText->SetText(tr("%1%")
+        m_signalStrengthText->SetText(QString("%1%")
                                .arg(static_cast<uint>(value * 100 / 65535)));
     if (m_signalStrengthBar)
         m_signalStrengthBar->SetUsed(value);
@@ -171,7 +155,7 @@ void ChannelScannerGUIScanPane::AppendLine(const QString &text)
 {
     if (m_log)
     {
-        MythUIButtonListItem *listItem = new MythUIButtonListItem(m_log, text);
+        auto *listItem = new MythUIButtonListItem(m_log, text);
         m_log->SetItemCurrent(listItem);
     }
 }
@@ -179,7 +163,7 @@ void ChannelScannerGUIScanPane::AppendLine(const QString &text)
 void ChannelScannerGUIScanPane::SetScanProgress(double value)
 {
     if (m_progressText)
-        m_progressText->SetText(tr("%1%")
+        m_progressText->SetText(QString("%1%")
                                .arg(static_cast<uint>(value * 100)));
     if (m_progressBar)
         m_progressBar->SetUsed(static_cast<uint>(value * 65535));

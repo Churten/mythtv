@@ -2,9 +2,11 @@
 #ifndef _INPUTINFO_H_
 #define _INPUTINFO_H_
 
+#include <utility>
+
 // Qt headers
-#include <QStringList>
 #include <QMap>
+#include <QStringList>
 
 // MythTV headers
 #include "channelinfo.h" // for ChannelInfoList
@@ -12,71 +14,46 @@
 class MTV_PUBLIC InputInfo
 {
   public:
-    InputInfo() : name(QString::null),
-                  sourceid(0), inputid(0), mplexid(0),
-                  chanid(0), recPriority(0), scheduleOrder(0),
-                  livetvorder(0), quickTune(false) {}
-    InputInfo(const QString &name,
-              uint sourceid, uint inputid, uint mplexid,
-              uint chanid, uint livetvorder);
+    InputInfo() = default;
+    InputInfo(QString _name,
+              uint _sourceid, uint _inputid, uint _mplexid,
+              uint _chanid, uint _livetvorder) :
+        m_name(std::move(_name)),
+        m_sourceId(_sourceid),
+        m_inputId(_inputid),
+        m_mplexId(_mplexid),
+        m_chanId(_chanid),
+        m_liveTvOrder(_livetvorder) {}
 
-    InputInfo(const InputInfo &other) :
-        name(other.name),
-        sourceid(other.sourceid),
-        inputid(other.inputid),
-        mplexid(other.mplexid),
-        chanid(other.chanid),
-        displayName(other.displayName),
-        recPriority(other.recPriority),
-        scheduleOrder(other.scheduleOrder),
-        livetvorder(other.livetvorder),
-        quickTune(other.quickTune)
-    {
-        name.detach();
-    }
+    virtual ~InputInfo() = default;
 
-    InputInfo &operator=(const InputInfo &other)
-    {
-        name     = other.name;
-        name.detach();
-        sourceid = other.sourceid;
-        inputid  = other.inputid;
-        mplexid  = other.mplexid;
-        chanid   = other.chanid;
-        displayName = other.displayName;
-        recPriority = other.recPriority;
-        scheduleOrder = other.scheduleOrder;
-        livetvorder = other.livetvorder;
-        quickTune = other.quickTune;
-        return *this;
-    }
+    InputInfo(const InputInfo&) = default;
+    InputInfo &operator=(const InputInfo&) = default;
 
-    bool operator == (uint _inputid) const
-        { return inputid == _inputid; }
+    bool operator == (uint inputid) const
+        { return m_inputId == inputid; }
 
-    bool operator == (const QString &_name) const
-        { return name == _name; }
-
-    virtual ~InputInfo() {}
+    bool operator == (const QString &name) const
+        { return m_name == name; }
 
     virtual bool FromStringList(QStringList::const_iterator &it,
-                                QStringList::const_iterator  end);
+                                const QStringList::const_iterator& end);
     virtual void ToStringList(QStringList &list) const;
 
     virtual void Clear(void);
-    virtual bool IsEmpty(void) const { return name.isEmpty(); }
+    virtual bool IsEmpty(void) const { return m_name.isEmpty(); }
 
   public:
-    QString name;     ///< input name
-    uint    sourceid; ///< associated channel listings source
-    uint    inputid;  ///< unique key in DB for this input
-    uint    mplexid;  ///< mplexid restriction if applicable
-    uint    chanid;   ///< chanid restriction if applicable
-    QString displayName;
-    int     recPriority;
-    uint    scheduleOrder;
-    uint    livetvorder; ///< order for live TV use
-    bool    quickTune;
+    QString m_name;              ///< input name
+    uint    m_sourceId      {0}; ///< associated channel listings source
+    uint    m_inputId       {0}; ///< unique key in DB for this input
+    uint    m_mplexId       {0}; ///< mplexid restriction if applicable
+    uint    m_chanId        {0}; ///< chanid restriction if applicable
+    QString m_displayName;
+    int     m_recPriority   {0};
+    uint    m_scheduleOrder {0};
+    uint    m_liveTvOrder   {0}; ///< order for live TV use
+    bool    m_quickTune     {false};
 };
 
 #endif // _INPUTINFO_H_

@@ -13,10 +13,7 @@
 #include <metaio.h>
 #include <musicfilescanner.h>
 
-MusicFileScanner::MusicFileScanner():
-    m_tracksTotal(0), m_tracksUnchanged(0), m_tracksAdded (0), m_tracksRemoved(0),
-    m_tracksUpdated(0), m_coverartTotal(0), m_coverartUnchanged(0), m_coverartAdded(0),
-    m_coverartRemoved(0), m_coverartUpdated(0)
+MusicFileScanner::MusicFileScanner()
 {
     MSqlQuery query(MSqlQuery::InitCon());
 
@@ -61,17 +58,13 @@ MusicFileScanner::MusicFileScanner():
     }
 }
 
-MusicFileScanner::~MusicFileScanner ()
-{
-
-}
-
 /*!
  * \brief Builds a list of all the files found descending recursively
  *        into the given directory
  *
  * \param directory Directory to begin search
  * \param music_files A pointer to the MusicLoadedMap to store the results
+ * \param art_files   A pointer to the MusicLoadedMap to store the results
  * \param parentid The id of the parent directory in the music_directories
  *                 table. The root directory should have an id of 0
  *
@@ -91,13 +84,12 @@ void MusicFileScanner::BuildFileList(QString &directory, MusicLoadedMap &music_f
         return;
 
     QFileInfoList::const_iterator it = list.begin();
-    const QFileInfo *fi;
 
     // Recursively traverse directory
     int newparentid = 0;
     while (it != list.end())
     {
-        fi = &(*it);
+        const QFileInfo *fi = &(*it);
         ++it;
         QString filename = fi->absoluteFilePath();
         if (fi->isDir())
@@ -144,9 +136,11 @@ void MusicFileScanner::BuildFileList(QString &directory, MusicLoadedMap &music_f
                 music_files[filename] = fdata;
             }
             else
+            {
                 LOG(VB_GENERAL, LOG_INFO,
                         QString("Found file with unsupported extension %1")
                             .arg(filename));
+            }
         }
     }
 }
@@ -158,22 +152,16 @@ bool MusicFileScanner::IsArtFile(const QString &filename)
     QString nameFilter = gCoreContext->GetSetting("AlbumArtFilter", "*.png;*.jpg;*.jpeg;*.gif;*.bmp");
 
 
-    if (!extension.isEmpty() && nameFilter.indexOf(extension.toLower()) > -1)
-        return true;
-
-    return false;
+    return !extension.isEmpty() && nameFilter.indexOf(extension.toLower()) > -1;
 }
 
 bool MusicFileScanner::IsMusicFile(const QString &filename)
 {
     QFileInfo fi(filename);
     QString extension = fi.suffix().toLower();
-    QString nameFilter = MetaIO::ValidFileExtensions;
+    QString nameFilter = MetaIO::kValidFileExtensions;
 
-    if (!extension.isEmpty() && nameFilter.indexOf(extension.toLower()) > -1)
-        return true;
-
-    return false;
+    return !extension.isEmpty() && nameFilter.indexOf(extension.toLower()) > -1;
 }
 
 /*!
@@ -243,12 +231,9 @@ bool MusicFileScanner::HasFileChanged(
         QDateTime old_dt = MythDate::fromString(date_modified);
         return !old_dt.isValid() || (dt > old_dt);
     }
-    else
-    {
-        LOG(VB_GENERAL, LOG_ERR, QString("Failed to stat file: %1")
-                .arg(filename));
-        return false;
-    }
+    LOG(VB_GENERAL, LOG_ERR, QString("Failed to stat file: %1")
+        .arg(filename));
+    return false;
 }
 
 /*!
@@ -260,6 +245,9 @@ bool MusicFileScanner::HasFileChanged(
  *        type.
  *
  * \param filename Full path to file.
+ * \param startDir The starting directory fir the search. This will be
+ *                 removed making the stored name relative to the
+ *                 storage directory where it was found.
  *
  * \returns Nothing.
  */
@@ -297,7 +285,7 @@ void MusicFileScanner::AddFileToDB(const QString &filename, const QString &start
         return;
     }
 
-    if (extension.isEmpty() || !MetaIO::ValidFileExtensions.contains(extension.toLower()))
+    if (extension.isEmpty() || !MetaIO::kValidFileExtensions.contains(extension.toLower()))
     {
         LOG(VB_GENERAL, LOG_WARNING, QString("Ignoring filename with unsupported filename: '%1'").arg(filename));
         return;
@@ -444,7 +432,7 @@ void MusicFileScanner::cleanDB()
     parentquery.prepare("SELECT COUNT(*) FROM music_directories "
                         "WHERE parent_id=:DIRECTORYID ");
 
-    int deletedCount;
+    int deletedCount = 0;
 
     do
     {
@@ -482,7 +470,7 @@ void MusicFileScanner::cleanDB()
 
         } while (query.next());
 
-    } while (deletedCount);
+    } while (deletedCount > 0);
 
     // delete unused albumart_ids from music_albumart (embedded images)
     if (!query.exec("SELECT a.albumart_id FROM music_albumart a LEFT JOIN "
@@ -505,6 +493,9 @@ void MusicFileScanner::cleanDB()
  * \brief Removes a file from the database.
  *
  * \param filename Full path to file.
+ * \param startDir The starting directory fir the search. This will be
+ *                 removed making the stored name relative to the
+ *                 storage directory where it was found.
  *
  * \returns Nothing.
  */
@@ -553,6 +544,9 @@ void MusicFileScanner::RemoveFileFromDB(const QString &filename, const QString &
  * \brief Updates a file in the database.
  *
  * \param filename Full path to file.
+ * \param startDir The starting directory fir the search. This will be
+ *                 removed making the stored name relative to the
+ *                 storage directory where it was found.
  *
  * \returns Nothing.
  */
@@ -626,11 +620,8 @@ void MusicFileScanner::UpdateFileInDB(const QString &filename, const QString &st
         m_albumid[album_cache_string] = disk_meta->getAlbumId();
     }
 
-    if (disk_meta)
-        delete disk_meta;
-
-    if (db_meta)
-        delete db_meta;
+    delete disk_meta;
+    delete db_meta;
 }
 
 /*!
@@ -812,7 +803,7 @@ void MusicFileScanner::ScanMusic(MusicLoadedMap &music_files)
             {
                 if (music_files[name].location == MusicFileScanner::kDatabase)
                     continue;
-                else if (HasFileChanged(name, query.value(1).toString()))
+                if (HasFileChanged(name, query.value(1).toString()))
                     music_files[name].location = MusicFileScanner::kNeedUpdate;
                 else
                 {
@@ -868,11 +859,8 @@ void MusicFileScanner::ScanArtwork(MusicLoadedMap &music_files)
             {
                 if (music_files[name].location == MusicFileScanner::kDatabase)
                     continue;
-                else
-                {
-                    ++m_coverartUnchanged;
-                    music_files.erase(iter);
-                }
+                ++m_coverartUnchanged;
+                music_files.erase(iter);
             }
             else
             {
@@ -885,10 +873,7 @@ void MusicFileScanner::ScanArtwork(MusicLoadedMap &music_files)
 // static
 bool MusicFileScanner::IsRunning(void)
 {
-   if (gCoreContext->GetSetting("MusicScannerLastRunStatus", "") == "running")
-       return true;
-
-   return false;
+   return gCoreContext->GetSetting("MusicScannerLastRunStatus", "") == "running";
 }
 
 void MusicFileScanner::updateLastRunEnd(void)

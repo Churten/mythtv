@@ -2,7 +2,7 @@ CONFIG += $$CCONFIG
 # enable C++11 support, QT5.7 will be based on C++11 anyway
 CONFIG += c++11
 
-LIBVERSION = 29
+LIBVERSION = 31
 
 MY_INSTALL_INCLUDE = $${SYSROOT}$${PREFIX}/include
 !contains(MY_INSTALL_INCLUDE, /usr/include$) {
@@ -65,7 +65,9 @@ QMAKE_LIBDIR_X11 =
 
 EXTRA_LIBS += $$EXTRALIBS
 EXTRA_LIBS += $$FREETYPE_LIBS
-EXTRA_LIBS += -lmp3lame
+contains(CONFIG_LIBMP3LAME, "yes") {
+  EXTRA_LIBS += -lmp3lame
+}
 EXTRA_LIBS += $$CONFIG_AUDIO_ALSA_LIBS
 EXTRA_LIBS += $$CONFIG_AUDIO_JACK_LIBS
 EXTRA_LIBS += $$CONFIG_FIREWIRE_LIBS
@@ -75,11 +77,28 @@ EXTRA_LIBS += $$LOCAL_LIBDIR_X11
 EXTRA_LIBS += $$CONFIG_XV_LIBS
 EXTRA_LIBS += $$CONFIG_XVMC_LIBS
 EXTRA_LIBS += $$CONFIG_OPENGL_VSYNC_LIBS
-contains(CONFIG_MYTHLOGSERVER, "yes") {
-  EXTRA_LIBS += -lmythzmq
-  EXTRA_LIBS += -lmythnzmqt
-}
 
 LIRC_LIBS = $$CONFIG_LIRC_LIBS
 
 macx:using_firewire:using_backend:EXTRA_LIBS += -F$${CONFIG_MAC_AVC} -framework AVCVideoServices
+
+#
+# Stash generated objects in a subdirectory
+#
+win32 {
+    CONFIG(debug, debug|release) {
+        MOC_DIR         = debug/moc
+        OBJECTS_DIR     = debug/obj
+    } else {
+        MOC_DIR         = release/moc
+        OBJECTS_DIR     = release/obj
+    }
+} else {
+    MOC_DIR         = moc
+    OBJECTS_DIR     = obj
+}
+
+using_compdb:contains(CC, clang) {
+    QMAKE_CFLAGS += "-MJ $@.json"
+    QMAKE_CXXFLAGS += "-MJ $@.json"
+}

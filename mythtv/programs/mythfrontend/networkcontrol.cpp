@@ -70,174 +70,169 @@ static bool is_abbrev(QString const& command,
 {
     if (test.length() < minchars)
         return command.toLower() == test.toLower();
-    else
-        return test.toLower() == command.left(test.length()).toLower();
+    return test.toLower() == command.left(test.length()).toLower();
 }
 
 NetworkControl::NetworkControl() :
-    ServerPool(), prompt("# "),
-    gotAnswer(false), answer(""),
-    clientLock(QMutex::Recursive),
-    commandThread(new MThread("NetworkControl", this)),
-    stopCommandThread(false)
+    m_commandThread(new MThread("NetworkControl", this))
 {
     // Eventually this map should be in the jumppoints table
-    jumpMap["channelpriorities"]     = "Channel Recording Priorities";
-    jumpMap["livetv"]                = "Live TV";
-    jumpMap["mainmenu"]              = "Main Menu";
-    jumpMap["managerecordings"]      = "Manage Recordings / Fix Conflicts";
-    jumpMap["mythgallery"]           = "MythGallery";
-    jumpMap["mythvideo"]             = "Video Default";
-    jumpMap["mythweather"]           = "MythWeather";
-    jumpMap["mythgame"]              = "MythGame";
-    jumpMap["mythnews"]              = "MythNews";
-    jumpMap["playdvd"]               = "Play Disc";
-    jumpMap["playmusic"]             = "Play music";
-    jumpMap["playlistview"]          = "Play music";
-    jumpMap["programfinder"]         = "Program Finder";
-    jumpMap["programguide"]          = "Program Guide";
-    jumpMap["ripcd"]                 = "Rip CD";
-    jumpMap["musicplaylists"]        = "Select music playlists";
-    jumpMap["playbackrecordings"]    = "TV Recording Playback";
-    jumpMap["videobrowser"]          = "Video Browser";
-    jumpMap["videogallery"]          = "Video Gallery";
-    jumpMap["videolistings"]         = "Video Listings";
-    jumpMap["videomanager"]          = "Video Manager";
-    jumpMap["zoneminderconsole"]     = "ZoneMinder Console";
-    jumpMap["zoneminderliveview"]    = "ZoneMinder Live View";
-    jumpMap["zoneminderevents"]      = "ZoneMinder Events";
+    m_jumpMap["channelpriorities"]     = "Channel Recording Priorities";
+    m_jumpMap["livetv"]                = "Live TV";
+    m_jumpMap["mainmenu"]              = "Main Menu";
+    m_jumpMap["managerecordings"]      = "Manage Recordings / Fix Conflicts";
+    m_jumpMap["mythgallery"]           = "MythGallery";
+    m_jumpMap["mythvideo"]             = "Video Default";
+    m_jumpMap["mythweather"]           = "MythWeather";
+    m_jumpMap["mythgame"]              = "MythGame";
+    m_jumpMap["mythnews"]              = "MythNews";
+    m_jumpMap["playdvd"]               = "Play Disc";
+    m_jumpMap["playmusic"]             = "Play music";
+    m_jumpMap["playlistview"]          = "Play music";
+    m_jumpMap["programfinder"]         = "Program Finder";
+    m_jumpMap["programguide"]          = "Program Guide";
+    m_jumpMap["ripcd"]                 = "Rip CD";
+    m_jumpMap["musicplaylists"]        = "Select music playlists";
+    m_jumpMap["playbackrecordings"]    = "TV Recording Playback";
+    m_jumpMap["videobrowser"]          = "Video Browser";
+    m_jumpMap["videogallery"]          = "Video Gallery";
+    m_jumpMap["videolistings"]         = "Video Listings";
+    m_jumpMap["videomanager"]          = "Video Manager";
+    m_jumpMap["zoneminderconsole"]     = "ZoneMinder Console";
+    m_jumpMap["zoneminderliveview"]    = "ZoneMinder Live View";
+    m_jumpMap["zoneminderevents"]      = "ZoneMinder Events";
 
-    jumpMap["channelrecpriority"]    = "Channel Recording Priorities";
-    jumpMap["viewscheduled"]         = "Manage Recordings / Fix Conflicts";
-    jumpMap["previousbox"]           = "Previously Recorded";
-    jumpMap["progfinder"]            = "Program Finder";
-    jumpMap["guidegrid"]             = "Program Guide";
-    jumpMap["managerecrules"]        = "Manage Recording Rules";
-    jumpMap["statusbox"]             = "Status Screen";
-    jumpMap["playbackbox"]           = "TV Recording Playback";
-    jumpMap["pbb"]                   = "TV Recording Playback";
+    m_jumpMap["channelrecpriority"]    = "Channel Recording Priorities";
+    m_jumpMap["viewscheduled"]         = "Manage Recordings / Fix Conflicts";
+    m_jumpMap["previousbox"]           = "Previously Recorded";
+    m_jumpMap["progfinder"]            = "Program Finder";
+    m_jumpMap["guidegrid"]             = "Program Guide";
+    m_jumpMap["managerecrules"]        = "Manage Recording Rules";
+    m_jumpMap["statusbox"]             = "Status Screen";
+    m_jumpMap["playbackbox"]           = "TV Recording Playback";
+    m_jumpMap["pbb"]                   = "TV Recording Playback";
 
-    jumpMap["reloadtheme"]           = "Reload Theme";
-    jumpMap["showborders"]           = "Toggle Show Widget Borders";
-    jumpMap["shownames"]             = "Toggle Show Widget Names";
+    m_jumpMap["reloadtheme"]           = "Reload Theme";
+    m_jumpMap["showborders"]           = "Toggle Show Widget Borders";
+    m_jumpMap["shownames"]             = "Toggle Show Widget Names";
 
-    keyMap["up"]                     = Qt::Key_Up;
-    keyMap["down"]                   = Qt::Key_Down;
-    keyMap["left"]                   = Qt::Key_Left;
-    keyMap["right"]                  = Qt::Key_Right;
-    keyMap["home"]                   = Qt::Key_Home;
-    keyMap["end"]                    = Qt::Key_End;
-    keyMap["enter"]                  = Qt::Key_Enter;
-    keyMap["return"]                 = Qt::Key_Return;
-    keyMap["pageup"]                 = Qt::Key_PageUp;
-    keyMap["pagedown"]               = Qt::Key_PageDown;
-    keyMap["escape"]                 = Qt::Key_Escape;
-    keyMap["tab"]                    = Qt::Key_Tab;
-    keyMap["backtab"]                = Qt::Key_Backtab;
-    keyMap["space"]                  = Qt::Key_Space;
-    keyMap["backspace"]              = Qt::Key_Backspace;
-    keyMap["insert"]                 = Qt::Key_Insert;
-    keyMap["delete"]                 = Qt::Key_Delete;
-    keyMap["plus"]                   = Qt::Key_Plus;
-    keyMap["+"]                      = Qt::Key_Plus;
-    keyMap["comma"]                  = Qt::Key_Comma;
-    keyMap[","]                      = Qt::Key_Comma;
-    keyMap["minus"]                  = Qt::Key_Minus;
-    keyMap["-"]                      = Qt::Key_Minus;
-    keyMap["underscore"]             = Qt::Key_Underscore;
-    keyMap["_"]                      = Qt::Key_Underscore;
-    keyMap["period"]                 = Qt::Key_Period;
-    keyMap["."]                      = Qt::Key_Period;
-    keyMap["numbersign"]             = Qt::Key_NumberSign;
-    keyMap["poundsign"]              = Qt::Key_NumberSign;
-    keyMap["hash"]                   = Qt::Key_NumberSign;
-    keyMap["#"]                      = Qt::Key_NumberSign;
-    keyMap["bracketleft"]            = Qt::Key_BracketLeft;
-    keyMap["["]                      = Qt::Key_BracketLeft;
-    keyMap["bracketright"]           = Qt::Key_BracketRight;
-    keyMap["]"]                      = Qt::Key_BracketRight;
-    keyMap["backslash"]              = Qt::Key_Backslash;
-    keyMap["\\"]                     = Qt::Key_Backslash;
-    keyMap["dollar"]                 = Qt::Key_Dollar;
-    keyMap["$"]                      = Qt::Key_Dollar;
-    keyMap["percent"]                = Qt::Key_Percent;
-    keyMap["%"]                      = Qt::Key_Percent;
-    keyMap["ampersand"]              = Qt::Key_Ampersand;
-    keyMap["&"]                      = Qt::Key_Ampersand;
-    keyMap["parenleft"]              = Qt::Key_ParenLeft;
-    keyMap["("]                      = Qt::Key_ParenLeft;
-    keyMap["parenright"]             = Qt::Key_ParenRight;
-    keyMap[")"]                      = Qt::Key_ParenRight;
-    keyMap["asterisk"]               = Qt::Key_Asterisk;
-    keyMap["*"]                      = Qt::Key_Asterisk;
-    keyMap["question"]               = Qt::Key_Question;
-    keyMap["?"]                      = Qt::Key_Question;
-    keyMap["slash"]                  = Qt::Key_Slash;
-    keyMap["/"]                      = Qt::Key_Slash;
-    keyMap["colon"]                  = Qt::Key_Colon;
-    keyMap[":"]                      = Qt::Key_Colon;
-    keyMap["semicolon"]              = Qt::Key_Semicolon;
-    keyMap[";"]                      = Qt::Key_Semicolon;
-    keyMap["less"]                   = Qt::Key_Less;
-    keyMap["<"]                      = Qt::Key_Less;
-    keyMap["equal"]                  = Qt::Key_Equal;
-    keyMap["="]                      = Qt::Key_Equal;
-    keyMap["greater"]                = Qt::Key_Greater;
-    keyMap[">"]                      = Qt::Key_Greater;
-    keyMap["bar"]                    = Qt::Key_Bar;
-    keyMap["pipe"]                   = Qt::Key_Bar;
-    keyMap["|"]                      = Qt::Key_Bar;
-    keyMap["f1"]                     = Qt::Key_F1;
-    keyMap["f2"]                     = Qt::Key_F2;
-    keyMap["f3"]                     = Qt::Key_F3;
-    keyMap["f4"]                     = Qt::Key_F4;
-    keyMap["f5"]                     = Qt::Key_F5;
-    keyMap["f6"]                     = Qt::Key_F6;
-    keyMap["f7"]                     = Qt::Key_F7;
-    keyMap["f8"]                     = Qt::Key_F8;
-    keyMap["f9"]                     = Qt::Key_F9;
-    keyMap["f10"]                    = Qt::Key_F10;
-    keyMap["f11"]                    = Qt::Key_F11;
-    keyMap["f12"]                    = Qt::Key_F12;
-    keyMap["f13"]                    = Qt::Key_F13;
-    keyMap["f14"]                    = Qt::Key_F14;
-    keyMap["f15"]                    = Qt::Key_F15;
-    keyMap["f16"]                    = Qt::Key_F16;
-    keyMap["f17"]                    = Qt::Key_F17;
-    keyMap["f18"]                    = Qt::Key_F18;
-    keyMap["f19"]                    = Qt::Key_F19;
-    keyMap["f20"]                    = Qt::Key_F20;
-    keyMap["f21"]                    = Qt::Key_F21;
-    keyMap["f22"]                    = Qt::Key_F22;
-    keyMap["f23"]                    = Qt::Key_F23;
-    keyMap["f24"]                    = Qt::Key_F24;
+    m_keyMap["up"]                     = Qt::Key_Up;
+    m_keyMap["down"]                   = Qt::Key_Down;
+    m_keyMap["left"]                   = Qt::Key_Left;
+    m_keyMap["right"]                  = Qt::Key_Right;
+    m_keyMap["home"]                   = Qt::Key_Home;
+    m_keyMap["end"]                    = Qt::Key_End;
+    m_keyMap["enter"]                  = Qt::Key_Enter;
+    m_keyMap["return"]                 = Qt::Key_Return;
+    m_keyMap["pageup"]                 = Qt::Key_PageUp;
+    m_keyMap["pagedown"]               = Qt::Key_PageDown;
+    m_keyMap["escape"]                 = Qt::Key_Escape;
+    m_keyMap["tab"]                    = Qt::Key_Tab;
+    m_keyMap["backtab"]                = Qt::Key_Backtab;
+    m_keyMap["space"]                  = Qt::Key_Space;
+    m_keyMap["backspace"]              = Qt::Key_Backspace;
+    m_keyMap["insert"]                 = Qt::Key_Insert;
+    m_keyMap["delete"]                 = Qt::Key_Delete;
+    m_keyMap["plus"]                   = Qt::Key_Plus;
+    m_keyMap["+"]                      = Qt::Key_Plus;
+    m_keyMap["comma"]                  = Qt::Key_Comma;
+    m_keyMap[","]                      = Qt::Key_Comma;
+    m_keyMap["minus"]                  = Qt::Key_Minus;
+    m_keyMap["-"]                      = Qt::Key_Minus;
+    m_keyMap["underscore"]             = Qt::Key_Underscore;
+    m_keyMap["_"]                      = Qt::Key_Underscore;
+    m_keyMap["period"]                 = Qt::Key_Period;
+    m_keyMap["."]                      = Qt::Key_Period;
+    m_keyMap["numbersign"]             = Qt::Key_NumberSign;
+    m_keyMap["poundsign"]              = Qt::Key_NumberSign;
+    m_keyMap["hash"]                   = Qt::Key_NumberSign;
+    m_keyMap["#"]                      = Qt::Key_NumberSign;
+    m_keyMap["bracketleft"]            = Qt::Key_BracketLeft;
+    m_keyMap["["]                      = Qt::Key_BracketLeft;
+    m_keyMap["bracketright"]           = Qt::Key_BracketRight;
+    m_keyMap["]"]                      = Qt::Key_BracketRight;
+    m_keyMap["backslash"]              = Qt::Key_Backslash;
+    m_keyMap["\\"]                     = Qt::Key_Backslash;
+    m_keyMap["dollar"]                 = Qt::Key_Dollar;
+    m_keyMap["$"]                      = Qt::Key_Dollar;
+    m_keyMap["percent"]                = Qt::Key_Percent;
+    m_keyMap["%"]                      = Qt::Key_Percent;
+    m_keyMap["ampersand"]              = Qt::Key_Ampersand;
+    m_keyMap["&"]                      = Qt::Key_Ampersand;
+    m_keyMap["parenleft"]              = Qt::Key_ParenLeft;
+    m_keyMap["("]                      = Qt::Key_ParenLeft;
+    m_keyMap["parenright"]             = Qt::Key_ParenRight;
+    m_keyMap[")"]                      = Qt::Key_ParenRight;
+    m_keyMap["asterisk"]               = Qt::Key_Asterisk;
+    m_keyMap["*"]                      = Qt::Key_Asterisk;
+    m_keyMap["question"]               = Qt::Key_Question;
+    m_keyMap["?"]                      = Qt::Key_Question;
+    m_keyMap["slash"]                  = Qt::Key_Slash;
+    m_keyMap["/"]                      = Qt::Key_Slash;
+    m_keyMap["colon"]                  = Qt::Key_Colon;
+    m_keyMap[":"]                      = Qt::Key_Colon;
+    m_keyMap["semicolon"]              = Qt::Key_Semicolon;
+    m_keyMap[";"]                      = Qt::Key_Semicolon;
+    m_keyMap["less"]                   = Qt::Key_Less;
+    m_keyMap["<"]                      = Qt::Key_Less;
+    m_keyMap["equal"]                  = Qt::Key_Equal;
+    m_keyMap["="]                      = Qt::Key_Equal;
+    m_keyMap["greater"]                = Qt::Key_Greater;
+    m_keyMap[">"]                      = Qt::Key_Greater;
+    m_keyMap["bar"]                    = Qt::Key_Bar;
+    m_keyMap["pipe"]                   = Qt::Key_Bar;
+    m_keyMap["|"]                      = Qt::Key_Bar;
+    m_keyMap["f1"]                     = Qt::Key_F1;
+    m_keyMap["f2"]                     = Qt::Key_F2;
+    m_keyMap["f3"]                     = Qt::Key_F3;
+    m_keyMap["f4"]                     = Qt::Key_F4;
+    m_keyMap["f5"]                     = Qt::Key_F5;
+    m_keyMap["f6"]                     = Qt::Key_F6;
+    m_keyMap["f7"]                     = Qt::Key_F7;
+    m_keyMap["f8"]                     = Qt::Key_F8;
+    m_keyMap["f9"]                     = Qt::Key_F9;
+    m_keyMap["f10"]                    = Qt::Key_F10;
+    m_keyMap["f11"]                    = Qt::Key_F11;
+    m_keyMap["f12"]                    = Qt::Key_F12;
+    m_keyMap["f13"]                    = Qt::Key_F13;
+    m_keyMap["f14"]                    = Qt::Key_F14;
+    m_keyMap["f15"]                    = Qt::Key_F15;
+    m_keyMap["f16"]                    = Qt::Key_F16;
+    m_keyMap["f17"]                    = Qt::Key_F17;
+    m_keyMap["f18"]                    = Qt::Key_F18;
+    m_keyMap["f19"]                    = Qt::Key_F19;
+    m_keyMap["f20"]                    = Qt::Key_F20;
+    m_keyMap["f21"]                    = Qt::Key_F21;
+    m_keyMap["f22"]                    = Qt::Key_F22;
+    m_keyMap["f23"]                    = Qt::Key_F23;
+    m_keyMap["f24"]                    = Qt::Key_F24;
 
-    keyTextMap[Qt::Key_Space]           = " ";
-    keyTextMap[Qt::Key_Plus]            = "+";
-    keyTextMap[Qt::Key_Comma]           = ",";
-    keyTextMap[Qt::Key_Minus]           = "-";
-    keyTextMap[Qt::Key_Underscore]      = "_";
-    keyTextMap[Qt::Key_Period]          = ".";
-    keyTextMap[Qt::Key_NumberSign]      = "#";
-    keyTextMap[Qt::Key_BracketLeft]     = "[";
-    keyTextMap[Qt::Key_BracketRight]    = "]";
-    keyTextMap[Qt::Key_Backslash]       = "\\";
-    keyTextMap[Qt::Key_Dollar]          = "$";
-    keyTextMap[Qt::Key_Percent]         = "%";
-    keyTextMap[Qt::Key_Ampersand]       = "&";
-    keyTextMap[Qt::Key_ParenLeft]       = "(";
-    keyTextMap[Qt::Key_ParenRight]      = ")";
-    keyTextMap[Qt::Key_Asterisk]        = "*";
-    keyTextMap[Qt::Key_Question]        = "?";
-    keyTextMap[Qt::Key_Slash]           = "/";
-    keyTextMap[Qt::Key_Colon]           = ":";
-    keyTextMap[Qt::Key_Semicolon]       = ";";
-    keyTextMap[Qt::Key_Less]            = "<";
-    keyTextMap[Qt::Key_Equal]           = "=";
-    keyTextMap[Qt::Key_Greater]         = ">";
-    keyTextMap[Qt::Key_Bar]             = "|";
+    m_keyTextMap[Qt::Key_Space]           = " ";
+    m_keyTextMap[Qt::Key_Plus]            = "+";
+    m_keyTextMap[Qt::Key_Comma]           = ",";
+    m_keyTextMap[Qt::Key_Minus]           = "-";
+    m_keyTextMap[Qt::Key_Underscore]      = "_";
+    m_keyTextMap[Qt::Key_Period]          = ".";
+    m_keyTextMap[Qt::Key_NumberSign]      = "#";
+    m_keyTextMap[Qt::Key_BracketLeft]     = "[";
+    m_keyTextMap[Qt::Key_BracketRight]    = "]";
+    m_keyTextMap[Qt::Key_Backslash]       = "\\";
+    m_keyTextMap[Qt::Key_Dollar]          = "$";
+    m_keyTextMap[Qt::Key_Percent]         = "%";
+    m_keyTextMap[Qt::Key_Ampersand]       = "&";
+    m_keyTextMap[Qt::Key_ParenLeft]       = "(";
+    m_keyTextMap[Qt::Key_ParenRight]      = ")";
+    m_keyTextMap[Qt::Key_Asterisk]        = "*";
+    m_keyTextMap[Qt::Key_Question]        = "?";
+    m_keyTextMap[Qt::Key_Slash]           = "/";
+    m_keyTextMap[Qt::Key_Colon]           = ":";
+    m_keyTextMap[Qt::Key_Semicolon]       = ";";
+    m_keyTextMap[Qt::Key_Less]            = "<";
+    m_keyTextMap[Qt::Key_Equal]           = "=";
+    m_keyTextMap[Qt::Key_Greater]         = ">";
+    m_keyTextMap[Qt::Key_Bar]             = "|";
 
-    commandThread->start();
+    m_commandThread->start();
 
     gCoreContext->addListener(this);
 
@@ -249,41 +244,41 @@ NetworkControl::~NetworkControl(void)
 {
     gCoreContext->removeListener(this);
 
-    clientLock.lock();
-    while (!clients.isEmpty())
+    m_clientLock.lock();
+    while (!m_clients.isEmpty())
     {
-        NetworkControlClient *ncc = clients.takeFirst();
+        NetworkControlClient *ncc = m_clients.takeFirst();
         delete ncc;
     }
-    clientLock.unlock();
+    m_clientLock.unlock();
 
-    nrLock.lock();
-    networkControlReplies.push_back(new NetworkCommand(NULL,
+    m_nrLock.lock();
+    m_networkControlReplies.push_back(new NetworkCommand(nullptr,
         "mythfrontend shutting down, connection closing..."));
-    nrLock.unlock();
+    m_nrLock.unlock();
 
     notifyDataAvailable();
 
-    ncLock.lock();
-    stopCommandThread = true;
-    ncCond.wakeOne();
-    ncLock.unlock();
-    commandThread->wait();
-    delete commandThread;
-    commandThread = NULL;
+    m_ncLock.lock();
+    m_stopCommandThread = true;
+    m_ncCond.wakeOne();
+    m_ncLock.unlock();
+    m_commandThread->wait();
+    delete m_commandThread;
+    m_commandThread = nullptr;
 }
 
 void NetworkControl::run(void)
 {
-    QMutexLocker locker(&ncLock);
-    while (!stopCommandThread)
+    QMutexLocker locker(&m_ncLock);
+    while (!m_stopCommandThread)
     {
-        while (networkControlCommands.empty() && !stopCommandThread)
-            ncCond.wait(&ncLock);
-        if (!stopCommandThread)
+        while (m_networkControlCommands.empty() && !m_stopCommandThread)
+            m_ncCond.wait(&m_ncLock);
+        if (!m_stopCommandThread)
         {
-            NetworkCommand *nc = networkControlCommands.front();
-            networkControlCommands.pop_front();
+            NetworkCommand *nc = m_networkControlCommands.front();
+            m_networkControlCommands.pop_front();
             locker.unlock();
             processNetworkControlCommand(nc);
             locker.relock();
@@ -293,10 +288,10 @@ void NetworkControl::run(void)
 
 void NetworkControl::processNetworkControlCommand(NetworkCommand *nc)
 {
-    QMutexLocker locker(&clientLock);
+    QMutexLocker locker(&m_clientLock);
     QString result;
 
-    int clientID = clients.indexOf(nc->getClient());
+    int clientID = m_clients.indexOf(nc->getClient());
 
     if (is_abbrev("jump", nc->getArg(0)))
         result = processJump(nc);
@@ -319,15 +314,19 @@ void NetworkControl::processNetworkControlCommand(NetworkCommand *nc)
     else if (is_abbrev("theme", nc->getArg(0)))
         result = processTheme(nc);
     else if ((nc->getArg(0).toLower() == "exit") || (nc->getArg(0).toLower() == "quit"))
+    {
         QCoreApplication::postEvent(this,
                                 new NetworkControlCloseEvent(nc->getClient()));
+    }
     else if (! nc->getArg(0).isEmpty())
+    {
         result = QString("INVALID command '%1', try 'help' for more info")
                          .arg(nc->getArg(0));
+    }
 
-    nrLock.lock();
-    networkControlReplies.push_back(new NetworkCommand(nc->getClient(),result));
-    nrLock.unlock();
+    m_nrLock.lock();
+    m_networkControlReplies.push_back(new NetworkCommand(nc->getClient(),result));
+    m_nrLock.unlock();
 
     notifyDataAvailable();
 }
@@ -335,12 +334,12 @@ void NetworkControl::processNetworkControlCommand(NetworkCommand *nc)
 void NetworkControl::deleteClient(void)
 {
     LOG(VB_GENERAL, LOG_INFO, LOC + "Client Socket disconnected");
-    QMutexLocker locker(&clientLock);
+    QMutexLocker locker(&m_clientLock);
 
     gCoreContext->SendSystemEvent("NET_CTRL_DISCONNECTED");
 
     QList<NetworkControlClient *>::const_iterator it;
-    for (it = clients.begin(); it != clients.end(); ++it)
+    for (it = m_clients.begin(); it != m_clients.end(); ++it)
     {
         NetworkControlClient *ncc = *it;
         if (ncc->getSocket()->state() == QTcpSocket::UnconnectedState)
@@ -353,10 +352,10 @@ void NetworkControl::deleteClient(void)
 
 void NetworkControl::deleteClient(NetworkControlClient *ncc)
 {
-    int index = clients.indexOf(ncc);
+    int index = m_clients.indexOf(ncc);
     if (index >= 0)
     {
-        clients.removeAt(index);
+        m_clients.removeAt(index);
 
         delete ncc;
     }
@@ -373,10 +372,10 @@ void NetworkControl::newConnection(QTcpSocket *client)
 
     gCoreContext->SendSystemEvent("NET_CTRL_CONNECTED");
 
-    NetworkControlClient *ncc = new NetworkControlClient(client);
+    auto *ncc = new NetworkControlClient(client);
 
-    QMutexLocker locker(&clientLock);
-    clients.push_back(ncc);
+    QMutexLocker locker(&m_clientLock);
+    m_clients.push_back(ncc);
 
     connect(ncc, SIGNAL(commandReceived(QString&)), this,
             SLOT(receiveCommand(QString&)));
@@ -385,9 +384,9 @@ void NetworkControl::newConnection(QTcpSocket *client)
     welcomeStr = "MythFrontend Network Control\r\n";
     welcomeStr += "Type 'help' for usage information\r\n"
                   "---------------------------------";
-    nrLock.lock();
-    networkControlReplies.push_back(new NetworkCommand(ncc,welcomeStr));
-    nrLock.unlock();
+    m_nrLock.lock();
+    m_networkControlReplies.push_back(new NetworkCommand(ncc,welcomeStr));
+    m_nrLock.unlock();
 
     notifyDataAvailable();
 }
@@ -410,7 +409,7 @@ NetworkControlClient::~NetworkControlClient()
 
 void NetworkControlClient::readClient(void)
 {
-    QTcpSocket *socket = (QTcpSocket *)sender();
+    auto *socket = (QTcpSocket *)sender();
     if (!socket)
         return;
 
@@ -440,31 +439,31 @@ void NetworkControl::receiveCommand(QString &command)
 {
     LOG(VB_NETWORK, LOG_INFO, LOC +
         QString("NetworkControl::receiveCommand(%1)").arg(command));
-    NetworkControlClient *ncc = static_cast<NetworkControlClient *>(sender());
+    auto *ncc = dynamic_cast<NetworkControlClient *>(sender());
     if (!ncc)
          return;
 
-    ncLock.lock();
-    networkControlCommands.push_back(new NetworkCommand(ncc,command));
-    ncCond.wakeOne();
-    ncLock.unlock();
+    m_ncLock.lock();
+    m_networkControlCommands.push_back(new NetworkCommand(ncc,command));
+    m_ncCond.wakeOne();
+    m_ncLock.unlock();
 }
 
 QString NetworkControl::processJump(NetworkCommand *nc)
 {
     QString result = "OK";
 
-    if ((nc->getArgCount() < 2) || (!jumpMap.contains(nc->getArg(1))))
+    if ((nc->getArgCount() < 2) || (!m_jumpMap.contains(nc->getArg(1))))
         return QString("ERROR: See 'help %1' for usage information")
                        .arg(nc->getArg(0));
 
-    GetMythMainWindow()->JumpTo(jumpMap[nc->getArg(1)]);
+    GetMythMainWindow()->JumpTo(m_jumpMap[nc->getArg(1)]);
 
     // Fixme, should do some better checking here, but that would
     // depend on all Locations matching their jumppoints
-    QTime timer;
+    QElapsedTimer timer;
     timer.start();
-    while ((timer.elapsed() < FE_SHORT_TO) &&
+    while (!timer.hasExpired(FE_SHORT_TO) &&
            (GetMythUI()->GetCurrentLocation().toLower() != nc->getArg(1)))
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
@@ -474,41 +473,37 @@ QString NetworkControl::processJump(NetworkCommand *nc)
 QString NetworkControl::processKey(NetworkCommand *nc)
 {
     QString result = "OK";
-    QKeyEvent *event = NULL;
+    QKeyEvent *event = nullptr;
 
     if (nc->getArgCount() < 2)
         return QString("ERROR: See 'help %1' for usage information")
                        .arg(nc->getArg(0));
 
-    QObject *keyDest = NULL;
+    QObject *keyDest = nullptr;
 
     if (GetMythMainWindow())
         keyDest = GetMythMainWindow();
     else
         return QString("ERROR: Application has no main window!\n");
 
-    if (GetMythMainWindow()->currentWidget())
-        keyDest = GetMythMainWindow()->currentWidget()->focusWidget();
-
     int curToken = 1;
-    int tokenLen = 0;
     while (curToken < nc->getArgCount())
     {
-        tokenLen = nc->getArg(curToken).length();
+        int tokenLen = nc->getArg(curToken).length();
 
         if (nc->getArg(curToken) == "sleep")
         {
             std::this_thread::sleep_for(std::chrono::seconds(1));
         }
-        else if (keyMap.contains(nc->getArg(curToken)))
+        else if (m_keyMap.contains(nc->getArg(curToken)))
         {
-            int keyCode = keyMap[nc->getArg(curToken)];
+            int keyCode = m_keyMap[nc->getArg(curToken)];
             QString keyText;
 
-            if (keyTextMap.contains(keyCode))
-                keyText = keyTextMap[keyCode];
+            if (m_keyTextMap.contains(keyCode))
+                keyText = m_keyTextMap[keyCode];
 
-            GetMythUI()->ResetScreensaver();
+            MythUIHelper::ResetScreensaver();
 
             event = new QKeyEvent(QEvent::KeyPress, keyCode, Qt::NoModifier,
                                   keyText);
@@ -552,7 +547,7 @@ QString NetworkControl::processKey(NetworkCommand *nc)
                     modifiers = Qt::ShiftModifier;
             }
 
-            GetMythUI()->ResetScreensaver();
+            MythUIHelper::ResetScreensaver();
 
             event = new QKeyEvent(QEvent::KeyPress, keyCode, modifiers,
                                   nc->getArg(curToken));
@@ -563,9 +558,11 @@ QString NetworkControl::processKey(NetworkCommand *nc)
             QCoreApplication::postEvent(keyDest, event);
         }
         else
+        {
             return QString("ERROR: Invalid syntax at '%1', see 'help %2' for "
                            "usage information")
                            .arg(nc->getArg(curToken)).arg(nc->getArg(0));
+        }
 
         curToken++;
     }
@@ -587,11 +584,11 @@ QString NetworkControl::processPlay(NetworkCommand *nc, int clientID)
     {
         if (GetMythUI()->GetCurrentLocation().toLower() != "mainmenu")
         {
-            GetMythMainWindow()->JumpTo(jumpMap["mainmenu"]);
+            GetMythMainWindow()->JumpTo(m_jumpMap["mainmenu"]);
 
-            QTime timer;
+            QElapsedTimer timer;
             timer.start();
-            while ((timer.elapsed() < FE_LONG_TO) &&
+            while (!timer.hasExpired(FE_LONG_TO) &&
                    (GetMythUI()->GetCurrentLocation().toLower() != "mainmenu"))
                 std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
@@ -600,7 +597,7 @@ QString NetworkControl::processPlay(NetworkCommand *nc, int clientID)
         {
             QStringList args;
             args << nc->getFrom(2);
-            MythEvent *me = new MythEvent(ACTION_HANDLEMEDIA, args);
+            auto *me = new MythEvent(ACTION_HANDLEMEDIA, args);
             qApp->postEvent(GetMythMainWindow(), me);
         }
         else
@@ -614,30 +611,30 @@ QString NetworkControl::processPlay(NetworkCommand *nc, int clientID)
     {
         if (GetMythUI()->GetCurrentLocation().toLower() == "playback")
         {
-            QString message = QString("NETWORK_CONTROL STOP");
-            MythEvent me(message);
+            QString msg = QString("NETWORK_CONTROL STOP");
+            MythEvent me(msg);
             gCoreContext->dispatch(me);
 
-            QTime timer;
+            QElapsedTimer timer;
             timer.start();
-            while ((timer.elapsed() < FE_LONG_TO) &&
+            while (!timer.hasExpired(FE_LONG_TO) &&
                    (GetMythUI()->GetCurrentLocation().toLower() == "playback"))
                 std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
 
         if (GetMythUI()->GetCurrentLocation().toLower() != "playbackbox")
         {
-            GetMythMainWindow()->JumpTo(jumpMap["playbackbox"]);
+            GetMythMainWindow()->JumpTo(m_jumpMap["playbackbox"]);
 
-            QTime timer;
+            QElapsedTimer timer;
             timer.start();
-            while ((timer.elapsed() < 10000) &&
+            while (!timer.hasExpired(10000) &&
                    (GetMythUI()->GetCurrentLocation().toLower() != "playbackbox"))
                 std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
             timer.start();
-            while ((timer.elapsed() < 10000) &&
-                   (!GetMythUI()->IsTopScreenInitialized()))
+            while (!timer.hasExpired(10000) &&
+                   (!MythUIHelper::IsTopScreenInitialized()))
                 std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
 
@@ -647,23 +644,23 @@ QString NetworkControl::processPlay(NetworkCommand *nc, int clientID)
             if (nc->getArgCount() == 5 && nc->getArg(4) == "resume")
                 action = "RESUME";
 
-            QString message = QString("NETWORK_CONTROL %1 PROGRAM %2 %3 %4")
+            QString msg = QString("NETWORK_CONTROL %1 PROGRAM %2 %3 %4")
                                       .arg(action).arg(nc->getArg(2))
                                       .arg(nc->getArg(3).toUpper()).arg(clientID);
 
             result.clear();
-            gotAnswer = false;
-            QTime timer;
+            m_gotAnswer = false;
+            QElapsedTimer timer;
             timer.start();
 
-            MythEvent me(message);
+            MythEvent me(msg);
             gCoreContext->dispatch(me);
 
-            while (timer.elapsed() < FE_LONG_TO && !gotAnswer)
+            while (!timer.hasExpired(FE_LONG_TO) && !m_gotAnswer)
                 std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
-            if (gotAnswer)
-                result += answer;
+            if (m_gotAnswer)
+                result += m_answer;
             else
                 result = "ERROR: Timed out waiting for reply from player";
 
@@ -698,61 +695,61 @@ QString NetworkControl::processPlay(NetworkCommand *nc, int clientID)
                 message = QString("MUSIC_COMMAND %1 STOP").arg(hostname);
             else if (is_abbrev("getvolume", nc->getArg(2)))
             {
-                gotAnswer = false;
+                m_gotAnswer = false;
 
                 MythEvent me(QString("MUSIC_COMMAND %1 GET_VOLUME").arg(hostname));
                 gCoreContext->dispatch(me);
 
-                QTime timer;
+                QElapsedTimer timer;
                 timer.start();
-                while (timer.elapsed() < FE_SHORT_TO && !gotAnswer)
+                while (!timer.hasExpired(FE_SHORT_TO) && !m_gotAnswer)
                 {
                     qApp->processEvents();
                     std::this_thread::sleep_for(std::chrono::milliseconds(10));
                 }
 
-                if (gotAnswer)
-                    return answer;
+                if (m_gotAnswer)
+                    return m_answer;
 
                 return "unknown";
             }
             else if (is_abbrev("getmeta", nc->getArg(2)))
             {
-                gotAnswer = false;
+                m_gotAnswer = false;
 
                 MythEvent me(QString("MUSIC_COMMAND %1 GET_METADATA").arg(hostname));
                 gCoreContext->dispatch(me);
 
-                QTime timer;
+                QElapsedTimer timer;
                 timer.start();
-                while (timer.elapsed() < FE_SHORT_TO && !gotAnswer)
+                while (!timer.hasExpired(FE_SHORT_TO) && !m_gotAnswer)
                 {
                     qApp->processEvents();
                     std::this_thread::sleep_for(std::chrono::milliseconds(10));
                 }
 
-                if (gotAnswer)
-                    return answer;
+                if (m_gotAnswer)
+                    return m_answer;
 
                 return "unknown";
             }
             else if (is_abbrev("getstatus", nc->getArg(2)))
             {
-                gotAnswer = false;
+                m_gotAnswer = false;
 
                 MythEvent me(QString("MUSIC_COMMAND %1 GET_STATUS").arg(hostname));
                 gCoreContext->dispatch(me);
 
-                QTime timer;
+                QElapsedTimer timer;
                 timer.start();
-                while (timer.elapsed() < FE_SHORT_TO && !gotAnswer)
+                while (!timer.hasExpired(FE_SHORT_TO) && !m_gotAnswer)
                 {
                     qApp->processEvents();
                     std::this_thread::sleep_for(std::chrono::milliseconds(10));
                 }
 
-                if (gotAnswer)
-                    return answer;
+                if (m_gotAnswer)
+                    return m_answer;
 
                 return "unknown";
             }
@@ -762,23 +759,33 @@ QString NetworkControl::processPlay(NetworkCommand *nc, int clientID)
         else if (nc->getArgCount() > 3)
         {
             if (is_abbrev("setvolume", nc->getArg(2)))
+            {
                 message = QString("MUSIC_COMMAND %1 SET_VOLUME %2")
                                 .arg(hostname)
                                 .arg(nc->getArg(3));
+            }
             else if (is_abbrev("track", nc->getArg(2)))
+            {
                 message = QString("MUSIC_COMMAND %1 PLAY_TRACK %2")
                                 .arg(hostname)
                                 .arg(nc->getArg(3));
+            }
             else if (is_abbrev("url", nc->getArg(2)))
+            {
                 message = QString("MUSIC_COMMAND %1 PLAY_URL %2")
                                 .arg(hostname)
                                 .arg(nc->getArg(3));
+            }
             else if (is_abbrev("file", nc->getArg(2)))
+            {
                 message = QString("MUSIC_COMMAND %1 PLAY_FILE '%2'")
                                 .arg(hostname)
                                 .arg(nc->getFrom(3));
+            }
             else
+            {
                 return QString("ERROR: Invalid 'play music' command");
+            }
         }
         else
             return QString("ERROR: Invalid 'play music' command");
@@ -882,11 +889,15 @@ QString NetworkControl::processPlay(NetworkCommand *nc, int clientID)
         if (nc->getArgCount() < 3)
             message = QString("NETWORK_CONTROL SUBTITLES 0");
         else if (!nc->getArg(2).toLower().contains(QRegExp("^\\d+$")))
+        {
             return QString("ERROR: See 'help %1' for usage information")
                 .arg(nc->getArg(0));
+        }
         else
+        {
             message = QString("NETWORK_CONTROL SUBTITLES %1")
                 .arg(nc->getArg(2));
+        }
     }
     else
         return QString("ERROR: See 'help %1' for usage information")
@@ -926,18 +937,18 @@ QString NetworkControl::processQuery(NetworkCommand *nc)
         if (location == "Playback")
         {
             result += " ";
-            gotAnswer = false;
+            m_gotAnswer = false;
             QString message = QString("NETWORK_CONTROL QUERY POSITION");
             MythEvent me(message);
             gCoreContext->dispatch(me);
 
-            QTime timer;
+            QElapsedTimer timer;
             timer.start();
-            while (timer.elapsed() < FE_SHORT_TO  && !gotAnswer)
+            while (!timer.hasExpired(FE_SHORT_TO) && !m_gotAnswer)
                 std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
-            if (gotAnswer)
-                result += answer;
+            if (m_gotAnswer)
+                result += m_answer;
             else
                 result = "ERROR: Timed out waiting for reply from player";
         }
@@ -950,8 +961,7 @@ QString NetworkControl::processQuery(NetworkCommand *nc)
     {
         if(nc->getArgCount() == 3) // has a channel ID
             return listSchedule(nc->getArg(2));
-        else
-            return listSchedule();
+        return listSchedule();
     }
     else if (is_abbrev("version", nc->getArg(1)))
     {
@@ -971,7 +981,7 @@ QString NetworkControl::processQuery(NetworkCommand *nc)
     else if (is_abbrev("uptime", nc->getArg(1)))
     {
         QString str;
-        time_t  uptime;
+        time_t  uptime = 0;
 
         if (getUptime(uptime))
             str = QString::number(uptime);
@@ -997,13 +1007,20 @@ QString NetworkControl::processQuery(NetworkCommand *nc)
     else if (is_abbrev("memstats", nc->getArg(1)))
     {
         QString str;
-        int     totalMB, freeMB, totalVM, freeVM;
+        int     totalMB = 0;
+        int     freeMB = 0;
+        int     totalVM = 0;
+        int     freeVM = 0;
 
         if (getMemStats(totalMB, freeMB, totalVM, freeVM))
+        {
             str = QString("%1 %2 %3 %4")
                           .arg(totalMB).arg(freeMB).arg(totalVM).arg(freeVM);
+        }
         else
+        {
             str = QString("Could not determine memory stats.");
+        }
         return str;
     }
     else if (is_abbrev("volume", nc->getArg(1)))
@@ -1015,18 +1032,18 @@ QString NetworkControl::processQuery(NetworkCommand *nc)
         if (location != "Playback")
             return str;
 
-        gotAnswer = false;
+        m_gotAnswer = false;
         QString message = QString("NETWORK_CONTROL QUERY VOLUME");
         MythEvent me(message);
         gCoreContext->dispatch(me);
 
-        QTime timer;
+        QElapsedTimer timer;
         timer.start();
-        while (timer.elapsed() < FE_SHORT_TO  && !gotAnswer)
+        while (!timer.hasExpired(FE_SHORT_TO) && !m_gotAnswer)
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
-        if (gotAnswer)
-            str = answer;
+        if (m_gotAnswer)
+            str = m_answer;
         else
             str = "ERROR: Timed out waiting for reply from player";
 
@@ -1044,12 +1061,11 @@ QString NetworkControl::processQuery(NetworkCommand *nc)
     {
         if (nc->getArgCount() == 2)
             return listChannels(0, 0);  // give us all you can
-        else if (nc->getArgCount() == 4)
+        if (nc->getArgCount() == 4)
             return listChannels(nc->getArg(2).toLower().toUInt(),
                                 nc->getArg(3).toLower().toUInt());
-        else
-            return QString("ERROR: See 'help %1' for usage information "
-                           "(parameters mismatch)").arg(nc->getArg(0));
+        return QString("ERROR: See 'help %1' for usage information "
+                       "(parameters mismatch)").arg(nc->getArg(0));
     }
     else
         return QString("ERROR: See 'help %1' for usage information")
@@ -1070,9 +1086,11 @@ QString NetworkControl::processSet(NetworkCommand *nc)
             return QString("ERROR: Missing filter name.");
 
         if (nc->getArgCount() > 3)
+        {
             return QString("ERROR: Separate filters with commas with no "
                            "space: playback,audio\r\n See 'help %1' for usage "
                            "information").arg(nc->getArg(0));
+        }
 
         QString oldVerboseString = verboseString;
         QString result = "OK";
@@ -1101,41 +1119,41 @@ QString NetworkControl::getWidgetType(MythUIType* type)
 {
     if (dynamic_cast<MythUIText *>(type))
         return "MythUIText";
-    else if (dynamic_cast<MythUITextEdit *>(type))
+    if (dynamic_cast<MythUITextEdit *>(type))
         return "MythUITextEdit";
-    else if (dynamic_cast<MythUIGroup *>(type))
+    if (dynamic_cast<MythUIGroup *>(type))
         return "MythUIGroup";
-    else if (dynamic_cast<MythUIButton *>(type))
+    if (dynamic_cast<MythUIButton *>(type))
         return "MythUIButton";
-    else if (dynamic_cast<MythUICheckBox *>(type))
+    if (dynamic_cast<MythUICheckBox *>(type))
         return "MythUICheckBox";
-    else if (dynamic_cast<MythUIShape *>(type))
+    if (dynamic_cast<MythUIShape *>(type))
         return "MythUIShape";
-    else if (dynamic_cast<MythUIButtonList *>(type))
+    if (dynamic_cast<MythUIButtonList *>(type))
         return "MythUIButtonList";
-    else if (dynamic_cast<MythUIImage *>(type))
+    if (dynamic_cast<MythUIImage *>(type))
         return "MythUIImage";
-    else if (dynamic_cast<MythUISpinBox *>(type))
+    if (dynamic_cast<MythUISpinBox *>(type))
         return "MythUISpinBox";
 #if CONFIG_QTWEBKIT
-    else if (dynamic_cast<MythUIWebBrowser *>(type))
+    if (dynamic_cast<MythUIWebBrowser *>(type))
         return "MythUIWebBrowser";
 #endif
-    else if (dynamic_cast<MythUIClock *>(type))
+    if (dynamic_cast<MythUIClock *>(type))
         return "MythUIClock";
-    else if (dynamic_cast<MythUIStateType *>(type))
+    if (dynamic_cast<MythUIStateType *>(type))
         return "MythUIStateType";
-    else if (dynamic_cast<MythUIProgressBar *>(type))
+    if (dynamic_cast<MythUIProgressBar *>(type))
         return "MythUIProgressBar";
-    else if (dynamic_cast<MythUIButtonTree *>(type))
+    if (dynamic_cast<MythUIButtonTree *>(type))
         return "MythUIButtonTree";
-    else if (dynamic_cast<MythUIScrollBar *>(type))
+    if (dynamic_cast<MythUIScrollBar *>(type))
         return "MythUIScrollBar";
-    else if (dynamic_cast<MythUIVideo *>(type))
+    if (dynamic_cast<MythUIVideo *>(type))
         return "MythUIVideo";
-    else if (dynamic_cast<MythUIGuideGrid *>(type))
+    if (dynamic_cast<MythUIGuideGrid *>(type))
         return "MythUIGuideGrid";
-    else if (dynamic_cast<MythUIEditBar *>(type))
+    if (dynamic_cast<MythUIEditBar *>(type))
         return "MythUIEditBar";
 
     return "Unknown";
@@ -1153,25 +1171,25 @@ QString NetworkControl::processTheme( NetworkCommand* nc)
         QString themeDir = GetMythUI()->GetThemeDir();
         return QString("%1 - %2").arg(themeName).arg(themeDir);
     }
-    else if (nc->getArg(1) == "reload")
+    if (nc->getArg(1) == "reload")
     {
-        GetMythMainWindow()->JumpTo(jumpMap["reloadtheme"]);
+        GetMythMainWindow()->JumpTo(m_jumpMap["reloadtheme"]);
 
         return "OK";
     }
-    else if (nc->getArg(1) == "showborders")
+    if (nc->getArg(1) == "showborders")
     {
-        GetMythMainWindow()->JumpTo(jumpMap["showborders"]);
+        GetMythMainWindow()->JumpTo(m_jumpMap["showborders"]);
 
         return "OK";
     }
-    else if (nc->getArg(1) == "shownames")
+    if (nc->getArg(1) == "shownames")
     {
-        GetMythMainWindow()->JumpTo(jumpMap["shownames"]);
+        GetMythMainWindow()->JumpTo(m_jumpMap["shownames"]);
 
         return "OK";
     }
-    else if (nc->getArg(1) == "getwidgetnames")
+    if (nc->getArg(1) == "getwidgetnames")
     {
         QStringList path;
 
@@ -1190,7 +1208,9 @@ QString NetworkControl::processTheme( NetworkCommand* nc)
         if (!topScreen)
             return QString("ERROR: no top screen found!");
 
-        MythUIType *currType = static_cast<MythUIType*>(topScreen);
+        auto *currType = dynamic_cast<MythUIType*>(topScreen);
+        if (currType == nullptr)
+            return QString("ERROR: cannot cast top screen!");
 
         while (!path.isEmpty())
         {
@@ -1213,7 +1233,7 @@ QString NetworkControl::processTheme( NetworkCommand* nc)
 
         return result;
     }
-    else if (nc->getArg(1) == "getarea")
+    if (nc->getArg(1) == "getarea")
     {
         if (nc->getArgCount() < 3)
             return QString("ERROR: Missing widget name.");
@@ -1233,7 +1253,9 @@ QString NetworkControl::processTheme( NetworkCommand* nc)
         if (!topScreen)
             return QString("ERROR: no top screen found!");
 
-        MythUIType *currType = static_cast<MythUIType*>(topScreen);
+        auto *currType = dynamic_cast<MythUIType*>(topScreen);
+        if (currType == nullptr)
+            return QString("ERROR: cannot cast top screen!");
 
         while (path.count() > 1)
         {
@@ -1254,7 +1276,7 @@ QString NetworkControl::processTheme( NetworkCommand* nc)
         return QString("The area of '%1' is x:%2, y:%3, w:%4, h:%5")
                        .arg(widgetName).arg(x).arg(y).arg(w).arg(h);
     }
-    else if (nc->getArg(1) == "setarea")
+    if (nc->getArg(1) == "setarea")
     {
         if (nc->getArgCount() < 3)
             return QString("ERROR: Missing widget name.");
@@ -1278,10 +1300,9 @@ QString NetworkControl::processTheme( NetworkCommand* nc)
             topScreen = stack->GetTopScreen();
         }
 
+        auto *currType = dynamic_cast<MythUIType*>(topScreen);
         if (!topScreen)
             return QString("ERROR: no top screen found!");
-
-                MythUIType *currType = static_cast<MythUIType*>(topScreen);
 
         while (path.count() > 1)
         {
@@ -1307,7 +1328,8 @@ QString NetworkControl::processTheme( NetworkCommand* nc)
 
 QString NetworkControl::processHelp(NetworkCommand *nc)
 {
-    QString command, helpText;
+    QString command;
+    QString helpText;
 
     if (nc->getArgCount() >= 1)
     {
@@ -1332,7 +1354,7 @@ QString NetworkControl::processHelp(NetworkCommand *nc)
             "\r\n"
             "Where JUMPPOINT is one of the following:\r\n";
 
-        for (it = jumpMap.begin(); it != jumpMap.end(); ++it)
+        for (it = m_jumpMap.begin(); it != m_jumpMap.end(); ++it)
         {
             helpText += it.key().leftJustified(20, ' ', true) + " - " +
                         *it + "\r\n";
@@ -1348,7 +1370,7 @@ QString NetworkControl::processHelp(NetworkCommand *nc)
 
         QMap<QString, int>::Iterator it;
         bool first = true;
-        for (it = keyMap.begin(); it != keyMap.end(); ++it)
+        for (it = m_keyMap.begin(); it != m_keyMap.end(); ++it)
         {
             if (first)
                 first = false;
@@ -1497,7 +1519,7 @@ QString NetworkControl::processMessage(NetworkCommand *nc)
 
     QString message = nc->getCommand().remove(0, 7).trimmed();
     MythMainWindow *window = GetMythMainWindow();
-    MythEvent* me = new MythEvent(MythEvent::MythUserMessage, message);
+    auto* me = new MythEvent(MythEvent::MythUserMessage, message);
     qApp->postEvent(window, me);
     return QString("OK");
 }
@@ -1523,10 +1545,12 @@ void NetworkControl::notifyDataAvailable(void)
 void NetworkControl::sendReplyToClient(NetworkControlClient *ncc,
                                        QString &reply)
 {
-    if (!clients.contains(ncc))
+    if (!m_clients.contains(ncc))
+    {
         // NetworkControl instance is unaware of control client
         // assume connection to client has been terminated and bail
         return;
+    }
 
     QRegExp crlfRegEx("\r\n$");
     QRegExp crlfcrlfRegEx("\r\n.*\r\n");
@@ -1540,7 +1564,7 @@ void NetworkControl::sendReplyToClient(NetworkControlClient *ncc,
 
         if ((!reply.contains(crlfRegEx)) ||
             ( reply.contains(crlfcrlfRegEx)))
-            *clientStream << "\r\n" << prompt;
+            *clientStream << "\r\n" << m_prompt;
 
         clientStream->flush();
         client->flush();
@@ -1549,10 +1573,13 @@ void NetworkControl::sendReplyToClient(NetworkControlClient *ncc,
 
 void NetworkControl::customEvent(QEvent *e)
 {
-    if ((MythEvent::Type)(e->type()) == MythEvent::MythEventMessage)
+    if (e->type() == MythEvent::MythEventMessage)
     {
-        MythEvent *me = (MythEvent *)e;
-        QString message = me->Message();
+        auto *me = dynamic_cast<MythEvent *>(e);
+        if (me == nullptr)
+            return;
+
+        const QString& message = me->Message();
 
         if (message.startsWith("MUSIC_CONTROL"))
         {
@@ -1561,10 +1588,10 @@ void NetworkControl::customEvent(QEvent *e)
                 (tokens[1] == "ANSWER") &&
                 (tokens[2] == gCoreContext->GetHostName()))
             {
-                answer = tokens[3];
+                m_answer = tokens[3];
                 for (int i = 4; i < tokens.size(); i++)
-                    answer += QString(" ") + tokens[i];
-                gotAnswer = true;
+                    m_answer += QString(" ") + tokens[i];
+                m_gotAnswer = true;
             }
 
         }
@@ -1574,34 +1601,33 @@ void NetworkControl::customEvent(QEvent *e)
             if ((tokens.size() >= 3) &&
                 (tokens[1] == "ANSWER"))
             {
-                answer = tokens[2];
+                m_answer = tokens[2];
                 for (int i = 3; i < tokens.size(); i++)
-                    answer += QString(" ") + tokens[i];
-                gotAnswer = true;
+                    m_answer += QString(" ") + tokens[i];
+                m_gotAnswer = true;
             }
             else if ((tokens.size() >= 4) &&
                      (tokens[1] == "RESPONSE"))
             {
 //                int clientID = tokens[2].toInt();
-                answer = tokens[3];
+                m_answer = tokens[3];
                 for (int i = 4; i < tokens.size(); i++)
-                    answer += QString(" ") + tokens[i];
-                gotAnswer = true;
+                    m_answer += QString(" ") + tokens[i];
+                m_gotAnswer = true;
             }
         }
     }
     else if (e->type() == kNetworkControlDataReadyEvent)
     {
-        NetworkCommand *nc;
         QString reply;
 
-        QMutexLocker locker(&clientLock);
-        QMutexLocker nrLocker(&nrLock);
+        QMutexLocker locker(&m_clientLock);
+        QMutexLocker nrLocker(&m_nrLock);
 
-        while (!networkControlReplies.isEmpty())
+        while (!m_networkControlReplies.isEmpty())
         {
-            nc = networkControlReplies.front();
-            networkControlReplies.pop_front();
+            NetworkCommand *nc = m_networkControlReplies.front();
+            m_networkControlReplies.pop_front();
 
             reply = nc->getCommand();
 
@@ -1613,11 +1639,11 @@ void NetworkControl::customEvent(QEvent *e)
             else //send to all clients
             {
                 QList<NetworkControlClient *>::const_iterator it;
-                for (it = clients.begin(); it != clients.end(); ++it)
+                for (it = m_clients.begin(); it != m_clients.end(); ++it)
                 {
-                    NetworkControlClient *ncc = *it;
-                    if (ncc)
-                        sendReplyToClient(ncc, reply);
+                    NetworkControlClient *ncc2 = *it;
+                    if (ncc2)
+                        sendReplyToClient(ncc2, reply);
                 }
             }
             delete nc;
@@ -1625,14 +1651,16 @@ void NetworkControl::customEvent(QEvent *e)
     }
     else if (e->type() == NetworkControlCloseEvent::kEventType)
     {
-        NetworkControlCloseEvent *ncce = static_cast<NetworkControlCloseEvent*>(e);
-        NetworkControlClient     *ncc  = ncce->getClient();
-
+        auto *ncce = dynamic_cast<NetworkControlCloseEvent*>(e);
+        if (ncce == nullptr)
+            return;
+        
+        NetworkControlClient *ncc  = ncce->getClient();
         deleteClient(ncc);
     }
 }
 
-QString NetworkControl::listSchedule(const QString& chanID) const
+QString NetworkControl::listSchedule(const QString& chanID)
 {
     QString result("");
     MSqlQuery query(MSqlQuery::InitCon());
@@ -1687,7 +1715,7 @@ QString NetworkControl::listSchedule(const QString& chanID) const
     return result;
 }
 
-QString NetworkControl::listRecordings(QString chanid, QString starttime)
+QString NetworkControl::listRecordings(const QString& chanid, const QString& starttime)
 {
     QString result;
     MSqlQuery query(MSqlQuery::InitCon());
@@ -1709,18 +1737,24 @@ QString NetworkControl::listRecordings(QString chanid, QString starttime)
     query.prepare(queryStr);
     if (query.exec())
     {
-        QString episode, title, subtitle;
+        QString episode;
+        QString title;
+        QString subtitle;
         while (query.next())
         {
             title = query.value(2).toString();
             subtitle = query.value(3).toString();
 
             if (!subtitle.isEmpty())
+            {
                 episode = QString("%1 -\"%2\"")
                                   .arg(title)
                                   .arg(subtitle);
+            }
             else
+            {
                 episode = title;
+            }
 
             result +=
                 QString("%1 %2 %3").arg(query.value(0).toInt())
@@ -1737,21 +1771,20 @@ QString NetworkControl::listRecordings(QString chanid, QString starttime)
     return result;
 }
 
-QString NetworkControl::listChannels(const uint start, const uint limit) const
+QString NetworkControl::listChannels(const uint start, const uint limit)
 {
     QString result;
     MSqlQuery query(MSqlQuery::InitCon());
     QString queryStr;
-    uint cnt;
-    uint maxcnt;
     uint sqlStart = start;
 
     // sql starts at zero, we want to start at 1
     if (sqlStart > 0)
         sqlStart--;
 
-    queryStr = "select chanid, callsign, name from channel where visible=1";
-    queryStr += " ORDER BY callsign";
+    queryStr = "select chanid, callsign, name from channel "
+        "where deleted IS NULL and visible > 0 "
+        "ORDER BY callsign";
 
     if (limit > 0)  // only if a limit is specified, we limit the results
     {
@@ -1766,8 +1799,8 @@ QString NetworkControl::listChannels(const uint start, const uint limit) const
         return result;
     }
 
-    maxcnt = query.size();
-    cnt = 0;
+    uint maxcnt = query.size();
+    uint cnt = 0;
     if (maxcnt == 0)    // Feedback we have no usefull information
     {
         result += QString("0:0 0 \"Invalid\" \"Invalid\"");
@@ -1810,7 +1843,7 @@ QString NetworkControl::saveScreenshot(NetworkCommand *nc)
         args << QString::number(width);
         args << QString::number(height);
     }
-    MythEvent* me = new MythEvent(MythEvent::MythEventMessage,
+    auto *me = new MythEvent(MythEvent::MythEventMessage,
                                   ACTION_SCREENSHOT, args);
     qApp->postEvent(window, me);
     return "OK";
@@ -1820,8 +1853,8 @@ QString NetworkCommand::getFrom(int arg)
 {
     QString c = m_command;
     for(int i=0 ; i<arg ; i++) {
-        QString arg = c.simplified().split(" ")[0];
-        c = c.mid(arg.length()).trimmed();
+        QString argstr = c.simplified().split(" ")[0];
+        c = c.mid(argstr.length()).trimmed();
     }
     return c;
 }

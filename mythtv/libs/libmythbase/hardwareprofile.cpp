@@ -18,10 +18,7 @@ const QString SMOLT_SERVER_LOCATION =
 const QString SMOLT_TOKEN =
                   QString("smolt_token-smolt.mythtv.org");
 
-HardwareProfile::HardwareProfile() :
-    m_enabled(false),
-    m_uuid(QString()),               m_publicuuid(QString()),
-    m_lastUpdate(QDateTime()),       m_hardwareProfile(QString())
+HardwareProfile::HardwareProfile()
 {
     m_enabled = (gCoreContext->GetNumSetting("HardwareProfileEnabled", 0) == 1);
     m_uuid = gCoreContext->GetSetting("HardwareProfileUUID");
@@ -38,10 +35,6 @@ HardwareProfile::HardwareProfile() :
         if (query.exec() && query.next())
             m_lastUpdate = MythDate::as_utc(query.value(0).toDateTime());
     }
-}
-
-HardwareProfile::~HardwareProfile()
-{
 }
 
 void HardwareProfile::Enable(void)
@@ -103,7 +96,7 @@ void HardwareProfile::GenerateUUIDs(void)
     m_publicuuid = GetPublicUUIDFromFile();
 }
 
-QString HardwareProfile::GetPrivateUUIDFromFile() const
+QString HardwareProfile::GetPrivateUUIDFromFile()
 {
     QString ret;
 
@@ -145,7 +138,7 @@ QString HardwareProfile::GetPublicUUIDFromFile() const
     return ret;
 }
 
-QString HardwareProfile::GetAdminPasswordFromFile() const
+QString HardwareProfile::GetAdminPasswordFromFile()
 {
     QString ret;
 
@@ -164,7 +157,7 @@ QString HardwareProfile::GetAdminPasswordFromFile() const
     return ret;
 }
 
-bool HardwareProfile::WritePrivateUUIDToFile(QString uuid)
+bool HardwareProfile::WritePrivateUUIDToFile(const QString &uuid)
 {
     QString hwuuid_file = GetConfDir() + "/HardwareProfile/hw-uuid";
     QFile file(hwuuid_file);
@@ -175,8 +168,7 @@ bool HardwareProfile::WritePrivateUUIDToFile(QString uuid)
         file.close();
         return true;
     }
-    else
-        return false;
+    return false;
 }
 
 bool HardwareProfile::NeedsUpdate(void) const
@@ -203,9 +195,11 @@ bool HardwareProfile::SubmitProfile(bool updateTime)
         Enable();
 
     if (!m_hardwareProfile.isEmpty())
+    {
         LOG(VB_GENERAL, LOG_INFO,
                  QString("Submitting the following hardware profile:  %1")
                          .arg(m_hardwareProfile));
+    }
 
     QString cmd = GetShareDir() + "hardwareprofile/sendProfile.py";
     QStringList args;
@@ -228,9 +222,6 @@ bool HardwareProfile::SubmitProfile(bool updateTime)
 
         return true;
     }
-    else
-        return false;
-
     return false;
 }
 
@@ -255,9 +246,6 @@ bool HardwareProfile::DeleteProfile(void)
         Disable();
         return true;
     }
-    else
-        return false;
-
     return false;
 }
 
@@ -273,7 +261,7 @@ QString HardwareProfile::GetProfileURL() const
     return ret;
 }
 
-QString HardwareProfile::GetHardwareProfile() const
+QString HardwareProfile::GetHardwareProfile()
 {
     QString cmd = GetShareDir() + "hardwareprofile/sendProfile.py";
     QStringList args;
@@ -285,7 +273,7 @@ QString HardwareProfile::GetHardwareProfile() const
     return system.ReadAll();
 }
 
-bool HardwareProfileTask::DoCheckRun(QDateTime now)
+bool HardwareProfileTask::DoCheckRun(const QDateTime& now)
 {
     if (gCoreContext->GetNumSetting("HardwareProfileEnabled", 0) == 0)
         // global disable, we don't want to run

@@ -2,23 +2,26 @@
  *  Class ASIChannel
  */
 
+// C/C++ includes
+#include <utility>
+
 // MythTV includes
 #include "mythlogging.h"
 #include "mpegtables.h"
 #include "asichannel.h"
 
-#define LOC     QString("ASIChan[%1](%2): ").arg(GetInputID()).arg(GetDevice())
+#define LOC     QString("ASIChan[%1](%2): ").arg(GetInputID()).arg(ASIChannel::GetDevice())
 
-ASIChannel::ASIChannel(TVRec *parent, const QString &device) :
-    DTVChannel(parent), m_device(device), m_isopen(false)
+ASIChannel::ASIChannel(TVRec *parent, QString device) :
+    DTVChannel(parent), m_device(std::move(device))
 {
-    m_tuner_types.push_back(DTVTunerType::kTunerTypeASI);
+    m_tunerTypes.emplace_back(DTVTunerType::kTunerTypeASI);
 }
 
 ASIChannel::~ASIChannel(void)
 {
-    if (IsOpen())
-        Close();
+    if (ASIChannel::IsOpen())
+        ASIChannel::Close();
 }
 
 bool ASIChannel::Open(void)
@@ -28,16 +31,16 @@ bool ASIChannel::Open(void)
     if (m_device.isEmpty())
         return false;
 
-    if (m_isopen)
+    if (m_isOpen)
         return true;
 
     if (!InitializeInput())
         return false;
 
-    if (!m_inputid)
+    if (!m_inputId)
         return false;
 
-    m_isopen = true;
+    m_isOpen = true;
 
     return true;
 }
@@ -45,5 +48,5 @@ bool ASIChannel::Open(void)
 void ASIChannel::Close()
 {
     LOG(VB_CHANNEL, LOG_INFO, LOC + "Close()");
-    m_isopen = false;
+    m_isOpen = false;
 }

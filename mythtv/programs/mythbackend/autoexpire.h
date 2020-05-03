@@ -1,8 +1,7 @@
 #ifndef AUTOEXPIRE_H_
 #define AUTOEXPIRE_H_
 
-#include <stdint.h>
-
+#include <cstdint>
 #include <vector>
 using namespace std;
 
@@ -23,8 +22,8 @@ class EncoderLink;
 class FileSystemInfo;
 class MainServer;
 
-typedef vector<ProgramInfo*> pginfolist_t;
-typedef vector<EncoderLink*> enclinklist_t;
+using pginfolist_t  = vector<ProgramInfo*>;
+using enclinklist_t = vector<EncoderLink*>;
 
 enum ExpireMethodType {
     emOldestFirst           = 1,
@@ -43,8 +42,8 @@ class ExpireThread : public MThread
 {
   public:
     explicit ExpireThread(AutoExpire *p) : MThread("Expire"), m_parent(p) {}
-    virtual ~ExpireThread() { wait(); }
-    virtual void run(void);
+    ~ExpireThread() override { wait(); }
+    void run(void) override; // MThread
   private:
     QPointer<AutoExpire> m_parent;
 };
@@ -53,10 +52,10 @@ class UpdateEntry
 {
   public:
     UpdateEntry(int _encoder, int _fsID)
-        : encoder(_encoder), fsID(_fsID) {};
+        : m_encoder(_encoder), m_fsID(_fsID) {};
 
-    int encoder;
-    int fsID;
+    int m_encoder;
+    int m_fsID;
 };
 
 class AutoExpire : public QObject
@@ -65,29 +64,29 @@ class AutoExpire : public QObject
 
     friend class ExpireThread;
   public:
-    explicit AutoExpire(QMap<int, EncoderLink *> *encoderList);
-    AutoExpire(void);
-   ~AutoExpire();
+    explicit AutoExpire(QMap<int, EncoderLink *> *tvList);
+    AutoExpire() = default;
+   ~AutoExpire() override;
 
     void CalcParams(void);
-    void PrintExpireList(QString expHost = "ALL");
+    void PrintExpireList(const QString& expHost = "ALL");
 
     uint64_t GetDesiredSpace(int fsID) const;
 
     void GetAllExpiring(QStringList &strList);
     void GetAllExpiring(pginfolist_t &list);
-    void ClearExpireList(pginfolist_t &expireList, bool deleteProg = true);
+    static void ClearExpireList(pginfolist_t &expireList, bool deleteProg = true);
 
     static void Update(int encoder, int fsID, bool immediately);
     static void Update(bool immediately) { Update(0, -1, immediately); }
 
     void SetMainServer(MainServer *ms)
     {
-        QMutexLocker locker(&instance_lock);
-        main_server = ms;
+        QMutexLocker locker(&m_instanceLock);
+        m_mainServer = ms;
     }
 
-    QMap<int, EncoderLink *> *encoderList;
+    QMap<int, EncoderLink *> *m_encoderList {nullptr};
 
   protected:
     void RunExpirer(void);
@@ -101,7 +100,7 @@ class AutoExpire : public QObject
 
     void FillExpireList(pginfolist_t &expireList);
     void FillDBOrdered(pginfolist_t &expireList, int expMethod);
-    void SendDeleteMessages(pginfolist_t &deleteList);
+    static void SendDeleteMessages(pginfolist_t &deleteList);
     void Sleep(int sleepTime /*ms*/);
 
     void UpdateDontExpireSet(void);
@@ -110,22 +109,22 @@ class AutoExpire : public QObject
                                uint chanid, const QDateTime &recstartts);
 
     // main expire info
-    QSet<QString> dont_expire_set;
-    ExpireThread *expire_thread;     // protected by instance_lock
-    uint          desired_freq;      // protected by instance_lock
-    bool          expire_thread_run; // protected by instance_lock
+    QSet<QString> m_dontExpireSet;
+    ExpireThread *m_expireThread      {nullptr}; // protected by m_instanceLock
+    uint          m_desiredFreq       {15};      // protected by m_instanceLock
+    bool          m_expireThreadRun   {false};   // protected by m_instanceLock
 
-    QMap<int, int64_t>  desired_space; // protected by instance_lock
-    QMap<int, int>      used_encoders; // protected by instance_lock
+    QMap<int, int64_t>  m_desiredSpace;          // protected by m_instanceLock
+    QMap<int, int>      m_usedEncoders;          // protected by m_instanceLock
 
-    mutable QMutex instance_lock;
-    QWaitCondition instance_cond; // protected by instance_lock
+    mutable QMutex m_instanceLock;
+    QWaitCondition m_instanceCond;               // protected by m_instanceLock
 
-    MainServer   *main_server;    // protected by instance_lock
+    MainServer    *m_mainServer       {nullptr};  // protected by m_instanceLock
 
     // update info
-    QMutex              update_lock;
-    QQueue<UpdateEntry> update_queue; // protected by update_lock
+    QMutex              m_updateLock;
+    QQueue<UpdateEntry> m_updateQueue;           // protected by m_updateLock
 };
 
 #endif

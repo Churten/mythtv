@@ -24,48 +24,48 @@ class UPnpCDSMusic : public UPnpCDSExtension
     public:
 
         UPnpCDSMusic();
-        virtual ~UPnpCDSMusic() { };
+        ~UPnpCDSMusic() override = default;
 
     protected:
 
-        virtual bool             IsBrowseRequestForUs( UPnpCDSRequest *pRequest );
-        virtual bool             IsSearchRequestForUs( UPnpCDSRequest *pRequest );
+        bool IsBrowseRequestForUs( UPnpCDSRequest *pRequest ) override; // UPnpCDSExtension
+        bool IsSearchRequestForUs( UPnpCDSRequest *pRequest ) override; // UPnpCDSExtension
 
-        virtual void             CreateRoot ( );
+        void CreateRoot ( ) override; // UPnpCDSExtension
 
-        virtual bool             LoadMetadata( const UPnpCDSRequest *pRequest,
-                                                UPnpCDSExtensionResults *pResults,
-                                                IDTokenMap tokens,
-                                                QString currentToken );
-        virtual bool             LoadChildren( const UPnpCDSRequest *pRequest,
-                                               UPnpCDSExtensionResults *pResults,
-                                               IDTokenMap tokens,
-                                               QString currentToken );
+        bool LoadMetadata( const UPnpCDSRequest *pRequest,
+                            UPnpCDSExtensionResults *pResults,
+                            const IDTokenMap& tokens,
+                            const QString& currentToken ) override; // UPnpCDSExtension
+        bool LoadChildren( const UPnpCDSRequest *pRequest,
+                           UPnpCDSExtensionResults *pResults,
+                           const IDTokenMap& tokens,
+                           const QString& currentToken ) override; // UPnpCDSExtension
 
     private:
 
-        QUrl             m_URIBase;
+        QUrl             m_uriBase;
 
         void             PopulateArtworkURIS( CDSObject *pItem,
                                               int songID );
 
-        bool             LoadArtists(const UPnpCDSRequest *pRequest,
+        static bool      LoadArtists(const UPnpCDSRequest *pRequest,
                                      UPnpCDSExtensionResults *pResults,
-                                     IDTokenMap tokens);
+                                     const IDTokenMap& tokens);
         bool             LoadAlbums(const UPnpCDSRequest *pRequest,
                                     UPnpCDSExtensionResults *pResults,
-                                    IDTokenMap tokens);
-        bool             LoadGenres(const UPnpCDSRequest *pRequest,
+                                    const IDTokenMap& tokens);
+        static bool      LoadGenres(const UPnpCDSRequest *pRequest,
                                     UPnpCDSExtensionResults *pResults,
-                                    IDTokenMap tokens);
+                                    const IDTokenMap& tokens);
         bool             LoadTracks(const UPnpCDSRequest *pRequest,
                                     UPnpCDSExtensionResults *pResults,
-                                    IDTokenMap tokens);
+                                    const IDTokenMap& tokens);
 
         // Common code helpers
-        QString BuildWhereClause( QStringList clauses,
+        static QString BuildWhereClause( QStringList clauses,
                                   IDTokenMap tokens );
-        void    BindValues ( MSqlQuery &query,
+        static void    BindValues ( MSqlQuery &query,
                              IDTokenMap tokens );
 };
 

@@ -3,9 +3,13 @@
 #include "mythuitype.h"
 
 // QT headers
+#include <QDomDocument>
 #include <QEvent>
 #include <QKeyEvent>
-#include <QDomDocument>
+#include <utility>
+
+// XML headers
+#include "xmlparsebase.h"
 
 // Mythbase headers
 #include "mythlogging.h"
@@ -32,30 +36,12 @@
 #  include "compat.h"   // random
 #endif
 
+#define LOC      QString("MythUIType: ")
+
 MythUIType::MythUIType(QObject *parent, const QString &name)
     : QObject(parent)
 {
     setObjectName(name);
-
-    m_Visible = true;
-    m_Enabled = true;
-    m_EnableInitiator = false;
-    m_Initiator = false;
-    m_Vanish = false;
-    m_Vanished = false;
-    m_CanHaveFocus = m_HasFocus = false;
-    m_Area = MythRect(0, 0, 0, 0);
-    m_MinArea = MythRect(0, 0, 0, 0);
-    m_NeedsRedraw = false;
-    m_AlphaChangeMode = m_AlphaChange = m_AlphaMin = 0;
-    m_AlphaMax = 255;
-    m_Moving = false;
-    m_XYDestination = QPoint(0, 0);
-    m_XYSpeed = QPoint(0, 0);
-    m_deferload = false;
-    m_IsDependDefault = false;
-
-    m_Parent = NULL;
 
     if (parent)
     {
@@ -65,11 +51,7 @@ MythUIType::MythUIType(QObject *parent, const QString &name)
             m_Parent->AddChild(this);
     }
 
-    m_DirtyRegion = QRegion(QRect(0, 0, 0, 0));
-
     m_Fonts = new FontMap();
-    m_focusOrder = 0;
-    m_Painter = NULL;
 
     m_BorderColor = QColor(random() % 255, random()  % 255, random()  % 255);
 }
@@ -112,16 +94,14 @@ static QObject *qChildHelper(const char *objName, const char *inheritsClass,
                              bool recursiveSearch, const QObjectList &children)
 {
     if (children.isEmpty())
-        return 0;
+        return nullptr;
 
     bool onlyWidgets = (inheritsClass
                         && qstrcmp(inheritsClass, "QWidget") == 0);
     const QLatin1String oName(objName);
 
-    for (int i = 0; i < children.size(); ++i)
+    foreach (auto obj, children)
     {
-        QObject *obj = children.at(i);
-
         if (onlyWidgets)
         {
             if (obj->isWidgetType() && (!objName || obj->objectName() == oName))
@@ -131,36 +111,36 @@ static QObject *qChildHelper(const char *objName, const char *inheritsClass,
                  && (!objName || obj->objectName() == oName))
             return obj;
 
-        if (recursiveSearch && (dynamic_cast<MythUIGroup *>(obj) != NULL)
+        if (recursiveSearch && (dynamic_cast<MythUIGroup *>(obj) != nullptr)
             && (obj = qChildHelper(objName, inheritsClass,
                                    recursiveSearch,
                                    obj->children())))
             return obj;
     }
 
-    return 0;
+    return nullptr;
 }
 
 /**
  *  \brief Get a named child of this UIType
  *
- *  \param Name of child
- *  \return Pointer to child if found, or NULL
+ *  \param name Name of child
+ *  \return Pointer to child if found, or nullptr
  */
 MythUIType *MythUIType::GetChild(const QString &name) const
 {
-    QObject *ret = qChildHelper(name.toLatin1().constData(), NULL, true, children());
+    QObject *ret = qChildHelper(name.toLatin1().constData(), nullptr, true, children());
 
     if (ret)
         return dynamic_cast<MythUIType *>(ret);
 
-    return NULL;
+    return nullptr;
 }
 
 /**
  *  \brief Delete a named child of this UIType
  *
- *  \param Name of child
+ *  \param name Name of child
  */
 void MythUIType::DeleteChild(const QString &name)
 {
@@ -184,7 +164,7 @@ void MythUIType::DeleteChild(const QString &name)
  *  \brief Delete the given UIType if it is a child of this UIType.
  *
  *  Will not delete the object if it is not a child. Pointer will be set to
- *  NULL if successful.
+ *  nullptr if successful.
  */
 void MythUIType::DeleteChild(MythUIType *child)
 {
@@ -202,7 +182,7 @@ void MythUIType::DeleteChild(MythUIType *child)
         {
             delete type;
             it.remove();
-            child = NULL;
+            child = nullptr;
             return;
         }
     }
@@ -230,11 +210,11 @@ void MythUIType::DeleteAllChildren(void)
     m_ChildrenList.clear();
 }
 
-/** \brief Return the first MythUIType which accepts focus found at the given
- *         coordinates
+/** \brief Return the first MythUIType at the given coordinates
  *
  *  \param p QPoint coordinates
  *  \param recursive Whether to perform a recursive search
+ *  \param focusable Only consider widgets that are focusable.
  *
  *  \return The widget at these coordinates
  */
@@ -244,10 +224,10 @@ MythUIType *MythUIType::GetChildAt(const QPoint &p, bool recursive,
     if (GetArea().contains(p))
     {
         if (!IsVisible() || !IsEnabled())
-            return NULL;
+            return nullptr;
 
         if (m_ChildrenList.isEmpty())
-            return NULL;
+            return nullptr;
 
         /* check all children */
         QList<MythUIType *>::const_iterator it;
@@ -282,7 +262,7 @@ MythUIType *MythUIType::GetChildAt(const QPoint &p, bool recursive,
         }
     }
 
-    return NULL;
+    return nullptr;
 }
 
 void MythUIType::ActivateAnimations(MythUIAnimation::Trigger trigger)
@@ -425,16 +405,16 @@ void MythUIType::HandleAlphaPulse(void)
     if (m_AlphaChangeMode == 0)
         return;
 
-    m_Effects.alpha += m_AlphaChange;
+    m_Effects.m_alpha += m_AlphaChange;
 
-    if (m_Effects.alpha > m_AlphaMax)
-        m_Effects.alpha = m_AlphaMax;
+    if (m_Effects.m_alpha > m_AlphaMax)
+        m_Effects.m_alpha = m_AlphaMax;
 
-    if (m_Effects.alpha < m_AlphaMin)
-        m_Effects.alpha = m_AlphaMin;
+    if (m_Effects.m_alpha < m_AlphaMin)
+        m_Effects.m_alpha = m_AlphaMin;
 
     // Reached limits so change direction
-    if (m_Effects.alpha == m_AlphaMax || m_Effects.alpha == m_AlphaMin)
+    if (m_Effects.m_alpha == m_AlphaMax || m_Effects.m_alpha == m_AlphaMin)
     {
         if (m_AlphaChangeMode == 2)
         {
@@ -477,10 +457,11 @@ void MythUIType::Pulse(void)
 
 int MythUIType::CalcAlpha(int alphamod)
 {
-    return (int)(m_Effects.alpha * (alphamod / 255.0));
+    return (int)(m_Effects.m_alpha * (alphamod / 255.0));
 }
 
-void MythUIType::DrawSelf(MythPainter *, int, int, int, QRect)
+void MythUIType::DrawSelf(MythPainter * /*p*/, int /*xoffset*/, int /*yoffset*/,
+                          int /*alphaMod*/, QRect /*clipRect*/)
 {
 }
 
@@ -515,10 +496,10 @@ void MythUIType::Draw(MythPainter *p, int xoffset, int yoffset, int alphaMod,
 
     if (p->ShowBorders())
     {
-        static const QBrush nullbrush(Qt::NoBrush);
+        static const QBrush kNullBrush(Qt::NoBrush);
         QPen pen(m_BorderColor);
         pen.setWidth(1);
-        p->DrawRect(realArea, nullbrush, pen, 255);
+        p->DrawRect(realArea, kNullBrush, pen, 255);
 
         if (p->ShowTypeNames())
         {
@@ -602,7 +583,7 @@ QSize MythUIType::GetMinSize(void) const
     if (!m_MinSize.isValid())
         return m_Area.size();
 
-    return QSize(m_MinSize.x(), m_MinSize.y());
+    return {m_MinSize.x(), m_MinSize.y()};
 }
 
 void MythUIType::SetArea(const MythRect &rect)
@@ -705,7 +686,10 @@ void MythUIType::VanishSibling(void)
 void MythUIType::SetMinAreaParent(MythRect actual_area, MythRect allowed_area,
                                   MythUIType *calling_child)
 {
-    int delta_x = 0, delta_y = 0, delta_w = 0, delta_h = 0;
+    int delta_x = 0;
+    int delta_y = 0;
+    int delta_w = 0;
+    int delta_h = 0;
     MythRect area;
 
     // If a minsize is not set, don't use MinArea
@@ -931,30 +915,30 @@ void MythUIType::AdjustAlpha(int mode, int alphachange, int minalpha,
     m_AlphaMin = minalpha;
     m_AlphaMax = maxalpha;
 
-    if (m_Effects.alpha > m_AlphaMax)
-        m_Effects.alpha = m_AlphaMax;
+    if (m_Effects.m_alpha > m_AlphaMax)
+        m_Effects.m_alpha = m_AlphaMax;
 
-    if (m_Effects.alpha < m_AlphaMin)
-        m_Effects.alpha = m_AlphaMin;
+    if (m_Effects.m_alpha < m_AlphaMin)
+        m_Effects.m_alpha = m_AlphaMin;
 }
 
 void MythUIType::SetAlpha(int newalpha)
 {
-    if (m_Effects.alpha == newalpha)
+    if (m_Effects.m_alpha == newalpha)
         return;
 
-    m_Effects.alpha = newalpha;
+    m_Effects.m_alpha = newalpha;
     SetRedraw();
 }
 
 int MythUIType::GetAlpha(void) const
 {
-    return m_Effects.alpha;
+    return m_Effects.m_alpha;
 }
 
 void MythUIType::SetCentre(UIEffects::Centre centre)
 {
-    m_Effects.centre = centre;
+    m_Effects.m_centre = centre;
 }
 
 void MythUIType::SetZoom(float zoom)
@@ -965,19 +949,19 @@ void MythUIType::SetZoom(float zoom)
 
 void MythUIType::SetHorizontalZoom(float zoom)
 {
-    m_Effects.hzoom = zoom;
+    m_Effects.m_hzoom = zoom;
     SetRedraw();
 }
 
 void MythUIType::SetVerticalZoom(float zoom)
 {
-    m_Effects.vzoom = zoom;
+    m_Effects.m_vzoom = zoom;
     SetRedraw();
 }
 
 void MythUIType::SetAngle(float angle)
 {
-    m_Effects.angle = angle;
+    m_Effects.m_angle = angle;
     SetRedraw();
 }
 
@@ -985,15 +969,15 @@ void MythUIType::SetAngle(float angle)
  *
  *  \param event Keypress event
  */
-bool MythUIType::keyPressEvent(QKeyEvent *)
+bool MythUIType::keyPressEvent(QKeyEvent * /*event*/)
 {
     return false;
 }
 
 
-void MythUIType::customEvent(QEvent *)
+void MythUIType::customEvent(QEvent *event)
 {
-    return;
+    QObject::customEvent(event);
 }
 
 /** \brief Mouse click/movement handler, receives mouse gesture events from the
@@ -1001,7 +985,7 @@ void MythUIType::customEvent(QEvent *)
  *
  *  \param event Mouse event
  */
-bool MythUIType::gestureEvent(MythGestureEvent *)
+bool MythUIType::gestureEvent(MythGestureEvent * /*event*/)
 {
     return false;
 }
@@ -1010,9 +994,8 @@ bool MythUIType::gestureEvent(MythGestureEvent *)
  *
  *  \param event Media event
  */
-void MythUIType::mediaEvent(MythMediaEvent *)
+void MythUIType::mediaEvent(MythMediaEvent * /*event*/)
 {
-    return;
 }
 
 void MythUIType::LoseFocus(void)
@@ -1053,6 +1036,7 @@ void MythUIType::UpdateDependState(MythUIType *dependee, bool isDefault)
     {
         bool reverse = m_ReverseDepend[dependee];
         visible = reverse ? !isDefault : isDefault;
+        // NOLINTNEXTLINE(modernize-loop-convert)
         for (int i = 0; i < m_dependsValue.size(); i++)
         {
             if (m_dependsValue[i].first != dependee)
@@ -1062,7 +1046,7 @@ void MythUIType::UpdateDependState(MythUIType *dependee, bool isDefault)
         }
     }
 
-    if (m_dependsValue.size() > 0)
+    if (!m_dependsValue.empty())
         visible = m_dependsValue[0].second;
     for (int i = 1; i <  m_dependsValue.size(); i++)
     {
@@ -1088,7 +1072,7 @@ void MythUIType::UpdateDependState(MythUIType *dependee, bool isDefault)
 
 void MythUIType::UpdateDependState(bool isDefault)
 {
-    MythUIType *dependee = static_cast<MythUIType*>(sender());
+    auto *dependee = static_cast<MythUIType*>(sender());
 
     UpdateDependState(dependee, isDefault);
 }
@@ -1147,14 +1131,14 @@ void MythUIType::AddFocusableChildrenToList(QMap<int, MythUIType *> &focusList)
         (*it)->AddFocusableChildrenToList(focusList);
 }
 
-int MythUIType::NormX(const int x)
+int MythUIType::NormX(const int width)
 {
-    return GetMythMainWindow()->NormX(x);
+    return GetMythMainWindow()->NormX(width);
 }
 
-int MythUIType::NormY(const int y)
+int MythUIType::NormY(const int height)
 {
-    return GetMythMainWindow()->NormY(y);
+    return GetMythMainWindow()->NormY(height);
 }
 
 /**
@@ -1190,7 +1174,7 @@ void MythUIType::CopyFrom(MythUIType *base)
     QList<MythUIAnimation*>::Iterator i;
     for (i = base->m_animations.begin(); i != base->m_animations.end(); ++i)
     {
-        MythUIAnimation* animation = new MythUIAnimation(this);
+        auto* animation = new MythUIAnimation(this);
         animation->CopyFrom(*i);
         m_animations.push_back(animation);
     }
@@ -1217,7 +1201,7 @@ void MythUIType::CopyFrom(MythUIType *base)
  *  \brief Copy the state of this widget to the one given, it must be of the
  *         same type.
  */
-void MythUIType::CreateCopy(MythUIType *)
+void MythUIType::CreateCopy(MythUIType * /*parent*/)
 {
     // Calling CreateCopy on base type is not valid
 }
@@ -1250,17 +1234,17 @@ bool MythUIType::ParseElement(
     }
     else if (element.tagName() == "alpha")
     {
-        m_Effects.alpha = getFirstText(element).toInt();
+        m_Effects.m_alpha = getFirstText(element).toInt();
         m_AlphaChangeMode = 0;
     }
     else if (element.tagName() == "alphapulse")
     {
         m_AlphaChangeMode = 2;
         m_AlphaMin = element.attribute("min", "0").toInt();
-        m_Effects.alpha = m_AlphaMax = element.attribute("max", "255").toInt();
+        m_Effects.m_alpha = m_AlphaMax = element.attribute("max", "255").toInt();
 
         if (m_AlphaMax > 255)
-            m_Effects.alpha = m_AlphaMax = 255;
+            m_Effects.m_alpha = m_AlphaMax = 255;
 
         if (m_AlphaMin < 0)
             m_AlphaMin = 0;
@@ -1284,8 +1268,13 @@ bool MythUIType::ParseElement(
     {
         MythUIAnimation::ParseElement(element, this);
     }
-    else
+    else {
+        if (showWarnings) {
+            VERBOSE_XML(VB_GENERAL, LOG_ERR, filename, element,
+                        QString("Unknown widget type '%1'").arg(element.tagName()));
+        }
         return false;
+    }
 
     return true;
 }
@@ -1399,10 +1388,7 @@ void MythUIType::LoadNow(void)
  */
 bool MythUIType::ContainsPoint(const QPoint &point) const
 {
-    if (m_Area.contains(point))
-        return true;
-
-    return false;
+    return m_Area.contains(point);
 }
 
 MythPainter *MythUIType::GetPainter(void)
@@ -1418,7 +1404,7 @@ MythPainter *MythUIType::GetPainter(void)
 
 void MythUIType::SetDependsMap(QMap<QString, QString> dependsMap)
 {
-    m_dependsMap = dependsMap;
+    m_dependsMap = std::move(dependsMap);
 }
 
 void MythUIType::SetReverseDependence(MythUIType *dependee, bool reverse)
@@ -1484,11 +1470,11 @@ void MythUIType::ConnectDependants(bool recurse)
 
     if (recurse)
     {
-        QList<MythUIType *>::iterator it;
-        for (it = m_ChildrenList.begin(); it != m_ChildrenList.end(); ++it)
+        QList<MythUIType *>::iterator child;
+        for (child = m_ChildrenList.begin(); child != m_ChildrenList.end(); ++child)
         {
-            if (*it)
-                (*it)->ConnectDependants(recurse);
+            if (*child)
+                (*child)->ConnectDependants(recurse);
         }
     }
 }

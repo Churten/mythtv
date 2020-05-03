@@ -9,7 +9,7 @@
 #define LOC QString("BDScreen: ")
 
 BDOverlayScreen::BDOverlayScreen(MythPlayer *player, const QString &name)
-  : MythScreenType((MythScreenType*)NULL, name),
+  : MythScreenType((MythScreenType*)nullptr, name),
     m_player(player)
 {
 }
@@ -24,15 +24,16 @@ void BDOverlayScreen::DisplayBDOverlay(BDOverlay *overlay)
     if (!overlay || !m_player)
         return;
 
-    MythRect rect(overlay->x, overlay->y, overlay->image.width(), overlay->image.height());
+    MythRect rect(overlay->m_x, overlay->m_y,
+                  overlay->m_image.width(), overlay->m_image.height());
     SetArea(rect);
     DeleteAllChildren();
 
-    VideoOutput *vo = m_player->GetVideoOutput();
+    MythVideoOutput *vo = m_player->GetVideoOutput();
     if (!vo)
         return;
 
-    QImage& img = overlay->image;
+    QImage& img = overlay->m_image;
 
     // add to screen
     QRect scaled = vo->GetImageRect(rect);
@@ -43,14 +44,14 @@ void BDOverlayScreen::DisplayBDOverlay(BDOverlay *overlay)
     }
 
     MythPainter *osd_painter = vo->GetOSDPainter();
-    MythImage* image = NULL;
+    MythImage* image = nullptr;
     if (osd_painter)
          image = osd_painter->GetFormatImage();
 
     if (image)
     {
         image->Assign(img);
-        MythUIImage *uiimage = new MythUIImage(this, "bdoverlay");
+        auto *uiimage = new MythUIImage(this, "bdoverlay");
         if (uiimage)
         {
             uiimage->SetImage(image);

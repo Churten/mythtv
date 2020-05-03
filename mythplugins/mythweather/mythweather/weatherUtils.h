@@ -1,13 +1,15 @@
 #ifndef _WEATHERUTILS_H_
 #define _WEATHERUTILS_H_
 
+#include <utility>
+
 // QT headers
-#include <QMap>
-#include <QMultiHash>
-#include <QString>
 #include <QDomElement>
 #include <QFile>
+#include <QMap>
 #include <QMetaType>
+#include <QMultiHash>
+#include <QString>
 
 // MythTV headers
 #include <mythcontext.h>
@@ -19,93 +21,56 @@
 
 class ScriptInfo;
 
-typedef unsigned char units_t;
-typedef QMap<QString, QString> DataMap;
+using units_t = unsigned char;
+using DataMap = QMap<QString, QString>;
 
 class TypeListInfo
 {
   public:
 
-    TypeListInfo(const TypeListInfo& info)
-        : name(info.name), location(info.location), src(info.src)
-    {
-        name.detach();
-        location.detach();
-    }
-
-    explicit TypeListInfo(const QString &_name)
-        : name(_name), location(QString::null), src(NULL)
-    {
-        name.detach();
-    }
-    TypeListInfo(const QString &_name, const QString &_location)
-        : name(_name), location(_location), src(NULL)
-    {
-        name.detach();
-        location.detach();
-    }
-    TypeListInfo(const QString &_name, const QString &_location,
+    TypeListInfo(const TypeListInfo& info) = default;
+    explicit TypeListInfo(QString _name)
+        : m_name(std::move(_name)) {}
+    TypeListInfo(QString _name, QString _location)
+        : m_name(std::move(_name)), m_location(std::move(_location)) {}
+    TypeListInfo(QString _name, QString _location,
                  ScriptInfo *_src)
-        : name(_name), location(_location), src(_src)
-    {
-        name.detach();
-        location.detach();
-    }
+        : m_name(std::move(_name)), m_location(std::move(_location)), m_src(_src) {}
 
   public:
-    QString name;
-    QString location;
-    ScriptInfo *src;
+    QString     m_name;
+    QString     m_location;
+    ScriptInfo *m_src      {nullptr};
 };
-typedef QMultiHash<QString, TypeListInfo> TypeListMap;
+using TypeListMap = QMultiHash<QString, TypeListInfo>;
 
 class ScreenListInfo
 {
   public:
-    ScreenListInfo() :
-        units(SI_UNITS),
-        hasUnits(false),
-        multiLoc(false)
-    {
-        updating = false;
-    }
-
-    ScreenListInfo(const ScreenListInfo& info) :
-        name(info.name),
-        title(info.title),
-        types(info.types),
-        dataTypes(info.dataTypes),
-        helptxt(info.helptxt),
-        sources(info.sources),
-        units(info.units),
-        hasUnits(info.hasUnits),
-        multiLoc(info.multiLoc),
-        updating(info.updating)
-    {
-      types.detach();
-    }
+    ScreenListInfo() = default;
+    ScreenListInfo(const ScreenListInfo& info) = default;
 
     TypeListInfo GetCurrentTypeList(void) const;
 
   public:
-    QString name;
-    QString title;
-    TypeListMap types;
-    QStringList dataTypes;
-    QString helptxt;
-    QStringList sources;
-    units_t units;
-    bool hasUnits;
-    bool multiLoc;
-    bool updating;
+    QString     m_name;
+    QString     m_title;
+    TypeListMap m_types;
+    QStringList m_dataTypes;
+    QString     m_helptxt;
+    QStringList m_sources;
+    units_t     m_units    {SI_UNITS};
+    bool        m_hasUnits {false};
+    bool        m_multiLoc {false};
+    bool        m_updating {false};
 };
 
 Q_DECLARE_METATYPE(ScreenListInfo *);
 
-typedef QMap<QString, ScreenListInfo> ScreenListMap;
+using ScreenListMap = QMap<QString, ScreenListInfo>;
 
 ScreenListMap loadScreens();
-QStringList loadScreen(QDomElement ScreenListInfo);
+QStringList loadScreen(const QDomElement& ScreenListInfo);
 bool doLoadScreens(const QString &filename, ScreenListMap &screens);
 
 #endif

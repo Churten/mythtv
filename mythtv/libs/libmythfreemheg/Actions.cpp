@@ -19,7 +19,7 @@
 
 */
 
-#include <stdio.h>
+#include <cstdio>
 
 #include "BaseActions.h"
 #include "Actions.h"
@@ -44,16 +44,16 @@
 class MHUnimplementedAction: public MHElemAction
 {
   public:
-    MHUnimplementedAction(int nTag): MHElemAction(""), m_nTag(nTag)
+    explicit MHUnimplementedAction(int nTag): MHElemAction(""), m_nTag(nTag)
     {
         MHLOG(MHLogWarning, QString("WARN Unimplemented action %1").arg(m_nTag) );
     }
-    virtual void Initialise(MHParseNode *, MHEngine *) {}
-    virtual void PrintMe(FILE *fd, int /*nTabs*/) const
+    void Initialise(MHParseNode * /*p*/, MHEngine * /*engine*/) override {} // MHElemAction
+    void PrintMe(FILE *fd, int /*nTabs*/) const override // MHElemAction
     {
         fprintf(fd, "****Missing action %d\n", m_nTag);
     }
-    virtual void Perform(MHEngine *)
+    void Perform(MHEngine * /*engine*/) override // MHElemAction
     {
         MHERROR(QString("Unimplemented action %1").arg(m_nTag));
     }
@@ -70,7 +70,7 @@ void MHActionSequence::Initialise(MHParseNode *p, MHEngine *engine)
     for (int i = 0; i < p->GetArgCount(); i++)
     {
         MHParseNode *pElemAction = p->GetArgN(i);
-        MHElemAction *pAction;
+        MHElemAction *pAction = nullptr;
 
         switch (pElemAction->GetTagNo())
         {
@@ -176,12 +176,10 @@ void MHActionSequence::Initialise(MHParseNode *p, MHEngine *engine)
             case C_GET_ITEM_STATUS:
                 pAction = new MHGetItemStatus;
                 break;
-            case C_GET_LABEL:
+            case C_GET_LABEL:             // PushButton
+            case C_GET_LAST_ANCHOR_FIRED: // HyperText
                 pAction = new MHUnimplementedAction(pElemAction->GetTagNo());
-                break;// PushButton
-            case C_GET_LAST_ANCHOR_FIRED:
-                pAction = new MHUnimplementedAction(pElemAction->GetTagNo());
-                break;// HyperText
+                break;
             case C_GET_LINE_COLOUR:
                 pAction = new MHGetLineColour;
                 break;
@@ -291,23 +289,17 @@ void MHActionSequence::Initialise(MHParseNode *p, MHEngine *engine)
                 pAction = new MHSetBoxSize;
                 break;
             case C_SET_CACHE_PRIORITY:
+            case C_SET_COUNTER_END_POSITION: // Stream
                 pAction = new MHUnimplementedAction(pElemAction->GetTagNo());
-                break; // ?
-            case C_SET_COUNTER_END_POSITION:
-                pAction = new MHUnimplementedAction(pElemAction->GetTagNo());
-                break; // Stream
+                break;
             case C_SET_COUNTER_POSITION:
                 pAction = new MHSetCounterPosition;
                 break; // Stream
-            case C_SET_COUNTER_TRIGGER:
-                pAction = new MHUnimplementedAction(pElemAction->GetTagNo());
-                break; // Stream
+            case C_SET_COUNTER_TRIGGER: // Stream
             case C_SET_CURSOR_POSITION:
-                pAction = new MHUnimplementedAction(pElemAction->GetTagNo());
-                break; // ?
             case C_SET_CURSOR_SHAPE:
                 pAction = new MHUnimplementedAction(pElemAction->GetTagNo());
-                break; // ?
+                break;
             case C_SET_DATA:
                 pAction = new MHSetData;
                 break;
@@ -341,12 +333,10 @@ void MHActionSequence::Initialise(MHParseNode *p, MHEngine *engine)
             case C_SET_LINE_WIDTH:
                 pAction = new MHSetLineWidth;
                 break;
-            case C_SET_OVERWRITE_MODE:
+            case C_SET_OVERWRITE_MODE: // EntryField
+            case C_SET_PALETTE_REF:    // Visible
                 pAction = new MHUnimplementedAction(pElemAction->GetTagNo());
-                break; // EntryField
-            case C_SET_PALETTE_REF:
-                pAction = new MHUnimplementedAction(pElemAction->GetTagNo());
-                break; // Visible
+                break;
             case C_SET_PORTION:
                 pAction = new MHSetPortion;
                 break;
@@ -426,10 +416,8 @@ void MHActionSequence::Initialise(MHParseNode *p, MHEngine *engine)
             case C_GET_VIDEO_DECODE_OFFSET:
                 pAction = new MHGetVideoDecodeOffset;
                 break;
-            case C_GET_FOCUS_POSITION:
-                pAction = new MHUnimplementedAction(pElemAction->GetTagNo());
-                break; // HyperText
-            case C_SET_FOCUS_POSITION:
+            case C_GET_FOCUS_POSITION: // HyperText
+            case C_SET_FOCUS_POSITION: // HyperText
                 pAction = new MHUnimplementedAction(pElemAction->GetTagNo());
                 break; // HyperText
             case C_SET_BITMAP_DECODE_OFFSET:
@@ -454,7 +442,7 @@ void MHActionSequence::Initialise(MHParseNode *p, MHEngine *engine)
                 MHLOG(MHLogWarning, QString("WARN Unknown action %1").arg(pElemAction->GetTagNo()));
                 // Future proofing: ignore any actions that we don't know about.
                 // Obviously these can only arise in the binary coding.
-                pAction = NULL;
+                pAction = nullptr;
         }
 
         if (pAction)

@@ -1,12 +1,13 @@
 #ifndef GAMESCAN_H
 #define GAMESCAN_H
 
-#include <set>
 #include <map>
+#include <set>
+#include <utility>
 
+#include <QMap>
 #include <QObject> // for moc
 #include <QStringList>
-#include <QMap>
 
 #include "mthread.h"
 
@@ -23,27 +24,27 @@ struct RomFileInfo
     QString romfile;
     QString rompath;
     QString romname;
-    bool indb;
+    bool    indb     { false };
 };
 
-typedef QList< RomFileInfo > RomFileInfoList;
+using RomFileInfoList = QList< RomFileInfo >;
 
 class GameScannerThread : public MThread
 {
   public:
-    explicit GameScannerThread(QObject *parent);
-    ~GameScannerThread();
+    explicit GameScannerThread(void);
+    ~GameScannerThread() override = default;
 
-    virtual void run(void); // MThread
+    void run(void) override; // MThread
 
-    void SetHandlers(QList<GameHandler*> handlers) { m_handlers = handlers; };
+    void SetHandlers(QList<GameHandler*> handlers) { m_handlers = std::move(handlers); };
     void SetProgressDialog(MythUIProgressDialog *dialog) { m_dialog = dialog; };
 
-    bool getDataChanged() { return m_DBDataChanged; };
+    bool getDataChanged() { return m_dbDataChanged; };
 
   private:
 
-    void removeOrphan(const int id);
+    static void removeOrphan(int id);
 
     void verifyFiles();
     void updateDB();
@@ -53,8 +54,7 @@ class GameScannerThread : public MThread
     void SendProgressEvent(uint progress, uint total = 0,
                            QString message = QString());
 
-    QObject *m_parent;
-    bool m_HasGUI;
+    bool m_hasGUI;
 
     QList<GameHandler*> m_handlers;
 
@@ -62,9 +62,9 @@ class GameScannerThread : public MThread
     QList<uint> m_remove;
     QList<RomInfo*> m_dbgames;
 
-    MythUIProgressDialog *m_dialog;
+    MythUIProgressDialog *m_dialog        {nullptr};
 
-    bool m_DBDataChanged;
+    bool                  m_dbDataChanged {false};
 };
 
 class GameScanner : public QObject
@@ -73,7 +73,7 @@ class GameScanner : public QObject
 
   public:
     GameScanner();
-    ~GameScanner();
+    ~GameScanner() override;
 
     void doScan(QList<GameHandler*> handlers);
     void doScanAll(void);

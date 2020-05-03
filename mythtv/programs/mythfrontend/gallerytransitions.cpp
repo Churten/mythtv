@@ -1,15 +1,18 @@
 #include "gallerytransitions.h"
 
+#include <utility>
+
 #include "mythcorecontext.h"
 
+#if QT_VERSION >= QT_VERSION_CHECK(5,10,0)
+#include <QRandomGenerator>
+#endif
 
 #define LOC QString("Transition: ")
 
 
-Transition::Transition(QString name)
-    : QObject(),
-      m_duration(gCoreContext->GetNumSetting("GalleryTransitionTime", 1000)),
-      m_old(NULL), m_new(NULL), m_prev(NULL), m_next(NULL)
+Transition::Transition(const QString& name)
+    : m_duration(gCoreContext->GetNumSetting("GalleryTransitionTime", 1000))
 {
     setObjectName(name);
 }
@@ -29,9 +32,9 @@ Transition &TransitionRegistry::Select(int setting)
 
     // If chosen transition isn't viable for painter then use previous ones.
     // First transition must always be useable by all painters
-    Transition *result = NULL;
+    Transition *result = nullptr;
     do
-        result = m_map.value(value--, NULL);
+        result = m_map.value(value--, nullptr);
     while (value >= kNoTransition && !result);
 
     if (result)
@@ -49,7 +52,6 @@ Transition &TransitionRegistry::Select(int setting)
  \param includeAnimations Whether to use animated transitions (zoom, rotate)
 */
 TransitionRegistry::TransitionRegistry(bool includeAnimations)
-    : m_immediate()
 {
     // Create all non-animated transitions to be used by Random
     m_map.insert(kBlendTransition, new TransitionBlend());
@@ -139,8 +141,10 @@ void TransitionNone::Start(Slide &from, Slide &to,
 /*!
  \brief Create group transition
  \param animation Group animation
+ \param name The name for this transition. This string will be used in
+             log messages.
 */
-GroupTransition::GroupTransition(GroupAnimation *animation, QString name)
+GroupTransition::GroupTransition(GroupAnimation *animation, const QString& name)
     : Transition(name), m_animation(animation)
 {
     // Complete transition when the group finishes
@@ -207,12 +211,12 @@ void GroupTransition::Pulse(int interval)
 void TransitionBlend::Initialise()
 {
     // Fade out prev image
-    Animation *oldPic = new Animation(m_prev, Animation::Alpha);
+    auto *oldPic = new Animation(m_prev, Animation::Alpha);
     oldPic->Set(255, 0, m_duration, QEasingCurve::InOutQuad);
     m_animation->Add(oldPic);
 
     // Fade in next image
-    Animation *newPic = new Animation(m_next, Animation::Alpha);
+    auto *newPic = new Animation(m_next, Animation::Alpha);
     newPic->Set(0, 255, m_duration, QEasingCurve::InOutQuad);
     m_animation->Add(newPic);
 
@@ -237,12 +241,12 @@ void TransitionBlend::Finalise()
 void TransitionTwist::Initialise()
 {
     // Reduce hzoom of left image to nothing
-    Animation *oldPic = new Animation(m_prev, Animation::HorizontalZoom);
+    auto *oldPic = new Animation(m_prev, Animation::HorizontalZoom);
     oldPic->Set(1.0, 0.0, m_duration / 2, QEasingCurve::InQuart);
     m_animation->Add(oldPic);
 
     // Increase hzoom of right image from nothing to full
-    Animation *newPic = new Animation(m_next, Animation::HorizontalZoom);
+    auto *newPic = new Animation(m_next, Animation::HorizontalZoom);
     newPic->Set(0.0, 1.0, m_duration / 2, QEasingCurve::OutQuart);
     m_animation->Add(newPic);
 
@@ -270,12 +274,12 @@ void TransitionSlide::Initialise()
     int width = m_old->GetArea().width();
 
     // Slide off to left
-    Animation *oldPic = new Animation(m_prev, Animation::Position);
+    auto *oldPic = new Animation(m_prev, Animation::Position);
     oldPic->Set(QPoint(0, 0), QPoint(-width, 0), m_duration, QEasingCurve::InOutQuart);
     m_animation->Add(oldPic);
 
     // Slide in from right
-    Animation *newPic = new Animation(m_next, Animation::Position);
+    auto *newPic = new Animation(m_next, Animation::Position);
     newPic->Set(QPoint(width, 0), QPoint(0, 0), m_duration, QEasingCurve::InOutQuart);
     m_animation->Add(newPic);
 
@@ -303,21 +307,21 @@ void TransitionZoom::Initialise()
     int width = m_old->GetArea().width();
 
     // Zoom away to left
-    Animation *oldZoom = new Animation(m_prev, Animation::Zoom);
+    auto *oldZoom = new Animation(m_prev, Animation::Zoom);
     oldZoom->Set(1.0, 0.0, m_duration, QEasingCurve::OutQuad);
     m_animation->Add(oldZoom);
 
-    Animation *oldMove = new Animation(m_prev, Animation::Position);
+    auto *oldMove = new Animation(m_prev, Animation::Position);
     oldMove->Set(QPoint(0, 0), QPoint(-width / 2, 0), m_duration,
                  QEasingCurve::InQuad);
     m_animation->Add(oldMove);
 
     // Zoom in from right
-    Animation *newZoom = new Animation(m_next, Animation::Zoom);
+    auto *newZoom = new Animation(m_next, Animation::Zoom);
     newZoom->Set(0.0, 1.0, m_duration, QEasingCurve::InQuad);
     m_animation->Add(newZoom);
 
-    Animation *newMove = new Animation(m_next, Animation::Position);
+    auto *newMove = new Animation(m_next, Animation::Position);
     newMove->Set(QPoint(width / 2, 0), QPoint(0, 0), m_duration,
                  QEasingCurve::OutQuad);
     m_animation->Add(newMove);
@@ -348,7 +352,7 @@ void TransitionSpin::Initialise()
     TransitionBlend::Initialise();
 
     // Add simultaneous spin
-    Animation *an = new Animation(m_prev, Animation::Angle);
+    auto *an = new Animation(m_prev, Animation::Angle);
     an->Set(0.0, 360.1, m_duration, QEasingCurve::InOutQuad);
     m_animation->Add(an);
 
@@ -357,7 +361,7 @@ void TransitionSpin::Initialise()
     m_animation->Add(an);
 
     // Zoom prev away, then back
-    SequentialAnimation *seq = new SequentialAnimation();
+    auto *seq = new SequentialAnimation();
     m_animation->Add(seq);
 
     an = new Animation(m_prev, Animation::Zoom);
@@ -407,7 +411,11 @@ void TransitionSpin::Finalise()
 void TransitionRandom::Start(Slide &from, Slide &to, bool forwards, float speed)
 {
     // Select a random peer.
+#if QT_VERSION >= QT_VERSION_CHECK(5,10,0)
+    int rand = QRandomGenerator::global()->bounded(m_peers.size());
+#else
     int rand = qrand() % m_peers.size();
+#endif
     m_current = m_peers[rand];
     // Invoke peer
     connect(m_current, SIGNAL(finished()), this, SLOT(Finished()));
@@ -421,8 +429,8 @@ void TransitionRandom::Start(Slide &from, Slide &to, bool forwards, float speed)
 void TransitionRandom::Finished()
 {
     // Clean up
-    disconnect(m_current, 0, 0, 0);
-    m_current = NULL;
+    disconnect(m_current, nullptr, nullptr, nullptr);
+    m_current = nullptr;
     emit finished();
 }
 

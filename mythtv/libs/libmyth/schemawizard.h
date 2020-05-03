@@ -27,9 +27,9 @@ class MPUBLIC SchemaUpgradeWizard : public QObject, public DBUtil
     Q_OBJECT
 
   public:
-    SchemaUpgradeWizard(const QString &DBSchemaSetting, const QString &appName,
-                        const QString &upgradeSchemaVal);
-    ~SchemaUpgradeWizard();
+    SchemaUpgradeWizard(QString DBSchemaSetting, QString appName,
+                        QString upgradeSchemaVal);
+    ~SchemaUpgradeWizard() override;
 
 
     /// Call DBUtil::BackupDB(), and store results
@@ -46,27 +46,27 @@ class MPUBLIC SchemaUpgradeWizard : public QObject, public DBUtil
 
     /// Query user, to prevent silent, automatic database upgrades
     enum MythSchemaUpgrade PromptForUpgrade(const char *name,
-                                            const bool upgradeAllowed,
-                                            const bool upgradeIfNoUI,
-                                            const int  minDMBSmajor = 0,
-                                            const int  minDBMSminor = 0,
-                                            const int  minDBMSpoint = 0);
+                                            bool upgradeAllowed,
+                                            bool upgradeIfNoUI,
+                                            int  minDBMSmajor = 0,
+                                            int  minDBMSminor = 0,
+                                            int  minDBMSpoint = 0);
 
-    QString DBver;            ///< Schema version in the database
-    bool    emptyDB;          ///< Is the database currently empty?
-    int     versionsBehind;   ///< How many schema versions old is the DB?
+    QString m_DBver;               ///< Schema version in the database
+    bool    m_emptyDB {false};     ///< Is the database currently empty?
+    int     m_versionsBehind {-1}; ///< How many schema versions old is the DB?
 
-    MythDBBackupStatus backupStatus;   ///< BackupDB() status
+    MythDBBackupStatus m_backupStatus{kDB_Backup_Unknown}; ///< BackupDB() status
 
   private:
     void              BusyPopup(const QString &message);
-    MythSchemaUpgrade GuiPrompt(const QString &message,
+    static MythSchemaUpgrade GuiPrompt(const QString &message,
                                 bool upgradable, bool expert);
 
-    bool              m_autoUpgrade;        ///< If no UI, always upgrade
+    bool              m_autoUpgrade {false};///< If no UI, always upgrade
     QString           m_backupResult;       ///< File path, or __FAILED__
-    MythUIBusyDialog *m_busyPopup;          ///< Displayed during long pauses
-    bool              m_expertMode;         ///< Also allow newer DB schema
+    MythUIBusyDialog *m_busyPopup {nullptr};///< Displayed during long pauses
+    bool              m_expertMode {false}; ///< Also allow newer DB schema
     QString           m_schemaSetting;      ///< To lookup the schema version
     QString           m_schemaName;         ///< Shown to user in logs
     QString           m_newSchemaVer;       ///< What we need to upgrade to

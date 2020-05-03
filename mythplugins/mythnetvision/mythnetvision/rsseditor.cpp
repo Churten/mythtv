@@ -19,6 +19,7 @@
 #include <netutils.h>
 #include <rssparse.h>
 #include <mythdownloadmanager.h>
+#include <mythsorthelper.h>
 
 // RSS headers
 #include "rsseditor.h"
@@ -36,30 +37,11 @@ namespace
         QStringList ret;
 
         QList<QByteArray> exts = QImageReader::supportedImageFormats();
-        for (QList<QByteArray>::iterator p = exts.begin(); p != exts.end(); ++p)
-            ret.append(QString("*.").append(*p));
+        foreach (auto & ext, exts)
+            ret.append(QString("*.").append(ext));
 
         return ret;
     }
-}
-
-/** \brief Creates a new RSS Edit Popup
- *  \param parent Pointer to the screen stack
- *  \param name The name of the window
- */
-RSSEditPopup::RSSEditPopup(
-    const QString &url, bool edit,
-    MythScreenStack *parent, const QString &name) :
-    MythScreenType(parent, name),
-    m_site(NULL),
-    m_urlText(url),        m_editing(edit),
-    m_thumbImage(NULL),    m_thumbButton(NULL),
-    m_urlEdit(NULL),       m_titleEdit(NULL),
-    m_descEdit(NULL),      m_authorEdit(NULL),
-    m_okButton(NULL),      m_cancelButton(NULL),
-    m_download(NULL),      m_manager(NULL),
-    m_reply(NULL)
-{
 }
 
 RSSEditPopup::~RSSEditPopup()
@@ -68,7 +50,7 @@ RSSEditPopup::~RSSEditPopup()
     {
         m_manager->disconnect();
         m_manager->deleteLater();
-        m_manager = NULL;
+        m_manager = nullptr;
     }
 }
 
@@ -123,7 +105,7 @@ bool RSSEditPopup::Create(void)
             m_thumbImage->Load();
         }
 
-        if (m_site->GetDownload() == 1)
+        if (m_site->GetDownload())
             m_download->SetCheckState(MythUIStateType::Full);
     }
 
@@ -156,16 +138,12 @@ void RSSEditPopup::ParseAndSave(void)
         QString author = m_authorEdit->GetText();
         QString link = m_urlEdit->GetText();
         QString filename = m_thumbImage->GetFilename();
-
-        bool download;
-        if (m_download->GetCheckState() == MythUIStateType::Full)
-            download = true;
-        else
-            download = false;
+        bool download = m_download->GetCheckState() == MythUIStateType::Full;
 
         removeFromDB(m_urlText, VIDEO_PODCAST);
 
-        RSSSite site(title, filename, VIDEO_PODCAST,
+        std::shared_ptr<MythSortHelper>sh = getMythSortHelper();
+        RSSSite site(title, sh->doTitle(title), filename, VIDEO_PODCAST,
                      desc, link, author, download, MythDate::current());
         if (insertInDB(&site))
             emit Saving();
@@ -184,7 +162,7 @@ void RSSEditPopup::ParseAndSave(void)
 }
 
 QUrl RSSEditPopup::redirectUrl(const QUrl& possibleRedirectUrl,
-                               const QUrl& oldRedirectUrl) const
+                               const QUrl& oldRedirectUrl)
 {
     QUrl redirectUrl;
     if(!possibleRedirectUrl.isEmpty() && possibleRedirectUrl != oldRedirectUrl)
@@ -238,7 +216,7 @@ void RSSEditPopup::SlotSave(QNetworkReply* reply)
         if (description.isEmpty())
             description = channel.firstChildElement("description").text();
         if (author.isEmpty())
-            author = parser.GetAuthor(channel);
+            author = Parse::GetAuthor(channel);
         if (author.isEmpty())
             author = channel.firstChildElement("managingEditor").text();
         if (author.isEmpty())
@@ -266,12 +244,7 @@ void RSSEditPopup::SlotSave(QNetworkReply* reply)
             }
         }
 
-        bool download;
-        if (m_download->GetCheckState() == MythUIStateType::Full)
-            download = true;
-        else
-            download = false;
-
+        bool download = m_download->GetCheckState() == MythUIStateType::Full;
         QDateTime updated = MythDate::current();
         QString filename("");
 
@@ -282,7 +255,8 @@ void RSSEditPopup::SlotSave(QNetworkReply* reply)
 
         QString link = m_urlEdit->GetText();
 
-        RSSSite site(title, filename, VIDEO_PODCAST, description, link,
+        std::shared_ptr<MythSortHelper>sh = getMythSortHelper();
+        RSSSite site(title, sh->doTitle(title), filename, VIDEO_PODCAST, description, link,
                      author, download, MythDate::current());
         if (insertInDB(&site))
             emit Saving();
@@ -302,7 +276,7 @@ void RSSEditPopup::SelectImagePopup(const QString &prefix,
 {
     MythScreenStack *popupStack = GetMythMainWindow()->GetStack("popup stack");
 
-    MythUIFileBrowser *fb = new MythUIFileBrowser(popupStack, prefix);
+    auto *fb = new MythUIFileBrowser(popupStack, prefix);
     fb->SetNameFilter(GetSupportedImageExtensionFilter());
     if (fb->Create())
     {
@@ -317,21 +291,14 @@ void RSSEditPopup::customEvent(QEvent *levent)
 {
     if (levent->type() == DialogCompletionEvent::kEventType)
     {
-        DialogCompletionEvent *dce = (DialogCompletionEvent*)(levent);
-        if (dce->GetId() == CEID_NEWIMAGE)
+        auto *dce = dynamic_cast<DialogCompletionEvent*>(levent);
+        if ((dce != nullptr) && (dce->GetId() == CEID_NEWIMAGE))
         {
             m_thumbImage->SetFilename(dce->GetResultText());
             m_thumbImage->Load();
             m_thumbImage->Show();
         }
     }
-}
-
-RSSEditor::RSSEditor(MythScreenStack *parent, const QString &name) :
-    MythScreenType(parent, name), m_lock(QMutex::Recursive),
-    m_changed(false), m_sites(NULL), m_new(NULL), m_delete(NULL), m_edit(NULL),
-    m_image(NULL), m_title(NULL), m_url(NULL), m_desc(NULL), m_author(NULL)
-{
 }
 
 RSSEditor::~RSSEditor()
@@ -453,29 +420,26 @@ void RSSEditor::fillRSSButtonList()
 
     m_sites->Reset();
 
-    for (RSSSite::rssList::iterator i = m_siteList.begin();
-            i != m_siteList.end(); ++i)
+    foreach (auto & site, m_siteList)
     {
-        MythUIButtonListItem *item =
-                    new MythUIButtonListItem(m_sites, (*i)->GetTitle());
-        item->SetText((*i)->GetTitle(), "title");
-        item->SetText((*i)->GetDescription(), "description");
-        item->SetText((*i)->GetURL(), "url");
-        item->SetText((*i)->GetAuthor(), "author");
-        item->SetData(qVariantFromValue(*i));
-        item->SetImage((*i)->GetImage());
+        auto *item = new MythUIButtonListItem(m_sites, site->GetTitle());
+        item->SetText(site->GetTitle(), "title");
+        item->SetText(site->GetDescription(), "description");
+        item->SetText(site->GetURL(), "url");
+        item->SetText(site->GetAuthor(), "author");
+        item->SetData(QVariant::fromValue(site));
+        item->SetImage(site->GetImage());
     }
 }
 
 void RSSEditor::SlotItemChanged()
 {
-    RSSSite *site = m_sites->GetItemCurrent()->GetData().value<RSSSite*>();
-
+    auto *site = m_sites->GetItemCurrent()->GetData().value<RSSSite*>();
     if (site)
     {
         if (m_image)
         {
-            QString thumb = site->GetImage();
+            const QString& thumb = site->GetImage();
 
             m_image->Reset();
 
@@ -506,8 +470,7 @@ void RSSEditor::SlotDeleteSite()
     MythScreenStack *m_popupStack =
         GetMythMainWindow()->GetStack("popup stack");
 
-    MythConfirmationDialog *confirmdialog =
-        new MythConfirmationDialog(m_popupStack,message);
+    auto *confirmdialog = new MythConfirmationDialog(m_popupStack,message);
 
     if (confirmdialog->Create())
     {
@@ -526,11 +489,10 @@ void RSSEditor::SlotEditSite()
 
     MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
 
-    RSSSite *site = m_sites->GetItemCurrent()->GetData().value<RSSSite*>();
-
+    auto *site = m_sites->GetItemCurrent()->GetData().value<RSSSite*>();
     if (site)
     {
-        RSSEditPopup *rsseditpopup =
+        auto *rsseditpopup =
             new RSSEditPopup(site->GetURL(), true, mainStack, "rsseditpopup");
 
         if (rsseditpopup->Create())
@@ -550,8 +512,7 @@ void RSSEditor::SlotNewSite()
 
     MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
 
-    RSSEditPopup *rsseditpopup =
-        new RSSEditPopup("", false, mainStack, "rsseditpopup");
+    auto *rsseditpopup = new RSSEditPopup("", false, mainStack, "rsseditpopup");
 
     if (rsseditpopup->Create())
     {
@@ -570,7 +531,7 @@ void RSSEditor::DoDeleteSite(bool remove)
     if (!remove)
         return;
 
-    RSSSite *site = m_sites->GetItemCurrent()->GetData().value<RSSSite*>();
+    auto *site = m_sites->GetItemCurrent()->GetData().value<RSSSite*>();
 
     if (removeFromDB(site))
         ListChanged();

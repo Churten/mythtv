@@ -20,6 +20,8 @@ class MBASE_PUBLIC MThreadPool
   public:
     explicit MThreadPool(const QString &name);
     ~MThreadPool();
+    MThreadPool(const MThreadPool &) = delete;            // not copyable
+    MThreadPool &operator=(const MThreadPool &) = delete; // not copyable
 
     void Stop(void);
     void DeletePoolThreads(void);
@@ -28,10 +30,10 @@ class MBASE_PUBLIC MThreadPool
     static void StopAllPools(void);
     static void ShutdownAllPools(void);
 
-    void start(QRunnable *runnable, QString debugName, int priority = 0);
-    bool tryStart(QRunnable *runnable, QString debugName);
+    void start(QRunnable *runnable, const QString& debugName, int priority = 0);
+    bool tryStart(QRunnable *runnable, const QString& debugName);
 
-    void startReserved(QRunnable *runnable, QString debugName,
+    void startReserved(QRunnable *runnable, const QString& debugName,
                        int waitForAvailMS = 0);
 
     int expiryTimeout(void) const;
@@ -45,13 +47,13 @@ class MBASE_PUBLIC MThreadPool
     void waitForDone(void);
 
   private:
-    bool TryStartInternal(QRunnable*, QString, bool);
-    void NotifyAvailable(MPoolThread*);
-    void NotifyDone(MPoolThread*);
+    bool TryStartInternal(QRunnable *runnable, const QString& debugName, bool reserved);
+    void NotifyAvailable(MPoolThread *thread);
+    void NotifyDone(MPoolThread *thread);
     void ReleaseThread(void);
 
 
-    MThreadPoolPrivate *m_priv;
+    MThreadPoolPrivate *m_priv {nullptr};
 };
 
 #endif // _MYTH_THREAD_POOL_H_

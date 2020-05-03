@@ -36,12 +36,6 @@ using namespace std;
 #include "mythcorecontext.h"
 #include "mythsystem.h"
 
-#if QT_VERSION < QT_VERSION_CHECK(5, 0, 0)
-#define MSKIP(MSG) QSKIP(MSG, SkipSingle)
-#else
-#define MSKIP(MSG) QSKIP(MSG)
-#endif
-
 #ifdef NEW_LOGGING
 static DebugLogHandler *console_dbg(void)
 {
@@ -57,9 +51,9 @@ class TestMythSystem: public QObject
 
   private slots:
     // called at the beginning of these sets of tests
-    void initTestCase(void)
+    static void initTestCase(void)
     {
-        gCoreContext = new MythCoreContext("bin_version", NULL);
+        gCoreContext = new MythCoreContext("bin_version", nullptr);
 #ifdef NEW_LOGGING
         DebugLogHandler::AddReplacement("ConsoleLogHandler");
         myth_logging::initialize_logging(
@@ -85,11 +79,12 @@ class TestMythSystem: public QObject
         m_before = QDateTime();
     }
 
-    void constructed_command_is_run(void)
+    static void constructed_command_is_run(void)
     {
         QScopedPointer<MythSystem> cmd(
             MythSystem::Create(
-                QString("echo %1").arg(__FUNCTION__), kMSStdOut));
+                QString("echo %1; sleep 1").arg(__FUNCTION__),
+                kMSStdOut | kMSRunShell));
         cmd->Wait();
         QVERIFY(QString(cmd->GetStandardOutputStream()->readAll())
                 .contains(__FUNCTION__));
@@ -101,7 +96,7 @@ class TestMythSystem: public QObject
     // tests kMSRunBackground      -- run child in the background
     void run_in_background_works(void)
     {
-        MSKIP("MythSystemLegacyPrivate calls MythSystem::Unlock"
+        QSKIP("MythSystemLegacyPrivate calls MythSystem::Unlock"
               "after the instance is deleted");
         QScopedPointer<MythSystem> cmd(
             MythSystem::Create("sleep 0.5", kMSRunBackground));
@@ -112,9 +107,9 @@ class TestMythSystem: public QObject
     // TODO kMSProcessEvents      -- process events while waiting
 
     // kMSStdIn              -- allow access to stdin
-    void stdin_works(void)
+    static void stdin_works(void)
     {
-        MSKIP("stdin_works -- currently blocks forever");
+        QSKIP("stdin_works -- currently blocks forever");
         QTemporaryFile tempfile;
         tempfile.open();
         QByteArray in = QString(__FUNCTION__).toLatin1();
@@ -131,11 +126,11 @@ class TestMythSystem: public QObject
     }
 
     // kMSStdOut             -- allow access to stdout
-    void stdout_works(void)
+    static void stdout_works(void)
     {
         QScopedPointer<MythSystem> cmd(
-            MythSystem::Create(QString("echo %1").arg(__FUNCTION__),
-                               kMSStdOut));
+            MythSystem::Create(QString("echo %1; sleep 1").arg(__FUNCTION__),
+                               kMSStdOut | kMSRunShell));
         cmd->Wait();
         QVERIFY(cmd->GetExitCode() == 0);
         QVERIFY(cmd->GetStandardOutputStream());
@@ -145,10 +140,10 @@ class TestMythSystem: public QObject
     }
 
     // kMSStdErr             -- allow access to stderr
-    void stderr_works(void)
+    static void stderr_works(void)
     {
         QScopedPointer<MythSystem> cmd(
-            MythSystem::Create(QString("echo %1 >&2").arg(__FUNCTION__),
+            MythSystem::Create(QString("echo %1 >&2; sleep 1").arg(__FUNCTION__),
                                kMSRunShell | kMSStdErr));
         cmd->Wait();
         QVERIFY(cmd->GetExitCode() == 0);
@@ -159,20 +154,20 @@ class TestMythSystem: public QObject
     }
 
     // kMSRunShell           -- run process through shell
-    void shell_used_when_requested(void)
+    static void shell_used_when_requested(void)
     {
         QScopedPointer<MythSystem> cmd(
-            MythSystem::Create("if [ x != y ] ; then echo X ; else echo Y ; fi",
+            MythSystem::Create("if [ x != y ] ; then echo X ; else echo Y ; fi; sleep 1",
                                kMSRunShell | kMSStdOut));
         cmd->Wait();
         QVERIFY(QString(cmd->GetStandardOutputStream()->readAll())
                 .contains("X"));
     }
 
-    void shell_not_used_when_not_requested(void)
+    static void shell_not_used_when_not_requested(void)
     {
         QScopedPointer<MythSystem> cmd(
-            MythSystem::Create("if [ x != y ] ; then echo X ; else echo Y ; fi",
+            MythSystem::Create("if [ x != y ] ; then echo X ; else echo Y ; fi; sleep 1",
                                kMSStdOut));
         cmd->Wait();
         QVERIFY(!QString(cmd->GetStandardOutputStream()->readAll())
@@ -180,7 +175,7 @@ class TestMythSystem: public QObject
     }
 
     // kMSAnonLog            -- anonymize the logs
-    void logs_anonymized_when_requested(void)
+    static void logs_anonymized_when_requested(void)
     {
 #ifdef NEW_LOGGING
         console_dbg()->Clear();
@@ -191,56 +186,59 @@ class TestMythSystem: public QObject
         DebugLogHandlerEntry l = console_dbg()->LastEntry(kHandleLog);
         QVERIFY(!l.entry().GetMessage().contains(__FUNCTION__));
 #else
-        MSKIP("Log inspection not supported in old logging.");
+        QSKIP("Log inspection not supported in old logging.");
 #endif
     }
 
     // kMSAutoCleanup        -- automatically delete if backgrounded
-    void auto_cleanup_return_null(void)
+    static void auto_cleanup_return_null(void)
     {
         MythSystem *ptr = MythSystem::Create(
             "sleep 10", kMSAutoCleanup | kMSRunBackground);
         QVERIFY(!ptr);
+
+        // Shouldn't return a pointer, but if it does, delete it.
+        delete ptr;
     }
 
     // TODO kMSDisableUDPListener -- disable MythMessage UDP listener
     //                               for the duration of application.
     // TODO kMSPropagateLogs      -- add arguments for MythTV log propagation
 
-    void get_flags_returns_flags_sent(void)
+    static void get_flags_returns_flags_sent(void)
     {
         QScopedPointer<MythSystem> cmd(
             MythSystem::Create("exit 5", kMSStdOut | kMSDontDisableDrawing));
         QVERIFY(cmd->GetFlags() == (kMSStdOut | kMSDontDisableDrawing));
     }
 
-    void get_starting_path_returns_path_sent(void)
+    static void get_starting_path_returns_path_sent(void)
     {
         QScopedPointer<MythSystem> cmd(
             MythSystem::Create("exit 5", kMSNone, "/tmp"));
         QVERIFY(cmd->GetStartingPath() == "/tmp");
     }
 
-    void get_starting_path_returns_a_path_when_none_sent(void)
+    static void get_starting_path_returns_a_path_when_none_sent(void)
     {
-        MSKIP("Not working yet");
+        QSKIP("Not working yet");
         QScopedPointer<MythSystem> cmd(
             MythSystem::Create("exit 5", kMSNone));
         QVERIFY(!cmd->GetStartingPath().isEmpty());
     }
 
-    void get_cpu_priority_returns_priority_sent(void)
+    static void get_cpu_priority_returns_priority_sent(void)
     {
-        MSKIP("Not working yet");
+        QSKIP("Not working yet");
         QScopedPointer<MythSystem> cmd(
             MythSystem::Create(
                 "exit 5", kMSNone, QString(), MythSystem::kLowPriority));
         QVERIFY(cmd->GetCPUPriority() == MythSystem::kLowPriority);
     }
 
-    void get_disk_priority_returns_priority_sent(void)
+    static void get_disk_priority_returns_priority_sent(void)
     {
-        MSKIP("Not working yet");
+        QSKIP("Not working yet");
         QScopedPointer<MythSystem> cmd(
             MythSystem::Create(
                 "exit 5", kMSNone, QString(),
@@ -248,21 +246,21 @@ class TestMythSystem: public QObject
         QVERIFY(cmd->GetDiskPriority() == MythSystem::kLowPriority);
     }
 
-    void wait_returns_true_on_exit(void)
+    static void wait_returns_true_on_exit(void)
     {
         QScopedPointer<MythSystem> cmd(
             MythSystem::Create("exit 200", kMSRunShell));
         QVERIFY(cmd->Wait());
     }
 
-    void wait_returns_false_on_timeout(void)
+    static void wait_returns_false_on_timeout(void)
     {
         QScopedPointer<MythSystem> cmd(
             MythSystem::Create("sleep 2", kMSRunShell));
         QVERIFY(!cmd->Wait(1));
     }
 
-    void getexitcode_returns_exit_code_when_non_zero(void)
+    static void getexitcode_returns_exit_code_when_non_zero(void)
     {
         QScopedPointer<MythSystem> cmd(
             MythSystem::Create("exit 200", kMSRunShell));
@@ -270,7 +268,7 @@ class TestMythSystem: public QObject
         QVERIFY(cmd->GetExitCode() == 200);
     }
 
-    void getexitcode_returns_neg_1_when_signal_seen(void)
+    static void getexitcode_returns_neg_1_when_signal_seen(void)
     {
         QScopedPointer<MythSystem> cmd(
             MythSystem::Create("sleep 5", kMSRunShell));
@@ -280,7 +278,7 @@ class TestMythSystem: public QObject
         QCOMPARE(cmd->GetExitCode(), -1);
     }
 
-    void getexitcode_returns_neg_2_when_still_running(void)
+    static void getexitcode_returns_neg_2_when_still_running(void)
     {
         QScopedPointer<MythSystem> cmd(
             MythSystem::Create("sleep 0.25", kMSRunShell));

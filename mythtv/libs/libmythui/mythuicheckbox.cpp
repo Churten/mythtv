@@ -12,11 +12,6 @@
 MythUICheckBox::MythUICheckBox(MythUIType *parent, const QString &name)
     : MythUIType(parent, name)
 {
-    m_currentCheckState = MythUIStateType::Off;
-    m_state = "active";
-
-    m_BackgroundState = m_CheckState = NULL;
-
     connect(this, SIGNAL(TakingFocus()), this, SLOT(Select()));
     connect(this, SIGNAL(LosingFocus()), this, SLOT(Deselect()));
     connect(this, SIGNAL(Enabling()), this, SLOT(Enable()));
@@ -25,19 +20,17 @@ MythUICheckBox::MythUICheckBox(MythUIType *parent, const QString &name)
     SetCanTakeFocus(true);
 }
 
-MythUICheckBox::~MythUICheckBox()
-{
-}
-
 void MythUICheckBox::SetInitialStates()
 {
     m_BackgroundState = dynamic_cast<MythUIStateType *>(GetChild("background"));
     m_CheckState = dynamic_cast<MythUIStateType *>(GetChild("checkstate"));
 
     if (!m_CheckState || !m_BackgroundState)
+    {
         LOG(VB_GENERAL, LOG_ERR,
             QString("Checkbox %1 is missing required elements")
             .arg(objectName()));
+    }
 
     if (m_CheckState)
         m_CheckState->DisplayState(m_currentCheckState);
@@ -150,7 +143,6 @@ void MythUICheckBox::Disable()
 /** \brief Mouse click/movement handler, receives mouse gesture events from the
  *         QCoreApplication event loop. Should not be used directly.
  *
- *  \param uitype The mythuitype receiving the event
  *  \param event Mouse event
  */
 bool MythUICheckBox::gestureEvent(MythGestureEvent *event)
@@ -196,7 +188,7 @@ bool MythUICheckBox::keyPressEvent(QKeyEvent *event)
  */
 void MythUICheckBox::CreateCopy(MythUIType *parent)
 {
-    MythUICheckBox *checkbox = new MythUICheckBox(parent, objectName());
+    auto *checkbox = new MythUICheckBox(parent, objectName());
     checkbox->CopyFrom(this);
 }
 
@@ -205,7 +197,7 @@ void MythUICheckBox::CreateCopy(MythUIType *parent)
  */
 void MythUICheckBox::CopyFrom(MythUIType *base)
 {
-    MythUICheckBox *button = dynamic_cast<MythUICheckBox *>(base);
+    auto *button = dynamic_cast<MythUICheckBox *>(base);
 
     if (!button)
     {

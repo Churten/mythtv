@@ -40,44 +40,33 @@ class SERVICE_PUBLIC WOLInfo : public QObject
 
         static inline void InitializeCustomTypes();
 
-    public:
-
-        WOLInfo(QObject *parent = 0) 
+        Q_INVOKABLE WOLInfo(QObject *parent = nullptr)
             : QObject    ( parent ),
               m_Enabled  ( false  ),
               m_Reconnect( 0      ),
               m_Retry    ( 0      )   
         {
         }
-        
-        WOLInfo( const WOLInfo &src ) 
+
+        void Copy( const WOLInfo *src )
         {
-            Copy( src );
+            m_Enabled  = src->m_Enabled  ;
+            m_Reconnect= src->m_Reconnect;
+            m_Retry    = src->m_Retry    ;
+            m_Command  = src->m_Command  ;
         }
 
-        void Copy( const WOLInfo &src )
-        {
-            m_Enabled  = src.m_Enabled  ;
-            m_Reconnect= src.m_Reconnect;
-            m_Retry    = src.m_Retry    ;
-            m_Command  = src.m_Command  ;       
-        }
+    private:
+        Q_DISABLE_COPY(WOLInfo);
 };
 
-typedef WOLInfo* WOLInfoPtr;
+using WOLInfoPtr = WOLInfo*;
 
-} // namespace DTC
-
-Q_DECLARE_METATYPE( DTC::WOLInfo  )
-Q_DECLARE_METATYPE( DTC::WOLInfo* )
-
-namespace DTC
-{
 inline void WOLInfo::InitializeCustomTypes()
 {
-    qRegisterMetaType< WOLInfo   >();
     qRegisterMetaType< WOLInfo*  >();
 }
-}
+
+} // namespace DTC
 
 #endif

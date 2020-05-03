@@ -54,29 +54,14 @@
 
 GUIStartup::GUIStartup(MythScreenStack *parent, QEventLoop *eventLoop)
                  :MythScreenType(parent, "GUIStartup"),
-                  m_Exit(false),
-                  m_Setup(false),
-                  m_Retry(false),
-                  m_Search(false),
-                  m_dummyButton(0),
-                  m_retryButton(0),
-                  m_searchButton(0),
-                  m_setupButton(0),
-                  m_exitButton(0),
-                  m_statusState(0),
-                  m_progressBar(0),
-                  m_progressTimer(0),
                   m_loop(eventLoop),
-                  m_dlgLoop(this),
-                  m_total(0)
+                  m_dlgLoop(this)
 {
 }
 
 GUIStartup::~GUIStartup()
 {
-    if (m_progressTimer)
-        delete m_progressTimer;
-
+    delete m_progressTimer;
 }
 
 bool GUIStartup::Create(void)
@@ -142,8 +127,7 @@ bool GUIStartup::setMessageState(const QString &name)
 
 void GUIStartup::setTotal(int total)
 {
-    if (m_progressTimer)
-        delete m_progressTimer;
+    delete m_progressTimer;
     m_progressTimer = new MythTimer(MythTimer::kStartRunning);
     m_timer.start(500);
     m_total = total*1000;
@@ -161,7 +145,7 @@ bool GUIStartup::updateProgress(bool finished)
 {
     if (m_progressTimer)
     {
-        int elapsed;
+        int elapsed = 0;
         if (finished)
             elapsed = m_total;
         else
@@ -172,7 +156,7 @@ bool GUIStartup::updateProgress(bool finished)
             m_timer.stop();
             emit cancelPortCheck();
             delete m_progressTimer;
-            m_progressTimer = 0;
+            m_progressTimer = nullptr;
         }
         return elapsed >= m_total;
     }
@@ -192,9 +176,7 @@ void GUIStartup::Close(void)
     QString message = tr("Do you really want to exit MythTV?");
     MythScreenStack *popupStack
       = GetMythMainWindow()->GetStack("popup stack");
-    MythConfirmationDialog *confirmdialog
-      = new MythConfirmationDialog(
-         popupStack, message);
+    auto *confirmdialog = new MythConfirmationDialog(popupStack, message);
 
     if (confirmdialog->Create())
         popupStack->AddScreen(confirmdialog);

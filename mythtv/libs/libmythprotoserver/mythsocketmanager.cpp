@@ -35,11 +35,11 @@ class ProcessRequestRunnable : public QRunnable
         m_sock->IncrRef();
     }
 
-    virtual void run(void)
+    void run(void) override // QRunnable
     {
         m_parent.ProcessRequest(m_sock);
         m_sock->DecrRef();
-        m_sock = NULL;
+        m_sock = nullptr;
     }
 
     MythSocketManager &m_parent;
@@ -56,7 +56,7 @@ void MythServer::newTcpConnection(qt_socket_fd_t socket)
 }
 
 MythSocketManager::MythSocketManager() :
-    m_server(NULL), m_threadPool("MythSocketManager")
+    m_threadPool("MythSocketManager")
 {
 }
 
@@ -82,11 +82,11 @@ MythSocketManager::~MythSocketManager()
 
 bool MythSocketManager::Listen(int port)
 {
-    if (m_server != NULL)
+    if (m_server != nullptr)
     {
         m_server->close();
         delete m_server;
-        m_server = NULL;
+        m_server = nullptr;
     }
 
     m_server = new MythServer(this);
@@ -97,20 +97,15 @@ bool MythSocketManager::Listen(int port)
         return false;
     }
 
-#if (QT_VERSION >= 0x050000)
     connect(m_server, &MythServer::newConnection,
             this,     &MythSocketManager::newConnection);
-#else
-    connect(m_server, SIGNAL(newConnection(qt_socket_fd_t)),
-            this,     SLOT(newConnection(qt_socket_fd_t)));
-#endif
     return true;
 }
 
 void MythSocketManager::newConnection(qt_socket_fd_t sd)
 {
     QMutexLocker locker(&m_socketListLock);
-    MythSocket *ms = new MythSocket(sd, this);
+    auto *ms = new MythSocket(sd, this);
     if (ms->IsConnected())
         m_socketList.insert(ms);
     else
@@ -151,7 +146,7 @@ SocketHandler *MythSocketManager::GetConnectionBySocket(MythSocket *sock)
 {
     QReadLocker rlock(&m_socketLock);
     if (!m_socketMap.contains(sock))
-        return NULL;
+        return nullptr;
 
     SocketHandler *handler = m_socketMap[sock];
     handler->IncrRef();
@@ -276,14 +271,11 @@ void MythSocketManager::ProcessRequestWork(MythSocket *sock)
             
             return;
         }
-        else
-        {
-            LOG(VB_SOCKET, LOG_ERR, LOC +
-                "Use of socket attempted before announcement.");
-            listline.clear();
-            listline << "ERROR" << "socket has not been announced";
-            sock->WriteStringList(listline);
-        }
+        LOG(VB_SOCKET, LOG_ERR, LOC +
+            "Use of socket attempted before announcement.");
+        listline.clear();
+        listline << "ERROR" << "socket has not been announced";
+        sock->WriteStringList(listline);
         return;
     }
 
@@ -329,9 +321,11 @@ void MythSocketManager::ProcessRequestWork(MythSocket *sock)
     if (!handled)
     {
         if (command == "BACKEND_MESSAGE")
+        {
             // never respond to these... ever, even if they are not otherwise
             // handled by something in m_handlerMap
             return;
+        }
 
         listline.clear();
         listline << "ERROR" << "unknown command";

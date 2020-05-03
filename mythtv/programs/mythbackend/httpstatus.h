@@ -18,13 +18,13 @@
 #include "httpserver.h"
 #include "programinfo.h"
 
-typedef enum 
+enum HttpStatusMethod
 {
     HSM_Unknown         =  0,
     HSM_GetStatusHTML   =  1,
     HSM_GetStatusXML    =  2
 
-} HttpStatusMethod;
+};
 
 /////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////
@@ -53,44 +53,44 @@ class HttpStatus : public HttpServerExtension
 
     private:
 
-        HttpStatusMethod GetMethod( const QString &sURI );
+        static HttpStatusMethod GetMethod( const QString &sURI );
 
         void    GetStatusXML      ( HTTPRequest *pRequest );
         void    GetStatusHTML     ( HTTPRequest *pRequest );
 
         void    FillStatusXML     ( QDomDocument *pDoc);
     
-        void    PrintStatus       ( QTextStream &os, QDomDocument *pDoc );
-        int     PrintEncoderStatus( QTextStream &os, QDomElement encoders );
-        int     PrintScheduled    ( QTextStream &os, QDomElement scheduled );
-        int     PrintFrontends    ( QTextStream &os, QDomElement frontends );
-        int     PrintBackends     ( QTextStream &os, QDomElement backends );
-        int     PrintJobQueue     ( QTextStream &os, QDomElement jobs );
-        int     PrintMachineInfo  ( QTextStream &os, QDomElement info );
-        int     PrintMiscellaneousInfo ( QTextStream &os, QDomElement info );
+        static void    PrintStatus       ( QTextStream &os, QDomDocument *pDoc );
+        static int     PrintEncoderStatus( QTextStream &os, const QDomElement& encoders );
+        static int     PrintScheduled    ( QTextStream &os, const QDomElement& scheduled );
+        static int     PrintFrontends    ( QTextStream &os, const QDomElement& frontends );
+        static int     PrintBackends     ( QTextStream &os, const QDomElement& backends );
+        static int     PrintJobQueue     ( QTextStream &os, const QDomElement& jobs );
+        static int     PrintMachineInfo  ( QTextStream &os, const QDomElement& info );
+        static int     PrintMiscellaneousInfo ( QTextStream &os, const QDomElement& info );
 
-        void    FillProgramInfo   ( QDomDocument *pDoc,
-                                    QDomNode     &node,
-                                    ProgramInfo  *pInfo,
-                                    bool          bIncChannel = true,
-                                    bool          bDetails    = true );
+        static void    FillProgramInfo   ( QDomDocument *pDoc,
+                                           QDomNode     &node,
+                                           ProgramInfo  *pInfo,
+                                           bool          bIncChannel = true,
+                                           bool          bDetails    = true );
 
-        void    FillChannelInfo   ( QDomElement  &channel,
-                                    ProgramInfo  *pInfo,
-                                    bool          bDetails = true );
+        static void    FillChannelInfo   ( QDomElement  &channel,
+                                           ProgramInfo  *pInfo,
+                                           bool          bDetails = true );
 
 
     public:
                  HttpStatus( QMap<int, EncoderLink *> *tvList, Scheduler *sched,
                              AutoExpire *expirer, bool bIsMaster );
-        virtual ~HttpStatus();
+        ~HttpStatus() override = default;
 
         void     SetMainServer(MainServer *mainServer)
                     { m_pMainServer = mainServer; }
 
-        virtual QStringList GetBasePaths();
+        QStringList GetBasePaths() override; // HttpServerExtension
         
-        bool     ProcessRequest( HTTPRequest *pRequest );
+        bool     ProcessRequest( HTTPRequest *pRequest ) override; // HttpServerExtension
 };
 
 #endif

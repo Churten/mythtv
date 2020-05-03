@@ -1,14 +1,5 @@
-#include <iostream>
-using namespace std;
-
-#include <unistd.h>
-
-#include <QDir>
-#include <QApplication>
-
 #include "gameui.h"
 #include "gamehandler.h"
-#include "rominfo.h"
 #include "gamesettings.h"
 #include "dbcheck.h"
 
@@ -29,7 +20,7 @@ struct GameData
 
 static void GameCallback(void *data, QString &selection)
 {
-    GameData *ddata = (GameData *)data;
+    auto *ddata = (GameData *)data;
     QString sel = selection.toLower();
 
     (void)ddata;
@@ -37,9 +28,8 @@ static void GameCallback(void *data, QString &selection)
     if (sel == "game_settings")
     {
         MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
-        StandardSettingDialog *ssd =
-            new StandardSettingDialog(mainStack, "gamesettings",
-                                      new MythGameGeneralSettings());
+        auto *ssd = new StandardSettingDialog(mainStack, "gamesettings",
+                                              new GameGeneralSettings());
 
         if (ssd->Create())
             mainStack->AddScreen(ssd);
@@ -49,8 +39,14 @@ static void GameCallback(void *data, QString &selection)
 
     if (sel == "game_players")
     {
-        MythGamePlayerEditor mgpe;
-        mgpe.exec();
+        MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
+        auto *ssd = new StandardSettingDialog(mainStack, "gamesettings",
+                                              new GamePlayersList());
+
+        if (ssd->Create())
+            mainStack->AddScreen(ssd);
+        else
+            delete ssd;
     }
     else if (sel == "search_for_games")
     {
@@ -58,18 +54,19 @@ static void GameCallback(void *data, QString &selection)
     }
     if (sel == "clear_game_data")
     {
-        GameHandler *handler = new GameHandler();
+        auto *handler = new GameHandler();
         handler->clearAllGameData();
     }
 
 }
 
-static int runMenu(QString which_menu)
+static int runMenu(const QString& which_menu)
 {
     QString themedir = GetMythUI()->GetThemeDir();
 
-    MythThemedMenu *menu = new MythThemedMenu(
-        themedir, which_menu, GetMythMainWindow()->GetMainStack(), "game menu");
+    auto *menu = new MythThemedMenu(themedir, which_menu,
+                                    GetMythMainWindow()->GetMainStack(),
+                                    "game menu");
 
     GameData data;
 
@@ -84,30 +81,25 @@ static int runMenu(QString which_menu)
         GetMythMainWindow()->GetMainStack()->AddScreen(menu);
         return 0;
     }
-    else
-    {
-        LOG(VB_GENERAL, LOG_ERR, QString("Couldn't find menu %1 or theme %2")
-                              .arg(which_menu).arg(themedir));
-        delete menu;
-        return -1;
-    }
+
+    LOG(VB_GENERAL, LOG_ERR, QString("Couldn't find menu %1 or theme %2")
+        .arg(which_menu).arg(themedir));
+    delete menu;
+    return -1;
 }
 
 static int RunGames(void)
 {
     MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
-    GameUI *game = new GameUI(mainStack);
+    auto *game = new GameUI(mainStack);
 
     if (game->Create())
     {
         mainStack->AddScreen(game);
         return 0;
     }
-    else
-    {
-        delete game;
-        return -1;
-    }
+    delete game;
+    return -1;
 }
 
 static void runGames(void)
@@ -132,8 +124,8 @@ static void setupKeys(void)
 
 int mythplugin_init(const char *libversion)
 {
-    if (!gCoreContext->TestPluginVersion("mythgame", libversion,
-                                    MYTH_BINARY_VERSION))
+    if (!MythCoreContext::TestPluginVersion("mythgame", libversion,
+                                            MYTH_BINARY_VERSION))
         return -1;
 
     gCoreContext->ActivateSettingsCache(false);
@@ -144,12 +136,6 @@ int mythplugin_init(const char *libversion)
         return -1;
     }
     gCoreContext->ActivateSettingsCache(true);
-
-    MythGamePlayerSettings settings;
-#if 0
-    settings.Load();
-    settings.Save();
-#endif
 
     setupKeys();
 

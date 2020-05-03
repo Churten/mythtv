@@ -27,22 +27,20 @@
 #define SSDP_PORT       1900
 #define SSDP_SEARCHPORT 6549
 
-typedef enum
+enum SSDPMethod
 {
     SSDPM_Unknown         = 0,
     SSDPM_GetDeviceDesc   = 1,
     SSDPM_GetDeviceList   = 2
+};
 
-} SSDPMethod;
-
-typedef enum
+enum SSDPRequestType
 {
     SSDP_Unknown        = 0,
     SSDP_MSearch        = 1,
     SSDP_MSearchResp    = 2,
     SSDP_Notify         = 3
-
-} SSDPRequestType;
+};
 
 /////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////
@@ -56,26 +54,25 @@ typedef enum
 #define SocketIdx_Multicast  1
 #define SocketIdx_Broadcast  2
 
-#define NumberOfSockets     (sizeof( m_Sockets ) / sizeof( MSocketDevice * ))
-
 class UPNP_PUBLIC SSDP : public MThread
 {
     private:
         // Singleton instance used by all.
         static SSDP*        g_pSSDP;  
 
-        QRegExp             m_procReqLineExp;
-        MSocketDevice      *m_Sockets[3];
+        QRegExp             m_procReqLineExp        {"[ \r\n][ \r\n]*"};
+        constexpr static int kNumberOfSockets = 3;
+        MSocketDevice      *m_sockets[kNumberOfSockets] {nullptr,nullptr,nullptr};
 
-        int                 m_nPort;
-        int                 m_nSearchPort;
-        int                 m_nServicePort;
+        int                 m_nPort                 {SSDP_PORT};
+        int                 m_nSearchPort           {SSDP_SEARCHPORT};
+        int                 m_nServicePort          {0};
 
-        UPnpNotifyTask     *m_pNotifyTask;
-        bool                m_bAnnouncementsEnabled;
+        UPnpNotifyTask     *m_pNotifyTask           {nullptr};
+        bool                m_bAnnouncementsEnabled {false};
 
-        bool                m_bTermRequested;
-        QMutex              m_lock;
+        bool                m_bTermRequested        {false};
+        QMutex              m_lock                  {QMutex::NonRecursive};
 
     private:
 
@@ -88,14 +85,14 @@ class UPNP_PUBLIC SSDP : public MThread
     protected:
 
         bool    ProcessSearchRequest ( const QStringMap &sHeaders,
-                                       QHostAddress  peerAddress,
+                                       const QHostAddress&  peerAddress,
                                        quint16       peerPort );
-        bool    ProcessSearchResponse( const QStringMap &sHeaders );
-        bool    ProcessNotify        ( const QStringMap &sHeaders );
+        static bool    ProcessSearchResponse( const QStringMap &sHeaders );
+        static bool    ProcessNotify        ( const QStringMap &sHeaders );
 
         bool    IsTermRequested      ();
 
-        QString GetHeaderValue    ( const QStringMap &headers,
+        static QString GetHeaderValue    ( const QStringMap &headers,
                                     const QString    &sKey,
                                     const QString    &sDefault );
 
@@ -103,14 +100,14 @@ class UPNP_PUBLIC SSDP : public MThread
 
         SSDPRequestType ProcessRequestLine( const QString &sLine );
 
-        virtual void run    ();
+        void    run() override; // MThread
  
     public:
 
         static SSDP* Instance();
         static void Shutdown();
 
-            ~SSDP();
+            ~SSDP() override;
 
         void RequestTerminate(void);
 
@@ -150,19 +147,19 @@ class SSDPExtension : public HttpServerExtension
 
     private:
 
-        SSDPMethod GetMethod( const QString &sURI );
+        static SSDPMethod GetMethod( const QString &sURI );
 
         void       GetDeviceDesc( HTTPRequest *pRequest );
-        void       GetFile      ( HTTPRequest *pRequest, QString sFileName );
-        void       GetDeviceList( HTTPRequest *pRequest );
+        void       GetFile      ( HTTPRequest *pRequest, const QString& sFileName );
+        static void       GetDeviceList( HTTPRequest *pRequest );
 
     public:
                  SSDPExtension( int nServicePort, const QString &sSharePath);
-        virtual ~SSDPExtension( );
+        ~SSDPExtension( ) override = default;
 
-        virtual QStringList GetBasePaths();
+        QStringList GetBasePaths() override; // HttpServerExtension
         
-        bool     ProcessRequest( HTTPRequest *pRequest );
+        bool     ProcessRequest( HTTPRequest *pRequest ) override; // HttpServerExtension
 };
 
 #endif

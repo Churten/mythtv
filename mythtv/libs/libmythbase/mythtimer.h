@@ -1,7 +1,7 @@
 #ifndef MYTHTIMER_H_
 #define MYTHTIMER_H_
 
-#include <inttypes.h>
+#include <cinttypes>
 #include <QElapsedTimer>
 #include "mythbaseexp.h"
 
@@ -13,10 +13,10 @@
 class MBASE_PUBLIC MythTimer
 {
   public:
-    typedef enum {
+    enum StartState {
         kStartRunning,
         kStartInactive,
-    } StartState;
+    };
 
     explicit MythTimer(StartState state = kStartInactive);
 
@@ -26,13 +26,13 @@ class MBASE_PUBLIC MythTimer
 
     void addMSecs(int ms);
 
-    int elapsed(void) const;
+    int elapsed(void);
     int64_t nsecsElapsed(void) const;
     bool isRunning(void) const;
 
   private:
     QElapsedTimer m_timer;
-    int m_offset;
+    int           m_offset {0};
 };
 
 #endif

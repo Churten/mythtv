@@ -39,6 +39,7 @@ void (* mpeg2_cpu_state_restore) (cpu_state_t * state) = NULL;
 #if ARCH_X86
 static void state_restore_mmx (cpu_state_t * state)
 {
+    (void)state;
     emms ();
 }
 #endif
@@ -124,5 +125,7 @@ void mpeg2_cpu_state_init (uint32_t accel)
 	mpeg2_cpu_state_save = state_save_altivec;
 	mpeg2_cpu_state_restore = state_restore_altivec;
     }
+#else
+    (void)accel;
 #endif
 }

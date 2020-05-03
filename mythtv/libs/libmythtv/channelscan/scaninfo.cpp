@@ -1,5 +1,6 @@
-// POSIX headers
-#include <stdint.h>
+// C++ headers
+#include <cstdint>
+#include <utility>
 
 // Qt headers
 #include <QString>
@@ -11,12 +12,10 @@
 #include "mythdbcon.h"
 #include "mythlogging.h"
 
-ScanInfo::ScanInfo() : scanid(0), cardid(0), sourceid(0), processed(false) { }
-
-ScanInfo::ScanInfo(uint _scanid, uint _cardid, uint _sourceid,
-                   bool _processed, const QDateTime &_scandate) :
-    scanid(_scanid), cardid(_cardid), sourceid(_sourceid),
-    processed(_processed), scandate(_scandate)
+ScanInfo::ScanInfo(uint scanid, uint cardid, uint sourceid,
+                   bool processed, QDateTime scandate) :
+    m_scanid(scanid), m_cardid(cardid), m_sourceid(sourceid),
+    m_processed(processed), m_scandate(std::move(scandate))
 {
 }
 
@@ -26,20 +25,20 @@ uint SaveScan(const ScanDTVTransportList &scan)
             .arg(scan.size()));
 
     uint scanid = 0;
-    if (scan.empty() || scan[0].channels.empty())
+    if (scan.empty() || scan[0].m_channels.empty())
         return scanid;
 
-    uint sourceid = scan[0].channels[0].source_id;
-    uint cardid   = scan[0].cardid;
+    uint sourceid = scan[0].m_channels[0].m_sourceId;
+    uint cardid   = scan[0].m_cardid;
 
     // Delete very old scans
     const vector<ScanInfo> list = LoadScanList();
-    for (uint i = 0; i < list.size(); ++i)
+    for (const auto & si : list)
     {
-        if (list[i].scandate > MythDate::current().addDays(-14))
+        if (si.m_scandate > MythDate::current().addDays(-14))
             continue;
-        if ((list[i].cardid == cardid) && (list[i].sourceid == sourceid))
-            ScanInfo::DeleteScan(list[i].scanid);
+        if ((si.m_cardid == cardid) && (si.m_sourceid == sourceid))
+            ScanInfo::DeleteScan(si.m_scanid);
     }
 
     MSqlQuery query(MSqlQuery::InitCon());
@@ -65,8 +64,8 @@ uint SaveScan(const ScanDTVTransportList &scan)
     if (!scanid)
         return scanid;
 
-    for (uint i = 0; i < scan.size(); ++i)
-        scan[i].SaveScan(scanid);
+    for (const auto & si : scan)
+        si.SaveScan(scanid);
 
     return scanid;
 }
@@ -120,7 +119,8 @@ ScanDTVTransportList LoadScan(uint scanid)
             "    in_pat,             in_pmt,             in_vct,             "
             "    in_nit,             in_sdt,             is_encrypted,       "
             "    is_data_service,    is_audio_service,   is_opencable,       "
-            "    could_be_opencable, decryption_status,  default_authority   "
+            "    could_be_opencable, decryption_status,  default_authority,  "
+            "    service_type "
             "FROM channelscan_channel "
             "WHERE transportid = :TRANSPORTID");
         query2.bindValue(":TRANSPORTID", query.value(15).toUInt());
@@ -180,9 +180,10 @@ ScanDTVTransportList LoadScan(uint scanid)
                 query2.value(32).toBool()/*is_opencable*/,
                 query2.value(33).toBool()/*could_be_opencable*/,
                 query2.value(34).toInt()/*decryption_status*/,
-                query2.value(35).toString()/*default_authority*/);
+                query2.value(35).toString()/*default_authority*/,
+                query2.value(36).toUInt()/*service_type*/);
 
-            mux.channels.push_back(chan);
+            mux.m_channels.push_back(chan);
         }
 
         list.push_back(mux);
@@ -266,12 +267,11 @@ vector<ScanInfo> LoadScanList(void)
 
     while (query.next())
     {
-        list.push_back(
-            ScanInfo(query.value(0).toUInt(),
-                     query.value(1).toUInt(),
-                     query.value(2).toUInt(),
-                     (bool) query.value(3).toUInt(),
-                     MythDate::as_utc(query.value(4).toDateTime())));
+        list.emplace_back(query.value(0).toUInt(),
+                          query.value(1).toUInt(),
+                          query.value(2).toUInt(),
+                          (bool) query.value(3).toUInt(),
+                          MythDate::as_utc(query.value(4).toDateTime()));
     }
 
     return list;

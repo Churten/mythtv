@@ -20,17 +20,17 @@ class NetBase : public MythScreenType
   Q_OBJECT
 
   public:
-    NetBase(MythScreenStack *parent, const char *name = 0);
-    virtual ~NetBase();
+    explicit NetBase(MythScreenStack *parent, const char *name = nullptr);
+    ~NetBase() override;
 
   protected:
-    virtual void Init();
+    void Init() override; // MythScreenType
     virtual ResultItem *GetStreamItem() = 0;
     virtual void LoadData(void) = 0;
     void InitProgressDialog();
-    void CleanCacheDir();
+    static void CleanCacheDir();
     void DownloadVideo(const QString &url, const QString &dest);
-    void RunCmdWithoutScreensaver(const QString &cmd);
+    static void RunCmdWithoutScreensaver(const QString &cmd);
 
   protected slots:
     void StreamWebVideo(void);
@@ -39,14 +39,14 @@ class NetBase : public MythScreenType
     void DoPlayVideo(const QString &filename);
     void SlotDeleteVideo(void);
     void DoDeleteVideo(bool remove);
-    virtual void customEvent(QEvent *event);
+    void customEvent(QEvent *event) override; // MythUIType
 
   protected:
-    MythUIImage           *m_thumbImage;
-    MythUIStateType       *m_downloadable;
-    MythScreenStack       *m_popupStack;
-    MythUIProgressDialog  *m_progressDialog;
-    MetadataImageDownload *m_imageDownload;
+    MythUIImage           *m_thumbImage     {nullptr};
+    MythUIStateType       *m_downloadable   {nullptr};
+    MythScreenStack       *m_popupStack     {nullptr};
+    MythUIProgressDialog  *m_progressDialog {nullptr};
+    MetadataImageDownload *m_imageDownload  {nullptr};
 
     QString m_downloadFile;
     GrabberScript::scriptList m_grabberList;

@@ -1,10 +1,8 @@
 #ifndef FILETRANSFER_H_
 #define FILETRANSFER_H_
 
-// ANSI C headers
-#include <stdint.h>
-
 // C++ headers
+#include <cstdint>
 #include <vector>
 using namespace std;
 
@@ -29,10 +27,10 @@ class FileTransfer : public ReferenceCounter
                  bool usereadahead, int timeout_ms);
     FileTransfer(QString &filename, MythSocket *remote, bool write);
 
-    MythSocket *getSocket() { return sock; }
+    MythSocket *getSocket() { return m_sock; }
 
     bool isOpen(void);
-    bool ReOpen(QString newFilename = "");
+    bool ReOpen(const QString& newFilename = "");
 
     void Stop(void);
 
@@ -49,22 +47,22 @@ class FileTransfer : public ReferenceCounter
     void SetTimeout(bool fast);
 
   private:
-   ~FileTransfer();
+   ~FileTransfer() override;
 
-    volatile bool  readthreadlive;
-    bool           readsLocked;
-    QWaitCondition readsUnlockedCond;
+    volatile bool   m_readthreadlive    {true};
+    bool            m_readsLocked       {false};
+    QWaitCondition  m_readsUnlockedCond;
 
-    ProgramInfo *pginfo;
-    RingBuffer *rbuffer;
-    MythSocket *sock;
-    bool ateof;
+    ProgramInfo    *m_pginfo            {nullptr};
+    RingBuffer     *m_rbuffer           {nullptr};
+    MythSocket     *m_sock              {nullptr};
+    bool            m_ateof             {false};
 
-    vector<char> requestBuffer;
+    vector<char>    m_requestBuffer;
 
-    QMutex lock;
+    QMutex          m_lock              {QMutex::NonRecursive};
 
-    bool writemode;
+    bool            m_writemode         {false};
 };
 
 #endif

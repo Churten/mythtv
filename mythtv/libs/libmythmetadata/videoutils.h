@@ -22,14 +22,14 @@ class MythUIType;
 class MythUIImage;
 
 template <>
-META_PUBLIC void CheckedSet( MythUIStateType *uiItem, const QString &state);
+META_PUBLIC void CheckedSet( MythUIStateType *uiItem, const QString &value);
 
 META_PUBLIC void CheckedSet( MythUIType *container, const QString &itemName,
         const QString &value);
 
 META_PUBLIC void CheckedSet( MythUIImage *uiItem, const QString &filename);
 
-META_PUBLIC QStringList GetVideoDirsByHost(QString host);
+META_PUBLIC QStringList GetVideoDirsByHost(const QString& host);
 META_PUBLIC QStringList GetVideoDirs();
 
 META_PUBLIC bool IsDefaultCoverFile(const QString &coverfile);
@@ -67,7 +67,7 @@ inline QString generate_file_url(
 {
     uint port = gCoreContext->GetBackendServerPort(host);
 
-    return gCoreContext->GenMythURL(host, port, path,
+    return MythCoreContext::GenMythURL(host, port, path,
                                     StorageGroup::GetGroupToUse(host, storage_group));
 
 }

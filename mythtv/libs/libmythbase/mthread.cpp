@@ -62,21 +62,21 @@ class DBPurgeHandler : public QObject
   public:
     DBPurgeHandler()
     {
-        purgeTimer = startTimer(5 * 60000);
+        m_purgeTimer = startTimer(5 * 60000);
     }
-    void timerEvent(QTimerEvent *event)
+    void timerEvent(QTimerEvent *event) override // QObject
     {
-        if (event->timerId() == purgeTimer)
+        if (event->timerId() == m_purgeTimer)
             GetMythDB()->GetDBManager()->PurgeIdleConnections(false);
     }
-    int purgeTimer;
+    int m_purgeTimer;
 };
 
 class MThreadInternal : public QThread
 {
   public:
     explicit MThreadInternal(MThread &parent) : m_parent(parent) {}
-    virtual void run(void) { m_parent.run(); }
+    void run(void) override { m_parent.run(); } // QThread
 
     void QThreadRun(void) { QThread::run(); }
     int exec(void)
@@ -100,8 +100,7 @@ static QMutex s_all_threads_lock;
 static QSet<MThread*> s_all_threads;
 
 MThread::MThread(const QString &objectName) :
-    m_thread(new MThreadInternal(*this)), m_runnable(NULL),
-    m_prolog_executed(true), m_epilog_executed(true)
+    m_thread(new MThreadInternal(*this))
 {
     m_thread->setObjectName(objectName);
     QMutexLocker locker(&s_all_threads_lock);
@@ -110,7 +109,7 @@ MThread::MThread(const QString &objectName) :
 
 MThread::MThread(const QString &objectName, QRunnable *runnable) :
     m_thread(new MThreadInternal(*this)), m_runnable(runnable),
-    m_prolog_executed(false), m_epilog_executed(false)
+    m_prologExecuted(false), m_epilogExecuted(false)
 {
     m_thread->setObjectName(objectName);
     QMutexLocker locker(&s_all_threads_lock);
@@ -119,18 +118,18 @@ MThread::MThread(const QString &objectName, QRunnable *runnable) :
 
 MThread::~MThread()
 {
-    if (!m_prolog_executed)
+    if (!m_prologExecuted)
     {
-        LOG(VB_GENERAL, LOG_CRIT, "MThread prolog was never run!");
+        LOG(VB_GENERAL, LOG_CRIT, QString("'%1': MThread prolog was never run!").arg(objectName()));
     }
-    if (!m_epilog_executed)
+    if (!m_epilogExecuted)
     {
-        LOG(VB_GENERAL, LOG_CRIT, "MThread epilog was never run!");
+        LOG(VB_GENERAL, LOG_CRIT, QString("'%1': MThread epilog was never run! (%1)").arg(objectName()));
     }
     if (m_thread->isRunning())
     {
-        LOG(VB_GENERAL, LOG_CRIT,
-            "MThread destructor called while thread still running!");
+        LOG(VB_GENERAL, LOG_CRIT, QString("'%1': MThread destructor called while thread still running! (%1)")
+                                          .arg(objectName()));
         m_thread->wait();
     }
 
@@ -140,7 +139,7 @@ MThread::~MThread()
     }
 
     delete m_thread;
-    m_thread = NULL;
+    m_thread = nullptr;
 }
 
 void MThread::Cleanup(void)
@@ -210,7 +209,7 @@ void MThread::RunProlog(void)
     }
     setTerminationEnabled(false);
     ThreadSetup(m_thread->objectName());
-    m_prolog_executed = true;
+    m_prologExecuted = true;
 }
 
 void MThread::RunEpilog(void)
@@ -222,13 +221,17 @@ void MThread::RunEpilog(void)
         return;
     }
     ThreadCleanup();
-    m_epilog_executed = true;
+    m_epilogExecuted = true;
 }
 
 void MThread::ThreadSetup(const QString &name)
 {
     loggingRegisterThread(name);
+#if QT_VERSION < QT_VERSION_CHECK(5,8,0)
     qsrand(MythDate::current().toTime_t() ^ QTime::currentTime().msec());
+#elif QT_VERSION < QT_VERSION_CHECK(5,10,0)
+    qsrand(MythDate::current().toSecsSinceEpoch() ^ QTime::currentTime().msec());
+#endif
 }
 
 void MThread::ThreadCleanup(void)
@@ -290,8 +293,8 @@ void MThread::exit(int retcode)
 
 void MThread::start(QThread::Priority p)
 {
-    m_prolog_executed = false;
-    m_epilog_executed = false;
+    m_prologExecuted = false;
+    m_epilogExecuted = false;
     m_thread->start(p);
 }
 

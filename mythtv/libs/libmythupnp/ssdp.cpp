@@ -11,7 +11,9 @@
 //////////////////////////////////////////////////////////////////////////////
 
 #include <algorithm>
+#include <cerrno>
 #include <chrono> // for milliseconds
+#include <cstdlib>
 #include <thread> // for sleep_for
 
 #include "upnp.h"
@@ -29,8 +31,6 @@
 #ifdef ANDROID
 #include <sys/select.h>
 #endif
-#include <stdlib.h>
-#include <errno.h>
 
 using namespace std;
 
@@ -45,7 +45,7 @@ using namespace std;
 // We're creating this class immediately so it will always be available.
 
 static QMutex g_pSSDPCreationLock;
-SSDP* SSDP::g_pSSDP = NULL;
+SSDP* SSDP::g_pSSDP = nullptr;
 
 /////////////////////////////////////////////////////////////////////////////
 //
@@ -65,7 +65,7 @@ void SSDP::Shutdown()
 {
     QMutexLocker locker(&g_pSSDPCreationLock);
     delete g_pSSDP;
-    g_pSSDP = NULL;
+    g_pSSDP = nullptr;
 }
  
 /////////////////////////////////////////////////////////////////////////////
@@ -73,15 +73,7 @@ void SSDP::Shutdown()
 /////////////////////////////////////////////////////////////////////////////
 
 SSDP::SSDP() :
-    MThread                ("SSDP" ),
-    m_procReqLineExp       ("[ \r\n][ \r\n]*"),
-    m_nPort                ( SSDP_PORT ),
-    m_nSearchPort          ( SSDP_SEARCHPORT ),
-    m_nServicePort         ( 0 ),
-    m_pNotifyTask          ( NULL ),
-    m_bAnnouncementsEnabled( false ),
-    m_bTermRequested       ( false ),
-    m_lock                 ( QMutex::NonRecursive )
+    MThread("SSDP")
 {
     LOG(VB_UPNP, LOG_NOTICE, "Starting up SSDP Thread..." );
 
@@ -90,22 +82,22 @@ SSDP::SSDP() :
     m_nPort       = pConfig->GetValue("UPnP/SSDP/Port"      , SSDP_PORT      );
     m_nSearchPort = pConfig->GetValue("UPnP/SSDP/SearchPort", SSDP_SEARCHPORT);
 
-    m_Sockets[ SocketIdx_Search    ] =
+    m_sockets[ SocketIdx_Search    ] =
         new MMulticastSocketDevice();
-    m_Sockets[ SocketIdx_Multicast ] =
+    m_sockets[ SocketIdx_Multicast ] =
         new MMulticastSocketDevice(SSDP_GROUP, m_nPort);
-    m_Sockets[ SocketIdx_Broadcast ] =
+    m_sockets[ SocketIdx_Broadcast ] =
         new MBroadcastSocketDevice("255.255.255.255", m_nPort);
 
-    m_Sockets[ SocketIdx_Search    ]->setBlocking( false );
-    m_Sockets[ SocketIdx_Multicast ]->setBlocking( false );
-    m_Sockets[ SocketIdx_Broadcast ]->setBlocking( false );
+    m_sockets[ SocketIdx_Search    ]->setBlocking( false );
+    m_sockets[ SocketIdx_Multicast ]->setBlocking( false );
+    m_sockets[ SocketIdx_Broadcast ]->setBlocking( false );
 
     // Setup SearchSocket
     QHostAddress ip4addr( QHostAddress::Any );
 
-    m_Sockets[ SocketIdx_Search ]->bind( ip4addr          , m_nSearchPort );
-    m_Sockets[ SocketIdx_Search ]->bind( QHostAddress::Any, m_nSearchPort );
+    m_sockets[ SocketIdx_Search ]->bind( ip4addr          , m_nSearchPort );
+    m_sockets[ SocketIdx_Search ]->bind( QHostAddress::Any, m_nSearchPort );
 
     // ----------------------------------------------------------------------
     // Create the SSDP (Upnp Discovery) Thread.
@@ -126,22 +118,17 @@ SSDP::~SSDP()
 
     DisableNotifications();
 
-    m_bTermRequested = true;
+    RequestTerminate();
     wait();
 
-    if (m_pNotifyTask != NULL)
+    if (m_pNotifyTask != nullptr)
     {
         m_pNotifyTask->DecrRef();
-        m_pNotifyTask = NULL;
+        m_pNotifyTask = nullptr;
     }
 
-    for (int nIdx = 0; nIdx < (int)NumberOfSockets; nIdx++ )
-    {
-        if (m_Sockets[ nIdx ] != NULL )
-        {
-            delete m_Sockets[ nIdx ];
-        }
-    }
+    for (auto & socket : m_sockets)
+        delete socket;
 
     LOG(VB_UPNP, LOG_INFO, "SSDP Thread Terminated." );
 }
@@ -157,7 +144,7 @@ void SSDP::RequestTerminate(void)
 
 void SSDP::EnableNotifications( int nServicePort )
 {
-    if ( m_pNotifyTask == NULL )
+    if ( m_pNotifyTask == nullptr )
     {
         m_nServicePort = nServicePort;
 
@@ -172,7 +159,7 @@ void SSDP::EnableNotifications( int nServicePort )
         LOG(VB_UPNP, LOG_INFO,
             "SSDP::EnableNotifications() - sending NTS_byebye");
         m_pNotifyTask->SetNTS( NTS_byebye );
-        m_pNotifyTask->Execute( NULL );
+        m_pNotifyTask->Execute( nullptr );
 
         m_bAnnouncementsEnabled = true;
     }
@@ -199,12 +186,12 @@ void SSDP::DisableNotifications()
 {
     m_bAnnouncementsEnabled = false;
 
-    if (m_pNotifyTask != NULL)
+    if (m_pNotifyTask != nullptr)
     {
         // Send Announcement that we are leaving.
 
         m_pNotifyTask->SetNTS( NTS_byebye );
-        m_pNotifyTask->Execute( NULL );
+        m_pNotifyTask->Execute( nullptr );
     }
 }
 
@@ -226,7 +213,7 @@ void SSDP::PerformSearch(const QString &sST, uint timeout_secs)
 
     QByteArray sRequest = rRequest.toUtf8();
 
-    MSocketDevice *pSocket = m_Sockets[ SocketIdx_Search ];
+    MSocketDevice *pSocket = m_sockets[ SocketIdx_Search ];
     if ( !pSocket->isValid() )
     {
         pSocket->setProtocol(MSocketDevice::IPv4);
@@ -260,7 +247,7 @@ void SSDP::run()
     RunProlog();
 
     fd_set          read_set;
-    struct timeval  timeout;
+    struct timeval  timeout {};
 
     LOG(VB_UPNP, LOG_INFO, "SSDP::Run - SSDP Thread Started." );
 
@@ -272,22 +259,22 @@ void SSDP::run()
     {
         int nMaxSocket = 0;
 
-        FD_ZERO( &read_set );
+        FD_ZERO( &read_set ); // NOLINT(readability-isolate-declaration)
 
-        for (uint nIdx = 0; nIdx < NumberOfSockets; nIdx++ )
+        for (auto & socket : m_sockets)
         {
-            if (m_Sockets[nIdx] != NULL && m_Sockets[nIdx]->socket() >= 0)
+            if (socket != nullptr && socket->socket() >= 0)
             {
-                FD_SET( m_Sockets[ nIdx ]->socket(), &read_set );
-                nMaxSocket = max( m_Sockets[ nIdx ]->socket(), nMaxSocket );
+                FD_SET( socket->socket(), &read_set );
+                nMaxSocket = max( socket->socket(), nMaxSocket );
 
 #if 0
-                if (m_Sockets[ nIdx ]->bytesAvailable() > 0)
+                if (socket->bytesAvailable() > 0)
                 {
                     LOG(VB_GENERAL, LOG_DEBUG,
                         QString("Found Extra data before select: %1")
                         .arg(nIdx));
-                    ProcessData( m_Sockets[ nIdx ] );
+                    ProcessData( socket );
                 }
 #endif
             }
@@ -296,14 +283,13 @@ void SSDP::run()
         timeout.tv_sec  = 1;
         timeout.tv_usec = 0;
 
-        int count;
-        count = select(nMaxSocket + 1, &read_set, NULL, NULL, &timeout);
+        int count = select(nMaxSocket + 1, &read_set, nullptr, nullptr, &timeout);
 
-        for (int nIdx = 0; count && nIdx < (int)NumberOfSockets; nIdx++ )
+        for (int nIdx = 0; count && nIdx < kNumberOfSockets; nIdx++ )
         {
-            bool cond1 = m_Sockets[nIdx] != NULL;
-            bool cond2 = cond1 && m_Sockets[nIdx]->socket() >= 0;
-            bool cond3 = cond2 && FD_ISSET(m_Sockets[nIdx]->socket(), &read_set);
+            bool cond1 = m_sockets[nIdx] != nullptr;
+            bool cond2 = cond1 && m_sockets[nIdx]->socket() >= 0;
+            bool cond3 = cond2 && FD_ISSET(m_sockets[nIdx]->socket(), &read_set);
 
             if (cond3)
             {
@@ -311,7 +297,7 @@ void SSDP::run()
                 LOG(VB_GENERAL, LOG_DEBUG, QString("FD_ISSET( %1 )").arg(nIdx));
 #endif
 
-                ProcessData(m_Sockets[nIdx]);
+                ProcessData(m_sockets[nIdx]);
                 count--;
             }
         }
@@ -332,7 +318,7 @@ void SSDP::ProcessData( MSocketDevice *pSocket )
     // Note: this function MUST do a read even if someone sends a zero byte UDP message
     // Otherwise the select() will continue to signal data ready, so to prevent using 100%
     // CPU, we need to call a recv function to make select() block again
-    bool didDoRead = 0;
+    bool didDoRead = false;
 
     // UDP message of zero length? OK, "recv" it and move on
     if (nBytes == 0)
@@ -340,7 +326,7 @@ void SSDP::ProcessData( MSocketDevice *pSocket )
         LOG(VB_UPNP, LOG_WARNING, QString("SSDP: Received 0 byte UDP message"));
     }
 
-    while ((nBytes = pSocket->bytesAvailable()) > 0 || (nBytes == 0 && !didDoRead))
+    while (((nBytes = pSocket->bytesAvailable()) > 0 || (nBytes == 0 && !didDoRead)) && !m_bTermRequested)
     {
         buffer.resize(nBytes);
 
@@ -348,10 +334,14 @@ void SSDP::ProcessData( MSocketDevice *pSocket )
         do
         {
             long ret = pSocket->readBlock( buffer.data() + nRead, nBytes - nRead );
-            didDoRead = 1;
+            didDoRead = true;
             if (ret < 0)
             {
-                if (errno == EAGAIN || errno == EWOULDBLOCK)
+                if (errno == EAGAIN
+#if EAGAIN != EWOULDBLOCK
+                    || errno == EWOULDBLOCK
+#endif
+                    )
                 {
                     if (retries == 3)
                     {
@@ -394,7 +384,7 @@ void SSDP::ProcessData( MSocketDevice *pSocket )
         // ------------------------------------------------------------------
         QString     str          = QString(buffer.constData());
         QStringList lines        = str.split("\r\n", QString::SkipEmptyParts);
-        QString     sRequestLine = lines.size() ? lines[0] : "";
+        QString     sRequestLine = !lines.empty() ? lines[0] : "";
 
         if (!lines.isEmpty())
             lines.pop_front();
@@ -414,10 +404,8 @@ void SSDP::ProcessData( MSocketDevice *pSocket )
 
         QStringMap  headers;
 
-        for ( QStringList::Iterator it = lines.begin();
-                                    it != lines.end(); ++it ) 
+        foreach (auto sLine, lines)
         {
-            QString sLine  = *it;
             QString sName  = sLine.section( ':', 0, 0 ).trimmed();
             QString sValue = sLine.section( ':', 1 );
 
@@ -444,7 +432,7 @@ void SSDP::ProcessData( MSocketDevice *pSocket )
                 // want to answer search requests.
                 // ----------------------------------------------------------
 
-                if (m_pNotifyTask != NULL)
+                if (m_pNotifyTask != nullptr)
                     ProcessSearchRequest( headers, peerAddress, peerPort ); 
 
                 break;
@@ -484,13 +472,11 @@ SSDPRequestType SSDP::ProcessRequestLine( const QString &sLine )
 
     if ( sLine.startsWith( QString("HTTP/") ))
         return SSDP_MSearchResp;
-    else
+
+    if (tokens.count() > 0)
     {
-        if (tokens.count() > 0)
-        {
-            if (tokens[0] == "M-SEARCH" ) return SSDP_MSearch;
-            if (tokens[0] == "NOTIFY"   ) return SSDP_Notify;
-        }
+        if (tokens[0] == "M-SEARCH" ) return SSDP_MSearch;
+        if (tokens[0] == "NOTIFY"   ) return SSDP_Notify;
     }
 
     return SSDP_Unknown;
@@ -516,7 +502,7 @@ QString SSDP::GetHeaderValue( const QStringMap &headers,
 /////////////////////////////////////////////////////////////////////////////
 
 bool SSDP::ProcessSearchRequest( const QStringMap &sHeaders, 
-                                 QHostAddress      peerAddress,
+                                 const QHostAddress& peerAddress,
                                  quint16           peerPort )
 {
     QString sMAN = GetHeaderValue( sHeaders, "MAN", "" );
@@ -548,7 +534,7 @@ bool SSDP::ProcessSearchRequest( const QStringMap &sHeaders,
 
     nMX = (nMX > 120) ? 120 : nMX;
 
-    int nNewMX = (int)(0 + ((unsigned short)random() % nMX)) * 1000;
+    int nNewMX = (0 + ((unsigned short)random() % nMX)) * 1000;
 
     // ----------------------------------------------------------------------
     // See what they are looking for...
@@ -556,14 +542,14 @@ bool SSDP::ProcessSearchRequest( const QStringMap &sHeaders,
 
     if ((sST == "ssdp:all") || (sST == "upnp:rootdevice"))
     {
-        UPnpSearchTask *pTask = new UPnpSearchTask( m_nServicePort, 
+        auto *pTask = new UPnpSearchTask( m_nServicePort,
             peerAddress, peerPort, sST, 
             UPnp::g_UPnpDeviceDesc.m_rootDevice.GetUDN());
 
 #if 0
         // Excute task now for fastest response, queue for time-delayed response
         // -=>TODO: To be trully uPnp compliant, this Execute should be removed.
-        pTask->Execute( NULL );
+        pTask->Execute( nullptr );
 #endif
 
         TaskQueue::Instance()->AddTask( nNewMX, pTask );
@@ -582,15 +568,12 @@ bool SSDP::ProcessSearchRequest( const QStringMap &sHeaders,
 
     if (sUDN.length() > 0)
     {
-        UPnpSearchTask *pTask = new UPnpSearchTask( m_nServicePort,
-                                                    peerAddress,
-                                                    peerPort,
-                                                    sST, 
-                                                    sUDN );
+        auto *pTask = new UPnpSearchTask( m_nServicePort, peerAddress,
+                                          peerPort, sST, sUDN );
 
         // Excute task now for fastest response, queue for time-delayed response
         // -=>TODO: To be trully uPnp compliant, this Execute should be removed.
-        pTask->Execute( NULL );
+        pTask->Execute( nullptr );
 
         TaskQueue::Instance()->AddTask( nNewMX, pTask );
 
@@ -710,14 +693,6 @@ SSDPExtension::SSDPExtension( int nServicePort , const QString &sSharePath)
 //
 /////////////////////////////////////////////////////////////////////////////
 
-SSDPExtension::~SSDPExtension( )
-{
-}
-
-/////////////////////////////////////////////////////////////////////////////
-//
-/////////////////////////////////////////////////////////////////////////////
-
 SSDPMethod SSDPExtension::GetMethod( const QString &sURI )
 {
     if (sURI == "getDeviceDesc"     ) return( SSDPM_GetDeviceDesc    );
@@ -788,7 +763,7 @@ void SSDPExtension::GetDeviceDesc( HTTPRequest *pRequest )
 //                  
 /////////////////////////////////////////////////////////////////////////////
 
-void SSDPExtension::GetFile( HTTPRequest *pRequest, QString sFileName )
+void SSDPExtension::GetFile( HTTPRequest *pRequest, const QString& sFileName )
 {
     pRequest->m_eResponseType   = ResponseTypeHTML;
 
@@ -827,7 +802,8 @@ void SSDPExtension::GetDeviceList( HTTPRequest *pRequest )
     QString     sXML;
     QTextStream os(&sXML, QIODevice::WriteOnly);
 
-    uint nDevCount, nEntryCount;
+    uint nDevCount = 0;
+    uint nEntryCount = 0;
     SSDPCache::Instance()->OutputXML(os, &nDevCount, &nEntryCount);
 
     NameValues list;

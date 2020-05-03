@@ -40,8 +40,8 @@ class Buffer : QObject
   public:
     enum constants {MAX_QUEUE = 500};
 
-    Buffer(MythExternControl * parent);
-    ~Buffer(void);
+    explicit Buffer(MythExternControl * parent);
+    ~Buffer(void) override = default;
     void Start(void) {
         m_thread = std::thread(&Buffer::Run, this);
     }
@@ -75,8 +75,10 @@ class Commands : public QObject
     Q_OBJECT
 
   public:
-    Commands(MythExternControl * parent);
-    ~Commands(void);
+    explicit Commands(MythExternControl * parent)
+        : m_parent(parent)
+        , m_apiVersion(-1) {}
+    ~Commands(void) override = default;
     void Start(void) {
         m_thread = std::thread(&Commands::Run, this);
     }
@@ -85,8 +87,8 @@ class Commands : public QObject
             m_thread.join();
     }
 
-    bool SendStatus(const QString & cmd, const QString & status);
-    bool SendStatus(const QString & cmd, const QString & serial,
+    bool SendStatus(const QString & command, const QString & status);
+    bool SendStatus(const QString & command, const QString & serial,
                     const QString & status);
     bool ProcessCommand(const QString & cmd);
 
@@ -101,9 +103,11 @@ class Commands : public QObject
     void HasPictureAttributes(const QString & serial) const;
     void SetBlockSize(const QString & serial, int blksz);
     void TuneChannel(const QString & serial, const QString & channum);
+    void TuneStatus(const QString & serial);
     void LoadChannels(const QString & serial);
     void FirstChannel(const QString & serial);
     void NextChannel(const QString & serial);
+    void Cleanup(void);
 
   private:
     std::thread m_thread;
@@ -121,7 +125,7 @@ class MythExternControl : public QObject
 
   public:
     MythExternControl(void);
-    ~MythExternControl(void);
+    ~MythExternControl(void) override;
 
     QString Desc(void) const { return QString("%1: ").arg(m_desc); }
 
@@ -143,13 +147,15 @@ class MythExternControl : public QObject
     void HasPictureAttributes(const QString & serial) const;
     void SetBlockSize(const QString & serial, int blksz);
     void TuneChannel(const QString & serial, const QString & channum);
+    void TuneStatus(const QString & serial);
     void LoadChannels(const QString & serial);
     void FirstChannel(const QString & serial);
     void NextChannel(const QString & serial);
+    void Cleanup(void);
 
   public slots:
     void SetDescription(const QString & desc) { m_desc = desc; }
-    void SendMessage(const QString & command, const QString & serial,
+    void SendMessage(const QString & cmd, const QString & serial,
                      const QString & msg);
     void ErrorMessage(const QString & msg);
     void Opened(void);
@@ -162,21 +168,21 @@ class MythExternControl : public QObject
     Commands     m_commands;
     QString      m_desc;
 
-    std::atomic<bool> m_run;
-    std::atomic<bool> m_commands_running;
-    std::atomic<bool> m_buffer_running;
+    std::atomic<bool> m_run              {true};
+    std::atomic<bool> m_commands_running {true};
+    std::atomic<bool> m_buffer_running   {true};
     std::mutex   m_run_mutex;
     std::condition_variable m_run_cond;
     std::mutex   m_msg_mutex;
 
-    bool         m_fatal;
+    bool         m_fatal                 {false};
     QString      m_errmsg;
 
     std::mutex        m_flow_mutex;
     std::condition_variable m_flow_cond;
-    std::atomic<bool> m_streaming;
-    std::atomic<bool> m_xon;
-    std::atomic<bool> m_ready;
+    std::atomic<bool> m_streaming        {false};
+    std::atomic<bool> m_xon              {false};
+    std::atomic<bool> m_ready            {false};
 };
 
 #endif

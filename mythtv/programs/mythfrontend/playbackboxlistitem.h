@@ -14,11 +14,13 @@ class PlaybackBoxListItem : public MythUIButtonListItem
   public:
     PlaybackBoxListItem(PlaybackBox *parent, MythUIButtonList *lbtype, ProgramInfo *pi);
 
-//    virtual void SetToRealButton(MythUIStateType *button, bool selected);
+//  void SetToRealButton(MythUIStateType *button, bool selected) override; // MythUIButtonListItem
 
   private:
-    PlaybackBox *pbbox;
-    bool         needs_update;
+#ifdef INCLUDE_UNFINISHED
+    PlaybackBox *m_pbbox        {nullptr};
+    bool         m_needs_update {true};
+#endif
 };
 
 #endif // _PLAYBACKBOXLISTITEM_H_

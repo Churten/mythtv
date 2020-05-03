@@ -18,7 +18,7 @@ class RefCountHandler
 {
 public:
     RefCountHandler() : r(new T()) { }
-    RefCountHandler(T *r) : r(r) { r->IncrRef(); }
+    RefCountHandler(T *_r) : r(_r) { r->IncrRef(); }
     RefCountHandler(const RefCountHandler &other) : r(other.r) { r->IncrRef(); }
     RefCountHandler &operator= (const RefCountHandler &other)
     {
@@ -35,7 +35,7 @@ public:
     const T *operator->() const { return r; }
 
 private:
-    T *r;
+    T *r; //NOLINT(readability-identifier-naming)
 };
 
 /** \brief General purpose reference counted list.
@@ -43,6 +43,7 @@ private:
  * provide the same access methods as a QList
  */
 template <class T>
+
 class RefCountedList : public QList<RefCountHandler<T> >
 {
 public:
@@ -166,8 +167,11 @@ public:
         QList<RefCountHandler<T> >::operator=(other);
         return *this;
     }
+
+    RefCountedList<T>() = default;
+    RefCountedList<T>(const RefCountedList<T>&) = default;
 };
 
-typedef RefCountedList<ReferenceCounter> ReferenceCounterList;
+using ReferenceCounterList = RefCountedList<ReferenceCounter>;
 
 #endif /* defined(__MythTV__referencecounterlist__) */

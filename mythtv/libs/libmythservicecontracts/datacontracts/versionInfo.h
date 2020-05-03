@@ -36,15 +36,13 @@ class SERVICE_PUBLIC VersionInfo : public QObject
     PROPERTYIMP( QString,  Branch    )
     PROPERTYIMP( QString,  Protocol  )
     PROPERTYIMP( QString,  Binary    )
-    PROPERTYIMP( QString,  Schema    )
+    PROPERTYIMP( QString,  Schema    );
 
     public:
 
         static inline void InitializeCustomTypes();
 
-    public:
-
-        VersionInfo(QObject *parent = 0)
+        Q_INVOKABLE VersionInfo(QObject *parent = nullptr)
             : QObject   ( parent ),
               m_Version ( ""     ),
               m_Branch  ( ""     ),
@@ -53,36 +51,27 @@ class SERVICE_PUBLIC VersionInfo : public QObject
               m_Schema  ( ""     )
         {
         }
-        
-        VersionInfo( const VersionInfo &src ) 
+
+        void Copy( const VersionInfo *src )
         {
-            Copy( src );
+            m_Version  = src->m_Version;
+            m_Branch   = src->m_Branch;
+            m_Protocol = src->m_Protocol;
+            m_Binary   = src->m_Binary;
+            m_Schema   = src->m_Schema;
         }
 
-        void Copy( const VersionInfo &src )
-        {
-            m_Version  = src.m_Version;
-            m_Branch   = src.m_Branch;
-            m_Protocol = src.m_Protocol;
-            m_Binary   = src.m_Binary;
-            m_Schema   = src.m_Schema;
-        }
+    private:
+        Q_DISABLE_COPY(VersionInfo);
 };
 
-typedef VersionInfo* VersionInfoPtr;
+using VersionInfoPtr = VersionInfo*;
 
-} // namespace DTC
-
-Q_DECLARE_METATYPE( DTC::VersionInfo  )
-Q_DECLARE_METATYPE( DTC::VersionInfo* )
-
-namespace DTC
-{
 inline void VersionInfo::InitializeCustomTypes()
 {
-    qRegisterMetaType< VersionInfo   >();
     qRegisterMetaType< VersionInfo*  >();
 }
-}
+
+} // namespace DTC
 
 #endif

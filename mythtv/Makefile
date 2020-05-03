@@ -1,7 +1,7 @@
 include config.mak
 
 MAKE_SUBDIRS = external
-QT_SUBDIRS   = libs filters html programs themes i18n locales
+QT_SUBDIRS   = libs html programs themes i18n locales
 
 ifdef CONFIG_BINDINGS_PERL
     MAKE_SUBDIRS += bindings/perl
@@ -23,6 +23,7 @@ SUBDIRS += $(MAKE_SUBDIRS) $(QT_SUBDIRS)
 	distclean $(addsuffix _distclean,$(SUBDIRS))  \
 	install   $(addsuffix _install,  $(SUBDIRS))  \
 	uninstall $(addsuffix _uninstall,$(SUBDIRS))  \
+	global tags TAGS cleanold compdb \
 	libs/libmythbase/version.h force
 
 all: libs/libmythbase/version.h subdirs
@@ -42,8 +43,7 @@ libs/libmythbase/version.h:	version.sh force
 
 # explicit subdir dependencies
 libs: external
-filters: libs
-programs: libs filters
+programs: libs
 
 
 subdirs: $(SUBDIRS)
@@ -53,7 +53,6 @@ settings.pro: config.mak
 
 # explicit prerequisites for qmake generated makefiles
 libs/Makefile: libs/libs.pro
-filters/Makefile: filters/filters.pro
 html/Makefile: html/html.pro
 programs/Makefile: programs/programs.pro
 themes/Makefile: themes/themes.pro
@@ -88,6 +87,8 @@ distclean: $(addsuffix _distclean,$(SUBDIRS))
 	-rm -f external/FFmpeg/libavutil/avconfig.h
 	-rm -f config.ep
 	-rm -f $(addsuffix /Makefile,$(QT_SUBDIRS))
+	-rm -f ../GPATH ../GRTAGS ../GTAGS
+	-rm -f ../TAGS ../tags
 
 install: $(addsuffix _install,$(SUBDIRS))
 
@@ -98,3 +99,26 @@ uninstall: $(addsuffix _uninstall,$(SUBDIRS))
 
 test: libs/libmythbase/version.h subdirs
 	cd libs ; $(MAKE) test
+
+ctags tags:
+	@echo "Making tags..."
+	@cd .. ; rm -f tags
+	@cd .. ; find . -name \*.h -o -name \*.c -o -name \*.cpp | grep -v moc_ | xargs -r ctags -a
+
+etags TAGS:
+	@echo "Making TAGS..."
+	@cd .. ; rm -f TAGS
+	@cd .. ; find . -name \*.h -o -name \*.c -o -name \*.cpp | grep -v moc_ | xargs -r etags -a
+
+global GPATH GRTAGS GTAGS:
+	@echo "Making global tags..."
+	@cd .. ; rm -f GPATH GRTAGS GTAGS
+	@cd .. ; find . -name \*.h -o -name \*.c -o -name \*.cpp | grep -v moc_ | gtags -f -
+
+cleanall: clean
+	@echo "Removing old moc and .o files missed by 'clean'..."
+	@find .. -name moc_* -o -name *.o -name *.o.json | xargs -r rm
+
+compdb:
+	@echo "Building ../compile_commands.json"
+	@programs/scripts/build_compdb.py

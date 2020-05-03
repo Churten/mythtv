@@ -9,11 +9,8 @@ using namespace std;
 #include "cc608reader.h"
 
 CC608Reader::CC608Reader(MythPlayer *parent)
-  : m_parent(parent),   m_enabled(false), m_readPosition(0),
-    m_writePosition(0), m_maxTextSize(0), m_ccMode(CC_CC1),
-    m_ccPageNum(0x888)
+  : m_parent(parent)
 {
-    memset(&m_inputBuffers, 0, sizeof(m_inputBuffers));
     m_maxTextSize = 8 * (sizeof(teletextsubtitle) + VT_WIDTH);
     for (int i = 0; i < MAXTBUFFER; i++)
         m_inputBuffers[i].buffer = new unsigned char[m_maxTextSize + 1];
@@ -27,7 +24,7 @@ CC608Reader::~CC608Reader()
         if (m_inputBuffers[i].buffer)
         {
             delete [] m_inputBuffers[i].buffer;
-            m_inputBuffers[i].buffer = NULL;
+            m_inputBuffers[i].buffer = nullptr;
         }
     }
 }
@@ -53,7 +50,7 @@ CC608Buffer *CC608Reader::GetOutputText(bool &changed)
         }
     }
 
-    return NULL;
+    return nullptr;
 }
 
 CC608Buffer *CC608Reader::GetOutputText(bool &changed, int &streamIdx)
@@ -61,7 +58,7 @@ CC608Buffer *CC608Reader::GetOutputText(bool &changed, int &streamIdx)
     streamIdx = -1;
 
     if (!m_enabled)
-        return NULL;
+        return nullptr;
 
     if (!m_parent)
     {
@@ -80,11 +77,10 @@ CC608Buffer *CC608Reader::GetOutputText(bool &changed, int &streamIdx)
             m_state[streamIdx].m_changed = false;
             return &m_state[streamIdx].m_output;
         }
-        else
-            return &m_state[MAXOUTBUFFERS - 1].m_output;
+        return &m_state[MAXOUTBUFFERS - 1].m_output;
     }
 
-    VideoFrame *last = NULL;
+    VideoFrame *last = nullptr;
     if (m_parent->GetVideoOutput())
         last = m_parent->GetVideoOutput()->GetLastShownFrame();
 
@@ -103,7 +99,7 @@ CC608Buffer *CC608Reader::GetOutputText(bool &changed, int &streamIdx)
             // the pages are then very often transmitted (sometimes as often as
             // every 2 frames) with small differences between them
             unsigned char *inpos = m_inputBuffers[m_writePosition].buffer;
-            int pagenr;
+            int pagenr = 0;
             memcpy(&pagenr, inpos, sizeof(int));
             inpos += sizeof(int);
 
@@ -114,7 +110,7 @@ CC608Buffer *CC608Reader::GetOutputText(bool &changed, int &streamIdx)
                 (*inpos)++;
                 while (*inpos)
                 {
-                    struct teletextsubtitle st;
+                    struct teletextsubtitle st {};
                     memcpy(&st, inpos, sizeof(st));
                     inpos += sizeof(st);
 
@@ -151,10 +147,7 @@ CC608Buffer *CC608Reader::GetOutputText(bool &changed, int &streamIdx)
         m_state[streamIdx].m_changed = false;
         return &m_state[streamIdx].m_output;
     }
-    else
-    {
-        return &m_state[MAXOUTBUFFERS - 1].m_output;
-    }
+    return &m_state[MAXOUTBUFFERS - 1].m_output;
 }
 
 void CC608Reader::SetMode(int mode)
@@ -169,7 +162,7 @@ void CC608Reader::SetMode(int mode)
 
 int CC608Reader::Update(unsigned char *inpos)
 {
-    struct ccsubtitle subtitle;
+    struct ccsubtitle subtitle {};
 
     memcpy(&subtitle, inpos, sizeof(subtitle));
     inpos += sizeof(ccsubtitle);
@@ -195,9 +188,8 @@ int CC608Reader::Update(unsigned char *inpos)
         int row = 0;
         int linecont = (subtitle.resumetext & CC_LINE_CONT);
 
-        vector<CC608Text*> *ccbuf = new vector<CC608Text*>;
-        vector<CC608Text*>::iterator ccp;
-        CC608Text *tmpcc = NULL;
+        auto *ccbuf = new vector<CC608Text*>;
+        CC608Text *tmpcc = nullptr;
         int replace = linecont;
         int scroll = 0;
         bool scroll_prsv = false;
@@ -285,7 +277,7 @@ int CC608Reader::Update(unsigned char *inpos)
                 if (row)
                     scroll = m_state[streamIdx].m_outputRow - 15;
                 if (tmpcc)
-                    tmpcc->y = 15;
+                    tmpcc->m_y = 15;
             }
         }
         else if (subtitle.rowcount == 0 || row > 1)
@@ -294,11 +286,10 @@ int CC608Reader::Update(unsigned char *inpos)
             // - fix display of old (badly-encoded) files
             if (m_state[streamIdx].m_outputRow > 15)
             {
-                ccp = ccbuf->begin();
-                for (; ccp != ccbuf->end(); ++ccp)
+                for (auto & ccp : *ccbuf)
                 {
-                    tmpcc = *ccp;
-                    tmpcc->y -= (m_state[streamIdx].m_outputRow - 15);
+                    tmpcc = ccp;
+                    tmpcc->m_y -= (m_state[streamIdx].m_outputRow - 15);
                 }
             }
         }
@@ -315,7 +306,7 @@ int CC608Reader::Update(unsigned char *inpos)
             {
                 m_state[streamIdx].m_outputRow = subtitle.rowcount;
                 if (tmpcc)
-                    tmpcc->y = m_state[streamIdx].m_outputRow;
+                    tmpcc->m_y = m_state[streamIdx].m_outputRow;
             }
             if (row)
             {
@@ -372,17 +363,15 @@ void CC608Reader::Update608Text(
     vector<CC608Text*>::iterator i;
     int visible = 0;
 
-    m_state[streamIdx].m_output.lock.lock();
-    if (m_state[streamIdx].m_output.buffers.size() && (scroll || replace))
+    m_state[streamIdx].m_output.m_lock.lock();
+    if (!m_state[streamIdx].m_output.m_buffers.empty() && (scroll || replace))
     {
-        CC608Text *cc;
-
         // get last row
         int ylast = 0;
-        i = m_state[streamIdx].m_output.buffers.end() - 1;
-        cc = *i;
+        i = m_state[streamIdx].m_output.m_buffers.end() - 1;
+        CC608Text *cc = *i;
         if (cc)
-            ylast = cc->y;
+            ylast = cc->m_y;
 
         // calculate row positions to delete, keep
         int ydel = scroll_yoff + scroll;
@@ -395,34 +384,34 @@ void CC608Reader::Update608Text(
             ykeep += ymove;
         }
 
-        i = m_state[streamIdx].m_output.buffers.begin();
-        while (i < m_state[streamIdx].m_output.buffers.end())
+        i = m_state[streamIdx].m_output.m_buffers.begin();
+        while (i < m_state[streamIdx].m_output.m_buffers.end())
         {
             cc = (*i);
             if (!cc)
             {
-                i = m_state[streamIdx].m_output.buffers.erase(i);
+                i = m_state[streamIdx].m_output.m_buffers.erase(i);
                 continue;
             }
 
-            if (cc->y > (ylast - replace))
+            if (cc->m_y > (ylast - replace))
             {
                 // delete last lines
                 delete cc;
-                i = m_state[streamIdx].m_output.buffers.erase(i);
+                i = m_state[streamIdx].m_output.m_buffers.erase(i);
             }
             else if (scroll)
             {
-                if (cc->y > ydel && cc->y <= ykeep)
+                if (cc->m_y > ydel && cc->m_y <= ykeep)
                 {
                     // scroll up
-                    cc->y -= (scroll + ymove);
+                    cc->m_y -= (scroll + ymove);
                     ++i;
                 }
                 else
                 {
                     // delete lines outside scroll window
-                    i = m_state[streamIdx].m_output.buffers.erase(i);
+                    i = m_state[streamIdx].m_output.m_buffers.erase(i);
                     delete cc;
                 }
             }
@@ -433,7 +422,7 @@ void CC608Reader::Update608Text(
         }
     }
 
-    visible += m_state[streamIdx].m_output.buffers.size();
+    visible += m_state[streamIdx].m_output.m_buffers.size();
 
     if (ccbuf)
     {
@@ -443,12 +432,12 @@ void CC608Reader::Update608Text(
             if (*i)
             {
                 visible++;
-                m_state[streamIdx].m_output.buffers.push_back(*i);
+                m_state[streamIdx].m_output.m_buffers.push_back(*i);
             }
         }
     }
     m_state[streamIdx].m_changed = visible;
-    m_state[streamIdx].m_output.lock.unlock();
+    m_state[streamIdx].m_output.m_lock.unlock();
 }
 
 void CC608Reader::ClearBuffers(bool input, bool output, int outputStreamIdx)
@@ -469,8 +458,8 @@ void CC608Reader::ClearBuffers(bool input, bool output, int outputStreamIdx)
 
     if (output && outputStreamIdx < 0)
     {
-        for (int i = 0; i < MAXOUTBUFFERS; ++i)
-            m_state[i].Clear();
+        for (auto & state : m_state)
+            state.Clear();
     }
 
     if (output && outputStreamIdx >= 0)
@@ -482,7 +471,7 @@ void CC608Reader::ClearBuffers(bool input, bool output, int outputStreamIdx)
 
 int CC608Reader::NumInputBuffers(bool need_to_lock)
 {
-    int ret;
+    int ret = 0;
 
     if (need_to_lock)
         m_inputBufLock.lock();

@@ -29,25 +29,25 @@ class ThemeChooser : public MythScreenType
     Q_OBJECT
 
   public:
-    ThemeChooser(MythScreenStack *parent,
+    explicit ThemeChooser(MythScreenStack *parent,
                const QString &name = "ThemeChooser");
-   ~ThemeChooser();
+   ~ThemeChooser() override;
 
-    bool Create(void);
-    void Load(void);
-    void Init(void);
-    bool keyPressEvent(QKeyEvent*);
-    void customEvent(QEvent *e);
+    bool Create(void) override; // MythScreenType
+    void Load(void) override; // MythScreenType
+    void Init(void) override; // MythScreenType
+    bool keyPressEvent(QKeyEvent *event) override; // MythScreenType
+    void customEvent(QEvent *e) override; // MythUIType
 
   private slots:
     void itemChanged(MythUIButtonListItem *item);
     void saveAndReload(MythUIButtonListItem *item);
 
   protected slots:
-    void popupClosed(QString which, int result);
+    void popupClosed(const QString& which, int result);
     void saveAndReload(void);
     void toggleFullscreenPreview(void);
-    void toggleThemeUpdateNotifications(void);
+    static void toggleThemeUpdateNotifications(void);
     void refreshDownloadableThemes(void);
     void removeTheme(void);
 
@@ -66,31 +66,31 @@ class ThemeChooser : public MythScreenType
         dsExtractingTheme
     };
 
-    ThemeInfo *loadThemeInfo(QFileInfo &theme);
+    ThemeInfo *loadThemeInfo(const QFileInfo &theme);
     void showPopupMenu(void);
     void updateProgressBar(int bytesReceived, int bytesTotal);
     bool removeThemeDir(const QString &dirname);
 
-    MythUIButtonList *m_themes;
-    MythUIImage      *m_preview;
+    MythUIButtonList *m_themes                    {nullptr};
+    MythUIImage      *m_preview                   {nullptr};
 
-    bool              m_fullPreviewShowing;
-    MythUIStateType  *m_fullPreviewStateType;
-    MythUIText       *m_fullScreenName;
-    MythUIImage      *m_fullScreenPreview;
+    bool              m_fullPreviewShowing        {false};
+    MythUIStateType  *m_fullPreviewStateType      {nullptr};
+    MythUIText       *m_fullScreenName            {nullptr};
+    MythUIImage      *m_fullScreenPreview         {nullptr};
 
     QFileInfoList     m_infoList;
-    bool              m_refreshDownloadableThemes;
+    bool              m_refreshDownloadableThemes {false};
     QString           m_userThemeDir;
 
     QMap<QString, ThemeInfo*>  m_themeNameInfos;
     QMap<QString, ThemeInfo*>  m_themeFileNameInfos;
     QMap<QString, QString>     m_themeStatuses;
-    ThemeInfo                 *m_downloadTheme;
+    ThemeInfo                 *m_downloadTheme    {nullptr};
     QString                    m_downloadFile;
-    DownloadState              m_downloadState;
+    DownloadState              m_downloadState    {dsIdle};
 
-    MythDialogBox      *m_popupMenu;
+    MythDialogBox      *m_popupMenu               {nullptr};
 };
 
 ////////////////////////////////////////////////////////////////////////////
@@ -101,13 +101,13 @@ class ThemeUpdateChecker : public QObject
 
   public:
     ThemeUpdateChecker(void);
-   ~ThemeUpdateChecker(void);
+   ~ThemeUpdateChecker(void) override;
 
   protected slots:
     void checkForUpdate(void);
 
   private:
-    QTimer    *m_updateTimer;
+    QTimer    *m_updateTimer {nullptr};
     QStringList m_mythVersions;
     QString    m_infoPackage;
     QString    m_lastKnownThemeVersion;

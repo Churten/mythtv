@@ -35,9 +35,9 @@
 #include "Visible.h"  // For MHInteractible
 #include "Stream.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdarg.h>
+#include <cstdarg>
+#include <cstdio>
+#include <cstdlib>
 
 // External creation function.
 MHEG *MHCreateEngine(MHContext *context)
@@ -47,12 +47,8 @@ MHEG *MHCreateEngine(MHContext *context)
 
 MHEngine::MHEngine(MHContext *context): m_Context(context)
 {
-    m_fInTransition = false;
-    m_fBooting = true;
-    m_Interacting = 0;
-
     // Required for BBC Freeview iPlayer
-    MHPSEntry *pEntry = new MHPSEntry;
+    auto *pEntry = new MHPSEntry;
     pEntry->m_FileName.Copy("ram://bbcipstr");
     pEntry->m_Data.Append(new MHUnion(true)); // Default true
     // The next value must be true to enable Freeview interaction channel
@@ -175,9 +171,10 @@ int MHEngine::RunAll()
         {
             MHAsynchEvent *pEvent = m_EventQueue.dequeue();
             MHLOG(MHLogLinks, QString("Asynchronous event dequeued - %1 from %2")
-                  .arg(MHLink::EventTypeToString(pEvent->eventType))
-                  .arg(pEvent->pEventSource->m_ObjectReference.Printable()));
-            CheckLinks(pEvent->pEventSource->m_ObjectReference, pEvent->eventType, pEvent->eventData);
+                  .arg(MHLink::EventTypeToString(pEvent->m_eventType))
+                  .arg(pEvent->m_pEventSource->m_ObjectReference.Printable()));
+            CheckLinks(pEvent->m_pEventSource->m_ObjectReference,
+                       pEvent->m_eventType, pEvent->m_eventData);
             delete pEvent;
         }
     }
@@ -199,7 +196,7 @@ MHGroup *MHEngine::ParseProgram(QByteArray &text)
 {
     if (text.size() == 0)
     {
-        return NULL;
+        return nullptr;
     }
 
     // Look at the first byte to decide whether this is text or binary.  Binary
@@ -207,9 +204,9 @@ MHGroup *MHEngine::ParseProgram(QByteArray &text)
     // or curly bracket.
     // This is only there for testing: all downloaded objects will be in ASN1
     unsigned char ch = text[0];
-    MHParseBase *parser = NULL;
-    MHParseNode *pTree = NULL;
-    MHGroup *pRes = NULL;
+    MHParseBase *parser = nullptr;
+    MHParseNode *pTree = nullptr;
+    MHGroup *pRes = nullptr;
 
     if (ch >= 128)
     {
@@ -234,7 +231,7 @@ MHGroup *MHEngine::ParseProgram(QByteArray &text)
                 pRes = new MHScene;
                 break;
             default:
-                pTree->Failure("Expected Application or Scene"); // throws exception.
+                MHParseNode::Failure("Expected Application or Scene"); // throws exception.
         }
 
         pRes->Initialise(pTree, this); // Convert the parse tree.
@@ -265,7 +262,8 @@ static EProtocol PathProtocol(const QString& csPath)
     if (csPath.startsWith("CI:"))
         return kProtoCI;
 
-    int firstColon = csPath.indexOf(':'), firstSlash = csPath.indexOf('/');
+    int firstColon = csPath.indexOf(':');
+    int firstSlash = csPath.indexOf('/');
     if (firstColon > 0 && firstSlash > 0 && firstColon < firstSlash)
         return kProtoUnknown;
 
@@ -296,7 +294,7 @@ bool MHEngine::Launch(const MHObjectRef &target, bool fIsSpawn)
         return false;
     }
 
-    MHApplication *pProgram = dynamic_cast<MHApplication*>(ParseProgram(text));
+    auto *pProgram = dynamic_cast<MHApplication*>(ParseProgram(text));
     if (! pProgram)
     {
         MHLOG(MHLogWarning, "Empty application");
@@ -308,7 +306,7 @@ bool MHEngine::Launch(const MHObjectRef &target, bool fIsSpawn)
         delete pProgram;
         return false;
     }
-    if ((__mhlogoptions & MHLogScenes) && __mhlogStream != 0)   // Print it so we know what's going on.
+    if ((__mhlogoptions & MHLogScenes) && __mhlogStream != nullptr)   // Print it so we know what's going on.
     {
         pProgram->PrintMe(__mhlogStream, 0);
     }
@@ -420,8 +418,6 @@ void MHEngine::Quit()
 
 void MHEngine::TransitionToScene(const MHObjectRef &target)
 {
-    int i;
-
     if (m_fInTransition)
     {
         // TransitionTo is not allowed in OnStartUp or OnCloseDown actions.
@@ -463,7 +459,7 @@ void MHEngine::TransitionToScene(const MHObjectRef &target)
     // Deactivate any non-shared ingredients in the application.
     MHApplication *pApp = CurrentApp();
 
-    for (i = pApp->m_Items.Size(); i > 0; i--)
+    for (int i = pApp->m_Items.Size(); i > 0; i--)
     {
         MHIngredient *pItem = pApp->m_Items.GetAt(i - 1);
 
@@ -499,17 +495,17 @@ void MHEngine::TransitionToScene(const MHObjectRef &target)
     if (pApp->m_pCurrentScene)
     {
         delete(pApp->m_pCurrentScene);
-        pApp->m_pCurrentScene = NULL;
+        pApp->m_pCurrentScene = nullptr;
     }
 
-    m_Interacting = 0;
+    m_Interacting = nullptr;
 
     // Switch to the new scene.
     CurrentApp()->m_pCurrentScene = static_cast< MHScene* >(pProgram);
     SetInputRegister(CurrentScene()->m_nEventReg);
     m_redrawRegion = QRegion(0, 0, CurrentScene()->m_nSceneCoordX, CurrentScene()->m_nSceneCoordY); // Redraw the whole screen
 
-    if ((__mhlogoptions & MHLogScenes) && __mhlogStream != 0)   // Print it so we know what's going on.
+    if ((__mhlogoptions & MHLogScenes) && __mhlogStream != nullptr)   // Print it so we know what's going on.
     {
         pProgram->PrintMe(__mhlogStream, 0);
     }
@@ -557,7 +553,7 @@ QString MHEngine::GetPathName(const MHOctetString &str)
     }
 
     // Remove any occurrences of x/../
-    int nPos;
+    int nPos = -1;
 
     while ((nPos = csPath.indexOf("/../")) >= 0)
     {
@@ -578,8 +574,9 @@ QString MHEngine::GetPathName(const MHOctetString &str)
 MHRoot *MHEngine::FindObject(const MHObjectRef &oRef, bool failOnNotFound)
 {
     // It should match either the application or the scene.
-    MHGroup *pSearch = NULL;
-    MHGroup *pScene = CurrentScene(), *pApp = CurrentApp();
+    MHGroup *pSearch = nullptr;
+    MHGroup *pScene = CurrentScene();
+    MHGroup *pApp = CurrentApp();
 
     if (pScene && GetPathName(pScene->m_ObjectReference.m_GroupId) == GetPathName(oRef.m_GroupId))
     {
@@ -610,7 +607,7 @@ MHRoot *MHEngine::FindObject(const MHObjectRef &oRef, bool failOnNotFound)
         throw "FindObject failed";
     }
 
-    return NULL; // If we don't generate an error.
+    return nullptr; // If we don't generate an error.
 }
 
 // Run queued actions.
@@ -624,7 +621,7 @@ void MHEngine::RunActions()
         // Run it.  If it fails and throws an exception catch it and continue with the next.
         try
         {
-            if ((__mhlogoptions & MHLogActions) && __mhlogStream != 0)   // Debugging
+            if ((__mhlogoptions & MHLogActions) && __mhlogStream != nullptr)   // Debugging
             {
                 fprintf(__mhlogStream, "[freemheg] Action - ");
                 pAction->PrintMe(__mhlogStream, 0);
@@ -633,7 +630,7 @@ void MHEngine::RunActions()
 
             pAction->Perform(this);
         }
-        catch (char const *)
+        catch (...)
         {
         }
     }
@@ -690,10 +687,10 @@ void MHEngine::EventTriggered(MHRoot *pSource, enum EventType ev, const MHUnion 
         default:
         {
             // Asynchronous events.  Add to the event queue.
-            MHAsynchEvent *pEvent = new MHAsynchEvent;
-            pEvent->pEventSource = pSource;
-            pEvent->eventType = ev;
-            pEvent->eventData = evData;
+            auto *pEvent = new MHAsynchEvent;
+            pEvent->m_pEventSource = pSource;
+            pEvent->m_eventType = ev;
+            pEvent->m_eventData = evData;
             m_EventQueue.enqueue(pEvent);
         }
         break;
@@ -708,10 +705,8 @@ void MHEngine::EventTriggered(MHRoot *pSource, enum EventType ev, const MHUnion 
 // Check all the links in the application and scene and fire any that match this event.
 void MHEngine::CheckLinks(const MHObjectRef &sourceRef, enum EventType ev, const MHUnion &un)
 {
-    for (int i = 0; i < m_LinkTable.size(); i++)
-    {
-        m_LinkTable.at(i)->MatchEvent(sourceRef, ev, un, this);
-    }
+    foreach (auto link, m_LinkTable)
+        link->MatchEvent(sourceRef, ev, un, this);
 }
 
 // Add and remove links to and from the active link table.
@@ -771,9 +766,9 @@ void MHEngine::BringToFront(const MHRoot *p)
         return;    // If it's not there do nothing
     }
 
-    MHVisible *pVis = (MHVisible *)p; // Can now safely cast it.
+    auto *pVis = (MHVisible *)p; // Can now safely cast it.
     CurrentApp()->m_DisplayStack.RemoveAt(nPos); // Remove it from its present posn
-    CurrentApp()->m_DisplayStack.Append((MHVisible *)pVis); // Push it on the top.
+    CurrentApp()->m_DisplayStack.Append(pVis); // Push it on the top.
     Redraw(pVis->GetVisibleArea()); // Request a redraw
 }
 
@@ -786,7 +781,7 @@ void MHEngine::SendToBack(const MHRoot *p)
         return;    // If it's not there do nothing
     }
 
-    MHVisible *pVis = (MHVisible *)p; // Can now safely cast it.
+    auto *pVis = (MHVisible *)p; // Can now safely cast it.
     CurrentApp()->m_DisplayStack.RemoveAt(nPos); // Remove it from its present posn
     CurrentApp()->m_DisplayStack.InsertAt(pVis, 0); // Put it on the bottom.
     Redraw(pVis->GetVisibleArea()); // Request a redraw
@@ -801,7 +796,7 @@ void MHEngine::PutBefore(const MHRoot *p, const MHRoot *pRef)
         return;    // If it's not there do nothing
     }
 
-    MHVisible *pVis = (MHVisible *)p; // Can now safely cast it.
+    auto *pVis = (MHVisible *)p; // Can now safely cast it.
     int nRef = CurrentApp()->FindOnStack(pRef);
 
     if (nRef == -1)
@@ -839,7 +834,7 @@ void MHEngine::PutBehind(const MHRoot *p, const MHRoot *pRef)
         return;    // If the reference visible isn't there do nothing.
     }
 
-    MHVisible *pVis = (MHVisible *)p; // Can now safely cast it.
+    auto *pVis = (MHVisible *)p; // Can now safely cast it.
     CurrentApp()->m_DisplayStack.RemoveAt(nPos);
 
     if (nRef >= nPos)
@@ -847,14 +842,14 @@ void MHEngine::PutBehind(const MHRoot *p, const MHRoot *pRef)
         nRef--;    // The position of the reference may have shifted
     }
 
-    CurrentApp()->m_DisplayStack.InsertAt((MHVisible *)pVis, nRef); // Shift the reference and anything above up.
+    CurrentApp()->m_DisplayStack.InsertAt(pVis, nRef); // Shift the reference and anything above up.
     Redraw(pVis->GetVisibleArea()); // Request a redraw
 }
 
 // Draw a region of the screen.  This attempts to minimise the drawing by eliminating items
 // that are completely obscured by items above them.  We have to take into account the
 // transparency of items since items higher up the stack may be semi-transparent.
-void MHEngine::DrawRegion(QRegion toDraw, int nStackPos)
+void MHEngine::DrawRegion(const QRegion& toDraw, int nStackPos)
 {
     if (toDraw.isEmpty())
     {
@@ -895,13 +890,13 @@ void MHEngine::DrawDisplay(QRegion toDraw)
         return;
     }
 
-    int nTopStack = CurrentApp() == NULL ? -1 : CurrentApp()->m_DisplayStack.Size() - 1;
+    int nTopStack = CurrentApp() == nullptr ? -1 : CurrentApp()->m_DisplayStack.Size() - 1;
     DrawRegion(toDraw, nTopStack);
 }
 
 // An area of the screen needs to be redrawn.  We simply remember this and redraw it
 // in one go when the timer expires.
-void MHEngine::Redraw(QRegion region)
+void MHEngine::Redraw(const QRegion& region)
 {
     m_redrawRegion += region;
 }
@@ -1004,7 +999,7 @@ void MHEngine::RequestExternalContent(MHIngredient *pRequester)
                     reinterpret_cast< const unsigned char * >(text.constData()),
                     text.size(), this);
             }
-            catch (char const *)
+            catch (...)
             {}
         }
         else
@@ -1021,7 +1016,7 @@ void MHEngine::RequestExternalContent(MHIngredient *pRequester)
         // Need to record this and check later.
         MHLOG(MHLogNotifications, QString("Waiting for %1 <= %2")
             .arg(pRequester->m_ObjectReference.Printable()).arg(csPath.left(128)) );
-        MHExternContent *pContent = new MHExternContent;
+        auto *pContent = new MHExternContent;
         pContent->m_FileName = csPath;
         pContent->m_pRequester = pRequester;
         pContent->m_time.start();
@@ -1033,11 +1028,10 @@ void MHEngine::RequestExternalContent(MHIngredient *pRequester)
 void MHEngine::CancelExternalContentRequest(MHIngredient *pRequester)
 {
     QList<MHExternContent *>::iterator it = m_ExternContentTable.begin();
-    MHExternContent *pContent;
 
     while (it != m_ExternContentTable.end())
     {
-        pContent = *it;
+        MHExternContent *pContent = *it;
 
         if (pContent->m_pRequester == pRequester)
         {
@@ -1047,10 +1041,7 @@ void MHEngine::CancelExternalContentRequest(MHIngredient *pRequester)
             delete pContent;
             return;
         }
-        else
-        {
-            ++it;
-        }
+        ++it;
     }
 }
 
@@ -1079,7 +1070,7 @@ void MHEngine::CheckContentRequests()
                         reinterpret_cast< const unsigned char * >(text.constData()),
                         text.size(), this);
                 }
-                catch (char const *)
+                catch (...)
                 {}
             }
             else
@@ -1122,8 +1113,8 @@ bool MHEngine::LoadStorePersistent(bool fIsLoad, const MHOctetString &fileName, 
             (const char *)fileName.Bytes(), fileName.Size() );
 
     // See if there is an entry there already.
-    MHPSEntry *pEntry = NULL;
-    int i;
+    MHPSEntry *pEntry = nullptr;
+    int i = 0;
 
     for (i = 0; i < m_PersistentStore.Size(); i++)
     {
@@ -1182,7 +1173,7 @@ bool MHEngine::LoadStorePersistent(bool fIsLoad, const MHOctetString &fileName, 
         // Set the store to the values.
         for (i = 0; i < variables.Size(); i++)
         {
-            MHUnion *pValue = new MHUnion;
+            auto *pValue = new MHUnion;
             pEntry->m_Data.Append(pValue);
             FindObject(*(variables.GetAt(i)))->GetVariableValue(*pValue, this);
             MHLOG(MHLogNotifications, QString("Store Persistent(%1) %2=>#%3")
@@ -1214,40 +1205,19 @@ bool MHEngine::GetEngineSupport(const MHOctetString &feature)
 
     if (strings[0] == "SceneCoordinateSystem" || strings[0] == "SCS")
     {
-        if (strings.count() >= 3 && strings[1] == "720" && strings[2] == "576")
-        {
-            return true;
-        }
-        else
-        {
-            return false;
-        }
+        return strings.count() >= 3 && strings[1] == "720" && strings[2] == "576";
 
         // I've also seen SceneCoordinateSystem(1,1)
     }
 
     if (strings[0] == "MultipleAudioStreams" || strings[0] == "MAS")
     {
-        if (strings.count() >= 2 && (strings[1] == "0" || strings[1] == "1"))
-        {
-            return true;
-        }
-        else
-        {
-            return false;
-        }
+        return strings.count() >= 2 && (strings[1] == "0" || strings[1] == "1");
     }
 
     if (strings[0] == "MultipleVideoStreams" || strings[0] == "MVS")
     {
-        if (strings.count() >= 2 && (strings[1] == "0" || strings[1] == "1"))
-        {
-            return true;
-        }
-        else
-        {
-            return false;
-        }
+        return strings.count() >= 2 && (strings[1] == "0" || strings[1] == "1");
     }
 
     // We're supposed to return true for all values of N
@@ -1262,14 +1232,7 @@ bool MHEngine::GetEngineSupport(const MHOctetString &feature)
         {
             return false;
         }
-        else if ((strings[1] == "4" && strings[2] == "3") || (strings[1] == "16" && strings[2] == "9"))
-        {
-            return true;
-        }
-        else
-        {
-            return false;
-        }
+        return (strings[1] == "4" && strings[2] == "3") || (strings[1] == "16" && strings[2] == "9");
     }
 
     // We're supposed to support these at least.  May also support(10,1440,1152)
@@ -1279,14 +1242,7 @@ bool MHEngine::GetEngineSupport(const MHOctetString &feature)
         {
             return false;
         }
-        else if ((strings[2] == "720" && strings[3] == "576") || (strings[2] == "360" && strings[3] == "288"))
-        {
-            return true;
-        }
-        else
-        {
-            return false;
-        }
+        return (strings[2] == "720" && strings[3] == "576") || (strings[2] == "360" && strings[3] == "288");
     }
 
     if (strings[0] == "BitmapScaling" || strings[0] == "BSc")
@@ -1295,27 +1251,13 @@ bool MHEngine::GetEngineSupport(const MHOctetString &feature)
         {
             return false;
         }
-        else if ((strings[2] == "720" && strings[3] == "576") || (strings[2] == "360" && strings[3] == "288"))
-        {
-            return true;
-        }
-        else
-        {
-            return false;
-        }
+        return (strings[2] == "720" && strings[3] == "576") || (strings[2] == "360" && strings[3] == "288");
     }
 
     // I think we only support the video fully on screen
     if (strings[0] == "VideoDecodeOffset" || strings[0] == "VDO")
     {
-        if (strings.count() >= 3 && strings[1] == "10" && strings[1] == "0")
-        {
-            return true;
-        }
-        else
-        {
-            return false;
-        }
+        return strings.count() >= 3 && strings[1] == "10" && strings[1] == "0";
     }
 
     // We support bitmaps that are partially off screen (don't we?)
@@ -1325,14 +1267,11 @@ bool MHEngine::GetEngineSupport(const MHOctetString &feature)
         {
             return true;
         }
-        else if (strings.count() >= 2 && (strings[1] == "4" || strings[1] == "6"))
+        if (strings.count() >= 2 && (strings[1] == "4" || strings[1] == "6"))
         {
             return true;
         }
-        else
-        {
-            return false;
-        }
+        return false;
     }
 
     if (strings[0] == "UKEngineProfile" || strings[0] == "UniversalEngineProfile" || strings[0] == "UEP")
@@ -1393,9 +1332,8 @@ bool MHEngine::GetEngineSupport(const MHOctetString &feature)
     }
     if (strings[0] == "HDGraphicsPlaneExtension" || strings[0] == "HDG") {
         if (strings.count() < 2) return false;
-        if (strings[1] == "0")
-            return true; // HDGraphicsPlaneExtension
-        return false;
+        // true if HDGraphicsPlaneExtension
+        return strings[1] == "0";
     }
 
     // Otherwise return false.
@@ -1411,10 +1349,7 @@ int MHEngine::GetDefaultCharSet()
     {
         return pApp->m_nCharSet;
     }
-    else
-    {
-        return 10;    // UK MHEG default.
-    }
+    return 10;    // UK MHEG default.
 }
 
 void MHEngine::GetDefaultBGColour(MHColour &colour)
@@ -1495,10 +1430,7 @@ int MHEngine::GetDefaultTextCHook()
     {
         return pApp->m_nTextCHook;
     }
-    else
-    {
-        return 10;    // UK MHEG default.
-    }
+    return 10;    // UK MHEG default.
 }
 
 int MHEngine::GetDefaultStreamCHook()
@@ -1509,10 +1441,7 @@ int MHEngine::GetDefaultStreamCHook()
     {
         return pApp->m_nStrCHook;
     }
-    else
-    {
-        return 10;    // UK MHEG default.
-    }
+    return 10;    // UK MHEG default.
 }
 
 int MHEngine::GetDefaultBitmapCHook()
@@ -1523,10 +1452,7 @@ int MHEngine::GetDefaultBitmapCHook()
     {
         return pApp->m_nBitmapCHook;
     }
-    else
-    {
-        return 4;    // UK MHEG default - PNG bitmap
-    }
+    return 4;    // UK MHEG default - PNG bitmap
 }
 
 void MHEngine::GetDefaultFontAttrs(MHOctetString &str)
@@ -1549,10 +1475,10 @@ const char *MHEngine::MHEGEngineProviderIdString = "MHGGNU001";
 // Define the logging function and settings
 int __mhlogoptions = MHLogError;
 
-FILE *__mhlogStream = NULL;
+FILE *__mhlogStream = nullptr;
 
 // The MHEG engine calls this when it needs to log something.
-void __mhlog(QString logtext)
+void __mhlog(const QString& logtext)
 {
     QByteArray tmp = logtext.toLatin1();
     fprintf(__mhlogStream, "[freemheg] %s\n", tmp.constData());

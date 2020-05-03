@@ -22,12 +22,6 @@ QEvent::Type MetadataLookupEvent::kEventType =
 QEvent::Type MetadataLookupFailure::kEventType =
     (QEvent::Type) QEvent::registerEventType();
 
-MetadataDownload::MetadataDownload(QObject *parent) :
-    MThread("MetadataDownload")
-{
-    m_parent = parent;
-}
-
 MetadataDownload::~MetadataDownload()
 {
     cancel();
@@ -69,7 +63,7 @@ void MetadataDownload::cancel()
     QMutexLocker lock(&m_mutex);
 
     m_lookupList.clear();
-    m_parent = NULL;
+    m_parent = nullptr;
 }
 
 void MetadataDownload::run()
@@ -97,9 +91,25 @@ void MetadataDownload::run()
             lookup->GetType() == kMetadataRecording)
         {
             if (lookup->GetSubtype() == kProbableTelevision)
+            {
                 list = handleTelevision(lookup);
+                if (findExactMatchCount(list, lookup->GetBaseTitle(), true) == 0)
+                {
+                    // There are no exact match prospects with artwork from TV search,
+                    // so add in movies, where we might find a better match.
+                    list.append(handleMovie(lookup));
+                }
+            }
             else if (lookup->GetSubtype() == kProbableMovie)
+            {
                 list = handleMovie(lookup);
+                if (findExactMatchCount(list, lookup->GetBaseTitle(), true) == 0)
+                {
+                    // There are no exact match prospects with artwork from Movie search
+                    // so add in television, where we might find a better match.
+                    list.append(handleTelevision(lookup));
+                }
+            }
             else
             {
                 // will try both movie and TV
@@ -199,26 +209,98 @@ void MetadataDownload::run()
     RunEpilog();
 }
 
-MetadataLookup* MetadataDownload::findBestMatch(MetadataLookupList list,
-                                            const QString &originaltitle) const
+unsigned int MetadataDownload::findExactMatchCount(MetadataLookupList list,
+                                                   const QString &originaltitle,
+                                                   bool withArt)
 {
-    QStringList titles;
-    MetadataLookup *ret = NULL;
+    unsigned int exactMatches = 0;
+    unsigned int exactMatchesWithArt = 0;
 
-    // Build a list of all the titles
-    int exactMatches = 0;
     for (MetadataLookupList::const_iterator i = list.begin();
             i != list.end(); ++i)
     {
-        QString title = (*i)->GetBaseTitle();
-        if (title == originaltitle)
+        // Consider exact title matches (ignoring case)
+        if ((QString::compare((*i)->GetTitle(), originaltitle, Qt::CaseInsensitive) == 0))
         {
-            ret = (*i);
+            // In lookup by name, the television database tends to only include Banner artwork.
+            // In lookup by name, the movie database tends to include only Fan and Cover artwork.
+            if ((!((*i)->GetArtwork(kArtworkFanart)).empty()) ||
+                (!((*i)->GetArtwork(kArtworkCoverart)).empty()) ||
+                (!((*i)->GetArtwork(kArtworkBanner)).empty()))
+            {
+                exactMatchesWithArt++;
+            }
             exactMatches++;
+        }
+    }
+
+    if (withArt)
+        return exactMatchesWithArt;
+    return exactMatches;
+}
+
+MetadataLookup* MetadataDownload::findBestMatch(MetadataLookupList list,
+                                            const QString &originaltitle)
+{
+    QStringList titles;
+    MetadataLookup *ret = nullptr;
+    QDate exactTitleDate;
+    float exactTitlePopularity = 0.0F;
+    int exactMatches = 0;
+    int exactMatchesWithArt = 0;
+    bool foundMatchWithArt = false;
+
+    // Build a list of all the titles
+    for (MetadataLookupList::const_iterator i = list.begin();
+            i != list.end(); ++i)
+    {
+        QString title = (*i)->GetTitle();
+        LOG(VB_GENERAL, LOG_INFO, QString("Comparing metadata title '%1' [%2] to recording title '%3'")
+                .arg(title)
+                .arg((*i)->GetReleaseDate().toString())
+                .arg(originaltitle));
+        // Consider exact title matches (ignoring case), which have some artwork available.
+        if (QString::compare(title, originaltitle, Qt::CaseInsensitive) == 0)
+        {
+            bool hasArtwork = ((!((*i)->GetArtwork(kArtworkFanart)).empty()) ||
+                               (!((*i)->GetArtwork(kArtworkCoverart)).empty()) ||
+                               (!((*i)->GetArtwork(kArtworkBanner)).empty()));
+
+            LOG(VB_GENERAL, LOG_INFO, QString("'%1', popularity = %2, ReleaseDate = %3")
+                    .arg(title)
+                    .arg((*i)->GetPopularity())
+                    .arg((*i)->GetReleaseDate().toString()));
+
+            // After the first exact match, prefer any more popular one.
+            // Most of the Movie database entries have Popularity fields.
+            // The TV series database generally has no Popularity values specified,
+            // so if none are found so far in the search, pick the most recently
+            // released entry with artwork. Also, if the first exact match had
+            // no artwork, prefer any later exact match with artwork.
+            if ((ret == nullptr) ||
+                (hasArtwork &&
+                 ((!foundMatchWithArt) ||
+                  (((*i)->GetPopularity() > exactTitlePopularity)) ||
+                  ((exactTitlePopularity == 0.0F) && ((*i)->GetReleaseDate() > exactTitleDate)))))
+            {
+                exactTitleDate = (*i)->GetReleaseDate();
+                exactTitlePopularity = (*i)->GetPopularity();
+                ret = (*i);
+            }
+            exactMatches++;
+            if (hasArtwork)
+            {
+                foundMatchWithArt = true;
+                exactMatchesWithArt++;
+            }
         }
 
         titles.append(title);
     }
+
+    LOG(VB_GENERAL, LOG_DEBUG, QString("exactMatches = %1, exactMatchesWithArt = %2")
+            .arg(exactMatches)
+            .arg(exactMatchesWithArt));
 
     // If there was one or more exact matches then we can skip a more intensive
     // and time consuming search
@@ -226,18 +308,18 @@ MetadataLookup* MetadataDownload::findBestMatch(MetadataLookupList list,
     {
         if (exactMatches == 1)
         {
-            LOG(VB_GENERAL, LOG_INFO, QString("Single Exact Title Match For %1")
+            LOG(VB_GENERAL, LOG_INFO, QString("Single exact title match for '%1'")
                     .arg(originaltitle));
-            return ret;
         }
         else
         {
-            LOG(VB_GENERAL, LOG_ERR,
-                QString("Multiple exact title matches found for %1. "
-                        "Need to match on other criteria.")
-                    .arg(originaltitle));
-            return NULL;
+            LOG(VB_GENERAL, LOG_INFO,
+                QString("Multiple exact title matches found for '%1'. "
+                        "Selecting most popular or most recent [%2]")
+                    .arg(originaltitle)
+                    .arg(exactTitleDate.toString()));
         }
+        return ret;
     }
 
     // Apply Levenshtein distance algorithm to determine closest match
@@ -250,19 +332,18 @@ MetadataLookup* MetadataDownload::findBestMatch(MetadataLookupList list,
             QString("No adequate match or multiple "
                     "matches found for %1.  Update manually.")
                     .arg(originaltitle));
-        return NULL;
+        return nullptr;
     }
 
     LOG(VB_GENERAL, LOG_INFO, QString("Best Title Match For %1: %2")
                     .arg(originaltitle).arg(bestTitle));
 
     // Grab the one item that matches the besttitle (IMPERFECT)
-    MetadataLookupList::const_iterator i = list.begin();
-    for (; i != list.end(); ++i)
+    foreach (auto & item, list)
     {
-        if ((*i)->GetBaseTitle() == bestTitle)
+        if (item->GetTitle() == bestTitle)
         {
-            ret = (*i);
+            ret = item;
             break;
         }
     }
@@ -270,7 +351,7 @@ MetadataLookup* MetadataDownload::findBestMatch(MetadataLookupList list,
     return ret;
 }
 
-MetadataLookupList MetadataDownload::runGrabber(QString cmd, QStringList args,
+MetadataLookupList MetadataDownload::runGrabber(const QString& cmd, const QStringList& args,
                                                 MetadataLookup *lookup,
                                                 bool passseas)
 {
@@ -346,7 +427,7 @@ bool MetadataDownload::TelevisionGrabberWorks()
     return true;
 }
 
-MetadataLookupList MetadataDownload::readMXML(QString MXMLpath,
+MetadataLookupList MetadataDownload::readMXML(const QString& MXMLpath,
                                              MetadataLookup *lookup,
                                              bool passseas)
 {
@@ -360,7 +441,7 @@ MetadataLookupList MetadataDownload::readMXML(QString MXMLpath,
     {
         QByteArray mxmlraw;
         QDomElement item;
-        RemoteFile *rf = new RemoteFile(MXMLpath);
+        auto *rf = new RemoteFile(MXMLpath);
 
         if (rf->isOpen())
         {
@@ -383,7 +464,7 @@ MetadataLookupList MetadataDownload::readMXML(QString MXMLpath,
         }
 
         delete rf;
-        rf = NULL;
+        rf = nullptr;
 
         MetadataLookup *tmp = ParseMetadataItem(item, lookup, passseas);
         list.append(tmp);
@@ -394,7 +475,7 @@ MetadataLookupList MetadataDownload::readMXML(QString MXMLpath,
     return list;
 }
 
-MetadataLookupList MetadataDownload::readNFO(QString NFOpath,
+MetadataLookupList MetadataDownload::readNFO(const QString& NFOpath,
                                              MetadataLookup *lookup)
 {
     MetadataLookupList list;
@@ -409,7 +490,7 @@ MetadataLookupList MetadataDownload::readNFO(QString NFOpath,
     {
         QByteArray nforaw;
         QDomElement item;
-        RemoteFile *rf = new RemoteFile(NFOpath);
+        auto *rf = new RemoteFile(NFOpath);
 
         if (rf->isOpen())
         {
@@ -434,7 +515,7 @@ MetadataLookupList MetadataDownload::readNFO(QString NFOpath,
         }
 
         delete rf;
-        rf = NULL;
+        rf = nullptr;
 
         if (!error)
         {
@@ -586,7 +667,7 @@ MetadataLookupList MetadataDownload::handleTelevision(MetadataLookup *lookup)
                                           lookup->GetSubtitle(), lookup, false);
         }
 
-        if (list.isEmpty() && lookup->GetSeason() && lookup->GetEpisode())
+        if (list.isEmpty() && (lookup->GetSeason() || lookup->GetEpisode()))
         {
             list = grabber.LookupData(lookup->GetInetref(), lookup->GetSeason(),
                                       lookup->GetEpisode(), lookup);
@@ -643,8 +724,8 @@ MetadataLookupList MetadataDownload::handleTelevision(MetadataLookup *lookup)
     {
         // mark all results so that search collection is properly handled later
         lookup->SetIsCollection(searchcollection);
-        for (MetadataLookupList::iterator it = list.begin();
-             it != list.end(); ++it)
+        // NOLINTNEXTLINE(modernize-loop-convert)
+        for (auto it = list.begin(); it != list.end(); ++it)
         {
             (*it)->SetIsCollection(searchcollection);
         }
@@ -746,12 +827,12 @@ static QString getNameWithExtension(const QString &filename, const QString &type
     return ret;
 }
 
-QString MetadataDownload::getMXMLPath(QString filename)
+QString MetadataDownload::getMXMLPath(const QString& filename)
 {
     return getNameWithExtension(filename, "mxml");
 }
 
-QString MetadataDownload::getNFOPath(QString filename)
+QString MetadataDownload::getNFOPath(const QString& filename)
 {
     return getNameWithExtension(filename, "nfo");
 }

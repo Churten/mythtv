@@ -12,18 +12,18 @@ class HLSPlaylistWorker : public MThread
 {
   public:
     explicit HLSPlaylistWorker(HLSReader* parent);
-    ~HLSPlaylistWorker(void);
+    ~HLSPlaylistWorker(void) override;
     
     void Cancel(void);
 
   protected:
-    void run(void);
+    void run() override; // MThread
 
   private:
     // Class vars
-    HLSReader * m_parent;
-    bool        m_cancel;
-    bool        m_wokenup;
+    HLSReader      *m_parent  {nullptr};
+    bool            m_cancel  {false};
+    bool            m_wokenup {false};
 
     QWaitCondition  m_waitcond;
     QMutex          m_lock;

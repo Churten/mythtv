@@ -27,12 +27,12 @@
 
 // C++/C headers
 #include <cerrno>
-#include <unistd.h>
-#include <stdlib.h>
+#include <csignal> // for kill() and SIGXXX
+#include <cstdlib>
+#include <cstring>
+#include <ctime>
 #include <fcntl.h>
-#include <time.h>
-#include <signal.h> // for kill() and SIGXXX
-#include <string.h>
+#include <unistd.h>
 
 // QT headers
 #include <QCoreApplication>
@@ -42,7 +42,6 @@
 #include "mythcorecontext.h"
 #include "mythevent.h"
 #include "mythlogging.h"
-#include "exitcodes.h"
 
 #if CONFIG_CYGWIN || defined(_WIN32)
 #include "mythsystemwindows.h"
@@ -57,8 +56,6 @@
 
 void MythSystemLegacy::initializePrivate(void)
 {
-    m_nice = 0;
-    m_ioprio = 0;
 #if CONFIG_CYGWIN || defined(_WIN32)
     d = new MythSystemLegacyWindows(this);
 #else
@@ -66,14 +63,17 @@ void MythSystemLegacy::initializePrivate(void)
 #endif
 }
 
-MythSystemLegacy::MythSystemLegacy()
+MythSystemLegacy::MythSystemLegacy(QObject *parent) :
+    QObject(parent)
 {
     setObjectName("MythSystemLegacy()");
     m_semReady.release(1);  // initialize
     initializePrivate();
 }
 
-MythSystemLegacy::MythSystemLegacy(const QString &command, uint flags)
+MythSystemLegacy::MythSystemLegacy(const QString &command, uint flags,
+                                   QObject *parent) :
+    QObject(parent)
 {
     setObjectName(QString("MythSystemLegacy(%1)").arg(command));
     m_semReady.release(1);  // initialize
@@ -81,7 +81,7 @@ MythSystemLegacy::MythSystemLegacy(const QString &command, uint flags)
     SetCommand(command, flags);
 }
 
-/** \fn MythSystemLegacy::setCommand(const QString &command)
+/**
  *  \brief Resets an existing MythSystemLegacy object to a new command
  */
 void MythSystemLegacy::SetCommand(const QString &command, uint flags)
@@ -116,15 +116,17 @@ void MythSystemLegacy::SetCommand(const QString &command, uint flags)
 
 
 MythSystemLegacy::MythSystemLegacy(const QString &command,
-                       const QStringList &args, uint flags)
+                                   const QStringList &args,
+                                   uint flags,
+                                   QObject *parent) :
+    QObject(parent)
 {
     m_semReady.release(1);  // initialize
     initializePrivate();
     SetCommand(command, args, flags);
 }
 
-/** \fn MythSystemLegacy::setCommand(const QString &command,
-                               const QStringList &args)
+/**
  *  \brief Resets an existing MythSystemLegacy object to a new command
  */
 void MythSystemLegacy::SetCommand(const QString &command,
@@ -154,7 +156,7 @@ void MythSystemLegacy::SetCommand(const QString &command,
     }
 
     // check for execute rights
-    if (!GetSetting("UseShell") && access(command.toUtf8().constData(), X_OK))
+    if (!GetSetting("UseShell") && (access(command.toUtf8().constData(), X_OK)) != 0)
     {
         LOG(VB_GENERAL, LOG_ERR,
             QString("MythSystemLegacy(%1) command not executable, ")
@@ -171,24 +173,6 @@ void MythSystemLegacy::SetCommand(const QString &command,
     }
 }
 
-
-MythSystemLegacy::MythSystemLegacy(const MythSystemLegacy &other) :
-    d(other.d),
-    m_status(other.m_status),
-
-    m_command(other.m_command),
-    m_logcmd(other.m_logcmd),
-    m_args(other.m_args),
-    m_directory(other.m_directory),
-
-    m_nice(other.m_nice),
-    m_ioprio(other.m_ioprio),
-
-    m_settings(other.m_settings)
-{
-    m_semReady.release(other.m_semReady.available());
-}
-
 // QBuffers may also need freeing
 MythSystemLegacy::~MythSystemLegacy(void)
 {
@@ -199,7 +183,6 @@ MythSystemLegacy::~MythSystemLegacy(void)
     }
     d->DecrRef();
 }
-
 
 void MythSystemLegacy::SetDirectory(const QString &directory)
 {
@@ -267,9 +250,9 @@ uint MythSystemLegacy::Wait(time_t timeout)
     if (GetSetting("ProcessEvents"))
     {
         if (timeout > 0)
-            timeout += time(NULL);
+            timeout += time(nullptr);
 
-        while (!timeout || time(NULL) < timeout)
+        while (!timeout || time(nullptr) < timeout)
         {
             // loop until timeout hits or process ends
             if (m_semReady.tryAcquire(1,100))
@@ -319,6 +302,9 @@ void MythSystemLegacy::Signal(MythSignal sig)
     int posix_signal = SIGTRAP;
     switch (sig)
     {
+        case kSignalNone:
+        case kSignalUnknown:
+            break;
         case kSignalHangup: posix_signal = SIGHUP; break;
         case kSignalInterrupt: posix_signal = SIGINT; break;
         case kSignalContinue: posix_signal = SIGCONT; break;
@@ -336,7 +322,8 @@ void MythSystemLegacy::Signal(MythSignal sig)
     // case that is missed print out a message.
     if (SIGTRAP == posix_signal)
     {
-        LOG(VB_SYSTEM, LOG_ERR, "Programmer error: Unknown signal");
+        LOG(VB_SYSTEM, LOG_ERR,
+            QString("Programmer error: Unknown signal %1").arg(sig));
         return;
     }
 
@@ -373,10 +360,10 @@ void MythSystemLegacy::ProcessFlags(uint flags)
     if (GetSetting("IsInUI"))
     {
         // Check for UI-only locks
-        m_settings["BlockInputDevs"] = !(flags & kMSDontBlockInputDevs);
-        m_settings["DisableDrawing"] = !(flags & kMSDontDisableDrawing);
-        m_settings["ProcessEvents"]  = flags & kMSProcessEvents;
-        m_settings["DisableUDP"]     = flags & kMSDisableUDPListener;
+        m_settings["BlockInputDevs"] = ((flags & kMSDontBlockInputDevs) == 0U);
+        m_settings["DisableDrawing"] = ((flags & kMSDontDisableDrawing) == 0U);
+        m_settings["ProcessEvents"]  = ((flags & kMSProcessEvents)      != 0U);
+        m_settings["DisableUDP"]     = ((flags & kMSDisableUDPListener) != 0U);
     }
 
     if (flags & kMSStdIn)
@@ -466,7 +453,7 @@ void MythSystemLegacy::HandlePostRun(void)
     // handler thread), we need to use postEvents
     if (GetSetting("DisableDrawing"))
     {
-        QEvent *event = new QEvent(MythEvent::kPopDisableDrawingEventType);
+        auto *event = new QEvent(MythEvent::kPopDisableDrawingEventType);
         QCoreApplication::postEvent(gCoreContext->GetGUIObject(), event);
     }
 
@@ -474,7 +461,7 @@ void MythSystemLegacy::HandlePostRun(void)
     // the UDP ports before the child application has stopped and terminated
     if (GetSetting("DisableUDP"))
     {
-        QEvent *event = new QEvent(MythEvent::kEnableUDPListenerEventType);
+        auto *event = new QEvent(MythEvent::kEnableUDPListenerEventType);
         QCoreApplication::postEvent(gCoreContext->GetGUIObject(), event);
     }
 
@@ -482,7 +469,7 @@ void MythSystemLegacy::HandlePostRun(void)
     // after all existing (blocked) events are processed and ignored.
     if (GetSetting("BlockInputDevs"))
     {
-        QEvent *event = new QEvent(MythEvent::kUnlockInputDevicesEventType);
+        auto *event = new QEvent(MythEvent::kUnlockInputDevicesEventType);
         QCoreApplication::postEvent(gCoreContext->GetGUIObject(), event);
     }
 }
@@ -514,7 +501,7 @@ MythSystemLegacyPrivate::MythSystemLegacyPrivate(const QString &debugName) :
 uint myth_system(const QString &command, uint flags, uint timeout)
 {
     flags |= kMSRunShell | kMSAutoCleanup;
-    MythSystemLegacy *ms = new MythSystemLegacy(command, flags);
+    auto *ms = new MythSystemLegacy(command, flags);
     ms->Run(timeout);
     uint result = ms->Wait(0);
     if (!ms->GetSetting("RunInBackground"))

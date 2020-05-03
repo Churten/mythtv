@@ -16,15 +16,9 @@
 #include <QDir>
 #include <QElapsedTimer>
 
-#if QT_VERSION >= QT_VERSION_CHECK(5,0,0)
-    #include <QRegularExpression>
-    #define REGEXP QRegularExpression
-    #define MATCHES(RE, SUBJECT) RE.match(SUBJECT).hasMatch()
-#else
-    #include <QRegExp>
-    #define REGEXP QRegExp
-    #define MATCHES(RE, SUBJECT) RE.exactMatch(SUBJECT)
-#endif
+#include <QRegularExpression>
+#define REGEXP QRegularExpression
+#define MATCHES(RE, SUBJECT) RE.match(SUBJECT).hasMatch()
 
 #include "imagethumbs.h"
 
@@ -34,8 +28,8 @@ template <class DBFS>
 class META_PUBLIC ImageScanThread : public MThread
 {
 public:
-    ImageScanThread(DBFS *const dbfs, ImageThumb<DBFS> *thumbGen);
-    ~ImageScanThread();
+    ImageScanThread(DBFS *dbfs, ImageThumb<DBFS> *thumbGen);
+    ~ImageScanThread() override;
 
     void        cancel();
     bool        IsScanning();
@@ -45,7 +39,7 @@ public:
     QStringList GetProgress();
 
 protected:
-    void run();
+    void run() override; // MThread
 
 private:
     Q_DISABLE_COPY(ImageScanThread)
@@ -54,17 +48,22 @@ private:
                      const QString &base);
     int  SyncDirectory(const QFileInfo &dirInfo, int devId,
                        const QString &base, int parentId);
-    void PopulateMetadata(const QString &path, int type,
-                          QString &comment, uint &time, int &orientation);
+    void PopulateMetadata(const QString &path, int type, QString &comment,
+#if QT_VERSION < QT_VERSION_CHECK(5,8,0)
+                          uint &time,
+#else
+                          qint64 &time,
+#endif
+                          int &orientation);
     void SyncFile(const QFileInfo &fileInfo, int devId,
                   const QString &base, int parentId);
     void CountTree(QDir &dir);
     void CountFiles(const QStringList &paths);
     void Broadcast(int progress);
 
-    typedef QPair<int, QString> ClearTask;
+    using ClearTask = QPair<int, QString>;
 
-    bool              m_scanning;   //!< The requested scan state
+    bool              m_scanning {false}; //!< The requested scan state
     QMutex            m_mutexState; //!< Mutex protecting scan state
     QList<ClearTask>  m_clearQueue; //!< Queue of pending Clear requests
     QMutex            m_mutexQueue; //!< Mutex protecting Clear requests
@@ -84,8 +83,8 @@ private:
 
     //! Elapsed time since last progress event generated
     QElapsedTimer m_bcastTimer;
-    int           m_progressCount;      //!< Number of images scanned
-    int           m_progressTotalCount; //!< Total number of images to scan
+    int           m_progressCount      {0}; //!< Number of images scanned
+    int           m_progressTotalCount {0}; //!< Total number of images to scan
     QMutex        m_mutexProgress;      //!< Progress counts mutex
 
     //! Global working dir for file detection

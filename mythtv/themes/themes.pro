@@ -1,12 +1,6 @@
 include ( ../settings.pro )
 
-QMAKE_STRIP = echo
-
-TEMPLATE = app
-CONFIG -= moc qt
-
-QMAKE_COPY_DIR = sh ./cpsvndir
-win32:QMAKE_COPY_DIR = sh ./cpsimple
+TEMPLATE = aux
 
 themes.path = $${PREFIX}/share/mythtv/themes/
 themes.files = default default-wide classic DVR Slave
@@ -18,6 +12,3 @@ fonts.path = $${PREFIX}/share/mythtv/
 fonts.files = fonts
 
 INSTALLS += themes fonts
-
-# Input
-SOURCES += dummy.c

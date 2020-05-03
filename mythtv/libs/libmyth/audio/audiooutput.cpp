@@ -38,9 +38,7 @@ using namespace std;
 #endif
 #ifdef Q_OS_ANDROID
 #include "audiooutputopensles.h"
-#endif
-#ifdef USING_OPENMAX
-#include "audiooutput_omx.h"
+#include "audiooutputaudiotrack.h"
 #endif
 
 extern "C" {
@@ -59,7 +57,7 @@ void AudioOutput::Cleanup(void)
 
 AudioOutput *AudioOutput::OpenAudio(
     const QString &main_device, const QString &passthru_device,
-    AudioFormat format, int channels, int codec, int samplerate,
+    AudioFormat format, int channels, AVCodecID codec, int samplerate,
     AudioOutputSource source, bool set_initial_vol, bool passthru,
     int upmixer_startup, AudioOutputSettings *custom)
 {
@@ -82,11 +80,11 @@ AudioOutput *AudioOutput::OpenAudio(
 AudioOutput *AudioOutput::OpenAudio(AudioSettings &settings,
                                     bool willsuspendpa)
 {
-    QString &main_device = settings.main_device;
-    AudioOutput *ret = NULL;
+    QString &main_device = settings.m_mainDevice;
+    AudioOutput *ret = nullptr;
 
     // Don't suspend Pulse if unnecessary.  This can save 100mS
-    if (settings.format == FORMAT_NONE || settings.channels <= 0)
+    if (settings.m_format == FORMAT_NONE || settings.m_channels <= 0)
         willsuspendpa = false;
 
 #ifdef USING_PULSE
@@ -112,10 +110,10 @@ AudioOutput *AudioOutput::OpenAudio(AudioSettings &settings,
 #else
         LOG(VB_GENERAL, LOG_ERR, "Audio output device is set to PulseAudio "
                                  "but PulseAudio support is not compiled in!");
-        return NULL;
+        return nullptr;
 #endif
     }
-    else if (main_device.startsWith("NULL"))
+    if (main_device.startsWith("NULL"))
     {
         return new AudioOutputNULL(settings);
     }
@@ -154,6 +152,9 @@ AudioOutput *AudioOutput::OpenAudio(AudioSettings &settings,
             pulsestatus = PulseHandler::Suspend(PulseHandler::kPulseSuspend);
         }
     }
+#else // USING_PULSE
+    // Quiet warning error when not compiling with pulseaudio
+    Q_UNUSED(willsuspendpa);
 #endif
 
     if (main_device.startsWith("ALSA:"))
@@ -205,14 +206,13 @@ AudioOutput *AudioOutput::OpenAudio(AudioSettings &settings,
                                  "in!");
 #endif
     }
-    else if (main_device.startsWith("OpenMAX:"))
+    else if (main_device.startsWith("AudioTrack:"))
     {
-#ifdef USING_OPENMAX
-        if (!getenv("NO_OPENMAX_AUDIO"))
-            ret = new AudioOutputOMX(settings);
+#ifdef Q_OS_ANDROID
+        ret = new AudioOutputAudioTrack(settings);
 #else
-        LOG(VB_GENERAL, LOG_ERR, "Audio output device is set to a OpenMAX "
-                                 "device but OpenMAX support is not compiled "
+        LOG(VB_GENERAL, LOG_ERR, "Audio output device is set to AudioTrack "
+                                 "device but Android support is not compiled "
                                  "in!");
 #endif
     }
@@ -233,10 +233,10 @@ AudioOutput *AudioOutput::OpenAudio(AudioSettings &settings,
         if (pulsestatus)
             PulseHandler::Suspend(PulseHandler::kPulseResume);
 #endif
-        return NULL;
+        return nullptr;
     }
 #ifdef USING_PULSE
-    ret->pulsewassuspended = pulsestatus;
+    ret->m_pulseWasSuspended = pulsestatus;
 #endif
     return ret;
 }
@@ -244,10 +244,10 @@ AudioOutput *AudioOutput::OpenAudio(AudioSettings &settings,
 AudioOutput::~AudioOutput()
 {
 #ifdef USING_PULSE
-    if (pulsewassuspended)
+    if (m_pulseWasSuspended)
         PulseHandler::Suspend(PulseHandler::kPulseResume);
 #endif
-    av_frame_free(&_frame);
+    av_frame_free(&m_frame);
 }
 
 void AudioOutput::SetStretchFactor(float /*factor*/)
@@ -266,7 +266,7 @@ AudioOutputSettings* AudioOutput::GetOutputSettingsUsers(bool /*digital*/)
 
 bool AudioOutput::CanPassthrough(int /*samplerate*/,
                                  int /*channels*/,
-                                 int /*codec*/,
+                                 AVCodecID /*codec*/,
                                  int /*profile*/) const
 {
     return false;
@@ -276,41 +276,37 @@ bool AudioOutput::CanPassthrough(int /*samplerate*/,
 //       GetWarning() and why.  These would give more useful logs as macros
 void AudioOutput::Error(const QString &msg)
 {
-    lastError = msg;
-    lastError.detach();
-    LOG(VB_GENERAL, LOG_ERR, "AudioOutput Error: " + lastError);
+    m_lastError = msg;
+    LOG(VB_GENERAL, LOG_ERR, "AudioOutput Error: " + m_lastError);
 }
 
 void AudioOutput::SilentError(const QString &msg)
 {
-    lastError = msg;
-    lastError.detach();
+    m_lastError = msg;
 }
 
 void AudioOutput::Warn(const QString &msg)
 {
-    lastWarn = msg;
-    lastWarn.detach();
-    LOG(VB_GENERAL, LOG_WARNING, "AudioOutput Warning: " + lastWarn);
+    m_lastWarn = msg;
+    LOG(VB_GENERAL, LOG_WARNING, "AudioOutput Warning: " + m_lastWarn);
 }
 
 void AudioOutput::ClearError(void)
 {
-    lastError = QString::null;
+    m_lastError.clear();
 }
 
 void AudioOutput::ClearWarning(void)
 {
-    lastWarn = QString::null;
+    m_lastWarn.clear();
 }
 
 AudioOutput::AudioDeviceConfig* AudioOutput::GetAudioDeviceConfig(
     QString &name, QString &desc, bool willsuspendpa)
 {
     AudioOutputSettings aosettings(true);
-    AudioOutput::AudioDeviceConfig *adc;
 
-    AudioOutput *ao = OpenAudio(name, QString::null, willsuspendpa);
+    AudioOutput *ao = OpenAudio(name, QString(), willsuspendpa);
     if (ao)
     {
         aosettings = *(ao->GetOutputSettingsCleaned());
@@ -319,12 +315,9 @@ AudioOutput::AudioDeviceConfig* AudioOutput::GetAudioDeviceConfig(
     if (aosettings.IsInvalid())
     {
         if (!willsuspendpa)
-            return NULL;
-        else
-        {
-            QString msg = tr("Invalid or unuseable audio device");
-            return new AudioOutput::AudioDeviceConfig(name, msg);
-        }
+            return nullptr;
+        QString msg = tr("Invalid or unuseable audio device");
+        return new AudioOutput::AudioDeviceConfig(name, msg);
     }
 
     QString capabilities = desc;
@@ -375,7 +368,8 @@ AudioOutput::AudioDeviceConfig* AudioOutput::GetAudioDeviceConfig(
                 (aosettings.canLPCM() << 0) |
                 (aosettings.canAC3()  << 1) |
                 (aosettings.canDTS()  << 2);
-            static const char *type_names[] = { "LPCM", "AC3", "DTS" };
+            // cppcheck-suppress variableScope
+            static const char *s_typeNames[] = { "LPCM", "AC3", "DTS" };
 
             if (mask != 0)
             {
@@ -387,7 +381,7 @@ AudioOutput::AudioDeviceConfig* AudioOutput::GetAudioDeviceConfig(
                     {
                         if (found_one)
                             capabilities += ", ";
-                        capabilities += type_names[i];
+                        capabilities += s_typeNames[i];
                         found_one = true;
                     }
                 }
@@ -397,8 +391,8 @@ AudioOutput::AudioDeviceConfig* AudioOutput::GetAudioDeviceConfig(
     }
     LOG(VB_AUDIO, LOG_INFO, QString("Found %1 (%2)")
                                 .arg(name).arg(capabilities));
-    adc = new AudioOutput::AudioDeviceConfig(name, capabilities);
-    adc->settings = aosettings;
+    auto *adc = new AudioOutput::AudioDeviceConfig(name, capabilities);
+    adc->m_settings = aosettings;
     return adc;
 }
 
@@ -406,11 +400,8 @@ AudioOutput::AudioDeviceConfig* AudioOutput::GetAudioDeviceConfig(
 static void fillSelectionsFromDir(const QDir &dir,
                                   AudioOutput::ADCVect *list)
 {
-    QFileInfoList il = dir.entryInfoList();
-    for (QFileInfoList::Iterator it = il.begin();
-         it != il.end(); ++it )
+    foreach (auto & fi, dir.entryInfoList())
     {
-        QFileInfo &fi = *it;
         QString name = fi.absoluteFilePath();
         QString desc = AudioOutput::tr("OSS device");
         AudioOutput::AudioDeviceConfig *adc =
@@ -425,8 +416,7 @@ static void fillSelectionsFromDir(const QDir &dir,
 
 AudioOutput::ADCVect* AudioOutput::GetOutputList(void)
 {
-    ADCVect *list = new ADCVect;
-    AudioDeviceConfig *adc;
+    auto *list = new ADCVect;
 
 #ifdef USING_PULSE
     bool pasuspended = PulseHandler::Suspend(PulseHandler::kPulseSuspend);
@@ -440,11 +430,11 @@ AudioOutput::ADCVect* AudioOutput::GetOutputList(void)
         for (QMap<QString, QString>::const_iterator i = alsadevs->begin();
              i != alsadevs->end(); ++i)
         {
-            QString key = i.key();
+            const QString& key = i.key();
             QString desc = i.value();
             QString devname = QString("ALSA:%1").arg(key);
 
-            adc = GetAudioDeviceConfig(devname, desc);
+            auto *adc = GetAudioDeviceConfig(devname, desc);
             if (!adc)
                 continue;
             list->append(*adc);
@@ -474,7 +464,7 @@ AudioOutput::ADCVect* AudioOutput::GetOutputList(void)
     {
         QString name = "JACK:";
         QString desc = tr("Use JACK default sound server.");
-        adc = GetAudioDeviceConfig(name, desc);
+        auto *adc = GetAudioDeviceConfig(name, desc);
         if (adc)
         {
             list->append(*adc);
@@ -485,7 +475,7 @@ AudioOutput::ADCVect* AudioOutput::GetOutputList(void)
 #if CONFIG_DARWIN
 
     {
-        QMap<QString, QString> *devs = AudioOutputCA::GetDevices(NULL);
+        QMap<QString, QString> *devs = AudioOutputCA::GetDevices(nullptr);
         if (!devs->empty())
         {
             for (QMap<QString, QString>::const_iterator i = devs->begin();
@@ -495,7 +485,7 @@ AudioOutput::ADCVect* AudioOutput::GetOutputList(void)
                 QString desc = i.value();
                 QString devname = QString("CoreAudio:%1").arg(key);
 
-                adc = GetAudioDeviceConfig(devname, desc);
+                auto adc = GetAudioDeviceConfig(devname, desc);
                 if (!adc)
                     continue;
                 list->append(*adc);
@@ -505,7 +495,7 @@ AudioOutput::ADCVect* AudioOutput::GetOutputList(void)
         delete devs;
         QString name = "CoreAudio:Default Output Device";
         QString desc = tr("CoreAudio default output");
-        adc = GetAudioDeviceConfig(name, desc);
+        auto adc = GetAudioDeviceConfig(name, desc);
         if (adc)
         {
             list->append(*adc);
@@ -517,7 +507,7 @@ AudioOutput::ADCVect* AudioOutput::GetOutputList(void)
     {
         QString name = "Windows:";
         QString desc = "Windows default output";
-        adc = GetAudioDeviceConfig(name, desc);
+        auto adc = GetAudioDeviceConfig(name, desc);
         if (adc)
         {
             list->append(*adc);
@@ -531,10 +521,10 @@ AudioOutput::ADCVect* AudioOutput::GetOutputList(void)
             for (QMap<int, QString>::const_iterator i = dxdevs->begin();
                  i != dxdevs->end(); ++i)
             {
-                QString desc = i.value();
-                QString devname = QString("DirectX:%1").arg(desc);
+                QString devdesc = i.value();
+                QString devname = QString("DirectX:%1").arg(devdesc);
 
-                adc = GetAudioDeviceConfig(devname, desc);
+                adc = GetAudioDeviceConfig(devname, devdesc);
                 if (!adc)
                     continue;
                 list->append(*adc);
@@ -554,7 +544,7 @@ AudioOutput::ADCVect* AudioOutput::GetOutputList(void)
     {
         QString name = "PulseAudio:default";
         QString desc =  tr("PulseAudio default sound server.");
-        adc = GetAudioDeviceConfig(name, desc);
+        auto *adc = GetAudioDeviceConfig(name, desc);
         if (adc)
         {
             list->append(*adc);
@@ -566,31 +556,18 @@ AudioOutput::ADCVect* AudioOutput::GetOutputList(void)
 #ifdef ANDROID
     {
         QString name = "OpenSLES:";
-        QString desc =  tr("OpenSLES default output.");
-        adc = GetAudioDeviceConfig(name, desc);
+        QString desc =  tr("OpenSLES default output. Stereo support only.");
+        auto adc = GetAudioDeviceConfig(name, desc);
         if (adc)
         {
             list->append(*adc);
             delete adc;
         }
     }
-#endif
-
-#ifdef USING_OPENMAX
-    if (!getenv("NO_OPENMAX_AUDIO"))
     {
-        QString name = "OpenMAX:analog";
-        QString desc =  tr("OpenMAX analog output.");
-        adc = GetAudioDeviceConfig(name, desc);
-        if (adc)
-        {
-            list->append(*adc);
-            delete adc;
-        }
-
-        name = "OpenMAX:hdmi";
-        desc =  tr("OpenMAX HDMI output.");
-        adc = GetAudioDeviceConfig(name, desc);
+        QString name = "AudioTrack:";
+        QString desc =  tr("Android AudioTrack output. Supports surround sound.");
+        auto adc = GetAudioDeviceConfig(name, desc);
         if (adc)
         {
             list->append(*adc);
@@ -601,7 +578,7 @@ AudioOutput::ADCVect* AudioOutput::GetOutputList(void)
 
     QString name = "NULL";
     QString desc = "NULL device";
-    adc = GetAudioDeviceConfig(name, desc);
+    auto *adc = GetAudioDeviceConfig(name, desc);
     if (adc)
     {
         list->append(*adc);
@@ -621,25 +598,38 @@ int AudioOutput::DecodeAudio(AVCodecContext *ctx,
                              uint8_t *buffer, int &data_size,
                              const AVPacket *pkt)
 {
-    int got_frame = 0;
-    int ret;
+    bool got_frame = false;
     char error[AV_ERROR_MAX_STRING_SIZE];
 
     data_size = 0;
-    if (!_frame)
+    if (!m_frame)
     {
-        if (!(_frame = av_frame_alloc()))
+        if (!(m_frame = av_frame_alloc()))
         {
             return AVERROR(ENOMEM);
         }
     }
     else
     {
-        av_frame_unref(_frame);
+        av_frame_unref(m_frame);
     }
 
-    ret = avcodec_decode_audio4(ctx, _frame, &got_frame, pkt);
-    if (ret < 0)
+//  SUGGESTION
+//  Now that avcodec_decode_audio4 is deprecated and replaced
+//  by 2 calls (receive frame and send packet), this could be optimized
+//  into separate routines or separate threads.
+//  Also now that it always consumes a whole buffer some code
+//  in the caller may be able to be optimized.
+    int ret = avcodec_receive_frame(ctx,m_frame);
+    if (ret == 0)
+        got_frame = true;
+    if (ret == AVERROR(EAGAIN))
+        ret = 0;
+    if (ret == 0)
+        ret = avcodec_send_packet(ctx, pkt);
+    if (ret == AVERROR(EAGAIN))
+        ret = 0;
+    else if (ret < 0)
     {
         LOG(VB_AUDIO, LOG_ERR, LOC +
             QString("audio decode error: %1 (%2)")
@@ -647,6 +637,8 @@ int AudioOutput::DecodeAudio(AVCodecContext *ctx,
             .arg(got_frame));
         return ret;
     }
+    else
+        ret = pkt->size;
 
     if (!got_frame)
     {
@@ -655,28 +647,28 @@ int AudioOutput::DecodeAudio(AVCodecContext *ctx,
         return ret;
     }
 
-    AVSampleFormat format = (AVSampleFormat)_frame->format;
+    auto format = (AVSampleFormat)m_frame->format;
     AudioFormat fmt =
         AudioOutputSettings::AVSampleFormatToFormat(format, ctx->bits_per_raw_sample);
 
-    data_size = _frame->nb_samples * _frame->channels * av_get_bytes_per_sample(format);
+    data_size = m_frame->nb_samples * m_frame->channels * av_get_bytes_per_sample(format);
 
     // May need to convert audio to S16
     AudioConvert converter(fmt, CanProcess(fmt) ? fmt : FORMAT_S16);
-    uint8_t* src;
+    uint8_t* src = nullptr;
 
     if (av_sample_fmt_is_planar(format))
     {
         src = buffer;
-        converter.InterleaveSamples(_frame->channels,
+        converter.InterleaveSamples(m_frame->channels,
                                     src,
-                                    (const uint8_t **)_frame->extended_data,
+                                    (const uint8_t **)m_frame->extended_data,
                                     data_size);
     }
     else
     {
         // data is already compacted...
-        src = _frame->extended_data[0];
+        src = m_frame->extended_data[0];
     }
 
     uint8_t* transit = buffer;

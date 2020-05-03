@@ -12,7 +12,7 @@ const QString currentDatabaseVersion = "1006";
 
 static bool UpdateDBVersionNumber(const QString &newnumber)
 {
-    if (!gCoreContext->SaveSettingOnHost("WeatherDBSchemaVer",newnumber,NULL))
+    if (!gCoreContext->SaveSettingOnHost("WeatherDBSchemaVer",newnumber,nullptr))
     {
         LOG(VB_GENERAL, LOG_ERR,
             QString("DB Error (Setting new DB version number): %1\n")
@@ -24,7 +24,7 @@ static bool UpdateDBVersionNumber(const QString &newnumber)
     return true;
 }
 
-static bool performActualUpdate(const QStringList updates, QString version,
+static bool performActualUpdate(const QStringList& updates, const QString& version,
                                 QString &dbver)
 {
     LOG(VB_GENERAL, LOG_NOTICE,
@@ -138,7 +138,7 @@ bool InitializeDatabase()
     {
         QStringList updates;
         updates << QString("ALTER DATABASE %1 DEFAULT CHARACTER SET latin1;")
-            .arg(gContext->GetDatabaseParams().dbName) <<
+            .arg(gContext->GetDatabaseParams().m_dbName) <<
             "ALTER TABLE weatherdatalayout"
             "  MODIFY location varbinary(64) NOT NULL,"
             "  MODIFY dataitem varbinary(64) NOT NULL;" <<
@@ -163,7 +163,7 @@ bool InitializeDatabase()
     {
         QStringList updates;
         updates << QString("ALTER DATABASE %1 DEFAULT CHARACTER SET utf8 COLLATE utf8_general_ci;")
-                .arg(gContext->GetDatabaseParams().dbName) <<
+                .arg(gContext->GetDatabaseParams().m_dbName) <<
             "ALTER TABLE weatherdatalayout"
             "  DEFAULT CHARACTER SET default,"
             "  MODIFY location varchar(64) CHARACTER SET utf8 NOT NULL,"

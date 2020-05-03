@@ -17,12 +17,6 @@
 
 #include "compat.h"
 
-MythUISimpleText::MythUISimpleText(MythUIType *parent, const QString &name)
-    : MythUIType(parent, name),
-      m_Justification(Qt::AlignLeft | Qt::AlignTop)
-{
-}
-
 MythUISimpleText::MythUISimpleText(const QString &text,
                                    const MythFontProperties &font,
                                    const QRect & rect, Qt::Alignment align,
@@ -36,10 +30,6 @@ MythUISimpleText::MythUISimpleText(const QString &text,
     m_Font = font;
 }
 
-MythUISimpleText::~MythUISimpleText()
-{
-}
-
 void MythUISimpleText::DrawSelf(MythPainter *p, int xoffset, int yoffset,
                                 int alphaMod, QRect clipRect)
 {
@@ -48,12 +38,13 @@ void MythUISimpleText::DrawSelf(MythPainter *p, int xoffset, int yoffset,
 
     int alpha = CalcAlpha(alphaMod);
 
+    p->SetClipRect(clipRect);
     p->DrawText(area, m_Message, m_Justification, m_Font, alpha, area);
 }
 
 void MythUISimpleText::CopyFrom(MythUIType *base)
 {
-    MythUISimpleText *text = dynamic_cast<MythUISimpleText *>(base);
+    auto *text = dynamic_cast<MythUISimpleText *>(base);
 
     if (!text)
     {
@@ -70,6 +61,6 @@ void MythUISimpleText::CopyFrom(MythUIType *base)
 
 void MythUISimpleText::CreateCopy(MythUIType *parent)
 {
-    MythUISimpleText *text = new MythUISimpleText(parent, objectName());
+    auto *text = new MythUISimpleText(parent, objectName());
     text->CopyFrom(this);
 }

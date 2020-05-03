@@ -20,7 +20,8 @@
 #include "ExternalRecorder.h"
 #include "ExternalStreamHandler.h"
 
-#define LOC QString("ExternSigMon(%1): ").arg(channel->GetDevice())
+#define LOC QString("ExternSigMon[%1](%2): ") \
+    .arg(m_inputid).arg(static_cast<ExternalChannel *>(m_channel)->GetDescription())
 
 /**
  *  \brief Initializes signal lock and signal values.
@@ -40,17 +41,21 @@ ExternalSignalMonitor::ExternalSignalMonitor(int db_cardnum,
                                              ExternalChannel *_channel,
                                              bool _release_stream,
                                              uint64_t _flags)
-    : DTVSignalMonitor(db_cardnum, _channel, _flags, _release_stream),
-      m_stream_handler(NULL), m_stream_handler_started(false), m_lock_timeout(0)
+    : DTVSignalMonitor(db_cardnum, _channel, _release_stream, _flags)
 {
     QString result;
 
     LOG(VB_CHANNEL, LOG_INFO, LOC + "ctor");
-    m_stream_handler = ExternalStreamHandler::Get(_channel->GetDevice());
+    m_stream_handler = ExternalStreamHandler::Get(m_channel->GetDevice(),
+                                                  m_channel->GetInputID(),
+                                                  m_channel->GetMajorID());
     if (!m_stream_handler || m_stream_handler->HasError())
         LOG(VB_GENERAL, LOG_ERR, LOC + "Open failed");
     else
         m_lock_timeout = GetLockTimeout() * 1000;
+
+    if (GetExternalChannel()->IsBackgroundTuning())
+        m_scriptStatus.SetValue(1);
 }
 
 /** \fn ExternalSignalMonitor::~ExternalSignalMonitor()
@@ -59,8 +64,8 @@ ExternalSignalMonitor::ExternalSignalMonitor(int db_cardnum,
 ExternalSignalMonitor::~ExternalSignalMonitor()
 {
     LOG(VB_CHANNEL, LOG_INFO, LOC + "dtor");
-    Stop();
-    ExternalStreamHandler::Return(m_stream_handler);
+    ExternalSignalMonitor::Stop();
+    ExternalStreamHandler::Return(m_stream_handler, m_inputid);
 }
 
 /** \fn ExternalSignalMonitor::Stop(void)
@@ -73,7 +78,7 @@ void ExternalSignalMonitor::Stop(void)
     LOG(VB_CHANNEL, LOG_INFO, LOC + "Stop() -- begin");
 
     SignalMonitor::Stop();
-    if (release_stream && GetStreamData())
+    if (GetStreamData())
     {
         m_stream_handler->StopStreaming();
         m_stream_handler->RemoveListener(GetStreamData());
@@ -91,15 +96,25 @@ void ExternalSignalMonitor::Stop(void)
  */
 void ExternalSignalMonitor::UpdateValues(void)
 {
-    if (!running || exit)
+    if (!m_running || m_exit)
         return;
 
     if (GetExternalChannel()->IsExternalChannelChangeInUse())
     {
         SignalMonitor::UpdateValues();
 
-        QMutexLocker locker(&statusLock);
-        if (!scriptStatus.IsGood())
+        QMutexLocker locker(&m_statusLock);
+        if (!m_scriptStatus.IsGood())
+            return;
+    }
+
+    if (GetExternalChannel()->IsBackgroundTuning())
+    {
+        QMutexLocker locker(&m_statusLock);
+        if (m_scriptStatus.GetValue() < 2)
+            m_scriptStatus.SetValue(GetExternalChannel()->GetTuneStatus());
+
+        if (!m_scriptStatus.IsGood())
             return;
     }
 
@@ -107,9 +122,9 @@ void ExternalSignalMonitor::UpdateValues(void)
     {
         if (!m_stream_handler->IsRunning())
         {
-            error = QObject::tr("Error: stream handler died");
-            LOG(VB_CHANNEL, LOG_ERR, LOC + error);
-            update_done = true;
+            m_error = QObject::tr("Error: stream handler died");
+            LOG(VB_CHANNEL, LOG_ERR, LOC + m_error);
+            m_update_done = true;
             return;
         }
 
@@ -117,7 +132,7 @@ void ExternalSignalMonitor::UpdateValues(void)
         if (IsAllGood())
             SendMessageAllGood();
 
-        update_done = true;
+        m_update_done = true;
         return;
     }
 
@@ -128,9 +143,9 @@ void ExternalSignalMonitor::UpdateValues(void)
 
     // Set SignalMonitorValues
     {
-        QMutexLocker locker(&statusLock);
-        signalStrength.SetValue(strength);
-        signalLock.SetValue(is_locked);
+        QMutexLocker locker(&m_statusLock);
+        m_signalStrength.SetValue(strength);
+        m_signalLock.SetValue(is_locked);
     }
 
     EmitStatus();
@@ -152,7 +167,7 @@ void ExternalSignalMonitor::UpdateValues(void)
         }
     }
 
-    update_done = true;
+    m_update_done = true;
 }
 
 bool ExternalSignalMonitor::HasLock(void)
@@ -167,7 +182,7 @@ bool ExternalSignalMonitor::HasLock(void)
     LOG(VB_CHANNEL, LOG_ERR, LOC + QString
         ("HasLock: invalid response '%1'").arg(result));
     if (!result.startsWith("WARN"))
-        error = QString("HasLock: invalid response '%1'").arg(result);
+        m_error = QString("HasLock: invalid response '%1'").arg(result);
     return false;
 }
 
@@ -178,7 +193,7 @@ int ExternalSignalMonitor::GetSignalStrengthPercent(void)
     m_stream_handler->ProcessCommand("SignalStrengthPercent?", result);
     if (result.startsWith("OK:"))
     {
-        bool ok;
+        bool ok = false;
         int percent = result.mid(3).toInt(&ok);
         if (!ok)
         {
@@ -192,7 +207,7 @@ int ExternalSignalMonitor::GetSignalStrengthPercent(void)
     LOG(VB_CHANNEL, LOG_ERR, LOC + QString
         ("GetSignalStrengthPercent: invalid response '%1'").arg(result));
     if (!result.startsWith("WARN"))
-        error = QString("GetSignalStrengthPercent: invalid response '%1'")
+        m_error = QString("GetSignalStrengthPercent: invalid response '%1'")
                 .arg(result);
     return -1;
 }
@@ -201,10 +216,10 @@ int ExternalSignalMonitor::GetLockTimeout(void)
 {
     QString result;
 
-    m_stream_handler->ProcessCommand("LockTimeout?", result);
+    m_stream_handler->ProcessCommand("LockTimeout?", result, 10000);
     if (result.startsWith("OK:"))
     {
-        bool ok;
+        bool ok = false;
         int timeout = result.mid(3).toInt(&ok);
         if (!ok)
         {
@@ -218,6 +233,6 @@ int ExternalSignalMonitor::GetLockTimeout(void)
     LOG(VB_CHANNEL, LOG_ERR, LOC + QString
         ("GetLockTimeout: invalid response '%1'").arg(result));
     if (!result.startsWith("WARN"))
-        error = QString("GetLockTimeout: invalid response '%1'").arg(result);
+        m_error = QString("GetLockTimeout: invalid response '%1'").arg(result);
     return -1;
 }

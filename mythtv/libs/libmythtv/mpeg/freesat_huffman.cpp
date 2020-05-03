@@ -1,21 +1,22 @@
 #include "freesat_huffman.h"
 
 struct fsattab {
-    unsigned int value;
-    short bits;
-    char next;
+    unsigned int m_value;
+    short m_bits;
+    char m_next;
 };
 
 #define START   '\0'
 #define STOP    '\0'
 #define ESCAPE  '\1'
 
-#include "freesat_tables.h"
+#include "freesat_tables.cpp"
 
-QString freesat_huffman_to_string(const unsigned char *src, uint size)
+QString freesat_huffman_to_string(const unsigned char *compressed, uint size)
 {
-    struct fsattab *fsat_table;
-    unsigned int *fsat_index;
+    const unsigned char *src = compressed;
+    struct fsattab *fsat_table = nullptr;
+    unsigned int *fsat_index = nullptr;
 
     if (src[1] == 1 || src[1] == 2)
     {
@@ -29,7 +30,9 @@ QString freesat_huffman_to_string(const unsigned char *src, uint size)
         }
         QByteArray uncompressed(size * 3, '\0');
         int p = 0;
-        unsigned value = 0, byte = 2, bit = 0;
+        unsigned value = 0;
+        unsigned byte = 2;
+        unsigned bit = 0;
         while (byte < 6 && byte < size)
         {
             value |= src[byte] << ((5-byte) * 8);
@@ -58,19 +61,20 @@ QString freesat_huffman_to_string(const unsigned char *src, uint size)
             }
             else
             {
-                unsigned indx = (unsigned)lastch;
+                auto indx = (unsigned)lastch;
                 for (unsigned j = fsat_index[indx]; j < fsat_index[indx+1]; j++)
                 {
-                    unsigned mask = 0, maskbit = 0x80000000;
-                    for (short kk = 0; kk < fsat_table[j].bits; kk++)
+                    unsigned mask = 0;
+                    unsigned maskbit = 0x80000000;
+                    for (short kk = 0; kk < fsat_table[j].m_bits; kk++)
                     {
                         mask |= maskbit;
                         maskbit >>= 1;
                     }
-                    if ((value & mask) == fsat_table[j].value)
+                    if ((value & mask) == fsat_table[j].m_value)
                     {
-                        nextCh = fsat_table[j].next;
-                        bitShift = fsat_table[j].bits;
+                        nextCh = fsat_table[j].m_next;
+                        bitShift = fsat_table[j].m_bits;
                         found = true;
                         lastch = nextCh;
                         break;
@@ -110,5 +114,5 @@ QString freesat_huffman_to_string(const unsigned char *src, uint size)
 
         return QString::fromUtf8(uncompressed, p);
     }
-    else return QString("");
+    return QString("");
 }

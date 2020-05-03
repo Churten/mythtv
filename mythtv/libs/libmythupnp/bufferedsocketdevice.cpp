@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <chrono> // for milliseconds
 #include <thread> // for sleep_for
+#include <utility>
 
 #include "mythtimer.h"
 #include "bufferedsocketdevice.h"
@@ -37,20 +38,13 @@ BufferedSocketDevice::BufferedSocketDevice( int nSocket  )
                     sizeof(ling)) < 0) 
         LOG(VB_GENERAL, LOG_ERR, 
             "BufferedSocketDevice: setsockopt - SO_LINGER: " + ENO);
-
-    m_nDestPort          = 0;
-
-    m_nMaxReadBufferSize = 0; 
-    m_nWriteSize         = 0;
-    m_nWriteIndex        = 0;
-    m_bHandleSocketDelete= true;
 }
 
 /////////////////////////////////////////////////////////////////////////////
 //
 /////////////////////////////////////////////////////////////////////////////
 
-BufferedSocketDevice::BufferedSocketDevice( MSocketDevice *pSocket /* = NULL*/,
+BufferedSocketDevice::BufferedSocketDevice( MSocketDevice *pSocket /* = nullptr*/,
                                             bool bTakeOwnership /* = false */ )
 {
     m_pSocket            = pSocket;
@@ -85,7 +79,7 @@ void BufferedSocketDevice::Close()
     m_bufRead.clear();
     ClearPendingData();
 
-    if (m_pSocket != NULL)
+    if (m_pSocket != nullptr)
     {
         if (m_pSocket->isValid())
             m_pSocket->close();
@@ -93,7 +87,7 @@ void BufferedSocketDevice::Close()
         if (m_bHandleSocketDelete)
             delete m_pSocket;
 
-        m_pSocket = NULL;
+        m_pSocket = nullptr;
     }
 
 }
@@ -104,7 +98,7 @@ void BufferedSocketDevice::Close()
 
 bool BufferedSocketDevice::Connect( const QHostAddress &addr, quint16 port )
 {
-    if (m_pSocket == NULL)
+    if (m_pSocket == nullptr)
         return false;
 
     return m_pSocket->connect( addr, port );
@@ -125,7 +119,7 @@ MSocketDevice *BufferedSocketDevice::SocketDevice()
 
 void BufferedSocketDevice::SetSocketDevice( MSocketDevice *pSocket )
 {
-    if ((m_bHandleSocketDelete) && (m_pSocket != NULL))
+    if ((m_bHandleSocketDelete) && (m_pSocket != nullptr))
         delete m_pSocket;
     
     m_bHandleSocketDelete = false;
@@ -140,7 +134,7 @@ void BufferedSocketDevice::SetSocketDevice( MSocketDevice *pSocket )
 void BufferedSocketDevice::SetDestAddress(
     QHostAddress hostAddress, quint16 nPort)
 {
-    m_DestHostAddress = hostAddress;
+    m_DestHostAddress = std::move(hostAddress);
     m_nDestPort       = nPort;
 }
 
@@ -168,7 +162,7 @@ qulonglong BufferedSocketDevice::ReadBufferSize(void) const
 
 int BufferedSocketDevice::ReadBytes()
 {
-    if (m_pSocket == NULL)
+    if (m_pSocket == nullptr)
         return m_bufRead.size();
 
     qlonglong maxToRead = 0;
@@ -182,19 +176,18 @@ int BufferedSocketDevice::ReadBytes()
     }
 
     qlonglong nbytes = m_pSocket->bytesAvailable();
-    qlonglong nread;
 
-    QByteArray *a = 0;
+    QByteArray *a = nullptr;
 
     if ( nbytes > 0 )
     {
         a = new QByteArray();
         a->resize(nbytes);
 
-        nread = m_pSocket->readBlock(
+        qlonglong nread = m_pSocket->readBlock(
             a->data(), maxToRead ? std::min(nbytes, maxToRead) : nbytes);
 
-        if (( nread > 0 ) && ( nread != (int)a->size() ))
+        if (( nread > 0 ) && ( nread != a->size() ))
         {
             // unexpected
             a->resize( nread );
@@ -259,7 +252,7 @@ bool BufferedSocketDevice::ConsumeWriteBuf( qulonglong nbytes )
 void BufferedSocketDevice::Flush()
 {
 
-    if ((m_pSocket == NULL) || !m_pSocket->isValid())
+    if ((m_pSocket == nullptr) || !m_pSocket->isValid())
         return;
 
     bool osBufferFull = false;
@@ -267,13 +260,13 @@ void BufferedSocketDevice::Flush()
 
     while ( !osBufferFull && ( m_nWriteSize > 0 ) && m_pSocket->isValid())
     {
-        deque<QByteArray*>::iterator it = m_bufWrite.begin();
+        auto it = m_bufWrite.begin();
         QByteArray *a = *it;
 
         int nwritten = 0;
         int i = 0;
 
-        if ( (int)a->size() - m_nWriteIndex < 1460 ) 
+        if ( a->size() - m_nWriteIndex < 1460 )
         {
             QByteArray out;
             out.resize(65536);
@@ -281,7 +274,7 @@ void BufferedSocketDevice::Flush()
             int j = m_nWriteIndex;
             int s = a->size() - j;
 
-            while ( a && i+s < (int)out.size() ) 
+            while ( a && i+s < out.size() )
             {
                 memcpy( out.data()+i, a->data()+j, s );
                 j = 0;
@@ -334,7 +327,7 @@ qlonglong BufferedSocketDevice::Size()
 //
 /////////////////////////////////////////////////////////////////////////////
 
-qlonglong BufferedSocketDevice::At() const
+qlonglong BufferedSocketDevice::At()
 {
     return( 0 );
 }
@@ -351,7 +344,7 @@ bool BufferedSocketDevice::At( qlonglong index )
         return false;
 
     // throw away data 0..index-1
-    m_bufRead.consumeBytes( (qulonglong)index, 0 );
+    m_bufRead.consumeBytes( (qulonglong)index, nullptr );
 
     return true;
 }
@@ -388,7 +381,7 @@ qulonglong BufferedSocketDevice::BytesAvailable(void)
 /////////////////////////////////////////////////////////////////////////////
 
 qulonglong BufferedSocketDevice::WaitForMore(
-    int msecs, bool *pTimeout /* = NULL*/ ) 
+    int msecs, bool *pTimeout /* = nullptr*/ ) 
 {
     bool bTimeout = false;
 
@@ -428,7 +421,7 @@ qulonglong BufferedSocketDevice::WaitForMore(
 
         nBytes = m_pSocket->waitForMore( msecs, &bTimeout );
 
-        if (pTimeout != NULL)
+        if (pTimeout != nullptr)
             *pTimeout = bTimeout;
     }
             
@@ -474,7 +467,7 @@ void BufferedSocketDevice::ClearReadBuffer()
 
 qlonglong BufferedSocketDevice::ReadBlock( char *data, qulonglong maxlen )
 {
-    if ( data == 0 && maxlen != 0 ) 
+    if ( data == nullptr && maxlen != 0 ) 
         return -1;
 
     if ( !m_pSocket->isOpen() ) 
@@ -559,7 +552,7 @@ int BufferedSocketDevice::Getch()
 
         if (m_bufRead.size() > 0 ) 
         {
-            uchar c;
+            uchar c = '\0';
 
             m_bufRead.consumeBytes( 1, (char*)&c );
         
@@ -600,10 +593,7 @@ bool BufferedSocketDevice::CanReadLine()
 {
     ReadBytes();
 
-    if (( BytesAvailable() > 0 ) && m_bufRead.scanNewline( 0 ) )
-        return true;
-
-    return false;
+    return ( BytesAvailable() > 0 ) && m_bufRead.scanNewline( nullptr );
 }
                                
 /////////////////////////////////////////////////////////////////////////////

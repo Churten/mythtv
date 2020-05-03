@@ -88,19 +88,17 @@ void ring_destroy(ringbuffer *rbuf)
 
 int ring_write(ringbuffer *rbuf, uint8_t *data, int count)
 {
-
-	int free, pos, rest;
-
 	if (count <=0 ) return 0;
-       	pos  = rbuf->write_pos;
-	rest = rbuf->size - pos;
-	free = ring_free(rbuf);
+	int pos	 = rbuf->write_pos;
+	int rest = rbuf->size - pos;
+	int free = ring_free(rbuf);
 
 	if ( free < count ){
-		if (DEBUG)
+		if (DEBUG) {
 			LOG(VB_GENERAL, LOG_ERR,
 			    "ringbuffer overflow %d<%d %d",
 				free, count, rbuf->size);
+		}
 		return FULL_BUFFER;
 	}
 	
@@ -122,15 +120,11 @@ int ring_write(ringbuffer *rbuf, uint8_t *data, int count)
 
 int ring_peek(ringbuffer *rbuf, uint8_t *data, unsigned int count, uint32_t off)
 {
-
-	unsigned int avail, pos, rest;
-
 	if (off+count > rbuf->size || off+count >ring_avail(rbuf))
 		return -1;
-	pos  = (rbuf->read_pos+off)%rbuf->size;
-	rest = rbuf->size - pos ;
-	avail = ring_avail(rbuf); 
-
+	unsigned int pos  = (rbuf->read_pos+off)%rbuf->size;
+	unsigned int rest = rbuf->size - pos ;
+	unsigned int avail = ring_avail(rbuf);
 	
 	if ( avail < count ){
 #if 0
@@ -155,15 +149,11 @@ int ring_peek(ringbuffer *rbuf, uint8_t *data, unsigned int count, uint32_t off)
 
 int ring_poke(ringbuffer *rbuf, uint8_t *data, unsigned int count, uint32_t off)
 {
-
-	unsigned int avail, pos, rest;
-
 	if (off+count > rbuf->size || off+count >ring_avail(rbuf))
 		return -1;
-	pos  = (rbuf->read_pos+off)%rbuf->size;
-	rest = rbuf->size - pos ;
-	avail = ring_avail(rbuf); 
-
+	unsigned int pos  = (rbuf->read_pos+off)%rbuf->size;
+	unsigned int rest = rbuf->size - pos ;
+	unsigned int avail = ring_avail(rbuf);
 	
 	if ( avail < count ){
 #if 0
@@ -188,13 +178,10 @@ int ring_poke(ringbuffer *rbuf, uint8_t *data, unsigned int count, uint32_t off)
 
 int ring_read(ringbuffer *rbuf, uint8_t *data, int count)
 {
-
-	int avail, pos, rest;
-
 	if (count <=0 ) return 0;
-	pos  = rbuf->read_pos;
-	rest = rbuf->size - pos;
-	avail = ring_avail(rbuf);
+	int pos  = rbuf->read_pos;
+	int rest = rbuf->size - pos;
+	int avail = ring_avail(rbuf);
 	
 	if ( avail < count ){
 #if 0
@@ -224,13 +211,10 @@ int ring_read(ringbuffer *rbuf, uint8_t *data, int count)
 
 int ring_skip(ringbuffer *rbuf, int count)
 {
-
-	int avail, pos, rest;
-
 	if (count <=0 ) return -1;
-	pos  = rbuf->read_pos;
-	rest = rbuf->size - pos;
-	avail = ring_avail(rbuf);
+	int pos  = rbuf->read_pos;
+	int rest = rbuf->size - pos;
+	int avail = ring_avail(rbuf);
 
 	if ( avail < count ){
 #if 0
@@ -256,19 +240,19 @@ int ring_skip(ringbuffer *rbuf, int count)
 
 int ring_write_file(ringbuffer *rbuf, int fd, int count)
 {
-
-	int free, pos, rest, rr;
+	int rr = 0;
 
 	if (count <=0 ) return 0;
-       	pos  = rbuf->write_pos;
-	rest = rbuf->size - pos;
-	free = ring_free(rbuf);
+	int pos	 = rbuf->write_pos;
+	int rest = rbuf->size - pos;
+	int free = ring_free(rbuf);
 
 	if ( free < count ){
-		if (DEBUG)
+		if (DEBUG) {
 			LOG(VB_GENERAL, LOG_ERR,
 			    "ringbuffer overflow %d<%d %d %d\n",
 				free, count, pos, rbuf->read_pos);
+		}
 		return FULL_BUFFER;
 	}
 	
@@ -294,13 +278,12 @@ int ring_write_file(ringbuffer *rbuf, int fd, int count)
 
 int ring_read_file(ringbuffer *rbuf, int fd, int count)
 {
-
-	int avail, pos, rest, rr;
+	int rr = 0;
 
 	if (count <=0 ) return -1;
-	pos  = rbuf->read_pos;
-	rest = rbuf->size - pos;
-	avail = ring_avail(rbuf);
+	int pos  = rbuf->read_pos;
+	int rest = rbuf->size - pos;
+	int avail = ring_avail(rbuf);
 
 	if ( avail < count ){
 #if 0
@@ -334,18 +317,18 @@ int ring_read_file(ringbuffer *rbuf, int fd, int count)
 
 static void show(uint8_t *buf, int length)
 {
-	int i,j,r;
 	uint8_t temp[8];
 	uint8_t buffer[100];
 	buffer[0] = '\0';
 
-	for (i=0; i<length; i+=16){
+	for (int i=0; i<length; i+=16){
+		int j = 0;
 		for (j=0; j < 8 && j+i<length; j++)
 		{
 			sprintf(temp, "0x%02x ", (int)(buf[i+j]));
 			strcat(buffer, temp);
 		}
-		for (r=j; r<8; r++) 			
+		for (int r=j; r<8; r++)
 			strcat(buffer, "     ");
 
 		strcat(buffer,"  ");
@@ -355,7 +338,7 @@ static void show(uint8_t *buf, int length)
 			sprintf(temp, "0x%02x ", (int)(buf[i+j]));
 			strcat(buffer, temp);
 		}
-		for (r=j; r<16; r++) 			
+		for (int r=j; r<16; r++)
 			strcat(buffer, "     ");
 
 		for (j=0; j < 16 && j+i<length; j++){
@@ -375,15 +358,11 @@ static void show(uint8_t *buf, int length)
 
 void ring_show(ringbuffer *rbuf, unsigned int count, uint32_t off)
 {
-
-	unsigned int avail, pos, rest;
-
 	if (off+count > rbuf->size || off+count >ring_avail(rbuf))
 		return;
-	pos  = (rbuf->read_pos+off)%rbuf->size;
-	rest = rbuf->size - pos ;
-	avail = ring_avail(rbuf); 
-
+	unsigned int pos  = (rbuf->read_pos+off)%rbuf->size;
+	unsigned int rest = rbuf->size - pos ;
+	unsigned int avail = ring_avail(rbuf);
 	
 	if ( avail < count ){
 #if 0
@@ -442,15 +421,15 @@ int dummy_add(dummy_buffer *dbuf, uint64_t time, uint32_t size)
 	if (ring_write(&dbuf->data_index, (uint8_t *)&size, sizeof(uint32_t)) < 0) 
 		return -3;
 #if 0
-	LOG(VB_GENERAL, LOG_INFO, " - %d = "%d", size, dummy_space(dbuf));
+	LOG(VB_GENERAL, LOG_INFO, " - %d = %d", size, dummy_space(dbuf));
 #endif
 	return size;
 }
 
 int dummy_delete(dummy_buffer *dbuf, uint64_t time)
 {
-	uint64_t rtime;
-	uint32_t size;
+	uint64_t rtime = 0;
+	uint32_t size = 0;
 	int ex=0;
 	uint32_t dsize=0;
 
@@ -458,7 +437,7 @@ int dummy_delete(dummy_buffer *dbuf, uint64_t time)
 		if (ring_peek(&dbuf->time_index,(uint8_t *) &rtime, 
 			      sizeof(uint64_t), 0)<0){
 			if (dsize) break;
-			else return -1;
+			return -1;
 		}
 		if (ptscmp(rtime,time) < 0){
 			ring_read(&dbuf->time_index,(uint8_t *) &rtime, 
@@ -481,11 +460,10 @@ int dummy_delete(dummy_buffer *dbuf, uint64_t time)
 
 static void dummy_print(dummy_buffer *dbuf)
 {
-   int i;
-   uint64_t rtime;
-   uint32_t size;
+   uint64_t rtime = 0;
+   uint32_t size = 0;
    int avail = ring_avail(&dbuf->time_index) / sizeof(uint64_t);
-   for(i = 0; i < avail; i++) {
+   for (int i = 0; i < avail; i++) {
        ring_peek(&dbuf->time_index,(uint8_t *) &rtime, 
 			      sizeof(uint64_t), i * sizeof(uint64_t));
        ring_peek(&dbuf->data_index,(uint8_t *) &size, 

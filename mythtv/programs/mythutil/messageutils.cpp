@@ -40,13 +40,13 @@ const QString kNotification =
 "  <type>%type%</type>\n"
 "</mythnotification>";
 
-static int PrintMTemplate(const MythUtilCommandLineParser &cmdline)
+static int PrintMTemplate(const MythUtilCommandLineParser &/*cmdline*/)
 {
     cerr << kMessage.toLocal8Bit().constData() << endl;
     return GENERIC_EXIT_OK;
 }
 
-static int PrintNTemplate(const MythUtilCommandLineParser &cmdline)
+static int PrintNTemplate(const MythUtilCommandLineParser &/*cmdline*/)
 {
     cerr << kNotification.toLocal8Bit().constData() << endl;
     return GENERIC_EXIT_OK;
@@ -56,7 +56,6 @@ static int SendMessage(const MythUtilCommandLineParser &cmdline)
 {
     QHostAddress address = QHostAddress::Broadcast;
     unsigned short port = 6948;
-    QString name = cmdline.GetPassthrough();
     bool notification = cmdline.toBool("notification");
     QString text /* = "message" */ ;
     QString timeout = "0";
@@ -124,21 +123,21 @@ static int SendMessage(const MythUtilCommandLineParser &cmdline)
     QMap<QString,QString> extras = cmdline.GetExtra();
     for (i = extras.begin(); i != extras.end(); ++i)
     {
-        QString name = i.key();
-        QString value = i.value();
+        QString kv_name = i.key();
+        const QString& kv_value = i.value();
 
-        name.replace("--", "");
-        cerr << "name: " << name.toLocal8Bit().constData()
-             << " -- value: " << value.toLocal8Bit().constData() << endl;
+        kv_name.replace("--", "");
+        cerr << "name: " << kv_name.toLocal8Bit().constData()
+             << " -- value: " << kv_value.toLocal8Bit().constData() << endl;
 
-        name.append("%");
-        name.prepend("%");
-        message.replace(name, value);
+        kv_name.append("%");
+        kv_name.prepend("%");
+        message.replace(kv_name, kv_value);
     }
 
     cout << "output:\n" << message.toLocal8Bit().constData() << endl;
 
-    QUdpSocket *sock = new QUdpSocket();
+    auto *sock = new QUdpSocket();
     QByteArray utf8 = message.toUtf8();
 
     int result = GENERIC_EXIT_OK;

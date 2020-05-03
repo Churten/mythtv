@@ -1,8 +1,7 @@
-#include <fcntl.h>
-#include <signal.h>
 #include <cerrno>
-#include <stdlib.h>
-
+#include <csignal>
+#include <cstdlib>
+#include <fcntl.h>
 #include <iostream>
 using namespace std;
 
@@ -13,11 +12,14 @@ using namespace std;
 #include <QEvent>
 #include <QDir>
 #include <QTextCodec>
-#include <QWidget>
 #include <QApplication>
 #include <QTimer>
 #ifdef Q_OS_MAC
 #include <QProcessEnvironment>
+#endif
+
+#ifdef Q_OS_ANDROID
+#include <QtAndroidExtras>
 #endif
 
 #include "previewgeneratorqueue.h"
@@ -28,6 +30,7 @@ using namespace std;
 #include "mythsystemlegacy.h"
 #include "tv.h"
 #include "proglist.h"
+#include "prevreclist.h"
 #include "progfind.h"
 #include "scheduleeditor.h"
 #include "manualschedule.h"
@@ -69,6 +72,7 @@ using namespace std;
 #include "mythtranslation.h"
 #include "commandlineparser.h"
 #include "tvremoteutil.h"
+#include "channelutil.h"
 
 #include "myththemedmenu.h"
 #include "mediarenderer.h"
@@ -83,6 +87,7 @@ using namespace std;
 #include "taskqueue.h"
 #include "cleanupguard.h"
 #include "standardsettings.h"
+#include "settingshelper.h"
 
 // Video
 #include "cleanup.h"
@@ -111,13 +116,21 @@ using namespace std;
 #include <QScopedPointer>
 #include "bonjourregister.h"
 #endif
+#if CONFIG_SYSTEMD_NOTIFY
+#include <systemd/sd-daemon.h>
+#define fe_sd_notify(x) \
+    (void)sd_notify(0, x);
+#else
+#define fe_sd_notify(x)
+#endif
 
-static ExitPrompter   *exitPopup = NULL;
-static MythThemedMenu *menu;
+static ExitPrompter   *g_exitPopup = nullptr;
+static MythThemedMenu *g_menu;
 
-static QString         logfile;
-static MediaRenderer  *g_pUPnp   = NULL;
-static MythPluginManager *pmanager = NULL;
+static MediaRenderer  *g_pUPnp   = nullptr;
+static MythPluginManager *g_pmanager = nullptr;
+
+static SettingsHelper *g_settingsHelper = nullptr;
 
 static void handleExit(bool prompt);
 static void resetAllKeys(void);
@@ -160,7 +173,7 @@ namespace
             }
         }
 
-        ~RunSettingsCompletion() {}
+        ~RunSettingsCompletion() override = default;
 
       private slots:
         void OnPasswordResultReady(bool passwordValid,
@@ -171,7 +184,7 @@ namespace
             if (passwordValid)
             {
                 MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
-                StandardSettingDialog *ssd =
+                auto *ssd =
                     new StandardSettingDialog(mainStack, "videogeneralsettings",
                                               new VideoGeneralSettings());
 
@@ -204,17 +217,17 @@ namespace
       public:
         BookmarkDialog(ProgramInfo *pginfo, MythScreenStack *parent) :
                 MythScreenType(parent, "bookmarkdialog"),
-                pgi(pginfo)
+                m_pgi(pginfo)
         {
         }
 
-        bool Create()
+        bool Create() override // MythScreenType
         {
             QString msg = tr("DVD/Video contains a bookmark");
             QString btn0msg = tr("Play from bookmark");
             QString btn1msg = tr("Play from beginning");
 
-            MythDialogBox *popup = new MythDialogBox(msg, GetScreenStack(), "bookmarkdialog");
+            auto *popup = new MythDialogBox(msg, GetScreenStack(), "bookmarkdialog");
             if (!popup->Create())
             {
                 delete popup;
@@ -229,11 +242,11 @@ namespace
             return true;
         }
 
-        void customEvent(QEvent *event)
+        void customEvent(QEvent *event) override // MythUIType
         {
             if (event->type() == DialogCompletionEvent::kEventType)
             {
-                DialogCompletionEvent *dce = (DialogCompletionEvent*)(event);
+                auto *dce = (DialogCompletionEvent*)(event);
                 int buttonnum = dce->GetResult();
 
                 if (dce->GetId() == "bookmarkdialog")
@@ -245,30 +258,32 @@ namespace
                     }
                     else if (buttonnum != 0)
                     {
-                        delete pgi;
+                        delete m_pgi;
                         return;
                     }
 
-                    TV::StartTV(pgi, flags);
+                    TV::StartTV(m_pgi, flags);
 
-                    delete pgi;
+                    delete m_pgi;
                 }
             }
         }
 
       private:
-        ProgramInfo* pgi;
+        ProgramInfo* m_pgi {nullptr};
     };
 
     void cleanup()
     {
+        qApp->processEvents();
+        DestroyMythMainWindow();
 #ifdef USING_AIRPLAY
         MythRAOPDevice::Cleanup();
         MythAirplayServer::Cleanup();
 #endif
 
-        delete exitPopup;
-        exitPopup = NULL;
+        delete g_exitPopup;
+        g_exitPopup = nullptr;
 
         AudioOutput::Cleanup();
 
@@ -277,19 +292,23 @@ namespace
             // This takes a few seconds, so inform the user:
             LOG(VB_GENERAL, LOG_INFO, "Shutting down UPnP client...");
             delete g_pUPnp;
-            g_pUPnp = NULL;
+            g_pUPnp = nullptr;
         }
 
-        if (pmanager)
+        if (g_pmanager)
         {
-            delete pmanager;
-            pmanager = NULL;
+            delete g_pmanager;
+            g_pmanager = nullptr;
         }
 
-        DestroyMythMainWindow();
+        if (g_settingsHelper)
+        {
+            delete g_settingsHelper;
+            g_settingsHelper = nullptr;
+        }
 
         delete gContext;
-        gContext = NULL;
+        gContext = nullptr;
 
         ReferenceCounter::PrintDebug();
 
@@ -312,12 +331,14 @@ static void startAppearWiz(void)
     bool reload = false;
 
     if (isWindowed)
+    {
         ShowOkPopup(qApp->translate("(MythFrontendMain)",
                     "The ScreenSetupWizard cannot be used while "
                     "mythfrontend is operating in windowed mode."));
+    }
     else
     {
-        MythSystemLegacy *wizard = new MythSystemLegacy(
+        auto *wizard = new MythSystemLegacy(
             GetAppBinDir() + "mythscreenwizard",
             QStringList(),
             kMSDisableUDPListener | kMSPropagateLogs);
@@ -339,7 +360,7 @@ static void startAppearWiz(void)
         }
 
         delete wizard;
-        wizard = NULL;
+        wizard = nullptr;
     }
 
     if (reload)
@@ -350,7 +371,7 @@ static void startKeysSetup()
 {
     MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
 
-    MythControls *mythcontrols = new MythControls(mainStack, "mythcontrols");
+    auto *mythcontrols = new MythControls(mainStack, "mythcontrols");
 
     if (mythcontrols->Create())
         mainStack->AddScreen(mythcontrols);
@@ -363,7 +384,7 @@ static void startGuide(void)
     uint chanid = 0;
     QString channum = gCoreContext->GetSetting("DefaultTVChannel");
     QDateTime startTime;
-    GuideGrid::RunProgramGuide(chanid, channum, startTime, NULL, false, true, -2);
+    GuideGrid::RunProgramGuide(chanid, channum, startTime, nullptr, false, true, -2);
 }
 
 static void startFinder(void)
@@ -374,7 +395,7 @@ static void startFinder(void)
 static void startSearchTitle(void)
 {
     MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
-    ProgLister *pl = new ProgLister(mainStack, plTitleSearch, "", "");
+    auto *pl = new ProgLister(mainStack, plTitleSearch, "", "");
     if (pl->Create())
         mainStack->AddScreen(pl);
     else
@@ -384,7 +405,7 @@ static void startSearchTitle(void)
 static void startSearchKeyword(void)
 {
     MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
-    ProgLister *pl = new ProgLister(mainStack, plKeywordSearch, "", "");
+    auto *pl = new ProgLister(mainStack, plKeywordSearch, "", "");
     if (pl->Create())
         mainStack->AddScreen(pl);
     else
@@ -394,7 +415,7 @@ static void startSearchKeyword(void)
 static void startSearchPeople(void)
 {
     MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
-    ProgLister *pl = new ProgLister(mainStack, plPeopleSearch, "", "");
+    auto *pl = new ProgLister(mainStack, plPeopleSearch, "", "");
     if (pl->Create())
         mainStack->AddScreen(pl);
     else
@@ -404,7 +425,7 @@ static void startSearchPeople(void)
 static void startSearchPower(void)
 {
     MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
-    ProgLister *pl = new ProgLister(mainStack, plPowerSearch, "", "");
+    auto *pl = new ProgLister(mainStack, plPowerSearch, "", "");
     if (pl->Create())
         mainStack->AddScreen(pl);
     else
@@ -414,7 +435,7 @@ static void startSearchPower(void)
 static void startSearchStored(void)
 {
     MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
-    ProgLister *pl = new ProgLister(mainStack, plStoredSearch, "", "");
+    auto *pl = new ProgLister(mainStack, plStoredSearch, "", "");
     if (pl->Create())
         mainStack->AddScreen(pl);
     else
@@ -424,7 +445,7 @@ static void startSearchStored(void)
 static void startSearchChannel(void)
 {
     MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
-    ProgLister *pl = new ProgLister(mainStack, plChannel, "", "");
+    auto *pl = new ProgLister(mainStack, plChannel, "", "");
     if (pl->Create())
         mainStack->AddScreen(pl);
     else
@@ -434,7 +455,7 @@ static void startSearchChannel(void)
 static void startSearchCategory(void)
 {
     MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
-    ProgLister *pl = new ProgLister(mainStack, plCategory, "", "");
+    auto *pl = new ProgLister(mainStack, plCategory, "", "");
     if (pl->Create())
         mainStack->AddScreen(pl);
     else
@@ -444,7 +465,7 @@ static void startSearchCategory(void)
 static void startSearchMovie(void)
 {
     MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
-    ProgLister *pl = new ProgLister(mainStack, plMovies, "", "");
+    auto *pl = new ProgLister(mainStack, plMovies, "", "");
     if (pl->Create())
         mainStack->AddScreen(pl);
     else
@@ -454,7 +475,7 @@ static void startSearchMovie(void)
 static void startSearchNew(void)
 {
     MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
-    ProgLister *pl = new ProgLister(mainStack, plNewListings, "", "");
+    auto *pl = new ProgLister(mainStack, plNewListings, "", "");
     if (pl->Create())
         mainStack->AddScreen(pl);
     else
@@ -464,7 +485,7 @@ static void startSearchNew(void)
 static void startSearchTime(void)
 {
     MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
-    ProgLister *pl = new ProgLister(mainStack, plTime, "", "");
+    auto *pl = new ProgLister(mainStack, plTime, "", "");
     if (pl->Create())
         mainStack->AddScreen(pl);
     else
@@ -475,7 +496,7 @@ static void startManaged(void)
 {
     MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
 
-    ViewScheduled *viewsched = new ViewScheduled(mainStack);
+    auto *viewsched = new ViewScheduled(mainStack);
 
     if (viewsched->Create())
         mainStack->AddScreen(viewsched);
@@ -487,8 +508,7 @@ static void startManageRecordingRules(void)
 {
     MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
 
-    ProgramRecPriority *progRecPrior = new ProgramRecPriority(mainStack,
-                                                            "ManageRecRules");
+    auto *progRecPrior = new ProgramRecPriority(mainStack, "ManageRecRules");
 
     if (progRecPrior->Create())
         mainStack->AddScreen(progRecPrior);
@@ -500,7 +520,7 @@ static void startChannelRecPriorities(void)
 {
     MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
 
-    ChannelRecPriority *chanRecPrior = new ChannelRecPriority(mainStack);
+    auto *chanRecPrior = new ChannelRecPriority(mainStack);
 
     if (chanRecPrior->Create())
         mainStack->AddScreen(chanRecPrior);
@@ -512,7 +532,7 @@ static void startCustomPriority(void)
 {
     MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
 
-    CustomPriority *custom = new CustomPriority(mainStack);
+    auto *custom = new CustomPriority(mainStack);
 
     if (custom->Create())
         mainStack->AddScreen(custom);
@@ -520,12 +540,11 @@ static void startCustomPriority(void)
         delete custom;
 }
 
-static void startPlaybackWithGroup(QString recGroup = "")
+static void startPlaybackWithGroup(const QString& recGroup = "")
 {
     MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
 
-    PlaybackBox *pbb = new PlaybackBox(
-        mainStack, "playbackbox");
+    auto *pbb = new PlaybackBox(mainStack, "playbackbox");
 
     if (pbb->Create())
     {
@@ -546,7 +565,17 @@ static void startPlayback(void)
 static void startPrevious(void)
 {
     MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
-    ProgLister *pl = new ProgLister(mainStack);
+    auto *pl = new PrevRecordedList(mainStack);
+    if (pl->Create())
+        mainStack->AddScreen(pl);
+    else
+        delete pl;
+}
+
+static void startPreviousOld(void)
+{
+    MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
+    auto *pl = new ProgLister(mainStack);
     if (pl->Create())
         mainStack->AddScreen(pl);
     else
@@ -556,7 +585,7 @@ static void startPrevious(void)
 static void startCustomEdit(void)
 {
     MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
-    CustomEdit *custom = new CustomEdit(mainStack);
+    auto *custom = new CustomEdit(mainStack);
 
     if (custom->Create())
         mainStack->AddScreen(custom);
@@ -568,7 +597,7 @@ static void startManualSchedule(void)
 {
     MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
 
-    ManualSchedule *mansched= new ManualSchedule(mainStack);
+    auto *mansched= new ManualSchedule(mainStack);
 
     if (mansched->Create())
         mainStack->AddScreen(mansched);
@@ -592,15 +621,37 @@ static bool isLiveTVAvailable(void)
 
 static void startTVNormal(void)
 {
-    if (isLiveTVAvailable())
-        TV::StartTV(NULL, kStartTVNoFlags);
+    if (!isLiveTVAvailable())
+        return;
+
+    // Get the default channel keys (callsign(0) and channum(1)) and
+    // use them to generate the ordered list of channels.
+    QStringList keylist = gCoreContext->GetSettingOnHost(
+        "DefaultChanKeys", gCoreContext->GetHostName()).split("[]:[]");
+    while (keylist.size() < 2)
+        keylist << "";
+    uint dummy = 0;
+    ChannelInfoList livetvchannels = ChannelUtil::LoadChannels(
+        0,                      // startIndex
+        0,                      // count
+        dummy,                  // totalAvailable
+        true,                   // ignoreHidden
+        ChannelUtil::kChanOrderByLiveTV, // orderBy
+        ChannelUtil::kChanGroupByChanid, // groupBy
+        0,                      // sourceID
+        0,                      // channelGroupID
+        true,                   // liveTVOnly
+        keylist[0],             // callsign
+        keylist[1]);            // channum
+
+    TV::StartTV(nullptr, kStartTVNoFlags, livetvchannels);
 }
 
 static void showStatus(void)
 {
     MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
 
-    StatusBox *statusbox = new StatusBox(mainStack);
+    auto *statusbox = new StatusBox(mainStack);
 
     if (statusbox->Create())
         mainStack->AddScreen(statusbox);
@@ -613,7 +664,7 @@ static void standbyScreen(void)
 {
     MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
 
-    IdleScreen *idlescreen = new IdleScreen(mainStack);
+    auto *idlescreen = new IdleScreen(mainStack);
 
     if (idlescreen->Create())
         mainStack->AddScreen(idlescreen);
@@ -629,8 +680,8 @@ static void RunVideoScreen(VideoDialog::DialogType type, bool fromJump = false)
     MythScreenStack *popupStack =
             GetMythMainWindow()->GetStack("popup stack");
 
-    MythUIBusyDialog *busyPopup = new MythUIBusyDialog(message,
-            popupStack, "mythvideobusydialog");
+    auto *busyPopup = new MythUIBusyDialog(message, popupStack,
+                                           "mythvideobusydialog");
 
     if (busyPopup->Create())
         popupStack->AddScreen(busyPopup, false);
@@ -658,7 +709,7 @@ static void RunVideoScreen(VideoDialog::DialogType type, bool fromJump = false)
     if (!video_list)
         video_list = new VideoList;
 
-    VideoDialog *mythvideo =
+    auto *mythvideo =
             new VideoDialog(mainStack, "mythvideo", video_list, type, browse);
 
     if (mythvideo->Create())
@@ -679,7 +730,7 @@ static void jumpScreenVideoDefault() { RunVideoScreen(VideoDialog::DLG_DEFAULT, 
 static void RunGallery()
 {
     MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
-    GalleryThumbView *galleryView = new GalleryThumbView(mainStack, "galleryview");
+    auto *galleryView = new GalleryThumbView(mainStack, "galleryview");
     if (galleryView->Create())
     {
         mainStack->AddScreen(galleryView);
@@ -748,28 +799,24 @@ static void playDisc()
 
             return;
         }
-        else
+
+        if (command_string.contains("%d"))
         {
-            if (command_string.contains("%d"))
-            {
-                //
-                //  Need to do device substitution
-                //
-                command_string =
-                        command_string.replace(QRegExp("%d"), dvd_device);
-            }
-            gCoreContext->emitTVPlaybackStarted();
-            GetMythMainWindow()->PauseIdleTimer(true);
-            myth_system(command_string);
-            gCoreContext->emitTVPlaybackStopped();
-            GetMythMainWindow()->PauseIdleTimer(false);
-            if (GetMythMainWindow())
-            {
-                GetMythMainWindow()->raise();
-                GetMythMainWindow()->activateWindow();
-                if (GetMythMainWindow()->currentWidget())
-                    GetMythMainWindow()->currentWidget()->setFocus();
-            }
+            //
+            //  Need to do device substitution
+            //
+            command_string =
+                command_string.replace(QRegExp("%d"), dvd_device);
+        }
+        gCoreContext->emitTVPlaybackStarted();
+        GetMythMainWindow()->PauseIdleTimer(true);
+        myth_system(command_string);
+        gCoreContext->emitTVPlaybackStopped();
+        GetMythMainWindow()->PauseIdleTimer(false);
+        if (GetMythMainWindow())
+        {
+            GetMythMainWindow()->raise();
+            GetMythMainWindow()->activateWindow();
         }
         GetMythUI()->RemoveCurrentLocation();
     }
@@ -789,7 +836,6 @@ static void handleDVDMedia(MythMediaDevice *dvd)
     switch (gCoreContext->GetNumSetting("DVDOnInsertDVD", 1))
     {
         case 0 : // Do nothing
-            break;
         case 1 : // Display menu (mythdvd)*/
             break;
         case 2 : // play DVD or Blu-ray
@@ -812,12 +858,10 @@ static void handleGalleryMedia(MythMediaDevice *dev)
     QVector<MythScreenType*> screens;
     GetMythMainWindow()->GetMainStack()->GetScreenList(screens);
 
-    QVector<MythScreenType*>::const_iterator it    = screens.begin();
-    QVector<MythScreenType*>::const_iterator itend = screens.end();
 
-    for (; it != itend; ++it)
+    foreach (auto screen, screens)
     {
-        if (dynamic_cast<GalleryThumbView*>(*it))
+        if (dynamic_cast<GalleryThumbView*>(screen))
         {
             // Running gallery will receive this event later
             LOG(VB_MEDIA, LOG_INFO, "Main: Ignoring new gallery media - already running");
@@ -825,7 +869,7 @@ static void handleGalleryMedia(MythMediaDevice *dev)
         }
     }
 
-    if (gCoreContext->GetNumSetting("GalleryAutoLoad", 0))
+    if (gCoreContext->GetBoolSetting("GalleryAutoLoad", false))
     {
         LOG(VB_GUI, LOG_INFO, "Main: Autostarting Gallery for new media");
         GetMythMainWindow()->JumpTo(JUMP_GALLERY_DEFAULT);
@@ -841,9 +885,10 @@ static void TVMenuCallback(void *data, QString &selection)
 
     if (sel.startsWith("settings ") || sel == "video_settings_general")
     {
-        GetMythUI()->AddCurrentLocation("Setup");
-        gCoreContext->ActivateSettingsCache(false);
-        GetMythMainWindow()->HidePainterWindow();
+        if (!g_settingsHelper)
+            g_settingsHelper = new SettingsHelper;
+
+        g_settingsHelper->RunProlog(sel);
     }
 
     if (sel == "tv_watch_live")
@@ -890,12 +935,13 @@ static void TVMenuCallback(void *data, QString &selection)
         startSearchTime();
     else if (sel == "tv_previous")
         startPrevious();
+    else if (sel == "tv_previous_old")
+        startPreviousOld();
     else if (sel == "settings appearance")
     {
         MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
-        StandardSettingDialog *ssd =
-            new StandardSettingDialog(mainStack, "videogeneralsettings",
-                                      new AppearanceSettings());
+        auto *ssd = new StandardSettingDialog(mainStack, "videogeneralsettings",
+                                              new AppearanceSettings());
 
         if (ssd->Create())
         {
@@ -907,7 +953,7 @@ static void TVMenuCallback(void *data, QString &selection)
     else if (sel == "settings themechooser")
     {
         MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
-        ThemeChooser *tp = new ThemeChooser(mainStack);
+        auto *tp = new ThemeChooser(mainStack);
 
         if (tp->Create())
             mainStack->AddScreen(tp);
@@ -917,7 +963,7 @@ static void TVMenuCallback(void *data, QString &selection)
     else if (sel == "settings setupwizard")
     {
         MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
-        GeneralSetupWizard *sw = new GeneralSetupWizard(mainStack, "setupwizard");
+        auto *sw = new GeneralSetupWizard(mainStack, "setupwizard");
 
         if (sw->Create())
             mainStack->AddScreen(sw);
@@ -927,7 +973,7 @@ static void TVMenuCallback(void *data, QString &selection)
     else if (sel == "settings grabbers")
     {
         MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
-        GrabberSettings *gs = new GrabberSettings(mainStack, "grabbersettings");
+        auto *gs = new GrabberSettings(mainStack, "grabbersettings");
 
         if (gs->Create())
             mainStack->AddScreen(gs);
@@ -945,9 +991,8 @@ static void TVMenuCallback(void *data, QString &selection)
     else if (sel == "settings playgroup")
     {
         MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
-        StandardSettingDialog *ssd =
-            new StandardSettingDialog(mainStack, "playbackgroupsetting",
-                                      new PlayGroupEditor());
+        auto *ssd = new StandardSettingDialog(mainStack, "playbackgroupsetting",
+                                              new PlayGroupEditor());
 
         if (ssd->Create())
         {
@@ -959,9 +1004,8 @@ static void TVMenuCallback(void *data, QString &selection)
     else if (sel == "settings general")
     {
         MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
-        StandardSettingDialog *ssd =
-            new StandardSettingDialog(mainStack, "videogeneralsettings",
-                                      new GeneralSettings());
+        auto *ssd = new StandardSettingDialog(mainStack, "videogeneralsettings",
+                                              new GeneralSettings());
 
         if (ssd->Create())
         {
@@ -987,9 +1031,8 @@ static void TVMenuCallback(void *data, QString &selection)
     else if (sel == "settings maingeneral")
     {
         MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
-        StandardSettingDialog *ssd =
-            new StandardSettingDialog(mainStack, "maingeneralsettings",
-                                      new MainGeneralSettings());
+        auto *ssd = new StandardSettingDialog(mainStack, "maingeneralsettings",
+                                              new MainGeneralSettings());
 
         if (ssd->Create())
         {
@@ -1014,9 +1057,8 @@ static void TVMenuCallback(void *data, QString &selection)
     else if (sel == "settings osd")
     {
         MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
-        StandardSettingDialog *ssd =
-            new StandardSettingDialog(mainStack, "osdsettings",
-                                      new OSDSettings());
+        auto *ssd = new StandardSettingDialog(mainStack, "osdsettings",
+                                              new OSDSettings());
 
         if (ssd->Create())
         {
@@ -1028,9 +1070,8 @@ static void TVMenuCallback(void *data, QString &selection)
     else if (sel == "settings epg")
     {
         MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
-        StandardSettingDialog *ssd =
-            new StandardSettingDialog(mainStack, "epgsettings",
-                                      new EPGSettings());
+        auto *ssd = new StandardSettingDialog(mainStack, "epgsettings",
+                                              new EPGSettings());
 
         if (ssd->Create())
         {
@@ -1042,9 +1083,8 @@ static void TVMenuCallback(void *data, QString &selection)
     else if (sel == "settings channelgroups")
     {
         MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
-        StandardSettingDialog *ssd =
-            new StandardSettingDialog(mainStack, "channelgroupssettings",
-                                      new ChannelGroupsSetting());
+        auto *ssd = new StandardSettingDialog(mainStack, "channelgroupssettings",
+                                              new ChannelGroupsSetting());
 
         if (ssd->Create())
         {
@@ -1056,10 +1096,9 @@ static void TVMenuCallback(void *data, QString &selection)
     else if (sel == "settings generalrecpriorities")
     {
         MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
-        StandardSettingDialog *ssd =
-            new StandardSettingDialog(mainStack,
-                                      "generalrecprioritiessettings",
-                                      new GeneralRecPrioritiesSettings());
+        auto *ssd = new StandardSettingDialog(mainStack,
+                                              "generalrecprioritiessettings",
+                                              new GeneralRecPrioritiesSettings());
 
         if (ssd->Create())
         {
@@ -1080,8 +1119,7 @@ static void TVMenuCallback(void *data, QString &selection)
     {
         MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
 
-        MythSystemEventEditor *msee = new MythSystemEventEditor(
-                                    mainStack, "System Event Editor");
+        auto *msee = new MythSystemEventEditor(mainStack, "System Event Editor");
 
         if (msee->Create())
             mainStack->AddScreen(msee);
@@ -1091,31 +1129,35 @@ static void TVMenuCallback(void *data, QString &selection)
     else if (sel == "video_settings_general")
     {
         RunSettingsCompletion::Create(gCoreContext->
-                GetNumSetting("VideoAggressivePC", 0));
+                GetBoolSetting("VideoAggressivePC", false));
     }
     else if (sel == "video_settings_player")
     {
         MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
 
-        PlayerSettings *ps = new PlayerSettings(mainStack, "player settings");
+        auto *ps = new PlayerSettings(mainStack, "player settings");
 
         if (ps->Create())
             mainStack->AddScreen(ps);
+        else
+            delete ps;
     }
     else if (sel == "video_settings_metadata")
     {
         MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
 
-        MetadataSettings *ms = new MetadataSettings(mainStack, "metadata settings");
+        auto *ms = new MetadataSettings(mainStack, "metadata settings");
 
         if (ms->Create())
             mainStack->AddScreen(ms);
+        else
+            delete ms;
     }
     else if (sel == "video_settings_associations")
     {
         MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
 
-        FileAssocDialog *fa = new FileAssocDialog(mainStack, "fa dialog");
+        auto *fa = new FileAssocDialog(mainStack, "fa dialog");
 
         if (fa->Create())
             mainStack->AddScreen(fa);
@@ -1149,19 +1191,13 @@ static void TVMenuCallback(void *data, QString &selection)
 
     if (sel.startsWith("settings ") || sel == "video_settings_general")
     {
-        GetMythUI()->RemoveCurrentLocation();
-
-        gCoreContext->ActivateSettingsCache(true);
-
-        // tell the backend the settings may have changed
-        gCoreContext->SendMessage("CLEAR_SETTINGS_CACHE");
-        // tell the frontend the settings may have changed
-        gCoreContext->dispatch(MythEvent(QString("CLEAR_SETTINGS_CACHE")));
-
-        if (sel == "settings general" ||
-            sel == "settings generalrecpriorities")
-            ScheduledRecording::ReschedulePlace("TVMenuCallback");
-        GetMythMainWindow()->ShowPainterWindow();
+        if (g_settingsHelper)
+        {
+            qApp->connect(GetMythMainWindow()->GetMainStack()->GetTopScreen(),
+                          SIGNAL(Exiting()),
+                          g_settingsHelper,
+                          SLOT(RunEpilog()));
+        }
     }
 }
 
@@ -1169,34 +1205,33 @@ static void handleExit(bool prompt)
 {
     if (prompt)
     {
-        if (!exitPopup)
-            exitPopup = new ExitPrompter();
-
-        exitPopup->handleExit();
+        if (!g_exitPopup)
+            g_exitPopup = new ExitPrompter();
+        g_exitPopup->HandleExit();
     }
     else
         qApp->quit();
 }
 
-static bool RunMenu(QString themedir, QString themename)
+static bool RunMenu(const QString& themedir, const QString& themename)
 {
     QByteArray tmp = themedir.toLocal8Bit();
-    menu = new MythThemedMenu(QString(tmp.constData()), "mainmenu.xml",
+    g_menu = new MythThemedMenu(QString(tmp.constData()), "mainmenu.xml",
                               GetMythMainWindow()->GetMainStack(), "mainmenu");
 
-    if (menu->foundTheme())
+    if (g_menu->foundTheme())
     {
         LOG(VB_GENERAL, LOG_NOTICE, QString("Found mainmenu.xml for theme '%1'")
                 .arg(themename));
-        menu->setCallback(TVMenuCallback, gContext);
-        GetMythMainWindow()->GetMainStack()->AddScreen(menu);
+        g_menu->setCallback(TVMenuCallback, gContext);
+        GetMythMainWindow()->GetMainStack()->AddScreen(g_menu);
         return true;
     }
 
     LOG(VB_GENERAL, LOG_ERR,
         QString("Couldn't find mainmenu.xml for theme '%1'") .arg(themename));
-    delete menu;
-    menu = NULL;
+    delete g_menu;
+    g_menu = nullptr;
 
     return false;
 }
@@ -1258,10 +1293,10 @@ static int internal_play_media(const QString &mrl, const QString &plot,
         return res;
     }
 
-    ProgramInfo *pginfo = new ProgramInfo(
-        mrl, plot, title, subtitle, director, season, episode,
-        inetref, lenMins, (year.toUInt()) ? year.toUInt() : 1900,
-        id);
+    auto *pginfo = new ProgramInfo(
+        mrl, plot, title, QString(), subtitle, QString(),
+        director, season, episode, inetref, lenMins,
+        (year.toUInt()) ? year.toUInt() : 1900, id);
 
     pginfo->SetProgramInfoType(pginfo->DiscoverProgramInfoType());
 
@@ -1269,7 +1304,7 @@ static int internal_play_media(const QString &mrl, const QString &plot,
 
     if (pginfo->IsVideoDVD())
     {
-        DVDInfo *dvd = new DVDInfo(pginfo->GetPlaybackURL());
+        auto *dvd = new DVDInfo(pginfo->GetPlaybackURL());
         if (dvd->IsValid())
         {
             QString name;
@@ -1322,7 +1357,7 @@ static int internal_play_media(const QString &mrl, const QString &plot,
     if (useBookmark && bookmarkPresent)
     {
         MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
-        BookmarkDialog *bookmarkdialog = new BookmarkDialog(pginfo, mainStack);
+        auto *bookmarkdialog = new BookmarkDialog(pginfo, mainStack);
         if (!bookmarkdialog->Create())
         {
             delete bookmarkdialog;
@@ -1345,10 +1380,10 @@ static int internal_play_media(const QString &mrl, const QString &plot,
 static void gotoMainMenu(void)
 {
     // Reset the selected button to the first item.
-    MythThemedMenuState *menu = dynamic_cast<MythThemedMenuState *>
+    auto *lmenu = dynamic_cast<MythThemedMenuState *>
         (GetMythMainWindow()->GetMainStack()->GetTopScreen());
-    if (menu)
-        menu->m_buttonList->SetItemCurrent(0);
+    if (lmenu)
+        lmenu->m_buttonList->SetItemCurrent(0);
 }
 
 // If the theme specified in the DB is somehow broken, try a standard one:
@@ -1370,12 +1405,7 @@ static bool resetTheme(QString themedir, const QString &badtheme)
     MythTranslation::reload();
     gCoreContext->ReInitLocale();
     GetMythUI()->LoadQtConfig();
-#if CONFIG_DARWIN
-    GetMythMainWindow()->Init(OPENGL2_PAINTER);
-#else
     GetMythMainWindow()->Init();
-#endif
-
     GetMythMainWindow()->ReinitDone();
 
     return RunMenu(themedir, themename);
@@ -1383,6 +1413,58 @@ static bool resetTheme(QString themedir, const QString &badtheme)
 
 static int reloadTheme(void)
 {
+
+#ifdef Q_OS_ANDROID
+
+    // jni code to launch the application again
+    // reinitializing the main windows causes a segfault
+    // with android
+
+    auto activity = QtAndroid::androidActivity();
+    auto packageManager = activity.callObjectMethod
+        (   "getPackageManager",
+            "()Landroid/content/pm/PackageManager;"  );
+
+    auto activityIntent = packageManager.callObjectMethod
+        (   "getLaunchIntentForPackage",
+            "(Ljava/lang/String;)Landroid/content/Intent;",
+            activity.callObjectMethod("getPackageName",
+            "()Ljava/lang/String;").object()  );
+
+    auto pendingIntent = QAndroidJniObject::callStaticObjectMethod
+        (   "android/app/PendingIntent",
+            "getActivity",
+            "(Landroid/content/Context;ILandroid/content/Intent;I)Landroid/app/PendingIntent;",
+            activity.object(),
+            0,
+            activityIntent.object(),
+            QAndroidJniObject::getStaticField<jint>("android/content/Intent",
+            "FLAG_ACTIVITY_CLEAR_TOP")  );
+
+    auto alarmManager = activity.callObjectMethod
+        (   "getSystemService",
+            "(Ljava/lang/String;)Ljava/lang/Object;",
+            QAndroidJniObject::getStaticObjectField("android/content/Context",
+            "ALARM_SERVICE",
+            "Ljava/lang/String;").object()  );
+
+    alarmManager.callMethod<void>
+        (   "set",
+            "(IJLandroid/app/PendingIntent;)V",
+            QAndroidJniObject::getStaticField<jint>("android/app/AlarmManager", "RTC"),
+            jlong(QDateTime::currentMSecsSinceEpoch() + 100),
+            pendingIntent.object()  );
+
+    qApp->quit();
+    // QString title = QObject::tr("Your change will take effect the next time "
+    //                     "mythfrontend is started.");
+    //     MythScreenStack *popupStack = GetMythMainWindow()->GetStack("popup stack");    MythConfirmationDialog *okPopup =
+    //         new MythConfirmationDialog(popupStack, title, false);
+    // if (okPopup->Create())
+    //     popupStack->AddScreen(okPopup);
+    return 0;
+#else
+
     QString themename = gCoreContext->GetSetting("Theme", DEFAULT_UI_THEME);
     QString themedir = GetMythUI()->FindThemeDir(themename);
     if (themedir.isEmpty())
@@ -1396,21 +1478,11 @@ static int reloadTheme(void)
     MythTranslation::reload();
 
     GetMythMainWindow()->SetEffectsEnabled(false);
-
     GetMythUI()->LoadQtConfig();
-
-    if (menu)
-    {
-        menu->Close();
-    }
-#if CONFIG_DARWIN
-    GetMythMainWindow()->Init(gLoaded ? OPENGL2_PAINTER : QT_PAINTER);
-#else
+    if (g_menu)
+        g_menu->Close();
     GetMythMainWindow()->Init();
-#endif
-
     GetMythMainWindow()->ReinitDone();
-
     GetMythMainWindow()->SetEffectsEnabled(true);
 
     if (!RunMenu(themedir, themename) && !resetTheme(themedir, themename))
@@ -1424,6 +1496,7 @@ static int reloadTheme(void)
     }
 
     return 0;
+#endif // Q_OS_ANDROID else
 }
 
 static void reloadTheme_void(void)
@@ -1624,17 +1697,17 @@ static int internal_media_init()
     REG_MEDIAPLAYER("Internal", QT_TRANSLATE_NOOP("MythControls",
         "MythTV's native media player."), internal_play_media);
     REG_MEDIA_HANDLER(QT_TRANSLATE_NOOP("MythControls",
-        "MythDVD DVD Media Handler"), "", "", handleDVDMedia,
-        MEDIATYPE_DVD, QString::null);
+        "MythDVD DVD Media Handler"), "", handleDVDMedia,
+        MEDIATYPE_DVD, QString());
     REG_MEDIA_HANDLER(QT_TRANSLATE_NOOP("MythControls",
-        "MythImage Media Handler 1/2"), "", "", handleGalleryMedia,
-        MEDIATYPE_DATA | MEDIATYPE_MIXED, QString::null);
+        "MythImage Media Handler 1/2"), "", handleGalleryMedia,
+        MEDIATYPE_DATA | MEDIATYPE_MIXED, QString());
 
     QStringList extensions(ImageAdapterBase::SupportedImages()
                            + ImageAdapterBase::SupportedVideos());
 
     REG_MEDIA_HANDLER(QT_TRANSLATE_NOOP("MythControls",
-        "MythImage Media Handler 2/2"), "", "", handleGalleryMedia,
+        "MythImage Media Handler 2/2"), "", handleGalleryMedia,
         MEDIATYPE_MGALLERY | MEDIATYPE_MVIDEO, extensions.join(","));
     return 0;
 }
@@ -1656,7 +1729,7 @@ static bool WasAutomaticStart(void)
 
     // Is backend running?
     //
-    if( gCoreContext->BackendIsRunning() )
+    if( MythCoreContext::BackendIsRunning() )
     {
         QDateTime startupTime = QDateTime();
 
@@ -1704,7 +1777,7 @@ static bool WasAutomaticStart(void)
             if (!wakeupCmd.isEmpty())
             {
                 ProgramList progList;
-                bool        bConflicts;
+                bool        bConflicts = false;
                 QDateTime   nextRecordingStart;
 
                 if (LoadFromScheduler(progList, bConflicts))
@@ -1712,16 +1785,15 @@ static bool WasAutomaticStart(void)
                     // Find the first recording to be recorded
                     // on this machine
                     QString hostname = gCoreContext->GetHostName();
-                    ProgramList::const_iterator it = progList.begin();
-                    for (; it != progList.end(); ++it)
+                    for (auto *prog : progList)
                     {
-                        if (((*it)->GetRecordingStatus() == RecStatus::WillRecord ||
-                             (*it)->GetRecordingStatus() == RecStatus::Pending) &&
-                            ((*it)->GetHostname() == hostname) &&
+                        if ((prog->GetRecordingStatus() == RecStatus::WillRecord ||
+                             prog->GetRecordingStatus() == RecStatus::Pending) &&
+                            (prog->GetHostname() == hostname) &&
                             (nextRecordingStart.isNull() ||
-                             nextRecordingStart > (*it)->GetRecordingStartTime()))
+                             nextRecordingStart > prog->GetRecordingStartTime()))
                         {
-                            nextRecordingStart = (*it)->GetRecordingStartTime();
+                            nextRecordingStart = prog->GetRecordingStartTime();
                         }
                     }
 
@@ -1767,22 +1839,6 @@ int main(int argc, char **argv)
     bool bPromptForBackend    = false;
     bool bBypassAutoDiscovery = false;
 
-#if CONFIG_OMX_RPI
-    setenv("QT_XCB_GL_INTEGRATION","none",0);
-#endif
-
-#ifdef Q_OS_ANDROID
-    // extra for 0 termination
-    char *newargv[argc+4+1];
-    memset(newargv, 0, sizeof(newargv));
-    memcpy(newargv, argv, sizeof(char*) * argc);
-    //newargv[argc++] = "-v";
-    //newargv[argc++] = "general,gui,playback";
-    //newargv[argc++] = "--loglevel";
-    //newargv[argc++] = "debug";
-    argv = &newargv[0];
-#endif
-
     MythFrontendCommandLineParser cmdline;
     if (!cmdline.Parse(argc, argv))
     {
@@ -1798,30 +1854,16 @@ int main(int argc, char **argv)
 
     if (cmdline.toBool("showversion"))
     {
-        cmdline.PrintVersion();
+        MythFrontendCommandLineParser::PrintVersion();
         return GENERIC_EXIT_OK;
     }
 
     CleanupGuard callCleanup(cleanup);
-
-#ifdef Q_OS_MAC
-    // Without this, we can't set focus to any of the CheckBoxSetting, and most
-    // of the MythPushButton widgets, and they don't use the themed background.
-    QApplication::setDesktopSettingsAware(false);
-#endif
-#ifdef Q_OS_LINUX
-    // This makes Xlib calls thread-safe which seems to be required for hardware
-    // accelerated Flash playback to work without causing mythfrontend to abort.
-    QApplication::setAttribute(Qt::AA_X11InitThreads);
-#endif
-#ifdef Q_OS_ANDROID
-    //QApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
-#endif
-#if QT_VERSION >= 0x050300
+    MythDisplay::ConfigureQtGUI();
     QApplication::setSetuidAllowed(true);
-#endif
     new QApplication(argc, argv);
     QCoreApplication::setApplicationName(MYTH_APPNAME_MYTHFRONTEND);
+
 
 #ifdef Q_OS_MAC
     QString path = QCoreApplication::applicationDirPath();
@@ -1845,8 +1887,8 @@ int main(int argc, char **argv)
     SignalHandler::SetHandler(SIGHUP, logSigHup);
 #endif
 
-    int retval;
-    if ((retval = cmdline.ConfigureLogging()) != GENERIC_EXIT_OK)
+    int retval = cmdline.ConfigureLogging();
+    if (retval != GENERIC_EXIT_OK)
         return retval;
 
     bool ResetSettings = false;
@@ -1869,6 +1911,7 @@ int main(int argc, char **argv)
         MythUIHelper::ParseGeometryOverride(cmdline.toString("geometry"));
     }
 
+    fe_sd_notify("STATUS=Connecting to database.");
     gContext = new MythContext(MYTH_BINARY_VERSION, true);
     gCoreContext->SetAsFrontend(true);
 
@@ -1893,11 +1936,12 @@ int main(int argc, char **argv)
 
     if (!cmdline.toBool("noupnp"))
     {
+        fe_sd_notify("STATUS=Creating UPnP media renderer");
         g_pUPnp  = new MediaRenderer();
         if (!g_pUPnp->isInitialized())
         {
             delete g_pUPnp;
-            g_pUPnp = NULL;
+            g_pUPnp = nullptr;
         }
     }
 
@@ -1914,9 +1958,9 @@ int main(int argc, char **argv)
 
         gCoreContext->SaveSetting("Theme", DEFAULT_UI_THEME);
         gCoreContext->GetDB()->ClearSetting("Language");
-        gCoreContext->GetDB()->ClearSettingOnHost("Language", NULL);
+        gCoreContext->GetDB()->ClearSettingOnHost("Language", nullptr);
         gCoreContext->GetDB()->ClearSetting("Country");
-        gCoreContext->GetDB()->ClearSettingOnHost("Country", NULL);
+        gCoreContext->GetDB()->ClearSettingOnHost("Country", nullptr);
 
         LOG(VB_GENERAL, LOG_NOTICE, "Appearance settings and language have "
                                     "been reset to defaults. You will need to "
@@ -1925,9 +1969,7 @@ int main(int argc, char **argv)
         return GENERIC_EXIT_OK;
     }
 
-#if QT_VERSION >= QT_VERSION_CHECK(5,3,0)
     qApp->setSetuidAllowed(true);
-#endif
 
     if (revokeRoot() != 0)
     {
@@ -1941,6 +1983,7 @@ int main(int argc, char **argv)
     QScopedPointer<BonjourRegister> bonjour(new BonjourRegister());
     if (bonjour.data())
     {
+        fe_sd_notify("STATUS=Registering frontend with bonjour");
         QByteArray dummy;
         int port = gCoreContext->GetNumSetting("UPnP/MythFrontend/ServicePort", 6547);
         QByteArray name("Mythfrontend on ");
@@ -1950,12 +1993,15 @@ int main(int argc, char **argv)
     }
 #endif
 
+    fe_sd_notify("STATUS=Initializing LCD");
     LCD::SetupLCD();
     if (LCD *lcd = LCD::Get())
         lcd->setupLEDs(RemoteGetRecordingMask);
 
+    fe_sd_notify("STATUS=Loading translation");
     MythTranslation::load("mythfrontend");
 
+    fe_sd_notify("STATUS=Loading themes");
     QString themename = gCoreContext->GetSetting("Theme", DEFAULT_UI_THEME);
 
     QString themedir = GetMythUI()->FindThemeDir(themename);
@@ -1978,20 +2024,17 @@ int main(int argc, char **argv)
     }
 
     MythMainWindow *mainWindow = GetMythMainWindow();
-#if CONFIG_DARWIN
-    mainWindow->Init(QT_PAINTER, false);
-#else
-    mainWindow->Init(QString(), false);
-#endif
+    mainWindow->Init(false);
     mainWindow->setWindowTitle(qApp->translate("(MythFrontendMain)",
                                                "MythTV Frontend",
                                                "Main window title"));
 
 #ifdef USING_AIRPLAY
-    if (gCoreContext->GetNumSetting("AirPlayEnabled", true))
+    if (gCoreContext->GetBoolSetting("AirPlayEnabled", true))
     {
+        fe_sd_notify("STATUS=Initializing AirPlay");
         MythRAOPDevice::Create();
-        if (!gCoreContext->GetNumSetting("AirPlayAudioOnly", false))
+        if (!gCoreContext->GetBoolSetting("AirPlayAudioOnly", false))
         {
             MythAirplayServer::Create();
         }
@@ -2007,7 +2050,7 @@ int main(int argc, char **argv)
             return GENERIC_EXIT_NO_THEME;
     }
 
-    if (!UpgradeTVDatabaseSchema(false))
+    if (!UpgradeTVDatabaseSchema(false, false, true))
     {
         LOG(VB_GENERAL, LOG_ERR,
             "Couldn't upgrade database to new schema, exiting.");
@@ -2020,6 +2063,7 @@ int main(int argc, char **argv)
     // when they were written originally
     mainWindow->ReloadKeys();
 
+    fe_sd_notify("STATUS=Initializing jump points");
     InitJumpPoints();
     InitKeys();
     TV::InitKeys();
@@ -2031,9 +2075,11 @@ int main(int argc, char **argv)
 
     setHttpProxy();
 
-    pmanager = new MythPluginManager();
-    gCoreContext->SetPluginManager(pmanager);
+    fe_sd_notify("STATUS=Initializing plugins");
+    g_pmanager = new MythPluginManager();
+    gCoreContext->SetPluginManager(g_pmanager);
 
+    fe_sd_notify("STATUS=Initializing media monitor");
     MediaMonitor *mon = MediaMonitor::GetMediaMonitor();
     if (mon)
     {
@@ -2041,20 +2087,23 @@ int main(int argc, char **argv)
         mainWindow->installEventFilter(mon);
     }
 
-    NetworkControl *networkControl = NULL;
-    if (gCoreContext->GetNumSetting("NetworkControlEnabled", 0))
+    fe_sd_notify("STATUS=Initializing network control");
+    NetworkControl *networkControl = nullptr;
+    if (gCoreContext->GetBoolSetting("NetworkControlEnabled", false))
     {
         int port = gCoreContext->GetNumSetting("NetworkControlPort", 6546);
         networkControl = new NetworkControl();
         if (!networkControl->listen(port))
+        {
             LOG(VB_GENERAL, LOG_ERR,
                 QString("NetworkControl failed to bind to port %1.")
                    .arg(port));
+        }
     }
 
 #if CONFIG_DARWIN
     GetMythMainWindow()->SetEffectsEnabled(false);
-    GetMythMainWindow()->Init(OPENGL2_PAINTER);
+    GetMythMainWindow()->Init();
     GetMythMainWindow()->ReinitDone();
     GetMythMainWindow()->SetEffectsEnabled(true);
     gLoaded = true;
@@ -2063,18 +2112,20 @@ int main(int argc, char **argv)
     {
         return GENERIC_EXIT_NO_THEME;
     }
-    ThemeUpdateChecker *themeUpdateChecker = NULL;
-    if (gCoreContext->GetNumSetting("ThemeUpdateNofications", 1))
+    fe_sd_notify("STATUS=Loading theme updates");
+    ThemeUpdateChecker *themeUpdateChecker = nullptr;
+    if (gCoreContext->GetBoolSetting("ThemeUpdateNofications", true))
         themeUpdateChecker = new ThemeUpdateChecker();
 
-    MythSystemEventHandler *sysEventHandler = new MythSystemEventHandler();
+    auto *sysEventHandler = new MythSystemEventHandler();
 
     BackendConnectionManager bcm;
 
     PreviewGeneratorQueue::CreatePreviewGeneratorQueue(
         PreviewGenerator::kRemote, 50, 60);
 
-    HouseKeeper *housekeeping = new HouseKeeper();
+    fe_sd_notify("STATUS=Creating housekeeper");
+    auto *housekeeping = new HouseKeeper();
 #ifdef __linux__
  #ifdef CONFIG_BINDINGS_PYTHON
     housekeeping->RegisterTask(new HardwareProfileTask());
@@ -2085,12 +2136,12 @@ int main(int argc, char **argv)
 
     if (cmdline.toBool("runplugin"))
     {
-        QStringList plugins = pmanager->EnumeratePlugins();
+        QStringList plugins = g_pmanager->EnumeratePlugins();
 
         if (plugins.contains(cmdline.toString("runplugin")))
-            pmanager->run_plugin(cmdline.toString("runplugin"));
+            g_pmanager->run_plugin(cmdline.toString("runplugin"));
         else if (plugins.contains("myth" + cmdline.toString("runplugin")))
-            pmanager->run_plugin("myth" + cmdline.toString("runplugin"));
+            g_pmanager->run_plugin("myth" + cmdline.toString("runplugin"));
         else
         {
             LOG(VB_GENERAL, LOG_ERR,
@@ -2128,29 +2179,30 @@ int main(int argc, char **argv)
         standbyScreen();
     }
 
+    // Provide systemd ready notification (for type=notify units)
+    fe_sd_notify("STATUS=");
+    fe_sd_notify("READY=1");
+
     int ret = qApp->exec();
 
+    fe_sd_notify("STOPPING=1\nSTATUS=Exiting");
     if (ret==0)
         gContext-> saveSettingsCache();
 
+    DestroyMythUI();
     PreviewGeneratorQueue::TeardownPreviewGeneratorQueue();
 
     delete housekeeping;
-
-    if (themeUpdateChecker)
-        delete themeUpdateChecker;
-
+    delete themeUpdateChecker;
     delete sysEventHandler;
 
-    pmanager->DestroyAllPlugins();
+    g_pmanager->DestroyAllPlugins();
 
     if (mon)
         mon->deleteLater();
 
     delete networkControl;
-
     return ret;
-
 }
 
 void handleSIGUSR1(void)

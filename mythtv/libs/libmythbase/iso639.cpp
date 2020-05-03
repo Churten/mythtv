@@ -60,9 +60,8 @@ vector<int> iso639_get_language_key_list(void)
     if (_language_keys.empty())
     {
         const QStringList list = iso639_get_language_list();
-        QStringList::const_iterator it = list.begin();
-        for (; it != list.end(); ++it)
-            _language_keys.push_back(iso639_str3_to_key(*it));
+        foreach (const auto & it, list)
+            _language_keys.push_back(iso639_str3_to_key(it));
     }
     return _language_keys;
 }
@@ -103,9 +102,8 @@ QString iso639_str_toName(const unsigned char *iso639)
 {
     if (strlen((const char *)iso639) == 2)
         return iso639_Alpha2_toName(iso639);
-    else if (strlen((const char *)iso639) == 3)
+    if (strlen((const char *)iso639) == 3)
         return iso639_Alpha3_toName(iso639);
-
     return "Unknown";
 }
 
@@ -874,7 +872,7 @@ static int createCode2ToCode3Map(QMap<int, int>& codemap) {
     functionality.
 */
 
-typedef QMap<QString, QString> ISO639ToNameMap;
+using  ISO639ToNameMap = QMap<QString, QString>;
 static ISO639ToNameMap createLanguageMap(void)
 {
     ISO639ToNameMap map;
@@ -957,7 +955,7 @@ static ISO639ToNameMap createLanguageMap(void)
 
 static ISO639ToNameMap gLanguageMap;
 
-QString GetISO639LanguageName(QString iso639_1)
+QString GetISO639LanguageName(const QString &iso639_1)
 {
     if (gLanguageMap.isEmpty())
         gLanguageMap = createLanguageMap();
@@ -965,7 +963,7 @@ QString GetISO639LanguageName(QString iso639_1)
     return gLanguageMap[iso639_1];
 }
 
-QString GetISO639EnglishLanguageName(QString iso639_1)
+QString GetISO639EnglishLanguageName(const QString &iso639_1)
 {
     QString iso639_2 = iso639_str2_to_str3(iso639_1);
     int key2 = iso639_str3_to_key(iso639_2);

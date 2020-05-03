@@ -21,13 +21,14 @@ class EditMetadataCommon : public MythScreenType
 
   public:
     EditMetadataCommon(MythScreenStack *parent, MusicMetadata *source_metadata, const QString &name);
-    EditMetadataCommon(MythScreenStack *parent, const QString &name);
+    EditMetadataCommon(MythScreenStack *parent, const QString &name)
+        : MythScreenType(parent, name) {}
 
-    ~EditMetadataCommon(void);
+    ~EditMetadataCommon(void) override;
 
     bool CreateCommon(void);
 
-    bool keyPressEvent(QKeyEvent *event);
+    bool keyPressEvent(QKeyEvent *event) override; // MythScreenType
 
     void setSaveMetadataOnly(void);
 
@@ -36,25 +37,24 @@ class EditMetadataCommon : public MythScreenType
 
   protected slots:
     void showSaveMenu(void);
-    void saveToDatabase(void);
+    static void saveToDatabase(void);
     void saveToMetadata(void);
     void saveAll(void);
     void cleanupAndClose(void);
 
   protected:
-    bool hasMetadataChanged(void);
+    static bool hasMetadataChanged(void);
     void updateMetadata(void);
     void searchForAlbumImages(void);
-    void scanForImages(void);
+    static void scanForImages(void);
 
-    static bool            metadataOnly;
-    static MusicMetadata  *m_metadata, *m_sourceMetadata;
+    static bool           s_metadataOnly;
+    static MusicMetadata *s_metadata;
+    static MusicMetadata *s_sourceMetadata;
 
-    bool m_albumArtChanged;
-
-    QString m_searchType;
-
-    MythUIButton *m_doneButton;
+    bool                  m_albumArtChanged {false};
+    QString               m_searchType;
+    MythUIButton         *m_doneButton      {nullptr};
 };
 
 class EditMetadataDialog : public EditMetadataCommon
@@ -64,12 +64,12 @@ class EditMetadataDialog : public EditMetadataCommon
   public:
     EditMetadataDialog(MythScreenStack *parent, MusicMetadata *source_metadata);
     explicit EditMetadataDialog(MythScreenStack *parent);
-    ~EditMetadataDialog(void);
+    ~EditMetadataDialog(void) override;
 
-    bool Create(void);
+    bool Create(void) override; // MythScreenType
 
-    bool keyPressEvent(QKeyEvent *event);
-    void customEvent(QEvent *event);
+    bool keyPressEvent(QKeyEvent *event) override; // EditMetadataCommon
+    void customEvent(QEvent *event) override; // MythUIType
 
   protected slots:
     void searchArtist(void);
@@ -77,10 +77,10 @@ class EditMetadataDialog : public EditMetadataCommon
     void searchAlbum(void);
     void searchGenre(void);
 
-    void setArtist(QString artist);
-    void setCompArtist(QString compArtist);
-    void setAlbum(QString album);
-    void setGenre(QString genre);
+    void setArtist(const QString& artist);
+    void setCompArtist(const QString& compArtist);
+    void setAlbum(const QString& album);
+    void setGenre(const QString& genre);
     void ratingSpinChanged(MythUIButtonListItem *item);
 
     void artistLostFocus(void);
@@ -110,33 +110,33 @@ class EditMetadataDialog : public EditMetadataCommon
     //
     //  GUI stuff
     //
-    MythUITextEdit    *m_artistEdit;
-    MythUITextEdit    *m_compArtistEdit;
-    MythUITextEdit    *m_albumEdit;
-    MythUITextEdit    *m_titleEdit;
-    MythUITextEdit    *m_genreEdit;
+    MythUITextEdit    *m_artistEdit             {nullptr};
+    MythUITextEdit    *m_compArtistEdit         {nullptr};
+    MythUITextEdit    *m_albumEdit              {nullptr};
+    MythUITextEdit    *m_titleEdit              {nullptr};
+    MythUITextEdit    *m_genreEdit              {nullptr};
 
-    MythUISpinBox     *m_yearSpin;
-    MythUISpinBox     *m_trackSpin;
-    MythUISpinBox     *m_discSpin;
-    MythUISpinBox     *m_ratingSpin;
+    MythUISpinBox     *m_yearSpin               {nullptr};
+    MythUISpinBox     *m_trackSpin              {nullptr};
+    MythUISpinBox     *m_discSpin               {nullptr};
+    MythUISpinBox     *m_ratingSpin             {nullptr};
 
-    MythUIStateType   *m_ratingState;
-    MythUIButton      *m_incRatingButton;
-    MythUIButton      *m_decRatingButton;
+    MythUIStateType   *m_ratingState            {nullptr};
+    MythUIButton      *m_incRatingButton        {nullptr};
+    MythUIButton      *m_decRatingButton        {nullptr};
 
-    MythUIButton      *m_searchArtistButton;
-    MythUIButton      *m_searchCompArtistButton;
-    MythUIButton      *m_searchAlbumButton;
-    MythUIButton      *m_searchGenreButton;
+    MythUIButton      *m_searchArtistButton     {nullptr};
+    MythUIButton      *m_searchCompArtistButton {nullptr};
+    MythUIButton      *m_searchAlbumButton      {nullptr};
+    MythUIButton      *m_searchGenreButton      {nullptr};
 
-    MythUIImage       *m_artistIcon;
-    MythUIImage       *m_albumIcon;
-    MythUIImage       *m_genreIcon;
+    MythUIImage       *m_artistIcon             {nullptr};
+    MythUIImage       *m_albumIcon              {nullptr};
+    MythUIImage       *m_genreIcon              {nullptr};
 
-    MythUICheckBox    *m_compilationCheck;
+    MythUICheckBox    *m_compilationCheck       {nullptr};
 
-    MythUIButton      *m_albumartButton;
+    MythUIButton      *m_albumartButton         {nullptr};
 };
 
 class EditAlbumartDialog : public EditMetadataCommon
@@ -145,12 +145,12 @@ class EditAlbumartDialog : public EditMetadataCommon
 
   public:
     explicit EditAlbumartDialog(MythScreenStack *parent);
-    ~EditAlbumartDialog();
+    ~EditAlbumartDialog() override;
 
-    bool Create(void);
+    bool Create(void) override; // MythScreenType
 
-    bool keyPressEvent(QKeyEvent *event);
-    void customEvent(QEvent *event);
+    bool keyPressEvent(QKeyEvent *event) override; // EditMetadataCommon
+    void customEvent(QEvent *event) override; // MythUIType
 
   signals:
     void metadataChanged(void);
@@ -172,19 +172,19 @@ class EditAlbumartDialog : public EditMetadataCommon
     void startCopyImageToTag(void);
     void copyImageToTag(ImageType imageType);
     void doCopyImageToTag(const AlbumArtImage *image);
-    void removeCachedImage(const AlbumArtImage *image);
+    static void removeCachedImage(const AlbumArtImage *image);
 
     QString         m_imageFilename;
 
     //
     //  GUI stuff
     //
-    MythUIButton      *m_metadataButton;
+    MythUIButton      *m_metadataButton    {nullptr};
 
-    MythUIImage       *m_coverartImage;
-    MythUIButtonList  *m_coverartList;
-    MythUIText        *m_imagetypeText;
-    MythUIText        *m_imagefilenameText;
+    MythUIImage       *m_coverartImage     {nullptr};
+    MythUIButtonList  *m_coverartList      {nullptr};
+    MythUIText        *m_imagetypeText     {nullptr};
+    MythUIText        *m_imagefilenameText {nullptr};
 };
 
 #endif

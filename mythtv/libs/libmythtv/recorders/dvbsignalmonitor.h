@@ -16,7 +16,7 @@ class DVBSignalMonitorListener;
 
 class DVBSignalMonitor: public DTVSignalMonitor
 {
-    Q_DECLARE_TR_FUNCTIONS(DVBSignalMonitor)
+    Q_DECLARE_TR_FUNCTIONS(DVBSignalMonitor);
 
   public:
     DVBSignalMonitor(int db_cardnum, DVBChannel* _channel,
@@ -24,47 +24,47 @@ class DVBSignalMonitor: public DTVSignalMonitor
                      uint64_t _flags =
                      kSigMon_WaitForSig    | kDVBSigMon_WaitForSNR |
                      kDVBSigMon_WaitForBER | kDVBSigMon_WaitForUB);
-    virtual ~DVBSignalMonitor();
+    ~DVBSignalMonitor() override;
 
-    virtual QStringList GetStatusList(void) const;
-    void Stop(void);
+    QStringList GetStatusList(void) const override; // DTVSignalMonitor
+    void Stop(void) override; // SignalMonitor
 
-    virtual void SetRotorTarget(float target);
-    virtual void GetRotorStatus(bool &was_moving, bool &is_moving);
-    virtual void SetRotorValue(int val)
+    void SetRotorTarget(float target) override; // DTVSignalMonitor
+    void GetRotorStatus(bool &was_moving, bool &is_moving) override; // DTVSignalMonitor
+    void SetRotorValue(int val) override // DTVSignalMonitor
     {
-        QMutexLocker locker(&statusLock);
-        rotorPosition.SetValue(val);
+        QMutexLocker locker(&m_statusLock);
+        m_rotorPosition.SetValue(val);
     }
 
-    virtual void EmitStatus(void);
+    void EmitStatus(void) override; // SignalMonitor
 
     // MPEG
-    virtual void HandlePMT(uint, const ProgramMapTable*);
+    void HandlePMT(uint program_num, const ProgramMapTable *pmt) override; // DTVSignalMonitor
 
     // ATSC Main
-    virtual void HandleSTT(const SystemTimeTable*);
+    void HandleSTT(const SystemTimeTable *stt) override; // DTVSignalMonitor
 
     // DVB Main
-    virtual void HandleTDT(const TimeDateTable*);
+    void HandleTDT(const TimeDateTable *tdt) override; // DTVSignalMonitor
 
   protected:
     DVBSignalMonitor(void);
     DVBSignalMonitor(const DVBSignalMonitor&);
 
-    virtual void UpdateValues(void);
+    void UpdateValues(void) override; // SignalMonitor
     void EmitDVBSignals(void);
 
     DVBChannel *GetDVBChannel(void);
 
   protected:
-    SignalMonitorValue signalToNoise;
-    SignalMonitorValue bitErrorRate;
-    SignalMonitorValue uncorrectedBlocks;
-    SignalMonitorValue rotorPosition;
+    SignalMonitorValue m_signalToNoise;
+    SignalMonitorValue m_bitErrorRate;
+    SignalMonitorValue m_uncorrectedBlocks;
+    SignalMonitorValue m_rotorPosition;
 
-    bool               streamHandlerStarted;
-    DVBStreamHandler  *streamHandler;
+    bool               m_streamHandlerStarted;
+    DVBStreamHandler  *m_streamHandler;
 };
 
 #endif // DVBSIGNALMONITOR_H

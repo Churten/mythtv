@@ -20,7 +20,7 @@
 #include "v4l2encstreamhandler.h"
 #include "v4l2encsignalmonitor.h"
 
-#define LOC QString("V4L2SigMon(%1): ").arg(channel->GetDevice())
+#define LOC QString("V4L2SigMon[%1](%2): ").arg(m_inputid).arg(m_channel->GetDevice())
 
 /**
  *  \brief Initializes signal lock and signal values.
@@ -39,13 +39,11 @@ V4L2encSignalMonitor::V4L2encSignalMonitor(int db_cardnum,
                                            V4LChannel *_channel,
                                            bool _release_stream,
                                            uint64_t _flags)
-    : DTVSignalMonitor(db_cardnum, _channel, _release_stream, _flags),
-      m_stream_handler(nullptr), m_isTS(false),
-      m_strength(0), m_stable_time(1500), m_width(0), m_height(0), m_lock_cnt(0)
+    : DTVSignalMonitor(db_cardnum, _channel, _release_stream, _flags)
 {
     LOG(VB_CHANNEL, LOG_INFO, LOC + "ctor");
 
-    m_v4l2.Open(channel->GetDevice());
+    m_v4l2.Open(m_channel->GetDevice());
     if (!m_v4l2.IsOpen())
     {
         LOG(VB_GENERAL, LOG_ERR, LOC + "ctor -- Open failed");
@@ -55,7 +53,7 @@ V4L2encSignalMonitor::V4L2encSignalMonitor(int db_cardnum,
     m_isTS = (m_v4l2.GetStreamType() == V4L2_MPEG_STREAM_TYPE_MPEG2_TS);
 
 
-    signalStrength.SetRange(0, 100);
+    m_signalStrength.SetRange(0, 100);
     LOG(VB_CHANNEL, LOG_INFO, LOC + QString("%1 stream.")
         .arg(m_isTS ? "Transport" : "Program"));
 }
@@ -66,9 +64,9 @@ V4L2encSignalMonitor::V4L2encSignalMonitor(int db_cardnum,
 V4L2encSignalMonitor::~V4L2encSignalMonitor()
 {
     LOG(VB_CHANNEL, LOG_INFO, LOC + "dtor");
-    Stop();
-    if (m_stream_handler)
-        V4L2encStreamHandler::Return(m_stream_handler);
+    V4L2encSignalMonitor::Stop();
+    if (m_streamHandler)
+        V4L2encStreamHandler::Return(m_streamHandler, m_inputid);
 }
 
 /** \fn V4L2encSignalMonitor::Stop(void)
@@ -79,8 +77,8 @@ void V4L2encSignalMonitor::Stop(void)
     LOG(VB_CHANNEL, LOG_INFO, LOC + "Stop() -- begin");
 
     SignalMonitor::Stop();
-    if (m_stream_handler && GetStreamData())
-            m_stream_handler->RemoveListener(GetStreamData());
+    if (m_streamHandler && GetStreamData())
+            m_streamHandler->RemoveListener(GetStreamData());
 
     LOG(VB_CHANNEL, LOG_INFO, LOC + "Stop() -- end");
 }
@@ -93,7 +91,7 @@ void V4L2encSignalMonitor::Stop(void)
  */
 void V4L2encSignalMonitor::UpdateValues(void)
 {
-    if (!running || exit)
+    if (!m_running || m_exit)
         return;
 
     if (!m_isTS)
@@ -105,19 +103,19 @@ void V4L2encSignalMonitor::UpdateValues(void)
         SignalMonitor::UpdateValues();
 
         {
-            QMutexLocker locker(&statusLock);
-            if (!scriptStatus.IsGood())
+            QMutexLocker locker(&m_statusLock);
+            if (!m_scriptStatus.IsGood())
                 return;
         }
     }
 
-    if (m_stream_handler)
+    if (m_streamHandler)
     {
         EmitStatus();
         if (IsAllGood())
             SendMessageAllGood();
 
-        update_done = true;
+        m_update_done = true;
         return;
     }
 
@@ -126,9 +124,9 @@ void V4L2encSignalMonitor::UpdateValues(void)
     LOG(VB_CHANNEL, LOG_INFO, LOC + QString("isLocked: %1").arg(isLocked));
 
     {
-        QMutexLocker locker(&statusLock);
-        signalStrength.SetValue(m_strength);
-        signalLock.SetValue(isLocked ? 1 : 0);
+        QMutexLocker locker(&m_statusLock);
+        m_signalStrength.SetValue(m_strength);
+        m_signalLock.SetValue(isLocked ? 1 : 0);
     }
 
     EmitStatus();
@@ -137,28 +135,27 @@ void V4L2encSignalMonitor::UpdateValues(void)
 
     // Start table monitoring if we are waiting on any table
     // and we have a lock.
-    if (isLocked && !m_stream_handler && GetStreamData() &&
+    if (isLocked && !m_streamHandler && GetStreamData() &&
             HasAnyFlag(kDTVSigMon_WaitForPAT | kDTVSigMon_WaitForPMT |
                        kDTVSigMon_WaitForMGT | kDTVSigMon_WaitForVCT |
                        kDTVSigMon_WaitForNIT | kDTVSigMon_WaitForSDT))
     {
-        V4LChannel* chn = reinterpret_cast<V4LChannel*>(channel);
-        m_stream_handler =
-            V4L2encStreamHandler::Get(chn->GetDevice(),
-                                      chn->GetAudioDevice().toInt());
-        if (!m_stream_handler || m_stream_handler->HasError())
+        auto* chn = reinterpret_cast<V4LChannel*>(m_channel);
+        m_streamHandler = V4L2encStreamHandler::Get(chn->GetDevice(),
+                                      chn->GetAudioDevice().toInt(), m_inputid);
+        if (!m_streamHandler || m_streamHandler->HasError())
         {
             LOG(VB_GENERAL, LOG_ERR, LOC +
                 "V4L2encSignalMonitor -- failed to start StreamHandler.");
         }
         else
         {
-            m_stream_handler->AddListener(GetStreamData());
-            m_stream_handler->StartEncoding();
+            m_streamHandler->AddListener(GetStreamData());
+            m_streamHandler->StartEncoding();
         }
     }
 
-    update_done = true;
+    m_update_done = true;
 }
 
 bool V4L2encSignalMonitor::HasLock(void)
@@ -173,23 +170,24 @@ bool V4L2encSignalMonitor::HasLock(void)
     if (m_strength >= 0)
         m_strength = m_v4l2.GetSignalStrength();
     if (m_strength < 0)
-        return (true || StableResolution() == 100);
+        return (true /* || StableResolution() == 100 */);
 
     return m_strength > 50;
 }
 
-/** \fn V4L2encSignalMonitor::HandleHDPVR(void)
+/**
  *  \brief Wait for a stable signal
  *
  *  The HD-PVR will produce garbage if the resolution or audio type
- *  changes after it is told to start encoding.  m_stable_time is used
+ *  changes after it is told to start encoding.  m_stableTime is used
  *  to designate how long we need to see a stable resolution reported
  *  from the HD-PVR driver, before we consider it a good lock.  In my
  *  testing 2 seconds is safe, while 1 second worked most of the time. --jp
  */
 int V4L2encSignalMonitor::StableResolution(void)
 {
-    int width, height;
+    int width = 0;
+    int height = 0;
 
     if (m_v4l2.GetResolution(width, height))
     {
@@ -201,11 +199,8 @@ int V4L2encSignalMonitor::StableResolution(void)
                 .arg(width).arg(height));
             return 100;
         }
-        else
-        {
-            LOG(VB_GENERAL, LOG_ERR, LOC + "Device wedged?");
-            return 0;
-        }
+        LOG(VB_GENERAL, LOG_ERR, LOC + "Device wedged?");
+        return 0;
     }
 
     if (m_width == width)
@@ -214,11 +209,11 @@ int V4L2encSignalMonitor::StableResolution(void)
         {
             LOG(VB_CHANNEL, LOG_INFO, QString("Resolution %1 x %2")
                 .arg(width).arg(height));
-            if (++m_lock_cnt > 9)
-                m_lock_cnt = 1;
+            if (++m_lockCnt > 9)
+                m_lockCnt = 1;
             m_timer.start();
         }
-        else if (m_timer.elapsed() > m_stable_time)
+        else if (m_timer.elapsed() > m_stableTime)
         {
             LOG(VB_CHANNEL, LOG_INFO, QString("Resolution stable at %1 x %2")
                 .arg(width).arg(height));
@@ -226,19 +221,19 @@ int V4L2encSignalMonitor::StableResolution(void)
             return 100;
         }
         else
-            return 40 + m_lock_cnt;
+            return 40 + m_lockCnt;
     }
     else
     {
         // Indicate that we are still waiting for a valid res, every 3 seconds.
-        if (!m_status_time.isValid() || MythDate::current() > m_status_time)
+        if (!m_statusTime.isValid() || MythDate::current() > m_statusTime)
         {
             LOG(VB_CHANNEL, LOG_WARNING, "Waiting for valid resolution");
-            m_status_time = MythDate::current().addSecs(3);
+            m_statusTime = MythDate::current().addSecs(3);
         }
         m_timer.stop();
     }
 
     m_width = width;
-    return 20 + m_lock_cnt;
+    return 20 + m_lockCnt;
 }

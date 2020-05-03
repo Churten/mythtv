@@ -25,7 +25,7 @@ struct UIUtilDisp
 {
     template <typename ContainerType, typename UIType>
     static bool Assign(ContainerType *container, UIType *&item,
-                       const QString &name, bool *err = NULL)
+                       const QString &name, bool *err = nullptr) // NOLINT(readability-non-const-parameter)
     {
         if (!container)
         {
@@ -49,7 +49,7 @@ struct UIUtilDisp
     }
 };
 
-typedef struct UIUtilDisp<ETPrintWarning> UIUtilW;
-typedef struct UIUtilDisp<ETPrintError> UIUtilE;
+using UIUtilW = struct UIUtilDisp<ETPrintWarning>;
+using UIUtilE = struct UIUtilDisp<ETPrintError>;
 
 #endif

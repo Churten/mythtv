@@ -3,15 +3,15 @@
 #include <QCoreApplication>
 #include <QList>
 
-#include <stdint.h>
-#include <stdlib.h> // for free
-#include <signal.h>
-#include <unistd.h>
+#include <csignal>
+#include <cstdint>
+#include <cstdlib> // for free
+#include <iostream>
 #include <sys/types.h>
+#include <unistd.h>
 #ifndef _WIN32
 #include <sys/socket.h>
 #endif
-#include <iostream>
 
 using namespace std;
 
@@ -20,7 +20,7 @@ using namespace std;
 #include "exitcodes.h"
 #include "signalhandling.h"
 
-int SignalHandler::sigFd[2];
+int SignalHandler::s_sigFd[2];
 volatile bool SignalHandler::s_exit_program = false;
 QMutex SignalHandler::s_singletonLock;
 SignalHandler *SignalHandler::s_singleton;
@@ -33,10 +33,10 @@ uint sig_str_len[SIG_STR_COUNT];
 
 static void sig_str_init(int sig, const char *name)
 {
-    char line[128];
-
     if (sig < SIG_STR_COUNT)
     {
+        char line[128];
+
         if (sig_str[sig])
             free(sig_str[sig]);
         snprintf(line, 128, "Handling %s\n", name);
@@ -50,7 +50,7 @@ static void sig_str_init(void)
 {
     for (int i = 0; i < SIG_STR_COUNT; i++)
     {
-        sig_str[i] = NULL;
+        sig_str[i] = nullptr;
         sig_str_init(i, qPrintable(QString("Signal %1").arg(i)));
     }
 }
@@ -58,7 +58,7 @@ static void sig_str_init(void)
 QList<int> SignalHandler::s_defaultHandlerList;
 
 SignalHandler::SignalHandler(QList<int> &signallist, QObject *parent) :
-    QObject(parent), m_notifier(NULL)
+    QObject(parent)
 {
     s_exit_program = false; // set here due to "C++ static initializer madness"
     sig_str_init();
@@ -71,11 +71,11 @@ SignalHandler::SignalHandler(QList<int> &signallist, QObject *parent) :
     stack.ss_size = SIGSTKSZ;
 
     // Carry on without the signal stack if it fails
-    if (sigaltstack(&stack, NULL) == -1)
+    if (sigaltstack(&stack, nullptr) == -1)
     {
         cerr << "Couldn't create signal stack!" << endl;
         delete [] m_sigStack;
-        m_sigStack = NULL;
+        m_sigStack = nullptr;
     }
 #endif
 
@@ -88,44 +88,42 @@ SignalHandler::SignalHandler(QList<int> &signallist, QObject *parent) :
     s_defaultHandlerList << SIGRTMIN;
 #endif
 
-    if (::socketpair(AF_UNIX, SOCK_STREAM, 0, sigFd))
+    if (::socketpair(AF_UNIX, SOCK_STREAM, 0, s_sigFd))
     {
         cerr << "Couldn't create socketpair" << endl;
         return;
     }
-    m_notifier = new QSocketNotifier(sigFd[1], QSocketNotifier::Read, this);
+    m_notifier = new QSocketNotifier(s_sigFd[1], QSocketNotifier::Read, this);
     connect(m_notifier, SIGNAL(activated(int)), this, SLOT(handleSignal()));
 
-    QList<int>::iterator it = signallist.begin();
-    for( ; it != signallist.end(); ++it )
+    foreach (int signum, signallist)
     {
-        int signum = *it;
         if (!s_defaultHandlerList.contains(signum))
         {
             cerr << "No default handler for signal " << signum << endl;
             continue;
         }
 
-        SetHandlerPrivate(signum, NULL);
+        SetHandlerPrivate(signum, nullptr);
     }
 #endif
 }
 
 SignalHandler::~SignalHandler()
 {
-    s_singleton = NULL;
+    s_singleton = nullptr;
 
 #ifndef _WIN32
     if (m_notifier)
     {
-        ::close(sigFd[0]);
-        ::close(sigFd[1]);
+        ::close(s_sigFd[0]);
+        ::close(s_sigFd[1]);
         delete m_notifier;
     }
 
     QMutexLocker locker(&m_sigMapLock);
-    QMap<int, SigHandlerFunc>::iterator it = m_sigMap.begin();
-    for ( ; it != m_sigMap.end(); ++it)
+    // NOLINTNEXTLINE(modernize-loop-convert)
+    for (auto it = m_sigMap.begin(); it != m_sigMap.end(); ++it)
     {
         int signum = it.key();
         signal(signum, SIG_DFL);
@@ -145,8 +143,7 @@ void SignalHandler::Init(QList<int> &signallist, QObject *parent)
 void SignalHandler::Done(void)
 {
     QMutexLocker locker(&s_singletonLock);
-    if (s_singleton)
-        delete s_singleton;
+    delete s_singleton;
 }
 
 
@@ -168,7 +165,7 @@ void SignalHandler::SetHandlerPrivate(int signum, SigHandlerFunc handler)
     {
         QMutexLocker locker(&m_sigMapLock);
         sa_handler_already_set = m_sigMap.contains(signum);
-        if (m_sigMap.value(signum, NULL) && (handler != NULL))
+        if (m_sigMap.value(signum, nullptr) && (handler != nullptr))
         {
             LOG(VB_GENERAL, LOG_WARNING,
                 QString("Warning %1 signal handler overridden")
@@ -179,7 +176,7 @@ void SignalHandler::SetHandlerPrivate(int signum, SigHandlerFunc handler)
 
     if (!sa_handler_already_set)
     {
-        struct sigaction sa;
+        struct sigaction sa {};
         sa.sa_sigaction = SignalHandler::signalHandler;
         sigemptyset(&sa.sa_mask);
         sa.sa_flags = SA_RESTART | SA_SIGINFO;
@@ -188,38 +185,38 @@ void SignalHandler::SetHandlerPrivate(int signum, SigHandlerFunc handler)
 
         sig_str_init(signum, qPrintable(signal_name));
 
-        sigaction(signum, &sa, NULL);
+        sigaction(signum, &sa, nullptr);
     }
 
     LOG(VB_GENERAL, LOG_INFO, QString("Setup %1 handler").arg(signal_name));
 #endif
 }
 
-typedef struct {
-    int signum;
-    int code;
-    int pid;
-    int uid;
-    uint64_t value;
-} SignalInfo;
+struct SignalInfo {
+    int      m_signum;
+    int      m_code;
+    int      m_pid;
+    int      m_uid;
+    uint64_t m_value;
+};
 
 void SignalHandler::signalHandler(int signum, siginfo_t *info, void *context)
 {
-    SignalInfo signalInfo;
+    SignalInfo signalInfo {};
 
     (void)context;
-    signalInfo.signum = signum;
+    signalInfo.m_signum = signum;
 #ifdef _WIN32
     (void)info;
-    signalInfo.code   = 0;
-    signalInfo.pid    = 0;
-    signalInfo.uid    = 0;
-    signalInfo.value  = 0;
+    signalInfo.m_code   = 0;
+    signalInfo.m_pid    = 0;
+    signalInfo.m_uid    = 0;
+    signalInfo.m_value  = 0;
 #else
-    signalInfo.code   = (info ? info->si_code : 0);
-    signalInfo.pid    = (info ? (int)info->si_pid : 0);
-    signalInfo.uid    = (info ? (int)info->si_uid : 0);
-    signalInfo.value  = (info ? *(uint64_t *)&info->si_value : 0);
+    signalInfo.m_code   = (info ? info->si_code : 0);
+    signalInfo.m_pid    = (info ? (int)info->si_pid : 0);
+    signalInfo.m_uid    = (info ? (int)info->si_uid : 0);
+    signalInfo.m_value  = (info ? *(uint64_t *)&info->si_value : 0);
 #endif
 
     // Keep trying if there's no room to write, but stop on error (-1)
@@ -227,7 +224,7 @@ void SignalHandler::signalHandler(int signum, siginfo_t *info, void *context)
     int size  = sizeof(SignalInfo);
     char *buffer = (char *)&signalInfo;
     do {
-        int written = ::write(sigFd[0], &buffer[index], size);
+        int written = ::write(s_sigFd[0], &buffer[index], size);
         // If there's an error, the signal will not be seen be the application,
         // but we can't keep trying.
         if (written < 0)
@@ -290,10 +287,10 @@ void SignalHandler::handleSignal(void)
 #ifndef _WIN32
     m_notifier->setEnabled(false);
 
-    SignalInfo signalInfo;
-    int ret = ::read(sigFd[1], &signalInfo, sizeof(SignalInfo));
+    SignalInfo signalInfo {};
+    int ret = ::read(s_sigFd[1], &signalInfo, sizeof(SignalInfo));
     bool infoComplete = (ret == sizeof(SignalInfo));
-    int signum = (infoComplete ? signalInfo.signum : 0);
+    int signum = (infoComplete ? signalInfo.m_signum : 0);
 
     if (infoComplete)
     {
@@ -301,12 +298,12 @@ void SignalHandler::handleSignal(void)
         signame = strdup(signame ? signame : "Unknown Signal");
         LOG(VB_GENERAL, LOG_CRIT,
             QString("Received %1: Code %2, PID %3, UID %4, Value 0x%5")
-            .arg(signame) .arg(signalInfo.code) .arg(signalInfo.pid)
-            .arg(signalInfo.uid) .arg(signalInfo.value,8,16,QChar('0')));
+            .arg(signame) .arg(signalInfo.m_code) .arg(signalInfo.m_pid)
+            .arg(signalInfo.m_uid) .arg(signalInfo.m_value,8,16,QChar('0')));
         free(signame);
     }
 
-    SigHandlerFunc handler = NULL;
+    SigHandlerFunc handler = nullptr;
     bool allowNullHandler = false;
 
 #if ! CONFIG_DARWIN
@@ -324,7 +321,7 @@ void SignalHandler::handleSignal(void)
     case SIGINT:
     case SIGTERM:
         m_sigMapLock.lock();
-        handler = m_sigMap.value(signum, NULL);
+        handler = m_sigMap.value(signum, nullptr);
         m_sigMapLock.unlock();
 
         if (handler)
@@ -343,7 +340,7 @@ void SignalHandler::handleSignal(void)
         break;
     default:
         m_sigMapLock.lock();
-        handler = m_sigMap.value(signum, NULL);
+        handler = m_sigMap.value(signum, nullptr);
         m_sigMapLock.unlock();
         if (handler)
         {

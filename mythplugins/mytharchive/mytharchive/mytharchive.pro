@@ -2,9 +2,6 @@ include ( ../../mythconfig.mak )
 include ( ../../settings.pro )
 include ( ../../programs-libs.pro )
 
-QMAKE_COPY_DIR = sh ../../cpsvndir
-win32:QMAKE_COPY_DIR = sh ../../cpsimple
-
 INCLUDEPATH += $${SYSROOT}$${PREFIX}/include/mythtv/libavformat
 INCLUDEPATH += $${SYSROOT}$${PREFIX}/include/mythtv/libswscale
 DEPENDPATH *= $${INCLUDEPATH}
@@ -18,7 +15,7 @@ LIBS += -lmythtv-$$LIBVERSION
 # libmythtv dependencies
 using_live: LIBS += -lmythlivemedia-$$LIBVERSION
 using_mheg: LIBS += -lmythfreemheg-$$LIBVERSION
-using_hdhomerun: LIBS += -lmythhdhomerun-$$LIBVERSION
+using_hdhomerun: LIBS += -lhdhomerun
 
 TEMPLATE = lib opengl
 CONFIG += plugin thread
@@ -38,41 +35,45 @@ SOURCES += dbcheck.cpp archiveutil.cpp selectdestination.cpp
 SOURCES += mythburn.cpp themeselector.cpp editmetadata.cpp thumbfinder.cpp
 SOURCES += exportnative.cpp importnative.cpp
 
-burnuifiles.path = $${SYSROOT}$${PREFIX}/share/mythtv/themes/default
+burnuifiles.path = $${PREFIX}/share/mythtv/themes/default
 burnuifiles.files = mythburn-ui.xml
 
-scriptfiles.path = $${SYSROOT}$${PREFIX}/share/mythtv/mytharchive/scripts
+scriptfiles.path = $${PREFIX}/share/mythtv/mytharchive/scripts
 scriptfiles.files = ../mythburn/scripts/*
 
-introfiles.path = $${SYSROOT}$${PREFIX}/share/mythtv/mytharchive/intro
+introfiles.path = $${PREFIX}/share/mythtv/mytharchive/intro
 introfiles.files = ../mythburn/intro/*.mpg
 
-musicfiles.path = $${SYSROOT}$${PREFIX}/share/mythtv/mytharchive/music
+musicfiles.path = $${PREFIX}/share/mythtv/mytharchive/music
 musicfiles.files = ../mythburn/music/*.ac3
 
-imagefiles.path = $${SYSROOT}$${PREFIX}/share/mythtv/mytharchive/images
+imagefiles.path = $${PREFIX}/share/mythtv/mytharchive/images
 imagefiles.files = ../mythburn/images/*.png
 
-themefiles.path = $${SYSROOT}$${PREFIX}/share/mythtv/mytharchive/themes
+themefiles.path = $${PREFIX}/share/mythtv/mytharchive/themes
 themefiles.files = ../mythburn/themes/*
 
-profilefiles.path = $${SYSROOT}$${PREFIX}/share/mythtv/mytharchive/encoder_profiles
+profilefiles.path = $${PREFIX}/share/mythtv/mytharchive/encoder_profiles
 profilefiles.files = ../mythburn/encoder_profiles/*.xml
 
-nativeuifiles.path = $${SYSROOT}$${PREFIX}/share/mythtv/themes/default
+nativeuifiles.path = $${PREFIX}/share/mythtv/themes/default
 nativeuifiles.files = mythnative-ui.xml
 
 INSTALLS +=  scriptfiles introfiles themefiles imagefiles musicfiles
 INSTALLS +=  profilefiles burnuifiles
 INSTALLS +=  nativeuifiles
 
-#The following line was inserted by qt3to4
 QT += xml sql opengl network
 
 DEFINES += MPLUGIN_API
 
 use_hidesyms {
     QMAKE_CXXFLAGS += -fvisibility=hidden
+}
+
+android {
+    # to discriminate plugins in a flat directory structure
+    TARGET = mythplugin$${TARGET}
 }
 
 include ( ../../libs-targetfix.pro )

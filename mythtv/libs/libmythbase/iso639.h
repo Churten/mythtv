@@ -73,15 +73,10 @@ static inline int iso639_str3_to_key(const char *iso639_2)
 static inline int iso639_str3_to_key(const QString &iso639_2)
 {
     if (iso639_2.length() < 3)
-    {
         return iso639_str3_to_key("und");
-    }
-    else
-    {
-        return ((iso639_2.at(0).toLatin1()<<16) |
-                (iso639_2.at(1).toLatin1()<<8) |
-                (iso639_2.at(2).toLatin1()));
-    }
+    return ((iso639_2.at(0).toLatin1()<<16) |
+            (iso639_2.at(1).toLatin1()<<8) |
+            (iso639_2.at(2).toLatin1()));
 }
 
 
@@ -102,7 +97,7 @@ static inline QString iso639_str_to_canonoical_str(const QString &str3)
     return iso639_key_to_str3(can);
 }
 
-MBASE_PUBLIC  QString GetISO639LanguageName(QString iso639Code);
-MBASE_PUBLIC  QString GetISO639EnglishLanguageName(QString iso639Code);
+MBASE_PUBLIC  QString GetISO639LanguageName(const QString &iso639Code);
+MBASE_PUBLIC  QString GetISO639EnglishLanguageName(const QString &iso639Code);
 
 #endif // _ISO_639_2_H_

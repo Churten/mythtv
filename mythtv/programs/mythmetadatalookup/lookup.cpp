@@ -15,8 +15,7 @@
 #include "metadataimagehelper.h"
 
 LookerUpper::LookerUpper() :
-    m_busyRecList(QList<ProgramInfo*>()),
-    m_updaterules(false), m_updateartwork(false)
+    m_busyRecList(QList<ProgramInfo*>())
 {
     m_metadataFactory = new MetadataFactory(this);
 }
@@ -29,20 +28,15 @@ LookerUpper::~LookerUpper()
 
 bool LookerUpper::StillWorking()
 {
-    if (m_metadataFactory->IsRunning() ||
-        m_busyRecList.count())
-    {
-        return true;
-    }
-
-    return false;
+    return m_metadataFactory->IsRunning() ||
+        (m_busyRecList.count() != 0);
 }
 
 void LookerUpper::HandleSingleRecording(const uint chanid,
                                         const QDateTime &starttime,
                                         bool updaterules)
 {
-    ProgramInfo *pginfo = new ProgramInfo(chanid, starttime);
+    auto *pginfo = new ProgramInfo(chanid, starttime);
 
     if (!pginfo)
     {
@@ -70,9 +64,9 @@ void LookerUpper::HandleAllRecordings(bool updaterules)
 
     LoadFromRecorded( progList, false, inUseMap, isJobRunning, recMap, -1 );
 
-    for( int n = 0; n < (int)progList.size(); n++)
+    for (auto *pg : progList)
     {
-        ProgramInfo *pginfo = new ProgramInfo(*(progList[n]));
+        auto *pginfo = new ProgramInfo(*pg);
         if ((pginfo->GetRecordingGroup() != "Deleted") &&
             (pginfo->GetRecordingGroup() != "LiveTV") &&
             (pginfo->GetInetRef().isEmpty() ||
@@ -100,9 +94,9 @@ void LookerUpper::HandleAllRecordingRules()
 
     RemoteGetAllScheduledRecordings(recordingList);
 
-    for( int n = 0; n < (int)recordingList.size(); n++)
+    for (auto & pg : recordingList)
     {
-        ProgramInfo *pginfo = new ProgramInfo(*(recordingList[n]));
+        auto *pginfo = new ProgramInfo(*pg);
         if (pginfo->GetInetRef().isEmpty())
         {
             QString msg = QString("Looking up: %1 %2").arg(pginfo->GetTitle())
@@ -130,9 +124,9 @@ void LookerUpper::HandleAllArtwork(bool aggressive)
     RemoteGetAllScheduledRecordings(recordingList);
     int maxartnum = 3;
 
-    for( int n = 0; n < (int)recordingList.size(); n++)
+    for (auto & pg : recordingList)
     {
-        ProgramInfo *pginfo = new ProgramInfo(*(recordingList[n]));
+        auto *pginfo = new ProgramInfo(*pg);
         bool dolookup = true;
 
         if (pginfo->GetInetRef().isEmpty())
@@ -164,9 +158,9 @@ void LookerUpper::HandleAllArtwork(bool aggressive)
 
     LoadFromRecorded( progList, false, inUseMap, isJobRunning, recMap, -1 );
 
-    for( int n = 0; n < (int)progList.size(); n++)
+    for (auto *pg : progList)
     {
-        ProgramInfo *pginfo = new ProgramInfo(*(progList[n]));
+        auto *pginfo = new ProgramInfo(*pg);
 
         bool dolookup = true;
 
@@ -209,12 +203,12 @@ void LookerUpper::CopyRuleInetrefsToRecordings()
 
     LoadFromRecorded( progList, false, inUseMap, isJobRunning, recMap, -1 );
 
-    for( int n = 0; n < (int)progList.size(); n++)
+    for (auto *pg : progList)
     {
-        ProgramInfo *pginfo = new ProgramInfo(*(progList[n]));
+        auto *pginfo = new ProgramInfo(*pg);
         if (pginfo && pginfo->GetInetRef().isEmpty())
         {
-            RecordingRule *rule = new RecordingRule();
+            auto *rule = new RecordingRule();
             rule->m_recordID = pginfo->GetRecordingRuleID();
             rule->Load();
             if (!rule->m_inetref.isEmpty())
@@ -236,20 +230,49 @@ void LookerUpper::customEvent(QEvent *levent)
 {
     if (levent->type() == MetadataFactoryMultiResult::kEventType)
     {
-        MetadataFactoryMultiResult *mfmr = dynamic_cast<MetadataFactoryMultiResult*>(levent);
+        auto *mfmr = dynamic_cast<MetadataFactoryMultiResult*>(levent);
 
         if (!mfmr)
             return;
 
-        MetadataLookupList list = mfmr->results;
+        MetadataLookupList list = mfmr->m_results;
 
         if (list.count() > 1)
         {
             int yearindex = -1;
+            MetadataLookup *exactTitleMeta = nullptr;
+            QDate exactTitleDate;
+            float exactTitlePopularity = 0.0;
+            bool foundMatchWithArt = false;
 
             for (int p = 0; p != list.size(); ++p)
             {
-                ProgramInfo *pginfo = list[p]->GetData().value<ProgramInfo *>();
+                auto *pginfo = list[p]->GetData().value<ProgramInfo *>();
+
+                if (pginfo && (QString::compare(pginfo->GetTitle(), list[p]->GetBaseTitle(), Qt::CaseInsensitive)) == 0)
+                {
+                    bool hasArtwork = ((!(list[p]->GetArtwork(kArtworkFanart)).empty()) ||
+                                       (!(list[p]->GetArtwork(kArtworkCoverart)).empty()) ||
+                                       (!(list[p]->GetArtwork(kArtworkBanner)).empty()));
+
+                    // After the first exact match, prefer any more popular one.
+                    // Most of the Movie database entries have Popularity fields.
+                    // The TV series database generally has no Popularity values specified,
+                    // so if none are found so far in the search, pick the most recently
+                    // released entry with artwork. Also, if the first exact match had
+                    // no artwork, prefer any later exact match with artwork.
+                    if ((exactTitleMeta == nullptr) ||
+                        (hasArtwork &&
+                         ((!foundMatchWithArt) ||
+                          ((list[p]->GetPopularity() > exactTitlePopularity)) ||
+                          ((exactTitlePopularity == 0.0F) && (list[p]->GetReleaseDate() > exactTitleDate)))))
+                    {
+                        // remember the most popular or most recently released exact match
+                        exactTitleDate = list[p]->GetReleaseDate();
+                        exactTitlePopularity = list[p]->GetPopularity();
+                        exactTitleMeta = list[p];
+                    }
+                }
 
                 if (pginfo && !pginfo->GetSeriesID().isEmpty() &&
                     pginfo->GetSeriesID() == (list[p])->GetTMSref())
@@ -261,7 +284,7 @@ void LookerUpper::customEvent(QEvent *levent)
                     m_busyRecList.removeAll(pginfo);
                     return;
                 }
-                else if (pginfo && pginfo->GetYearOfInitialRelease() != 0 &&
+                if (pginfo && pginfo->GetYearOfInitialRelease() != 0 &&
                          (list[p])->GetYear() != 0 &&
                          pginfo->GetYearOfInitialRelease() == (list[p])->GetYear())
                 {
@@ -272,18 +295,27 @@ void LookerUpper::customEvent(QEvent *levent)
                         m_busyRecList.removeAll(pginfo);
                         return;
                     }
-                    else
-                    {
-                        LOG(VB_GENERAL, LOG_INFO, "Matched from multiple results based on year. ");
-                        yearindex = p;
-                    }
+                    LOG(VB_GENERAL, LOG_INFO, "Matched from multiple results based on year. ");
+                    yearindex = p;
                 }
             }
 
             if (yearindex > -1)
             {
                 MetadataLookup *lookup = list[yearindex];
-                ProgramInfo *pginfo = lookup->GetData().value<ProgramInfo *>();
+                auto *pginfo = lookup->GetData().value<ProgramInfo *>();
+                if (lookup->GetSubtype() != kProbableGenericTelevision)
+                    pginfo->SaveSeasonEpisode(lookup->GetSeason(), lookup->GetEpisode());
+                pginfo->SaveInetRef(lookup->GetInetref());
+                m_busyRecList.removeAll(pginfo);
+                return;
+            }
+
+            if (exactTitleMeta != nullptr)
+            {
+                LOG(VB_GENERAL, LOG_INFO, QString("Best match released %1").arg(exactTitleDate.toString()));
+                MetadataLookup *lookup = exactTitleMeta;
+                auto *pginfo = exactTitleMeta->GetData().value<ProgramInfo *>();
                 if (lookup->GetSubtype() != kProbableGenericTelevision)
                     pginfo->SaveSeasonEpisode(lookup->GetSeason(), lookup->GetEpisode());
                 pginfo->SaveInetRef(lookup->GetInetref());
@@ -295,7 +327,7 @@ void LookerUpper::customEvent(QEvent *levent)
                                       "You may wish to manually set the season, episode, and "
                                       "inetref in the 'Watch Recordings' screen.");
 
-            ProgramInfo *pginfo = list[0]->GetData().value<ProgramInfo *>();
+            auto *pginfo = list[0]->GetData().value<ProgramInfo *>();
 
             if (pginfo)
             {
@@ -305,18 +337,17 @@ void LookerUpper::customEvent(QEvent *levent)
     }
     else if (levent->type() == MetadataFactorySingleResult::kEventType)
     {
-        MetadataFactorySingleResult *mfsr =
-            dynamic_cast<MetadataFactorySingleResult*>(levent);
+        auto *mfsr = dynamic_cast<MetadataFactorySingleResult*>(levent);
 
         if (!mfsr)
             return;
 
-        MetadataLookup *lookup = mfsr->result;
+        MetadataLookup *lookup = mfsr->m_result;
 
         if (!lookup)
             return;
 
-        ProgramInfo *pginfo = lookup->GetData().value<ProgramInfo *>();
+        auto *pginfo = lookup->GetData().value<ProgramInfo *>();
 
         // This null check could hang us as this pginfo would then never be
         // removed
@@ -347,7 +378,7 @@ void LookerUpper::customEvent(QEvent *levent)
 
         if (m_updaterules)
         {
-            RecordingRule *rule = new RecordingRule();
+            auto *rule = new RecordingRule();
             if (rule)
             {
                 rule->LoadByProgram(pginfo);
@@ -376,17 +407,17 @@ void LookerUpper::customEvent(QEvent *levent)
     }
     else if (levent->type() == MetadataFactoryNoResult::kEventType)
     {
-        MetadataFactoryNoResult *mfnr = dynamic_cast<MetadataFactoryNoResult*>(levent);
+        auto *mfnr = dynamic_cast<MetadataFactoryNoResult*>(levent);
 
         if (!mfnr)
             return;
 
-        MetadataLookup *lookup = mfnr->result;
+        MetadataLookup *lookup = mfnr->m_result;
 
         if (!lookup)
             return;
 
-        ProgramInfo *pginfo = lookup->GetData().value<ProgramInfo *>();
+        auto *pginfo = lookup->GetData().value<ProgramInfo *>();
 
         // This null check could hang us as this pginfo would then never be removed
         if (!pginfo)

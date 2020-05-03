@@ -20,17 +20,17 @@ using TagLib::String;
 class META_PUBLIC MetaIOTagLib : public MetaIO
 {
   public:
-    MetaIOTagLib(void);
-    virtual ~MetaIOTagLib(void);
+    MetaIOTagLib(void) = default;
+    ~MetaIOTagLib(void) override = default;
 
-    virtual bool write(const QString &filename, MusicMetadata* mdata) = 0;
-    virtual MusicMetadata* read(const QString &filename) = 0;
+    bool write(const QString &filename, MusicMetadata* mdata) override = 0; // MetaIO
+    MusicMetadata* read(const QString &filename) override = 0; // MetaIO
 
   protected:
-    int getTrackLength(TagLib::File *file);
-    int getTrackLength(const QString &filename);
+    static int getTrackLength(TagLib::File *file);
+    int getTrackLength(const QString &filename) override; // MetaIO
     void ReadGenericMetadata(TagLib::Tag *tag, MusicMetadata *metadata);
-    void WriteGenericMetadata(TagLib::Tag *tag, const MusicMetadata *metadata);
+    static void WriteGenericMetadata(TagLib::Tag *tag, const MusicMetadata *metadata);
 };
 
 #endif

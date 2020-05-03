@@ -46,6 +46,17 @@
 #include "recordinginfo.h"
 #include "musicmetadata.h"
 
+#define ADD_SQL(settings_var, bindvar, col, api_param, val) { \
+    (settings_var) += QString("%1=:%2, ").arg(col).arg(api_param); \
+    (bindvar)[QString(":").append(api_param)] = val; \
+    }
+
+#define HAS_PARAM(p) m_parsedParams.contains(p)
+
+const QStringList KnownServices = { "Capture", "Channel", "Content", \
+                                    "Dvr",     "Guide",   "Music",   \
+                                    "Myth",    "Video" };
+
 void FillProgramInfo( DTC::Program *pProgram,
                       ProgramInfo  *pInfo,
                       bool          bIncChannel = true,
@@ -60,7 +71,7 @@ bool FillChannelInfo( DTC::ChannelInfo *pChannel,
                       const ChannelInfo &channelInfo,
                       bool              bDetails = true );
 
-void FillChannelGroup( DTC::ChannelGroup *pGroup, ChannelGroupItem pGroupItem);
+void FillChannelGroup( DTC::ChannelGroup *pGroup, const ChannelGroupItem& pGroupItem);
 
 void FillRecRuleInfo( DTC::RecRule  *pRecRule,
                       RecordingRule *pRule              );
@@ -73,13 +84,13 @@ void FillGenreList( DTC::GenreList *pGenreList, int videoID);
 
 void FillVideoMetadataInfo (
                       DTC::VideoMetadataInfo *pVideoMetadataInfo,
-                      VideoMetadataListManager::VideoMetadataPtr pMetadata,
+                      const VideoMetadataListManager::VideoMetadataPtr& pMetadata,
                       bool          bDetails);
 
 void FillMusicMetadataInfo (DTC::MusicMetadataInfo *pVideoMetadataInfo,
                             MusicMetadata *pMetadata, bool bDetails);
 
-void FillInputInfo( DTC::Input *input, InputInfo inputInfo);
+void FillInputInfo( DTC::Input *input, const InputInfo& inputInfo);
 
 void FillCastMemberList( DTC::CastMemberList *pCastMemberList,
                          ProgramInfo  *pInfo);

@@ -29,14 +29,14 @@
 #include <QImage>
 #include <QImageWriter>
 
-#include <math.h>
-#include <compat.h>
+#include <cmath>
+#include "compat.h"
 
 #include "mythcorecontext.h"
 #include "storagegroup.h"
 #include "programinfo.h"
 #include "previewgenerator.h"
-#include "backendutil.h"
+#include "requesthandler/fileserverutil.h"
 #include "httprequest.h"
 #include "serviceUtil.h"
 #include "mythdate.h"
@@ -181,15 +181,12 @@ QFileInfo Content::GetImageFile( const QString &sStorageGroup,
     // Must generate Generate Image and save.
     // ----------------------------------------------------------------------
 
-    float fAspect = 0.0;
-
-    QImage *pImage = new QImage( sFullFileName );
+    auto *pImage = new QImage( sFullFileName );
 
     if (!pImage || pImage->isNull())
         return QFileInfo();
 
-    if (fAspect <= 0)
-           fAspect = (float)(pImage->width()) / pImage->height();
+    float fAspect = (float)(pImage->width()) / pImage->height();
 
     if ( nWidth == 0 )
         nWidth = (int)rint(nHeight * fAspect);
@@ -319,7 +316,7 @@ DTC::ArtworkInfoList* Content::GetRecordingArtworkList( int        RecordedId,
 DTC::ArtworkInfoList* Content::GetProgramArtworkList( const QString &sInetref,
                                                       int            nSeason  )
 {
-    DTC::ArtworkInfoList *pArtwork = new DTC::ArtworkInfoList();
+    auto *pArtwork = new DTC::ArtworkInfoList();
 
     FillArtworkInfoList (pArtwork, sInetref, nSeason);
 
@@ -461,9 +458,7 @@ QFileInfo Content::GetAlbumArt( int nTrackId, int nWidth, int nHeight )
     }
     else
     {
-        float fAspect = 0.0;
-        if (fAspect <= 0)
-            fAspect = (float)(img.width()) / img.height();
+        float fAspect = (float)(img.width()) / img.height();
 
         if ( nWidth == 0 || nWidth > img.width() )
             nWidth = (int)rint(nHeight * fAspect);
@@ -570,9 +565,8 @@ QFileInfo Content::GetPreviewImage(        int        nRecordedId,
         if (!pginfo.IsLocal())
             return QFileInfo();
 
-        PreviewGenerator *previewgen = new PreviewGenerator( &pginfo,
-                                                             QString(),
-                                                             PreviewGenerator::kLocal);
+        auto *previewgen = new PreviewGenerator( &pginfo, QString(),
+                                                 PreviewGenerator::kLocal);
         previewgen->SetPreviewTimeAsSeconds( nSecsIn          );
         previewgen->SetOutputFilename      ( sPreviewFileName );
 
@@ -641,9 +635,8 @@ QFileInfo Content::GetPreviewImage(        int        nRecordedId,
     if (QFile::exists( sNewFileName ))
         return QFileInfo( sNewFileName );
 
-    PreviewGenerator *previewgen = new PreviewGenerator( &pginfo,
-                                                         QString(),
-                                                         PreviewGenerator::kLocal);
+    auto *previewgen = new PreviewGenerator( &pginfo, QString(),
+                                             PreviewGenerator::kLocal);
     previewgen->SetPreviewTimeAsSeconds( nSecsIn             );
     previewgen->SetOutputFilename      ( sNewFileName        );
     previewgen->SetOutputSize          (QSize(nWidth,nHeight));
@@ -860,10 +853,7 @@ bool Content::DownloadFile( const QString &sURL, const QString &sStorageGroup )
 
     outFile = outDir + "/" + filename;
 
-    if (GetMythDownloadManager()->download(sURL, outFile))
-        return true;
-
-    return false;
+    return GetMythDownloadManager()->download(sURL, outFile);
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -913,24 +903,23 @@ DTC::LiveStreamInfo *Content::AddLiveStream( const QString   &sStorageGroup,
             LOG(VB_UPNP, LOG_ERR,
                 QString("AddLiveStream - Unable to find %1.").arg(sFileName));
 
-            return NULL;
+            return nullptr;
         }
     }
     else
     {
         sFullFileName =
-            gCoreContext->GenMythURL(sHostName, 0, sFileName, sStorageGroup);
+            MythCoreContext::GenMythURL(sHostName, 0, sFileName, sStorageGroup);
     }
 
-    HTTPLiveStream *hls = new
-        HTTPLiveStream(sFullFileName, nWidth, nHeight, nBitrate, nAudioBitrate,
-                       nMaxSegments, 0, 0, nSampleRate);
+    auto *hls = new HTTPLiveStream(sFullFileName, nWidth, nHeight, nBitrate,
+                               nAudioBitrate, nMaxSegments, 0, 0, nSampleRate);
 
     if (!hls)
     {
         LOG(VB_UPNP, LOG_ERR,
             "AddLiveStream - Unable to create HTTPLiveStream.");
-        return NULL;
+        return nullptr;
     }
 
     DTC::LiveStreamInfo *lsInfo = hls->StartStream();
@@ -964,13 +953,13 @@ DTC::LiveStreamInfo *Content::StopLiveStream( int nId )
 
 DTC::LiveStreamInfo *Content::GetLiveStream( int nId )
 {
-    HTTPLiveStream *hls = new HTTPLiveStream(nId);
+    auto *hls = new HTTPLiveStream(nId);
 
     if (!hls)
     {
         LOG( VB_UPNP, LOG_ERR,
              QString("GetLiveStream - for stream id %1 failed").arg( nId ));
-        return NULL;
+        return nullptr;
     }
 
     DTC::LiveStreamInfo *hlsInfo = hls->GetLiveStreamInfo();
@@ -979,7 +968,7 @@ DTC::LiveStreamInfo *Content::GetLiveStream( int nId )
         LOG( VB_UPNP, LOG_ERR,
              QString("HLS::GetLiveStreamInfo - for stream id %1 failed")
                      .arg( nId ));
-        return NULL;
+        return nullptr;
     }
 
     delete hls;
@@ -1030,7 +1019,7 @@ DTC::LiveStreamInfo *Content::AddRecordingLiveStream(
         LOG(VB_UPNP, LOG_ERR,
             QString("AddRecordingLiveStream - for %1, %2 failed")
             .arg(QString::number(nRecordedId)));
-        return NULL;
+        return nullptr;
     }
 
     if (pginfo.GetHostname().toLower() != gCoreContext->GetHostName().toLower())
@@ -1058,7 +1047,7 @@ DTC::LiveStreamInfo *Content::AddRecordingLiveStream(
         LOG( VB_UPNP, LOG_ERR, QString("AddRecordingLiveStream - for %1, %2 failed")
                                     .arg( nChanId )
                                     .arg( recstarttsRaw.toUTC().toString() ));
-        return NULL;
+        return nullptr;
     }
 
     QFileInfo fInfo( sFileName );
@@ -1090,7 +1079,7 @@ DTC::LiveStreamInfo *Content::AddVideoLiveStream( int nId,
     {
         LOG( VB_UPNP, LOG_ERR, QString("AddVideoLiveStream - no metadata for %1")
                                     .arg( nId ));
-        return NULL;
+        return nullptr;
     }
 
     if ( metadata->GetHost().toLower() != gCoreContext->GetHostName().toLower())
@@ -1117,7 +1106,7 @@ DTC::LiveStreamInfo *Content::AddVideoLiveStream( int nId,
     if (!QFile::exists( sFileName ))
     {
         LOG( VB_UPNP, LOG_ERR, QString("AddVideoLiveStream - file does not exist."));
-        return NULL;
+        return nullptr;
     }
 
     return AddLiveStream( "Videos", metadata->GetFilename(),

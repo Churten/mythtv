@@ -29,32 +29,30 @@ const int SECS_PER_MIN = 60;
 static const char URL[] = "http://freedb.musicbrainz.org/~cddb/cddb.cgi?cmd=";
 static const QString& helloID();
 
-namespace {
 /*
  * Local cddb database
  */
 struct Dbase
 {
-    static bool Search(Cddb::Matches&, Cddb::discid_t);
-    static bool Search(Cddb::Album&, const QString& genre, Cddb::discid_t);
-    static bool Write(const Cddb::Album&);
+    static bool Search(Cddb::Matches& res, Cddb::discid_t discID);
+    static bool Search(Cddb::Album& a, const QString& genre, Cddb::discid_t discID);
+    static bool Write(const Cddb::Album& album);
 
-    static void New(Cddb::discid_t, const Cddb::Toc&);
-    static void MakeAlias(const Cddb::Album&, const Cddb::discid_t);
+    static void New(Cddb::discid_t discID, const Cddb::Toc& toc);
+    static void MakeAlias(const Cddb::Album& album, Cddb::discid_t discID);
 
 private:
-    static bool CacheGet(Cddb::Matches&, Cddb::discid_t);
-    static bool CacheGet(Cddb::Album&, const QString& genre, Cddb::discid_t);
-    static void CachePut(const Cddb::Album&);
+    static bool CacheGet(Cddb::Matches& res, Cddb::discid_t discID);
+    static bool CacheGet(Cddb::Album& album, const QString& genre, Cddb::discid_t discID);
+    static void CachePut(const Cddb::Album& album);
 
     // DiscID to album info cache
-    typedef QMap< Cddb::discid_t, Cddb::Album > cache_t; 
+    using cache_t = QMap< Cddb::discid_t, Cddb::Album >;
     static cache_t s_cache;
 
     static const QString& GetDB();
 };
 QMap< Cddb::discid_t, Cddb::Album > Dbase::s_cache;
-}
 
 
 /*
@@ -110,7 +108,7 @@ bool Cddb::Query(Matches& res, const Toc& toc)
 
     // Is it cached?
     if (Dbase::Search(res, discID))
-        return res.matches.size() > 0;
+        return !res.matches.empty();
 
     // Construct query
     // cddb query discid ntrks off1 off2 ... nsecs
@@ -143,7 +141,7 @@ bool Cddb::Query(Matches& res, const Toc& toc)
         res.isExact = true;
         res.matches.push_back(Match(
             cddb.section(' ', 0, 0), // genre
-            cddb.section(' ', 1, 1).toUInt(0,16), // discID
+            cddb.section(' ', 1, 1).toUInt(nullptr,16), // discID
             cddb.section(' ', 2).section(" / ", 0, 0), // artist
             cddb.section(' ', 2).section(" / ", 1) // title
         ));
@@ -172,13 +170,13 @@ bool Cddb::Query(Matches& res, const Toc& toc)
                 arg(cddb.section('\n',0,0)));
             res.matches.push_back(Match(
                 cddb.section(' ', 0, 0), // genre
-                cddb.section(' ', 1, 1).toUInt(0,16), // discID
+                cddb.section(' ', 1, 1).toUInt(nullptr,16), // discID
                 cddb.section(' ', 2).section(" / ", 0, 0), // artist
                 cddb.section(' ', 2).section(" / ", 1) // title
             ));
             cddb = cddb.section('\n', 1);
         }
-        if (res.matches.size() <= 0)
+        if (res.matches.empty())
             Dbase::New(discID, toc); // Stop future lookups
         break;
 
@@ -322,7 +320,7 @@ Cddb::Album& Cddb::Album::operator =(const QString& rhs)
         {
             QString s = line.section(QRegExp("[ \t]"), 3, 3);
             unsigned secs = s.toULong();
-            if (toc.size())
+            if (!toc.empty())
                 secs -= msf2sec(toc[0]);
             toc.push_back(sec2msf(secs));
             eState = kNorm;
@@ -487,7 +485,7 @@ bool Dbase::Search(Cddb::Matches& res, const Cddb::discid_t discID)
         QFileInfoList ids = QDir(it->canonicalFilePath()).entryInfoList(QDir::Files);
         for (QFileInfoList::const_iterator it2 = ids.begin(); it2 != ids.end(); ++it2)
         {
-            if (it2->baseName().toUInt(0,16) == discID)
+            if (it2->baseName().toUInt(nullptr,16) == discID)
             {
                 QFile file(it2->canonicalFilePath());
                 if (file.open(QIODevice::ReadOnly | QIODevice::Text))
@@ -506,7 +504,7 @@ bool Dbase::Search(Cddb::Matches& res, const Cddb::discid_t discID)
             }
         }
     }
-    return res.matches.size() > 0;
+    return !res.matches.empty();
 }
 
 // search local database for genre/discID
@@ -552,8 +550,7 @@ bool Dbase::Write(const Cddb::Album& album)
             QTextStream(&file) << album;
             return true;
         }
-        else
-            LOG(VB_GENERAL, LOG_ERR, "Cddb can't write " + file.fileName());
+        LOG(VB_GENERAL, LOG_ERR, "Cddb can't write " + file.fileName());
     }
     else
         LOG(VB_GENERAL, LOG_ERR, "Cddb can't mkpath " + GetDB() + '/' + genre);
@@ -647,14 +644,14 @@ const QString& Dbase::GetDB()
 // CDDB hello string
 static const QString& helloID()
 {
-    static QString helloID;
-    if (helloID.isEmpty())
+    static QString s_helloId;
+    if (s_helloId.isEmpty())
     {
-        helloID = getenv("USER");
-        if (helloID.isEmpty())
-            helloID = "anon";
-        helloID += QString("+%1+MythTV+%2+")
+        s_helloId = getenv("USER");
+        if (s_helloId.isEmpty())
+            s_helloId = "anon";
+        s_helloId += QString("+%1+MythTV+%2+")
                    .arg(gCoreContext->GetHostName()).arg(MYTH_BINARY_VERSION);
     }
-    return helloID;
+    return s_helloId;
 }

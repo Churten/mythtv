@@ -29,18 +29,6 @@
 #include "Logging.h"
 
 
-MHIngredient::MHIngredient()
-{
-    m_fInitiallyActive = true; // Default is true
-    m_nContentHook = 0; // Need to choose a value that isn't otherwise used
-    m_fShared = false;
-    m_nOrigContentSize = 0;
-    m_nOrigCCPrio = 127; // Default.
-    m_nContentSize = 0;
-    m_nCCPrio = 0;
-    m_ContentType = IN_NoContent;
-}
-
 // Copy constructor for cloning.
 MHIngredient::MHIngredient(const MHIngredient &ref): MHRoot(ref)
 {
@@ -248,16 +236,6 @@ void MHIngredient::SetData(const MHContentRef &referenced, bool /*fSizeGiven*/, 
 }
 
 // Font
-MHFont::MHFont()
-{
-
-}
-
-MHFont::~MHFont()
-{
-
-}
-
 void MHFont::Initialise(MHParseNode *p, MHEngine *engine)
 {
     MHIngredient::Initialise(p, engine);
@@ -277,16 +255,6 @@ void MHFont::PrintMe(FILE *fd, int nTabs) const
 
 // CursorShape
 
-MHCursorShape::MHCursorShape()
-{
-
-}
-
-MHCursorShape::~MHCursorShape()
-{
-
-}
-
 void MHCursorShape::Initialise(MHParseNode *p, MHEngine *engine)
 {
     MHIngredient::Initialise(p, engine);
@@ -304,16 +272,6 @@ void MHCursorShape::PrintMe(FILE *fd, int nTabs) const
 }
 
 // Palette
-
-MHPalette::MHPalette()
-{
-
-}
-
-MHPalette::~MHPalette()
-{
-
-}
 
 void MHPalette::Initialise(MHParseNode *p, MHEngine *engine)
 {
@@ -383,7 +341,7 @@ void MHSetData::Initialise(MHParseNode *p, MHEngine *engine)
     }
 }
 
-void MHSetData::PrintArgs(FILE *fd, int) const
+void MHSetData::PrintArgs(FILE *fd, int /*nTabs*/) const
 {
     if (m_fIsIncluded)
     {
@@ -421,25 +379,18 @@ void MHSetData::Perform(MHEngine *engine)
     else
     {
         MHContentRef referenced;
-        int size, cc;
+        int size = 0;
+        int cc = 0;
         m_Referenced.GetValue(referenced, engine);
 
         if (m_fSizePresent)
         {
             size = m_ContentSize.GetValue(engine);
         }
-        else
-        {
-            size = 0;
-        }
 
         if (m_fCCPriorityPresent)
         {
             cc = m_CCPriority.GetValue(engine);
-        }
-        else
-        {
-            cc = 0;
         }
 
         engine->FindObject(target)->SetData(referenced, m_fSizePresent, size, m_fCCPriorityPresent, cc, engine);

@@ -9,14 +9,18 @@
 #ifndef MythTV_mythavutil_h
 #define MythTV_mythavutil_h
 
-#include "mythtvexp.h" // for MUNUSED
 #include "mythframe.h"
 extern "C" {
 #include "libavcodec/avcodec.h"
 }
 
+#include <QMap>
+#include <QMutex>
+
 struct AVFilterGraph;
 struct AVFilterContext;
+struct AVStream;
+struct AVCodecContext;
 
 /** MythAVFrame
  * little utility class that act as a safe way to allocate an AVFrame
@@ -48,7 +52,7 @@ public:
     }
     bool operator !() const
     {
-        return m_frame == NULL;
+        return m_frame == nullptr;
     }
     AVFrame* operator->() const
     {
@@ -66,65 +70,89 @@ public:
     {
         return m_frame;
     }
-    operator AVPicture*() const
-    {
-        return reinterpret_cast<AVPicture*>(m_frame);
-    }
-    operator const AVPicture*() const
-    {
-        return reinterpret_cast<AVPicture*>(m_frame);
-    }
 
 private:
-    AVFrame *m_frame;
+    AVFrame *m_frame {nullptr};
 };
+
+/**
+ * MythCodecMap
+ * Utility class that keeps pointers to
+ * an AVStream and its AVCodecContext. The codec member
+ * of AVStream was previously used for this but is now
+ * deprecated.
+ *
+ * This is a singeton class - only 1 instance gets created.
+ */
+
+class MTV_PUBLIC MythCodecMap
+{
+  public:
+    MythCodecMap() = default;
+    ~MythCodecMap();
+    static MythCodecMap *getInstance();
+    AVCodecContext *getCodecContext(const AVStream *stream,
+        const AVCodec *pCodec = nullptr, bool nullCodec = false);
+    AVCodecContext *hasCodecContext(const AVStream *stream);
+    void freeCodecContext(const AVStream *stream);
+    void freeAllCodecContexts();
+  protected:
+    QMap<const AVStream*, AVCodecContext*> m_streamMap;
+    QMutex m_mapLock {QMutex::Recursive};
+};
+
+/// This global variable contains the MythCodecMap instance for the app
+extern MTV_PUBLIC MythCodecMap *gCodecMap;
+
 
 class MythAVCopyPrivate;
 
 /**
  * MythAVCopy
- * Copy AVPicture<->frame, performing the required conversion if any
+ * Copy AVFrame<->frame, performing the required conversion if any
  */
 class MTV_PUBLIC MythAVCopy
 {
 public:
     explicit MythAVCopy(bool USWC=true);
     virtual ~MythAVCopy();
+    MythAVCopy(const MythAVCopy &) = delete;            // not copyable
+    MythAVCopy &operator=(const MythAVCopy &) = delete; // not copyable
 
     int Copy(VideoFrame *dst, const VideoFrame *src);
     /**
      * Copy
-     * Initialise AVPicture pic, create buffer if required and copy content of
+     * Initialise AVFrame pic, create buffer if required and copy content of
      * VideoFrame frame into it, performing the required conversion if any
      * Returns size of buffer allocated
      * Data would have to be deleted once finished with object with:
      * av_freep(pic->data[0])
      */
-    int Copy(AVPicture *pic, const VideoFrame *frame,
-             unsigned char *buffer = NULL,
+    int Copy(AVFrame *pic, const VideoFrame *frame,
+             unsigned char *buffer = nullptr,
              AVPixelFormat fmt = AV_PIX_FMT_YUV420P);
     /**
      * Copy
-     * Copy AVPicture pic into VideoFrame frame, performing the required conversion
+     * Copy AVFrame pic into VideoFrame frame, performing the required conversion
      * Returns size of frame data
      */
-    int Copy(VideoFrame *frame, const AVPicture *pic,
+    int Copy(VideoFrame *frame, const AVFrame *pic,
              AVPixelFormat fmt = AV_PIX_FMT_YUV420P);
-    int Copy(AVPicture *dst, AVPixelFormat dst_pix_fmt,
-             const AVPicture *src, AVPixelFormat pix_fmt,
+    int Copy(AVFrame *dst, AVPixelFormat dst_pix_fmt,
+             const AVFrame *src, AVPixelFormat pix_fmt,
              int width, int height);
 
 private:
-    void FillFrame(VideoFrame *frame, const AVPicture *pic, int pitch,
-                   int width, int height, AVPixelFormat pix_fmt);
-    MythAVCopyPrivate *d;
+    static void FillFrame(VideoFrame *frame, const AVFrame *pic, int pitch,
+                          int width, int height, AVPixelFormat pix_fmt);
+    MythAVCopyPrivate *d {nullptr}; // NOLINT(readability-identifier-naming)
 };
 
 /**
  * AVPictureFill
- * Initialise AVPicture pic with content from VideoFrame frame
+ * Initialise AVFrame pic with content from VideoFrame frame
  */
-int MTV_PUBLIC AVPictureFill(AVPicture *pic, const VideoFrame *frame,
+int MTV_PUBLIC AVPictureFill(AVFrame *pic, const VideoFrame *frame,
                              AVPixelFormat fmt = AV_PIX_FMT_NONE);
 
 /**
@@ -134,6 +162,12 @@ int MTV_PUBLIC AVPictureFill(AVPicture *pic, const VideoFrame *frame,
 MTV_PUBLIC AVPixelFormat FrameTypeToPixelFormat(VideoFrameType type);
 MTV_PUBLIC VideoFrameType PixelFormatToFrameType(AVPixelFormat fmt);
 
+/*! \brief Return a user friendly description of the given deinterlacer
+*/
+MTV_PUBLIC QString DeinterlacerName(MythDeintType Deint, bool DoubleRate, VideoFrameType Format = FMT_NONE);
+
+MTV_PUBLIC QString DeinterlacerPref(MythDeintType Deint);
+
 /**
  * MythPictureDeinterlacer
  * simple deinterlacer based on FFmpeg's yadif filter.
@@ -142,26 +176,26 @@ MTV_PUBLIC VideoFrameType PixelFormatToFrameType(AVPixelFormat fmt);
 class MTV_PUBLIC MythPictureDeinterlacer
 {
 public:
-    MythPictureDeinterlacer(AVPixelFormat pixfmt, int width, int height, float ar = 1.0f);
+    MythPictureDeinterlacer(AVPixelFormat pixfmt, int width, int height, float ar = 1.0F);
     ~MythPictureDeinterlacer();
     // Will deinterlace src into dst. If EAGAIN is returned, more frames
     // are needed to output a frame.
-    // To drain the deinterlacer, call Deinterlace with src = NULL until you
+    // To drain the deinterlacer, call Deinterlace with src = nullptr until you
     // get no more frames. Once drained, you must call Flush() to start
     // deinterlacing again.
-    int Deinterlace(AVPicture *dst, const AVPicture *src);
-    int DeinterlaceSingle(AVPicture *dst, const AVPicture *src);
+    int Deinterlace(AVFrame *dst, const AVFrame *src);
+    int DeinterlaceSingle(AVFrame *dst, const AVFrame *src);
     // Flush and reset the deinterlacer.
     int Flush();
 private:
-    AVFilterGraph*      m_filter_graph;
-    MythAVFrame         m_filter_frame;
-    AVFilterContext*    m_buffersink_ctx;
-    AVFilterContext*    m_buffersrc_ctx;
-    AVPixelFormat       m_pixfmt;
-    int                 m_width;
-    int                 m_height;
+    AVFilterGraph*      m_filterGraph   {nullptr};
+    MythAVFrame         m_filterFrame;
+    AVFilterContext*    m_bufferSinkCtx {nullptr};
+    AVFilterContext*    m_bufferSrcCtx  {nullptr};
+    AVPixelFormat       m_pixfmt        {AV_PIX_FMT_NONE};
+    int                 m_width         {0};
+    int                 m_height        {0};
     float               m_ar;
-    bool                m_errored;
+    bool                m_errored       {false};
 };
 #endif

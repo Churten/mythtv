@@ -17,16 +17,13 @@ WeatherScreen *WeatherScreen::loadScreen(MythScreenStack *parent,
 
 WeatherScreen::WeatherScreen(MythScreenStack *parent,
                              ScreenListInfo *screenDefn, int id) :
-               MythScreenType (parent, screenDefn->title),
-    m_units(SI_UNITS),
+               MythScreenType (parent, screenDefn->m_title),
     m_screenDefn(screenDefn),
-    m_name(m_screenDefn->name),
-    m_inuse(false),
-    m_prepared(false),
+               m_name(m_screenDefn->m_name),
     m_id(id)
 {
 
-    QStringList types = m_screenDefn->dataTypes;
+    QStringList types = m_screenDefn->m_dataTypes;
 
     for (int i = 0; i < types.size(); ++i)
     {
@@ -34,18 +31,10 @@ WeatherScreen::WeatherScreen(MythScreenStack *parent,
     }
 }
 
-WeatherScreen::~WeatherScreen()
-{
-}
-
 bool WeatherScreen::Create()
 {
-
-    bool foundtheme = false;
-
     // Load the theme for this screen
-    foundtheme = LoadWindowFromXML("weather-ui.xml", m_name, this);
-
+    bool foundtheme = LoadWindowFromXML("weather-ui.xml", m_name, this);
     if (!foundtheme)
         return false;
 
@@ -81,11 +70,8 @@ void WeatherScreen::setValue(const QString &key, const QString &value)
         m_dataValueMap[key] = prepareDataItem(key, value);
 }
 
-void WeatherScreen::newData(QString loc, units_t units, DataMap data)
+void WeatherScreen::newData(const QString& /*loc*/, units_t /*units*/, DataMap data)
 {
-    (void) loc;
-    (void) units;
-
     DataMap::iterator itr = data.begin();
     while (itr != data.end())
     {
@@ -105,8 +91,7 @@ QString WeatherScreen::getTemperatureUnit()
 {
     if (m_units == ENG_UNITS)
         return QString::fromUtf8("°") + "F";
-    else
-        return QString::fromUtf8("°") + "C";
+    return QString::fromUtf8("°") + "C";
 }
 
 bool WeatherScreen::prepareScreen(bool checkOnly)
@@ -128,7 +113,7 @@ bool WeatherScreen::prepareScreen(bool checkOnly)
                         .arg(m_name));
                 return false;
             }
-            else if (name == "copyrightlogo")
+            if (name == "copyrightlogo")
             {
                 LOG(VB_GENERAL, LOG_WARNING,
                     QString("No copyrightlogo widget found, skipping screen %1.")
@@ -143,14 +128,14 @@ bool WeatherScreen::prepareScreen(bool checkOnly)
             continue;
         }
 
-        if (dynamic_cast<MythUIText *>(widget))
+        if (auto *w2 = dynamic_cast<MythUIText *>(widget))
         {
-            ((MythUIText *) widget)->SetText(itr.value());
+            w2->SetText(itr.value());
         }
-        else if (dynamic_cast<MythUIImage *>(widget))
+        else if (auto *w3 = dynamic_cast<MythUIImage *>(widget))
         {
-            ((MythUIImage *) widget)->SetFilename(itr.value());
-            ((MythUIImage *) widget)->Load();
+            w3->SetFilename(itr.value());
+            w3->Load();
         }
 
         prepareWidget(widget);
@@ -163,12 +148,12 @@ bool WeatherScreen::prepareScreen(bool checkOnly)
 
 void WeatherScreen::prepareWidget(MythUIType *widget)
 {
-    MythUIImage *img;
     /*
      * Basically so we don't do it twice since some screens (Static Map) mess
      * with image dimensions
      */
-    if ((img = dynamic_cast<MythUIImage *>(widget)))
+    auto *img = dynamic_cast<MythUIImage *>(widget);
+    if (img != nullptr)
     {
         img->Load();
     }
@@ -192,8 +177,7 @@ QString WeatherScreen::formatDataItem(const QString &key, const QString &value)
     {
        if ((value == "NA") || (value == "N/A"))
           return QString();
-       else
-          return value + getTemperatureUnit();
+       return value + getTemperatureUnit();
     }
 
     if (key.startsWith("wind_gust") ||
@@ -205,8 +189,8 @@ QString WeatherScreen::formatDataItem(const QString &key, const QString &value)
      the enum DaysOfWeek.*/
     if (key.startsWith("date"))
     {
-        bool isNumber;
-        value.toInt( &isNumber);
+        bool isNumber = false;
+        (void)value.toInt( &isNumber);
 
         if (isNumber)
         {
@@ -252,10 +236,7 @@ QString WeatherScreen::prepareDataItem(const QString &key, const QString &value)
 
 bool WeatherScreen::keyPressEvent(QKeyEvent *event)
 {
-    if (GetFocusWidget() && GetFocusWidget()->keyPressEvent(event))
-        return true;
-
-    return false;
+    return GetFocusWidget() && GetFocusWidget()->keyPressEvent(event);
 }
 
 /*

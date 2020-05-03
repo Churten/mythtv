@@ -34,10 +34,8 @@
 #include <QStringList>
 
 // MythTV headers
-#include "settings.h"
 #include "channelscanner.h"
 
-class LogList;
 class ChannelScannerGUIScanPane;
 class DeleteStage;
 class InsertStage;
@@ -55,29 +53,28 @@ class ChannelScannerGUI :
     friend void *spawn_popup(void*);
 
   public:
-    ChannelScannerGUI(void);
+    ChannelScannerGUI(void) = default;
     virtual void deleteLater(void)
         { Teardown(); }
 
-    virtual void HandleEvent(const ScannerEvent *scanEvent);
+    void HandleEvent(const ScannerEvent *scanEvent) override; // ChannelScanner
 
   protected:
-    virtual ~ChannelScannerGUI();
+    ~ChannelScannerGUI() override;
 
-    virtual void InformUser(const QString &error);
+    void InformUser(const QString &error) override; // ChannelScanner
 
-    virtual void Process(const ScanDTVTransportList&, bool success = false);
+    virtual void Process(const ScanDTVTransportList &_transports, bool success = false);
 
-    virtual void MonitorProgress(bool lock, bool strength,
-                                 bool snr, bool rotor);
+    void MonitorProgress(bool lock, bool strength,
+                         bool snr, bool rotor) override; // ChannelScanner
 
   public slots:
     void quitScanning(void);
 
   private:
-    ChannelScannerGUIScanPane *scanStage;
-    LogList                   *doneStage;
-    QStringList                messageList;
+    ChannelScannerGUIScanPane *m_scanStage {nullptr};
+    QStringList                m_messageList;
 };
 
 #endif // _CHANNEL_SCANNER_GUI_H_

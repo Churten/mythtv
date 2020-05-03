@@ -33,65 +33,51 @@ class SERVICE_PUBLIC BackendInfo : public QObject
 
     PROPERTYIMP_PTR( BuildInfo, Build )
     PROPERTYIMP_PTR( EnvInfo,   Env   )
-    PROPERTYIMP_PTR( LogInfo,   Log   )
+    PROPERTYIMP_PTR( LogInfo,   Log   );
 
     public:
 
         static inline void InitializeCustomTypes();
 
-    public:
-
-        BackendInfo(QObject *parent = 0)
-            : QObject   ( parent ),
-              m_Build   ( NULL   ),
-              m_Env     ( NULL   ),
-              m_Log     ( NULL   )
+        Q_INVOKABLE BackendInfo(QObject *parent = nullptr)
+            : QObject   ( parent  ),
+              m_Build   ( nullptr ),
+              m_Env     ( nullptr ),
+              m_Log     ( nullptr )
         {
         }
 
-        BackendInfo( const BackendInfo &src )
-            : m_Build  ( NULL ),
-              m_Env    ( NULL ),
-              m_Log    ( NULL )
-        {
-            Copy( src );
-        }
-
-        void Copy( const BackendInfo &src )
+        void Copy( const BackendInfo *src )
         {
             // We always need to make sure the child object is
             // created with the correct parent *
 
-            if (src.m_Build)
-                Build()->Copy( src.m_Build );
+            if (src->m_Build)
+                Build()->Copy( src->m_Build );
 
-            if (src.m_Env)
-                Env()->Copy( src.m_Env  );
+            if (src->m_Env)
+                Env()->Copy( src->m_Env  );
 
-            if (src.m_Log)
-                Log()->Copy( src.m_Log  );
+            if (src->m_Log)
+                Log()->Copy( src->m_Log  );
 
         }
+
+    private:
+        Q_DISABLE_COPY(BackendInfo);
 };
 
-typedef BackendInfo* BackendInfoPtr;
+using BackendInfoPtr = BackendInfo*;
 
-} // namespace DTC
-
-Q_DECLARE_METATYPE( DTC::BackendInfo  )
-Q_DECLARE_METATYPE( DTC::BackendInfo* )
-
-namespace DTC
-{
 inline void BackendInfo::InitializeCustomTypes()
 {
-    qRegisterMetaType< BackendInfo  >();
     qRegisterMetaType< BackendInfo* >();
 
     BuildInfo::InitializeCustomTypes();
     EnvInfo  ::InitializeCustomTypes();
     LogInfo  ::InitializeCustomTypes();
 }
-}
+
+} // namespace DTC
 
 #endif

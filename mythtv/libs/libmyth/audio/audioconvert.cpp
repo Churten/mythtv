@@ -21,9 +21,9 @@
  *   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
  */
 
-#include <math.h>
+#include <cinttypes>
+#include <cmath>
 #include <sys/types.h>
-#include <inttypes.h>
 
 #include "mythconfig.h"
 #include "mythlogging.h"
@@ -36,7 +36,7 @@ extern "C" {
 
 #define LOC QString("AudioConvert: ")
 
-#define ISALIGN(x) (((unsigned long)x & 0xf) == 0)
+#define ISALIGN(x) (((unsigned long)(x) & 0xf) == 0)
 
 #if ARCH_X86
 static int has_sse2 = -1;
@@ -78,8 +78,8 @@ static av_always_inline av_const long int lrintf(float x)
 
 static inline float clipcheck(float f)
 {
-    if (f > 1.0f) f = 1.0f;
-    else if (f < -1.0f) f = -1.0f;
+    if (f > 1.0F) f = 1.0F;
+    else if (f < -1.0F) f = -1.0F;
     return f;
 }
 
@@ -90,7 +90,7 @@ static inline float clipcheck(float f)
 static int toFloat8(float* out, const uchar* in, int len)
 {
     int i = 0;
-    float f = 1.0f / ((1<<7));
+    float f = 1.0F / ((1<<7));
 
 #if ARCH_X86
     if (sse_check() && len >= 16)
@@ -156,8 +156,9 @@ static int toFloat8(float* out, const uchar* in, int len)
 
 static inline uchar clip_uchar(int a)
 {
-    if (a&(~0xFF)) return (-a)>>31;
-    else           return a;
+    if (a&(~0xFF))
+        return (-a)>>31;
+    return a;
 }
 
 static int fromFloat8(uchar* out, const float* in, int len)
@@ -214,7 +215,7 @@ static int fromFloat8(uchar* out, const float* in, int len)
 static int toFloat16(float* out, const short* in, int len)
 {
     int i = 0;
-    float f = 1.0f / ((1<<15));
+    float f = 1.0F / ((1<<15));
 
 #if ARCH_X86
     if (sse_check() && len >= 16)
@@ -267,8 +268,9 @@ static int toFloat16(float* out, const short* in, int len)
 
 static inline short clip_short(int a)
 {
-    if ((a+0x8000) & ~0xFFFF) return (a>>31) ^ 0x7FFF;
-    else                      return a;
+    if ((a+0x8000) & ~0xFFFF)
+        return (a>>31) ^ 0x7FFF;
+    return a;
 }
 
 static int fromFloat16(short* out, const float* in, int len)
@@ -321,7 +323,7 @@ static int toFloat32(AudioFormat format, float* out, const int* in, int len)
 {
     int i = 0;
     int bits = AudioOutputSettings::FormatToBits(format);
-    float f = 1.0f / ((uint)(1<<(bits-1)));
+    float f = 1.0F / ((uint)(1<<(bits-1)));
     int shift = 32 - bits;
 
     if (format == FORMAT_S24LSB)
@@ -386,7 +388,8 @@ static int fromFloat32(AudioFormat format, int* out, const float* in, int len)
 #if ARCH_X86
     if (sse_check() && len >= 16)
     {
-        float o = 0.99999995, mo = -1;
+        float o = 0.99999995;
+        float mo = -1;
         int loops = len >> 4;
         i = loops << 4;
 
@@ -444,12 +447,12 @@ static int fromFloat32(AudioFormat format, int* out, const float* in, int len)
     {
         float valf = *in++;
 
-        if (valf >= 1.0f)
+        if (valf >= 1.0F)
         {
             *out++ = (range - 128) << shift;
             continue;
         }
-        if (valf <= -1.0f)
+        if (valf <= -1.0F)
         {
             *out++ = (-range) << shift;
             continue;
@@ -467,7 +470,8 @@ static int fromFloatFLT(float* out, const float* in, int len)
     if (sse_check() && len >= 16)
     {
         int loops = len >> 4;
-        float o = 1, mo = -1;
+        float o = 1;
+        float mo = -1;
         i = loops << 4;
 
         __asm__ volatile (
@@ -575,15 +579,14 @@ public:
     AudioConvertInternal(AVSampleFormat in, AVSampleFormat out) :
     m_in(in), m_out(out)
     {
-        char error[AV_ERROR_MAX_STRING_SIZE];
-        m_swr = swr_alloc_set_opts(NULL,
+        m_swr = swr_alloc_set_opts(nullptr,
                                    av_get_default_channel_layout(1),
                                    m_out,
                                    48000,
                                    av_get_default_channel_layout(1),
                                    m_in,
                                    48000,
-                                   0, NULL);
+                                   0, nullptr);
         if (!m_swr)
         {
             LOG(VB_AUDIO, LOG_ERR, LOC + "error allocating resampler context");
@@ -593,6 +596,7 @@ public:
         int ret = swr_init(m_swr);
         if (ret < 0)
         {
+            char error[AV_ERROR_MAX_STRING_SIZE];
             LOG(VB_AUDIO, LOG_ERR, LOC +
                 QString("error initializing resampler context (%1)")
                 .arg(av_make_error_string(error, sizeof(error), ret)));
@@ -623,20 +627,15 @@ public:
         }
     }
 
-    SwrContext* m_swr;
+    SwrContext* m_swr {nullptr};
     AVSampleFormat m_in, m_out;
 };
 
 
-AudioConvert::AudioConvert(AudioFormat in, AudioFormat out) :
-    m_ctx(NULL), m_in(in), m_out(out)
-{
-}
-
 AudioConvert::~AudioConvert()
 {
     delete m_ctx;
-    m_ctx = NULL;
+    m_ctx = nullptr;
 }
 
 /**
@@ -683,13 +682,14 @@ int AudioConvert::Process(void* out, const void* in, int bytes, bool noclip)
         // this leave S24 -> U8/S16.
         // TODO: native handling of those ; use internal temp buffer in the mean time
 
+        // cppcheck-suppress unassignedVariable
         uint8_t     buffer[65536+15];
-        uint8_t*    tmp = (uint8_t*)(((long)buffer + 15) & ~0xf);
+        auto*       tmp = (uint8_t*)(((long)buffer + 15) & ~0xf);
         int left        = bytes;
 
         while (left > 0)
         {
-            int s;
+            int s = 0;
 
             if (left >= 65536)
             {
@@ -722,8 +722,8 @@ int AudioConvert::Process(void* out, const void* in, int bytes, bool noclip)
  */
 void AudioConvert::MonoToStereo(void* dst, const void* src, int samples)
 {
-    float* d = (float*)dst;
-    float* s = (float*)src;
+    auto* d = (float*)dst;
+    auto* s = (float*)src;
     for (int i = 0; i < samples; i++)
     {
         *d++ = *s;
@@ -782,7 +782,7 @@ void AudioConvert::DeinterleaveSamples(AudioFormat format, int channels,
 
 template <class AudioDataType>
 void _InterleaveSample(AudioDataType* out, const AudioDataType* in, int channels, int frames,
-                       const AudioDataType*  const* inp = NULL)
+                       const AudioDataType*  const* inp = nullptr)
 {
     const AudioDataType* my_inp[8];
 
@@ -830,17 +830,17 @@ void AudioConvert::InterleaveSamples(AudioFormat format, int channels,
     int bits = AudioOutputSettings::FormatToBits(format);
     if (bits == 8)
     {
-        _InterleaveSample((char*)output, (const char*)NULL, channels, data_size/sizeof(char)/channels,
+        _InterleaveSample((char*)output, (const char*)nullptr, channels, data_size/sizeof(char)/channels,
                           (const char*  const*)input);
     }
     else if (bits == 16)
     {
-        _InterleaveSample((short*)output, (const short*)NULL, channels, data_size/sizeof(short)/channels,
+        _InterleaveSample((short*)output, (const short*)nullptr, channels, data_size/sizeof(short)/channels,
                           (const short*  const*)input);
     }
     else
     {
-        _InterleaveSample((int*)output, (const int*)NULL, channels, data_size/sizeof(int)/channels,
+        _InterleaveSample((int*)output, (const int*)nullptr, channels, data_size/sizeof(int)/channels,
                           (const int*  const*)input);
     }
 }

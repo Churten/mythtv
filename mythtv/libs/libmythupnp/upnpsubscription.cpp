@@ -11,6 +11,7 @@ QObject::customEvent to receive event notifications for subscribed services.
 #include "upnpsubscription.h"
 
 #include <QTextCodec>
+#include <utility>
 
 #include "mythcorecontext.h"
 #include "mythlogging.h"
@@ -28,15 +29,14 @@ class Subscription
 {
   public:
     Subscription(QUrl url, QString path)
-      : m_url(url), m_path(path), m_uuid(QString()) { }
+      : m_url(std::move(url)), m_path(std::move(path)), m_uuid(QString()) { }
     QUrl    m_url;
     QString m_path;
     QString m_uuid;
 };
 
 UPNPSubscription::UPNPSubscription(const QString &share_path, int port)
-  : HttpServerExtension("UPnPSubscriptionManager", share_path),
-    m_subscriptionLock(QMutex::Recursive), m_callback(QString("NOTSET"))
+  : HttpServerExtension("UPnPSubscriptionManager", share_path)
 {
     m_nSupportedMethods = (uint)RequestTypeNotify; // Only NOTIFY supported
 
@@ -290,8 +290,8 @@ bool UPNPSubscription::SendUnsubscribeRequest(const QString &usn,
 
     LOG(VB_UPNP, LOG_DEBUG, LOC + "\n\n" + sub);
 
-    MSocketDevice *sockdev = new MSocketDevice(MSocketDevice::Stream);
-    BufferedSocketDevice *sock = new BufferedSocketDevice(sockdev);
+    auto *sockdev = new MSocketDevice(MSocketDevice::Stream);
+    auto *sock = new BufferedSocketDevice(sockdev);
     sockdev->setBlocking(true);
 
     if (sock->Connect(QHostAddress(host), port))
@@ -357,8 +357,8 @@ int UPNPSubscription::SendSubscribeRequest(const QString &callback,
 
     LOG(VB_UPNP, LOG_DEBUG, LOC + "\n\n" + sub);
 
-    MSocketDevice *sockdev = new MSocketDevice(MSocketDevice::Stream);
-    BufferedSocketDevice *sock = new BufferedSocketDevice(sockdev);
+    auto *sockdev = new MSocketDevice(MSocketDevice::Stream);
+    auto *sock = new BufferedSocketDevice(sockdev);
     sockdev->setBlocking(true);
 
     QString uuid;

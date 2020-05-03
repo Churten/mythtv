@@ -29,15 +29,8 @@
 
 WelcomeDialog::WelcomeDialog(MythScreenStack *parent, const char *name)
               :MythScreenType(parent, name),
-    m_status_text(NULL),        m_recording_text(NULL), m_scheduled_text(NULL),
-    m_warning_text(NULL),       m_startfrontend_button(NULL),
-    m_menuPopup(NULL),          m_updateStatusTimer(new QTimer(this)),
-    m_updateScreenTimer(new QTimer(this)),              m_isRecording(false),
-    m_hasConflicts(false),      m_bWillShutdown(false),
-    m_secondsToShutdown(-1),    m_preRollSeconds(0),    m_idleWaitForRecordingTime(0),
-    m_idleTimeoutSecs(0),       m_screenTunerNo(0),     m_screenScheduledNo(0),
-    m_statusListNo(0),          m_frontendIsRunning(false),
-    m_pendingRecListUpdate(false), m_pendingSchedUpdate(false)
+               m_updateStatusTimer(new QTimer(this)),
+               m_updateScreenTimer(new QTimer(this))
 {
     gCoreContext->addListener(this);
 
@@ -46,12 +39,8 @@ WelcomeDialog::WelcomeDialog(MythScreenStack *parent, const char *name)
     m_idleWaitForRecordingTime =
                        gCoreContext->GetNumSetting("idleWaitForRecordingTime", 15);
 
-    m_timeFormat = gCoreContext->GetSetting("TimeFormat", "h:mm AP");
-    m_dateFormat = gCoreContext->GetSetting("MythWelcomeDateFormat", "dddd\\ndd MMM yyyy");
-    m_dateFormat.replace("\\n", "\n");
-
     // if idleTimeoutSecs is 0, the user disabled the auto-shutdown feature
-    m_bWillShutdown = (gCoreContext->GetNumSetting("idleTimeoutSecs", 0) != 0);
+    m_willShutdown = (gCoreContext->GetNumSetting("idleTimeoutSecs", 0) != 0);
 
     m_idleTimeoutSecs = gCoreContext->GetNumSetting("idleTimeoutSecs", 0);
 
@@ -65,20 +54,17 @@ WelcomeDialog::WelcomeDialog(MythScreenStack *parent, const char *name)
 
 bool WelcomeDialog::Create(void)
 {
-    bool foundtheme = false;
-
     // Load the theme for this screen
-    foundtheme = LoadWindowFromXML("welcome-ui.xml", "welcome_screen", this);
-
+    bool foundtheme = LoadWindowFromXML("welcome-ui.xml", "welcome_screen", this);
     if (!foundtheme)
         return false;
 
     bool err = false;
-    UIUtilE::Assign(this, m_status_text, "status_text", &err);
-    UIUtilE::Assign(this, m_recording_text, "recording_text", &err);
-    UIUtilE::Assign(this, m_scheduled_text, "scheduled_text", &err);
-    UIUtilE::Assign(this, m_warning_text, "conflicts_text", &err);
-    UIUtilE::Assign(this, m_startfrontend_button, "startfrontend_button", &err);
+    UIUtilE::Assign(this, m_statusText, "status_text", &err);
+    UIUtilE::Assign(this, m_recordingText, "recording_text", &err);
+    UIUtilE::Assign(this, m_scheduledText, "scheduled_text", &err);
+    UIUtilE::Assign(this, m_warningText, "conflicts_text", &err);
+    UIUtilE::Assign(this, m_startFrontendButton, "startfrontend_button", &err);
 
     if (err)
     {
@@ -86,15 +72,15 @@ bool WelcomeDialog::Create(void)
         return false;
     }
 
-    m_warning_text->SetVisible(false);
+    m_warningText->SetVisible(false);
 
-    m_startfrontend_button->SetText(tr("Start Frontend"));
-    connect(m_startfrontend_button, SIGNAL(Clicked()),
+    m_startFrontendButton->SetText(tr("Start Frontend"));
+    connect(m_startFrontendButton, SIGNAL(Clicked()),
             this, SLOT(startFrontendClick()));
 
     BuildFocusList();
 
-    SetFocusWidget(m_startfrontend_button);
+    SetFocusWidget(m_startFrontendButton);
 
     checkConnectionToServer();
     checkAutoStart();
@@ -134,7 +120,7 @@ void WelcomeDialog::checkAutoStart(void)
     LOG(VB_GENERAL, LOG_NOTICE,
         QString("mythshutdown --startup returned: %1").arg(state));
 
-    bool bAutoStartFrontend = gCoreContext->GetNumSetting("AutoStartFrontend", 1);
+    bool bAutoStartFrontend = gCoreContext->GetBoolSetting("AutoStartFrontend", true);
 
     if (state == 1 && bAutoStartFrontend)
         startFrontendClick();
@@ -145,9 +131,11 @@ void WelcomeDialog::checkAutoStart(void)
 
 void WelcomeDialog::customEvent(QEvent *e)
 {
-    if ((MythEvent::Type)(e->type()) == MythEvent::MythEventMessage)
+    if (e->type() == MythEvent::MythEventMessage)
     {
-        MythEvent *me = (MythEvent *) e;
+        auto *me = dynamic_cast<MythEvent *>(e);
+        if (me == nullptr)
+            return;
 
         if (me->Message().startsWith("RECORDING_LIST_CHANGE") ||
             me->Message() == "UPDATE_PROG_INFO")
@@ -155,7 +143,7 @@ void WelcomeDialog::customEvent(QEvent *e)
             LOG(VB_GENERAL, LOG_NOTICE,
                 "MythWelcome received a recording list change event");
 
-            QMutexLocker lock(&m_RecListUpdateMuxtex);
+            QMutexLocker lock(&m_recListUpdateMuxtex);
 
             if (pendingRecListUpdate())
             {
@@ -174,7 +162,7 @@ void WelcomeDialog::customEvent(QEvent *e)
             LOG(VB_GENERAL, LOG_NOTICE,
                 "MythWelcome received a SCHEDULE_CHANGE event");
 
-            QMutexLocker lock(&m_SchedUpdateMuxtex);
+            QMutexLocker lock(&m_schedUpdateMuxtex);
 
             if (pendingSchedUpdate())
             {
@@ -219,14 +207,23 @@ void WelcomeDialog::customEvent(QEvent *e)
     }
 }
 
+void WelcomeDialog::ShowSettings(GroupSetting *screen)
+{
+    MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
+    auto *ssd = new StandardSettingDialog(mainStack, "settings", screen);
+    if (ssd->Create())
+        mainStack->AddScreen(ssd);
+    else
+        delete ssd;
+}
+
 bool WelcomeDialog::keyPressEvent(QKeyEvent *event)
 {
     if (GetFocusWidget()->keyPressEvent(event))
         return true;
 
-    bool handled = false;
     QStringList actions;
-    handled = GetMythMainWindow()->TranslateKeyPress("Welcome", event, actions);
+    bool handled = GetMythMainWindow()->TranslateKeyPress("Welcome", event, actions);
 
     for (int i = 0; i < actions.size() && !handled; i++)
     {
@@ -237,9 +234,9 @@ bool WelcomeDialog::keyPressEvent(QKeyEvent *event)
         {
             return true; // eat escape key
         }
-        else if (action == "MENU")
+        if (action == "MENU")
         {
-            showMenu();
+            ShowMenu();
         }
         else if (action == "NEXTVIEW")
         {
@@ -247,22 +244,11 @@ bool WelcomeDialog::keyPressEvent(QKeyEvent *event)
         }
         else if (action == "INFO")
         {
-            MythWelcomeSettings settings;
-            if (kDialogCodeAccepted == settings.exec())
-            {
-                gCoreContext->SendMessage("CLEAR_SETTINGS_CACHE");
-                updateStatus();
-                updateScreen();
-
-                m_dateFormat = gCoreContext->GetSetting("MythWelcomeDateFormat", "dddd\\ndd MMM yyyy");
-                m_dateFormat.replace("\\n", "\n");
-            }
+            ShowSettings(new MythWelcomeSettings());
         }
         else if (action == "SHOWSETTINGS")
         {
-            MythShutdownSettings settings;
-            if (kDialogCodeAccepted == settings.exec())
-                gCoreContext->SendMessage("CLEAR_SETTINGS_CACHE");
+            ShowSettings(new MythShutdownSettings());
         }
         else if (action == "0")
         {
@@ -273,8 +259,8 @@ bool WelcomeDialog::keyPressEvent(QKeyEvent *event)
             QString mythshutdown_lock =
                 m_appBinDir + "mythshutdown --lock";
 
-            uint statusCode;
-            statusCode = myth_system(mythshutdown_status + logPropagateArgs, kMSDontBlockInputDevs);
+            uint statusCode =
+                myth_system(mythshutdown_status + logPropagateArgs, kMSDontBlockInputDevs);
 
             // is shutdown locked by a user
             if (!(statusCode & 0xFF00) && statusCode & 16)
@@ -339,9 +325,9 @@ void WelcomeDialog::updateScreen(void)
 
     if (!gCoreContext->IsConnectedToMaster())
     {
-        m_recording_text->SetText(tr("Cannot connect to server!"));
-        m_scheduled_text->SetText(tr("Cannot connect to server!"));
-        m_warning_text->SetVisible(false);
+        m_recordingText->SetText(tr("Cannot connect to server!"));
+        m_scheduledText->SetText(tr("Cannot connect to server!"));
+        m_warningText->SetVisible(false);
     }
     else
     {
@@ -375,9 +361,7 @@ void WelcomeDialog::updateScreen(void)
         else
             status = tr("There are no recordings currently taking place");
 
-        status.detach();
-
-        m_recording_text->SetText(status);
+        m_recordingText->SetText(status);
 
         // update scheduled
         if (!m_scheduledList.empty())
@@ -407,7 +391,7 @@ void WelcomeDialog::updateScreen(void)
         else
             status = tr("There are no scheduled recordings");
 
-        m_scheduled_text->SetText(status);
+        m_scheduledText->SetText(status);
     }
 
     // update status message
@@ -421,7 +405,7 @@ void WelcomeDialog::updateScreen(void)
         status = m_statusList[m_statusListNo];
         if (m_statusList.count() > 1)
             status += "...";
-        m_status_text->SetText(status);
+        m_statusText->SetText(status);
 
         if ((int)m_statusListNo < m_statusList.count() - 1)
             m_statusListNo++;
@@ -465,7 +449,7 @@ bool WelcomeDialog::updateRecordingList()
     {
         // clear pending flag early in case something happens while
         // we're updating
-        QMutexLocker lock(&m_RecListUpdateMuxtex);
+        QMutexLocker lock(&m_recListUpdateMuxtex);
         setPendingRecListUpdate(false);
     }
 
@@ -486,7 +470,7 @@ bool WelcomeDialog::updateScheduledList()
     {
         // clear pending flag early in case something happens while
         // we're updating
-        QMutexLocker lock(&m_SchedUpdateMuxtex);
+        QMutexLocker lock(&m_schedUpdateMuxtex);
         setPendingSchedUpdate(false);
     }
 
@@ -549,14 +533,18 @@ void WelcomeDialog::updateStatusMessage(void)
 
     if (m_statusList.empty())
     {
-        if (m_bWillShutdown && m_secondsToShutdown != -1)
+        if (m_willShutdown && m_secondsToShutdown != -1)
+        {
             m_statusList.append(tr("MythTV is idle and will shutdown in %n "
                                    "second(s).", "", m_secondsToShutdown));
+        }
         else
+        {
             m_statusList.append(tr("MythTV is idle."));
+        }
     }
 
-    m_warning_text->SetVisible(m_hasConflicts);
+    m_warningText->SetVisible(m_hasConflicts);
 }
 
 bool WelcomeDialog::checkConnectionToServer(void)
@@ -586,7 +574,7 @@ bool WelcomeDialog::checkConnectionToServer(void)
     return bRes;
 }
 
-void WelcomeDialog::showMenu(void)
+void WelcomeDialog::ShowMenu(void)
 {
     MythScreenStack *popupStack = GetMythMainWindow()->GetStack("popup stack");
 
@@ -700,7 +688,12 @@ void WelcomeDialog::shutdownNow(void)
         {
             QString time_ts;
             setwakeup_cmd.replace("$time",
-                                  time_ts.setNum(restarttime.toTime_t()));
+#if QT_VERSION < QT_VERSION_CHECK(5,8,0)
+                                  time_ts.setNum(restarttime.toTime_t())
+#else
+                                  time_ts.setNum(restarttime.toSecsSinceEpoch())
+#endif
+                );
         }
         else
             setwakeup_cmd.replace(

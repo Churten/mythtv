@@ -12,8 +12,8 @@ class MBASE_PUBLIC BonjourRegister : public QObject
 {
     Q_OBJECT
   public:
-    explicit BonjourRegister(QObject *parent = 0);
-    virtual ~BonjourRegister();
+    explicit BonjourRegister(QObject *parent = nullptr);
+    ~BonjourRegister() override;
 
     bool Register(uint16_t port, const QByteArray &type, const QByteArray &name,
                   const QByteArray &txt);
@@ -33,9 +33,9 @@ class MBASE_PUBLIC BonjourRegister : public QObject
                                           const char *domain, void *object);
     QByteArray RandomizeData(void);
 
-    DNSServiceRef    m_dnssref;
-    QSocketNotifier *m_socket;
-    QMutexLocker    *m_lock;
+    DNSServiceRef    m_dnssref {nullptr};
+    QSocketNotifier *m_socket  {nullptr};
+    QMutexLocker    *m_lock    {nullptr};
     static QMutex    g_lock;
     QByteArray       m_data;
 };

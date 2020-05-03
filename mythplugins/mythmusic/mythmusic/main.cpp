@@ -1,7 +1,7 @@
-// POSIX headers
-#include <sys/types.h>
+// C++ headers
+#include <cstdlib>
 #include <sys/stat.h>
-#include <stdlib.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 // Qt headers
@@ -155,7 +155,7 @@ static void startPlayback(void)
 
     MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
 
-    PlaylistView *view = new PlaylistView(mainStack, NULL);
+    auto *view = new PlaylistView(mainStack, nullptr);
 
     if (view->Create())
         mainStack->AddScreen(view);
@@ -169,7 +169,7 @@ static void startStreamPlayback(void)
 
     MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
 
-    StreamView *view = new StreamView(mainStack, NULL);
+    auto *view = new StreamView(mainStack, nullptr);
 
     if (view->Create())
         mainStack->AddScreen(view);
@@ -187,7 +187,7 @@ static void startDatabaseTree(void)
     MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
 
     QString lastView = gCoreContext->GetSetting("MusicPlaylistEditorView", "tree");
-    PlaylistEditorView *view = new PlaylistEditorView(mainStack, NULL, lastView);
+    auto *view = new PlaylistEditorView(mainStack, nullptr, lastView);
 
     if (view->Create())
         mainStack->AddScreen(view);
@@ -205,7 +205,7 @@ static void startRipper(void)
 
     MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
 
-    Ripper *rip = new Ripper(mainStack, chooseCD());
+    auto *rip = new Ripper(mainStack, chooseCD());
 
     if (rip->Create())
     {
@@ -231,7 +231,7 @@ static void runScan(void)
 
     LOG(VB_GENERAL, LOG_INFO, "Scanning for music files");
 
-    gMusicData->scanMusic();
+    MusicData::scanMusic();
 }
 
 static void startImport(void)
@@ -243,7 +243,7 @@ static void startImport(void)
 
     MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
 
-    ImportMusicDialog *import = new ImportMusicDialog(mainStack);
+    auto *import = new ImportMusicDialog(mainStack);
 
     if (import->Create())
     {
@@ -257,8 +257,8 @@ static void startImport(void)
 }
 
 // these point to the the mainmenu callback if found
-static void (*m_callback)(void *, QString &) = NULL;
-static void *m_callbackdata = NULL;
+static void (*m_callback)(void *, QString &) = nullptr;
+static void *m_callbackdata = nullptr;
 
 static void MusicCallback(void *data, QString &selection)
 {
@@ -286,7 +286,7 @@ static void MusicCallback(void *data, QString &selection)
     else if (sel == "settings_general")
      {
         MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
-        GeneralSettings *gs = new GeneralSettings(mainStack, "general settings");
+        auto *gs = new GeneralSettings(mainStack, "general settings");
 
         if (gs->Create())
             mainStack->AddScreen(gs);
@@ -296,7 +296,7 @@ static void MusicCallback(void *data, QString &selection)
     else if (sel == "settings_player")
     {
         MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
-        PlayerSettings *ps = new PlayerSettings(mainStack, "player settings");
+        auto *ps = new PlayerSettings(mainStack, "player settings");
 
         if (ps->Create())
             mainStack->AddScreen(ps);
@@ -306,7 +306,7 @@ static void MusicCallback(void *data, QString &selection)
     else if (sel == "settings_rating")
     {
         MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
-        RatingSettings *rs = new RatingSettings(mainStack, "rating settings");
+        auto *rs = new RatingSettings(mainStack, "rating settings");
 
         if (rs->Create())
             mainStack->AddScreen(rs);
@@ -317,17 +317,17 @@ static void MusicCallback(void *data, QString &selection)
     {
 
        MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
-       VisualizationSettings *vs = new VisualizationSettings(mainStack, "visualization settings");
+       auto *vs = new VisualizationSettings(mainStack, "visualization settings");
 
        if (vs->Create())
            mainStack->AddScreen(vs);
-        else
-            delete vs;
+       else
+           delete vs;
     }
     else if (sel == "settings_import")
     {
         MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
-        ImportSettings *is = new ImportSettings(mainStack, "import settings");
+        auto *is = new ImportSettings(mainStack, "import settings");
 
         if (is->Create())
             mainStack->AddScreen(is);
@@ -343,17 +343,17 @@ static void MusicCallback(void *data, QString &selection)
     }
 }
 
-static int runMenu(QString which_menu)
+static int runMenu(const QString& which_menu)
 {
     QString themedir = GetMythUI()->GetThemeDir();
 
     // find the 'mainmenu' MythThemedMenu so we can use the callback from it
-    MythThemedMenu *mainMenu = NULL;
+    MythThemedMenu *mainMenu = nullptr;
     QObject *parentObject = GetMythMainWindow()->GetMainStack()->GetTopScreen();
 
     while (parentObject)
     {
-        MythThemedMenu *menu = dynamic_cast<MythThemedMenu *>(parentObject);
+        auto *menu = dynamic_cast<MythThemedMenu *>(parentObject);
 
         if (menu && menu->objectName() == "mainmenu")
         {
@@ -364,15 +364,15 @@ static int runMenu(QString which_menu)
         parentObject = parentObject->parent();
     }
 
-    MythThemedMenu *diag = new MythThemedMenu(
-        themedir, which_menu, GetMythMainWindow()->GetMainStack(),
-        "music menu");
+    auto *diag = new MythThemedMenu(themedir, which_menu,
+                                    GetMythMainWindow()->GetMainStack(),
+                                    "music menu");
 
     // save the callback from the main menu
     if (mainMenu)
         mainMenu->getCallback(&m_callback, &m_callbackdata);
 
-    diag->setCallback(MusicCallback, NULL);
+    diag->setCallback(MusicCallback, nullptr);
     diag->setKillable();
 
     if (diag->foundTheme())
@@ -384,13 +384,10 @@ static int runMenu(QString which_menu)
         GetMythMainWindow()->GetMainStack()->AddScreen(diag);
         return 0;
     }
-    else
-    {
-        LOG(VB_GENERAL, LOG_ERR, QString("Couldn't find menu %1 or theme %2")
-                              .arg(which_menu).arg(themedir));
-        delete diag;
-        return -1;
-    }
+    LOG(VB_GENERAL, LOG_ERR, QString("Couldn't find menu %1 or theme %2")
+        .arg(which_menu).arg(themedir));
+    delete diag;
+    return -1;
 }
 
 static void runMusicPlayback(void)
@@ -421,7 +418,7 @@ static void runRipCD(void)
 #if defined HAVE_CDIO
     MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
 
-    Ripper *rip = new Ripper(mainStack, chooseCD());
+    auto *rip = new Ripper(mainStack, chooseCD());
 
     if (rip->Create())
         mainStack->AddScreen(rip);
@@ -439,7 +436,7 @@ static void runRipCD(void)
 
 static void showMiniPlayer(void)
 {
-    if (!gMusicData->all_music)
+    if (!gMusicData->m_all_music)
         return;
 
     // only show the miniplayer if there isn't already a client attached
@@ -449,7 +446,7 @@ static void showMiniPlayer(void)
 
 static QStringList GetMusicFilter()
 {
-    QString filt = MetaIO::ValidFileExtensions;
+    QString filt = MetaIO::kValidFileExtensions;
     filt.replace(".", "*.");
     return filt.split('|');
 }
@@ -511,10 +508,10 @@ static void handleMedia(MythMediaDevice *cd)
         }
 
         // device is not usable so remove any existing CD tracks
-        if (gMusicData->all_music)
+        if (gMusicData->m_initialized)
         {
-            gMusicData->all_music->clearCDData();
-            gMusicData->all_playlists->getActive()->removeAllCDTracks();
+            gMusicData->m_all_music->clearCDData();
+            gMusicData->m_all_playlists->getActive()->removeAllCDTracks();
         }
 
         gPlayer->activePlaylistChanged(-1, false);
@@ -529,18 +526,15 @@ static void handleMedia(MythMediaDevice *cd)
     s_mountPath.clear();
 
     // don't show the music screen if AutoPlayCD is off
-    if (!gCoreContext->GetNumSetting("AutoPlayCD", 0))
+    if (!gCoreContext->GetBoolSetting("AutoPlayCD", false))
         return;
 
-    if (!gMusicData->initialized)
+    if (!gMusicData->m_initialized)
         gMusicData->loadMusic();
 
     // remove any existing CD tracks
-    if (gMusicData->all_music)
-    {
-        gMusicData->all_music->clearCDData();
-        gMusicData->all_playlists->getActive()->removeAllCDTracks();
-    }
+    gMusicData->m_all_music->clearCDData();
+    gMusicData->m_all_playlists->getActive()->removeAllCDTracks();
 
     gPlayer->sendCDChangedEvent();
 
@@ -548,14 +542,13 @@ static void handleMedia(MythMediaDevice *cd)
 
     QString message = qApp->translate("(MythMusicMain)",
                                       "Searching for music files...");
-    MythUIBusyDialog *busy = new MythUIBusyDialog( message, popupStack,
-                                                    "musicscanbusydialog");
+    auto *busy = new MythUIBusyDialog( message, popupStack, "musicscanbusydialog");
     if (busy->Create())
         popupStack->AddScreen(busy, false);
     else
     {
         delete busy;
-        busy = NULL;
+        busy = nullptr;
     }
 
     // Search for music files
@@ -570,8 +563,8 @@ static void handleMedia(MythMediaDevice *cd)
         return;
 
     message = qApp->translate("(MythMusicMain)", "Loading music tracks");
-    MythUIProgressDialog *progress = new MythUIProgressDialog( message,
-                                        popupStack, "scalingprogressdialog");
+    auto *progress = new MythUIProgressDialog( message, popupStack,
+                                               "scalingprogressdialog");
     if (progress->Create())
     {
         popupStack->AddScreen(progress, false);
@@ -580,7 +573,7 @@ static void handleMedia(MythMediaDevice *cd)
     else
     {
         delete progress;
-        progress = NULL;
+        progress = nullptr;
     }
 
     // Read track metadata and add to all_music
@@ -592,7 +585,7 @@ static void handleMedia(MythMediaDevice *cd)
         if (meta)
         {
             meta->setTrack(++track);
-            gMusicData->all_music->addCDTrack(*meta);
+            gMusicData->m_all_music->addCDTrack(*meta);
         }
         if (progress)
         {
@@ -606,14 +599,14 @@ static void handleMedia(MythMediaDevice *cd)
         progress->Close();
 
     // Remove all tracks from the playlist
-    gMusicData->all_playlists->getActive()->removeAllTracks();
+    gMusicData->m_all_playlists->getActive()->removeAllTracks();
 
     // Create list of new tracks
     QList<int> songList;
-    const int tracks = gMusicData->all_music->getCDTrackCount();
+    const int tracks = gMusicData->m_all_music->getCDTrackCount();
     for (track = 1; track <= tracks; track++)
     {
-        MusicMetadata *mdata = gMusicData->all_music->getCDMetadata(track);
+        MusicMetadata *mdata = gMusicData->m_all_music->getCDMetadata(track);
         if (mdata)
             songList.append(mdata->ID());
     }
@@ -623,7 +616,7 @@ static void handleMedia(MythMediaDevice *cd)
     s_mountPath = cd->getMountPath();
 
     // Add new tracks to playlist
-    gMusicData->all_playlists->getActive()->fillSonglistFromList(
+    gMusicData->m_all_playlists->getActive()->fillSonglistFromList(
             songList, true, PL_REPLACE, 0);
     gPlayer->setCurrentTrackPos(0);
 
@@ -674,10 +667,10 @@ static void handleCDMedia(MythMediaDevice *cd)
         }
 
         // device is not usable so remove any existing CD tracks
-        if (gMusicData->all_music)
+        if (gMusicData->m_all_music)
         {
-            gMusicData->all_music->clearCDData();
-            gMusicData->all_playlists->getActive()->removeAllCDTracks();
+            gMusicData->m_all_music->clearCDData();
+            gMusicData->m_all_playlists->getActive()->removeAllCDTracks();
         }
 
         gPlayer->activePlaylistChanged(-1, false);
@@ -686,22 +679,23 @@ static void handleCDMedia(MythMediaDevice *cd)
         return;
     }
 
-    if (!gMusicData->initialized)
+    if (!gMusicData->m_initialized)
         gMusicData->loadMusic();
 
     // wait for the music and playlists to load
-    while (!gMusicData->all_playlists->doneLoading() || !gMusicData->all_music->doneLoading())
+    while (!gMusicData->m_all_playlists->doneLoading()
+           || !gMusicData->m_all_music->doneLoading())
     {
         qApp->processEvents();
         usleep(50000);
     }
 
     // remove any existing CD tracks
-    gMusicData->all_music->clearCDData();
-    gMusicData->all_playlists->getActive()->removeAllCDTracks();
+    gMusicData->m_all_music->clearCDData();
+    gMusicData->m_all_playlists->getActive()->removeAllCDTracks();
 
     // find any new cd tracks
-    CdDecoder *decoder = new CdDecoder("cda", NULL, NULL);
+    auto *decoder = new CdDecoder("cda", nullptr, nullptr);
     decoder->setDevice(newDevice);
 
     int tracks = decoder->getNumTracks();
@@ -712,7 +706,7 @@ static void handleCDMedia(MythMediaDevice *cd)
         MusicMetadata *track = decoder->getMetadata(trackNo);
         if (track)
         {
-            gMusicData->all_music->addCDTrack(*track);
+            gMusicData->m_all_music->addCDTrack(*track);
 
             if (!setTitle)
             {
@@ -736,7 +730,7 @@ static void handleCDMedia(MythMediaDevice *cd)
                     "    ~/.cddb and ~/.cdserverrc and restart MythMusic.");
                 }
 
-                gMusicData->all_music->setCDTitle(parenttitle);
+                gMusicData->m_all_music->setCDTitle(parenttitle);
                 setTitle = true;
             }
 
@@ -750,22 +744,22 @@ static void handleCDMedia(MythMediaDevice *cd)
 
     // if the AutoPlayCD setting is set we remove all the existing tracks
     // from the playlist and replace them with the new CD tracks found
-    if (gCoreContext->GetNumSetting("AutoPlayCD", 0))
+    if (gCoreContext->GetBoolSetting("AutoPlayCD", false))
     {
-        gMusicData->all_playlists->getActive()->removeAllTracks();
+        gMusicData->m_all_playlists->getActive()->removeAllTracks();
 
         QList<int> songList;
 
-        for (int x = 1; x <= gMusicData->all_music->getCDTrackCount(); x++)
+        for (int x = 1; x <= gMusicData->m_all_music->getCDTrackCount(); x++)
         {
-            MusicMetadata *mdata = gMusicData->all_music->getCDMetadata(x);
+            MusicMetadata *mdata = gMusicData->m_all_music->getCDMetadata(x);
             if (mdata)
                 songList.append((mdata)->ID());
         }
 
         if (songList.count())
         {
-            gMusicData->all_playlists->getActive()->fillSonglistFromList(
+            gMusicData->m_all_playlists->getActive()->fillSonglistFromList(
                     songList, true, PL_REPLACE, 0);
             gPlayer->setCurrentTrackPos(0);
         }
@@ -869,20 +863,20 @@ static void setupKeys(void)
         "Switch to the radio stream view"), "");
 
     REG_MEDIA_HANDLER(QT_TRANSLATE_NOOP("MythControls",
-        "MythMusic Media Handler 1/2"), "", "", handleCDMedia,
-        MEDIATYPE_AUDIO | MEDIATYPE_MIXED, QString::null);
-    QString filt = MetaIO::ValidFileExtensions;
+        "MythMusic Media Handler 1/2"), "", handleCDMedia,
+        MEDIATYPE_AUDIO | MEDIATYPE_MIXED, QString());
+    QString filt = MetaIO::kValidFileExtensions;
     filt.replace('|',',');
     filt.remove('.');
     REG_MEDIA_HANDLER(QT_TRANSLATE_NOOP("MythControls",
-        "MythMusic Media Handler 2/2"), "", "", handleMedia,
+        "MythMusic Media Handler 2/2"), "", handleMedia,
         MEDIATYPE_MMUSIC, filt);
 }
 
 int mythplugin_init(const char *libversion)
 {
-    if (!gCoreContext->TestPluginVersion("mythmusic", libversion,
-                                    MYTH_BINARY_VERSION))
+    if (!MythCoreContext::TestPluginVersion("mythmusic", libversion,
+                                            MYTH_BINARY_VERSION))
         return -1;
 
     gCoreContext->ActivateSettingsCache(false);
@@ -898,7 +892,7 @@ int mythplugin_init(const char *libversion)
 
     setupKeys();
 
-    gPlayer = new MusicPlayer(NULL);
+    gPlayer = new MusicPlayer(nullptr);
     gMusicData = new MusicData();
 
     return 0;
@@ -921,14 +915,14 @@ void mythplugin_destroy(void)
 
     // TODO these should be saved when they are changed
     // Automagically save all playlists and metadata (ratings) that have changed
-    if (gMusicData->all_music && gMusicData->all_music->cleanOutThreads())
+    if (gMusicData->m_all_music && gMusicData->m_all_music->cleanOutThreads())
     {
-        gMusicData->all_music->save();
+        gMusicData->m_all_music->save();
     }
 
-    if (gMusicData->all_playlists && gMusicData->all_playlists->cleanOutThreads())
+    if (gMusicData->m_all_playlists && gMusicData->m_all_playlists->cleanOutThreads())
     {
-        gMusicData->all_playlists->save();
+        gMusicData->m_all_playlists->save();
     }
 
     delete gPlayer;

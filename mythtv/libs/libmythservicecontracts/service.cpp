@@ -105,13 +105,8 @@ void* Service::ConvertToParameterPtr( int            nTypeId,
 
             int nParentId = QMetaType::type( sParentFQN.toUtf8() );
 
-#if QT_VERSION < QT_VERSION_CHECK(5, 0, 0)
-            QObject *pParentClass = (QObject *)QMetaType::construct( nParentId );
-#else
-            QObject *pParentClass = (QObject *)QMetaType::create( nParentId );
-#endif
-
-            if (pParentClass == NULL)
+            auto *pParentClass = (QObject *)QMetaType::create( nParentId );
+            if (pParentClass == nullptr)
                 break;
 
             const QMetaObject *pMetaObject = pParentClass->metaObject();

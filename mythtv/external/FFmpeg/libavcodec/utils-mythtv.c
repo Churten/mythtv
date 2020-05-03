@@ -36,7 +36,6 @@ const char *ff_codec_id_string(enum AVCodecID codec_id)
         case AV_CODEC_ID_NONE:             return "NONE";
         case AV_CODEC_ID_MPEG1VIDEO:       return "MPEG1VIDEO";
         case AV_CODEC_ID_MPEG2VIDEO:       return "MPEG2VIDEO";
-        case AV_CODEC_ID_MPEG2VIDEO_XVMC:  return "MPEG2VIDEO_XVMC";
         case AV_CODEC_ID_H261:             return "H261";
         case AV_CODEC_ID_H263:             return "H263";
         case AV_CODEC_ID_RV10:             return "RV10";
@@ -118,6 +117,8 @@ const char *ff_codec_id_string(enum AVCodecID codec_id)
         case AV_CODEC_ID_TRUEMOTION2:      return "TRUEMOTION2";
         case AV_CODEC_ID_BMP:              return "BMP";
         case AV_CODEC_ID_VP8:              return "VP8";
+        case AV_CODEC_ID_VP9:              return "VP9";
+        case AV_CODEC_ID_AV1:              return "AV1";
 
             /* various pcm "codecs" */
         case AV_CODEC_ID_PCM_S16LE:        return "PCM_S16LE";

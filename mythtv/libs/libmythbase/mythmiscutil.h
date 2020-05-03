@@ -1,15 +1,15 @@
 #ifndef MYTHMISCUTIL_H_
 #define MYTHMISCUTIL_H_
 
-#include <stdint.h>
-#include <time.h>
-
 #include <algorithm>
+#include <cstdint>
+#include <ctime>
 
 #include <QString>
 #include <QDir>
 
 #include "mythbaseexp.h"
+#include "mythsystem.h"
 
 class QStringList;
 class QFile;
@@ -27,13 +27,13 @@ MBASE_PUBLIC bool telnet(const QString &host, int port);
 MBASE_PUBLIC long long copy(QFile &dst, QFile &src, uint block_size = 0);
 MBASE_PUBLIC QString createTempFile(
     QString name_template = "/tmp/mythtv_XXXXXX", bool dir = false);
-MBASE_PUBLIC bool makeFileAccessible(QString filename);
+MBASE_PUBLIC bool makeFileAccessible(const QString& filename);
 
 MBASE_PUBLIC QString getResponse(const QString &query, const QString &def);
 MBASE_PUBLIC int     intResponse(const QString &query, int def);
 
 MBASE_PUBLIC QString getSymlinkTarget(const QString &start_file,
-                                      QStringList   *intermediaries = NULL,
+                                      QStringList   *intermediaries = nullptr,
                                       unsigned       maxLinks       = 255);
 
 MBASE_PUBLIC void wrapList(QStringList &list, int width);
@@ -48,7 +48,7 @@ inline int   clamp(int val, int minimum, int maximum)
 }
 inline float lerp(float r, float a, float b)
 {
-    return ((1.0f - r) * a) + (r * b);
+    return ((1.0F - r) * a) + (r * b);
 }
 inline int   lerp(float r, int a, int b)
 {
@@ -64,9 +64,12 @@ static inline QString xml_bool_to_string(bool val)
 
 MBASE_PUBLIC QString xml_indent(uint level);
 
-MBASE_PUBLIC bool IsMACAddress(QString MAC);
-MBASE_PUBLIC bool WakeOnLAN(QString MAC);
-MBASE_PUBLIC QString FileHash(QString filename);
+MBASE_PUBLIC bool IsMACAddress(const QString& MAC);
+MBASE_PUBLIC bool WakeOnLAN(const QString& MAC);
+MBASE_PUBLIC bool MythWakeup(const QString &wakeUpCommand,
+    uint flags = kMSNone, uint timeout = 0);
+
+MBASE_PUBLIC QString FileHash(const QString& filename);
 
 /// Is A/V Sync destruction daemon is running on this host?
 MBASE_PUBLIC bool IsPulseAudioRunning(void);
@@ -92,13 +95,13 @@ inline void rdtsc(uint64_t &x)
     QueryPerformanceCounter((LARGE_INTEGER*)(&x));
 }
 #else
-typedef struct {
+struct timing_ab_t {
     uint a;
     uint b;
-} timing_ab_t;
+};
 inline void rdtsc(uint64_t &x)
 {
-    timing_ab_t &y = (timing_ab_t&) x;
+    auto &y = (timing_ab_t&) x;
     asm("rdtsc \n"
         "mov %%eax, %0 \n"
         "mov %%edx, %1 \n"

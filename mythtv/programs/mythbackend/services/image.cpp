@@ -37,7 +37,7 @@
  *  \param  tag The exif tag
  *  \return QString The exif tag value if successful, otherwise empty
  */
-QString Image::GetImageInfo( int id, const QString &tag )
+QString Image::GetImageInfo( int /*id*/, const QString &/*tag*/ )
 {
 //    ImageManagerBe *mgr = ImageManagerBe::getInstance();
 
@@ -76,7 +76,7 @@ DTC::ImageMetadataInfoList* Image::GetImageInfoList(int id)
 {
     // This holds the xml data structure from
     // the returned stringlist with the exif data
-    DTC::ImageMetadataInfoList *imInfoList = new DTC::ImageMetadataInfoList();
+    auto *imInfoList = new DTC::ImageMetadataInfoList();
 
     // Read all metadata tags
 //    ImageManagerBe *mgr = ImageManagerBe::getInstance();
@@ -142,7 +142,7 @@ bool Image::RemoveImage( int id )
 /**
  *  \brief  Renames the file to the new name.
  *  \param  id The database id of the file
- *  \param  sNewName  The new name of the file (only the name, no path)
+ *  \param  newName  The new name of the file (only the name, no path)
  *  \return bool True if renaming was successful, otherwise false
  */
 bool Image::RenameImage( int id, const QString &newName)
@@ -203,7 +203,7 @@ DTC::ImageSyncInfo* Image::GetSyncStatus( void )
         QString("Image: Sync status is running: %1, current: %2, total: %3")
         .arg(running).arg(current).arg(total));
 
-    DTC::ImageSyncInfo *syncInfo = new DTC::ImageSyncInfo();
+    auto *syncInfo = new DTC::ImageSyncInfo();
     syncInfo->setRunning(running);
     syncInfo->setCurrent(current);
     syncInfo->setTotal(total);

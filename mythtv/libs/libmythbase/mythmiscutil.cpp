@@ -2,14 +2,12 @@
 #include "mythmiscutil.h"
 
 // C++ headers
+#include <cerrno>
+#include <cstdlib>
+#include <ctime>
 #include <iostream>
 
 using namespace std;
-
-// C headers
-#include <cerrno>
-#include <stdlib.h>
-#include <time.h>
 
 // POSIX
 #include <unistd.h>
@@ -65,14 +63,13 @@ using namespace std;
 bool getUptime(time_t &uptime)
 {
 #ifdef __linux__
-    struct sysinfo sinfo;
+    struct sysinfo sinfo {};
     if (sysinfo(&sinfo) == -1)
     {
         LOG(VB_GENERAL, LOG_ERR, "sysinfo() error");
         return false;
     }
-    else
-        uptime = sinfo.uptime;
+    uptime = sinfo.uptime;
 
 #elif defined(__FreeBSD__) || CONFIG_DARWIN
 
@@ -85,13 +82,12 @@ bool getUptime(time_t &uptime)
     len    = sizeof(bootTime);
     mib[0] = CTL_KERN;
     mib[1] = KERN_BOOTTIME;
-    if (sysctl(mib, 2, &bootTime, &len, NULL, 0) == -1)
+    if (sysctl(mib, 2, &bootTime, &len, nullptr, 0) == -1)
     {
         LOG(VB_GENERAL, LOG_ERR, "sysctl() error");
         return false;
     }
-    else
-        uptime = time(NULL) - bootTime.tv_sec;
+    uptime = time(nullptr) - bootTime.tv_sec;
 #elif defined(_WIN32)
     uptime = ::GetTickCount() / 1000;
 #else
@@ -112,20 +108,20 @@ bool getUptime(time_t &uptime)
 bool getMemStats(int &totalMB, int &freeMB, int &totalVM, int &freeVM)
 {
 #ifdef __linux__
-    size_t MB = (1024*1024);
-    struct sysinfo sinfo;
+    const size_t MB = (1024*1024);
+    struct sysinfo sinfo {};
     if (sysinfo(&sinfo) == -1)
     {
         LOG(VB_GENERAL, LOG_ERR,
             "getMemStats(): Error, sysinfo() call failed.");
         return false;
     }
-    else
-        totalMB = (int)((sinfo.totalram  * sinfo.mem_unit)/MB),
-        freeMB  = (int)((sinfo.freeram   * sinfo.mem_unit)/MB),
-        totalVM = (int)((sinfo.totalswap * sinfo.mem_unit)/MB),
-        freeVM  = (int)((sinfo.freeswap  * sinfo.mem_unit)/MB);
 
+    totalMB = (int)((sinfo.totalram  * sinfo.mem_unit)/MB);
+    freeMB  = (int)((sinfo.freeram   * sinfo.mem_unit)/MB);
+    totalVM = (int)((sinfo.totalswap * sinfo.mem_unit)/MB);
+    freeVM  = (int)((sinfo.freeswap  * sinfo.mem_unit)/MB);
+    return true;
 #elif CONFIG_DARWIN
     mach_port_t             mp;
     mach_msg_type_number_t  count;
@@ -160,14 +156,14 @@ bool getMemStats(int &totalMB, int &freeMB, int &totalVM, int &freeVM)
     free = getDiskSpace("/private/var/vm", total, used);
     totalVM = (int)(total >> 10);
     freeVM = (int)(free >> 10);
-
+    return true;
 #else
-    LOG(VB_GENERAL, LOG_NOTICE, "getMemStats(): Unknown platform. "
-        "How do I get the memory stats?");
+    Q_UNUSED(totalMB);
+    Q_UNUSED(freeMB);
+    Q_UNUSED(totalVM);
+    Q_UNUSED(freeVM);
     return false;
 #endif
-
-    return true;
 }
 
 /**
@@ -235,12 +231,11 @@ bool ping(const QString &host, int timeout)
     QString cmd = QString("%systemroot%\\system32\\ping.exe -w %1 -n 1 %2>NUL")
                   .arg(timeout*1000).arg(host);
 
-    if (myth_system(cmd, kMSDontBlockInputDevs | kMSDontDisableDrawing |
-                         kMSProcessEvents) != GENERIC_EXIT_OK)
-        return false;
+    return myth_system(cmd, kMSDontBlockInputDevs | kMSDontDisableDrawing |
+                         kMSProcessEvents) == GENERIC_EXIT_OK;
 #else
     QString addrstr =
-        gCoreContext->resolveAddress(host, gCoreContext->ResolveAny, true);
+        MythCoreContext::resolveAddress(host, gCoreContext->ResolveAny, true);
     QHostAddress addr = QHostAddress(addrstr);
 #if defined(__FreeBSD__) || CONFIG_DARWIN
     QString timeoutparam("-t");
@@ -253,12 +248,9 @@ bool ping(const QString &host, int timeout)
     QString cmd = QString("%1 %2 %3 -c 1  %4  >/dev/null 2>&1")
                   .arg(pingcmd).arg(timeoutparam).arg(timeout).arg(host);
 
-    if (myth_system(cmd, kMSDontBlockInputDevs | kMSDontDisableDrawing |
-                         kMSProcessEvents) != GENERIC_EXIT_OK)
-      return false;
+    return myth_system(cmd, kMSDontBlockInputDevs | kMSDontDisableDrawing |
+                         kMSProcessEvents) == GENERIC_EXIT_OK;
 #endif
-
-    return true;
 }
 
 /**
@@ -266,7 +258,7 @@ bool ping(const QString &host, int timeout)
  */
 bool telnet(const QString &host, int port)
 {
-    MythSocket *s = new MythSocket();
+    auto *s = new MythSocket();
 
     bool connected = s->ConnectToHost(host, port);
     s->DecrRef();
@@ -299,15 +291,18 @@ long long copy(QFile &dst, QFile &src, uint block_size)
 {
     uint buflen = (block_size < 1024) ? (16 * 1024) : block_size;
     char *buf = new char[buflen];
-    bool odst = false, osrc = false;
+    bool odst = false;
+    bool osrc = false;
 
     if (!buf)
         return -1LL;
 
     if (!dst.isWritable() && !dst.isOpen())
+    {
         odst = dst.open(QIODevice::Unbuffered |
                         QIODevice::WriteOnly  |
                         QIODevice::Truncate);
+    }
 
     if (!src.isReadable() && !src.isOpen())
         osrc = src.open(QIODevice::Unbuffered|QIODevice::ReadOnly);
@@ -316,8 +311,8 @@ long long copy(QFile &dst, QFile &src, uint block_size)
     long long total_bytes = 0LL;
     while (ok)
     {
-        long long rlen, wlen, off = 0;
-        rlen = src.read(buf, buflen);
+        long long off = 0;
+        long long rlen = src.read(buf, buflen);
         if (rlen<0)
         {
             LOG(VB_GENERAL, LOG_ERR, "read error");
@@ -327,11 +322,11 @@ long long copy(QFile &dst, QFile &src, uint block_size)
         if (rlen==0)
             break;
 
-        total_bytes += (long long) rlen;
+        total_bytes += rlen;
 
         while ((rlen-off>0) && ok)
         {
-            wlen = dst.write(buf + off, rlen - off);
+            long long wlen = dst.write(buf + off, rlen - off);
             if (wlen>=0)
                 off+= wlen;
             if (wlen<0)
@@ -424,7 +419,7 @@ QString createTempFile(QString name_template, bool dir)
  *
  *  \param filename   Path of file to make accessible
  */
-bool makeFileAccessible(QString filename)
+bool makeFileAccessible(const QString& filename)
 {
     QByteArray fname = filename.toLatin1();
     int ret = chmod(fname.constData(), 0666);
@@ -474,7 +469,7 @@ int intResponse(const QString &query, int def)
     QString str_resp = getResponse(query, QString("%1").arg(def));
     if (str_resp.isEmpty())
         return def;
-    bool ok;
+    bool ok = false;
     int resp = str_resp.toInt(&ok);
     return (ok ? resp : def);
 }
@@ -491,8 +486,8 @@ QString getSymlinkTarget(const QString &start_file,
             .arg(maxLinks));
 #endif
 
-    QString   link     = QString::null;
-    QString   cur_file = start_file; cur_file.detach();
+    QString   link;
+    QString   cur_file = start_file;
     QFileInfo fi(cur_file);
 
     if (intermediaries)
@@ -502,7 +497,7 @@ QString getSymlinkTarget(const QString &start_file,
     }
 
     for (uint i = 0; (i <= maxLinks) && fi.isSymLink() &&
-             !(link = fi.readLink()).isEmpty(); i++)
+             !(link = fi.symLinkTarget()).isEmpty(); i++)
     {
         cur_file = (link[0] == '/') ?
             link : // absolute link
@@ -513,9 +508,6 @@ QString getSymlinkTarget(const QString &start_file,
 
         fi = QFileInfo(cur_file);
     }
-
-    if (intermediaries)
-        intermediaries->detach();
 
 #if 0
     if (intermediaries)
@@ -529,13 +521,13 @@ QString getSymlinkTarget(const QString &start_file,
 
     LOG(VB_GENERAL, LOG_DEBUG,
             QString("getSymlinkTarget() -> '%1'")
-            .arg((!fi.isSymLink()) ? cur_file : QString::null));
+            .arg((!fi.isSymLink()) ? cur_file : QString()));
 #endif
 
-    return (!fi.isSymLink()) ? cur_file : QString::null;
+    return (!fi.isSymLink()) ? cur_file : QString();
 }
 
-bool IsMACAddress(QString MAC)
+bool IsMACAddress(const QString& MAC)
 {
     QStringList tokens = MAC.split(':');
     if (tokens.size() != 6)
@@ -545,10 +537,7 @@ bool IsMACAddress(QString MAC)
         return false;
     }
 
-    int y;
-    bool ok;
-    int value;
-    for (y = 0; y < 6; y++)
+    for (int y = 0; y < 6; y++)
     {
         if (tokens[y].isEmpty())
         {
@@ -558,7 +547,8 @@ bool IsMACAddress(QString MAC)
             return false;
         }
 
-        value = tokens[y].toInt(&ok, 16);
+        bool ok = false;
+        int value = tokens[y].toInt(&ok, 16);
         if (!ok)
         {
             LOG(VB_NETWORK, LOG_ERR,
@@ -582,7 +572,7 @@ bool IsMACAddress(QString MAC)
     return true;
 }
 
-QString FileHash(QString filename)
+QString FileHash(const QString& filename)
 {
     QFile file(filename);
     QFileInfo fileinfo(file);
@@ -623,14 +613,12 @@ QString FileHash(QString filename)
     return output;
 }
 
-bool WakeOnLAN(QString MAC)
+bool WakeOnLAN(const QString& MAC)
 {
     char msg[1024] = "\xFF\xFF\xFF\xFF\xFF\xFF";
     int  msglen = 6;
-    int  x, y;
     QStringList tokens = MAC.split(':');
     int macaddr[6];
-    bool ok;
 
     if (tokens.size() != 6)
     {
@@ -639,8 +627,9 @@ bool WakeOnLAN(QString MAC)
         return false;
     }
 
-    for (y = 0; y < 6; y++)
+    for (int y = 0; y < 6; y++)
     {
+        bool ok = false;
         macaddr[y] = tokens[y].toInt(&ok, 16);
 
         if (!ok)
@@ -651,9 +640,9 @@ bool WakeOnLAN(QString MAC)
         }
     }
 
-    for (x = 0; x < 16; x++)
-        for (y = 0; y < 6; y++)
-            msg[msglen++] = macaddr[y];
+    for (int x = 0; x < 16; x++)
+        for (int y : macaddr)
+            msg[msglen++] = y;
 
     LOG(VB_NETWORK, LOG_INFO,
             QString("WakeOnLan(): Sending WOL packet to %1").arg(MAC));
@@ -661,6 +650,16 @@ bool WakeOnLAN(QString MAC)
     QUdpSocket udp_socket;
     return udp_socket.writeDatagram(
         msg, msglen, QHostAddress::Broadcast, 32767) == msglen;
+}
+
+// Wake up either by command or by MAC address
+// return true = success
+bool MythWakeup(const QString &wakeUpCommand, uint flags, uint timeout)
+{
+    if (!IsMACAddress(wakeUpCommand))
+        return myth_system(wakeUpCommand, flags, timeout) == 0U;
+
+    return WakeOnLAN(wakeUpCommand);
 }
 
 bool IsPulseAudioRunning(void)
@@ -725,9 +724,9 @@ void myth_yield(void)
 #if defined(__linux__) && ( defined(__i386__) || defined(__ppc__) || \
                             defined(__x86_64__) || defined(__ia64__) )
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <errno.h>
+#include <cstdio>
+#include <cstdlib>
+#include <cerrno>
 #include <getopt.h>
 #include <unistd.h>
 #include <sys/ptrace.h>
@@ -752,7 +751,7 @@ void myth_yield(void)
 #define IOPRIO_PRIO_MASK        ((1UL << IOPRIO_CLASS_SHIFT) - 1)
 #define IOPRIO_PRIO_CLASS(mask) ((mask) >> IOPRIO_CLASS_SHIFT)
 #define IOPRIO_PRIO_DATA(mask)  ((mask) & IOPRIO_PRIO_MASK)
-#define IOPRIO_PRIO_VALUE(class, data)  (((class) << IOPRIO_CLASS_SHIFT) | data)
+#define IOPRIO_PRIO_VALUE(class, data)  (((class) << IOPRIO_CLASS_SHIFT) | (data))
 
 enum { IOPRIO_CLASS_NONE,IOPRIO_CLASS_RT,IOPRIO_CLASS_BE,IOPRIO_CLASS_IDLE, };
 enum { IOPRIO_WHO_PROCESS = 1, IOPRIO_WHO_PGRP, IOPRIO_WHO_USER, };
@@ -824,7 +823,7 @@ bool MythRemoveDirectory(QDir &aDir)
  * \brief Get network proxy settings from OS, and use for [Q]Http[Comms]
  *
  * The HTTP_PROXY environment var. is parsed for values like; "proxy-host",
- * "proxy-host:8080", "http://host:8080" and "http"//user:password@host:1080",
+ * "proxy-host:8080", "http://host:8080" and "http"//user:password\@host:1080",
  * and that is used for any Qt-based Http fetches.
  * We also test connectivity here with ping and telnet, and warn if it fails.
  *
@@ -866,13 +865,17 @@ void setHttpProxy(void)
             url.setPort(port);
         }
         else if (!ping(host, 1))
+        {
             LOG(VB_GENERAL, LOG_ERR, LOC +
                 QString("cannot locate host %1").arg(host) +
                 "\n\t\t\tPlease check HTTP_PROXY environment variable!");
+        }
         else if (!telnet(host,port))
+        {
             LOG(VB_GENERAL, LOG_ERR, LOC +
                 QString("%1:%2 - cannot connect!").arg(host).arg(port) +
                 "\n\t\t\tPlease check HTTP_PROXY environment variable!");
+        }
 
 #if 0
         LOG(VB_NETWORK, LOG_DEBUG, LOC + QString("using http://%1:%2@%3:%4")
@@ -917,11 +920,15 @@ void setHttpProxy(void)
         // via myth_system(command), by setting HTTP_PROXY
         QString url;
 
-        if (p.user().length())
+        if (!p.user().isEmpty())
+        {
             url = "http://%1:%2@%3:%4",
             url = url.arg(p.user()).arg(p.password());
+        }
         else
+        {
             url = "http://%1:%2";
+        }
 
         url = url.arg(p.hostName()).arg(p.port());
         setenv("HTTP_PROXY", url.toLatin1(), 1);
@@ -935,13 +942,11 @@ void setHttpProxy(void)
 
 void wrapList(QStringList &list, int width)
 {
-    int i;
-
     // if this is triggered, something has gone seriously wrong
     // the result won't really be usable, but at least it won't crash
     width = max(width, 5);
 
-    for(i = 0; i < list.size(); i++)
+    for (int i = 0; i < list.size(); i++)
     {
         QString string = list.at(i);
 
@@ -983,26 +988,26 @@ void wrapList(QStringList &list, int width)
 
 QString xml_indent(uint level)
 {
-    static QReadWriteLock rw_lock;
-    static QMap<uint,QString> cache;
+    static QReadWriteLock s_rwLock;
+    static QMap<uint,QString> s_cache;
 
-    rw_lock.lockForRead();
-    QMap<uint,QString>::const_iterator it = cache.find(level);
-    if (it != cache.end())
+    s_rwLock.lockForRead();
+    QMap<uint,QString>::const_iterator it = s_cache.find(level);
+    if (it != s_cache.end())
     {
         QString tmp = *it;
-        rw_lock.unlock();
+        s_rwLock.unlock();
         return tmp;
     }
-    rw_lock.unlock();
+    s_rwLock.unlock();
 
     QString ret = "";
     for (uint i = 0; i < level; i++)
         ret += "    ";
 
-    rw_lock.lockForWrite();
-    cache[level] = ret;
-    rw_lock.unlock();
+    s_rwLock.lockForWrite();
+    s_cache[level] = ret;
+    s_rwLock.unlock();
 
     return ret;
 }
@@ -1087,14 +1092,7 @@ int naturalCompare(const QString &_a, const QString &_b, Qt::CaseSensitivity cas
         // compare these sequences
         const QStringRef& subA(a.midRef(begSeqA - a.unicode(), currA - begSeqA));
         const QStringRef& subB(b.midRef(begSeqB - b.unicode(), currB - begSeqB));
-
-// QStringRef::localeAwareCompare is buggy on Qt < 5.3, taking significant time
-// to complete. So we use compare instead with those versions of Qt.
-#if (QT_VERSION >= QT_VERSION_CHECK(5, 0, 0)) && (QT_VERSION < QT_VERSION_CHECK(5, 3, 0))
-        const int cmp = QStringRef::compare(subA, subB);
-#else
         const int cmp = QStringRef::localeAwareCompare(subA, subB);
-#endif
 
         if (cmp != 0)
         {
@@ -1127,25 +1125,25 @@ int naturalCompare(const QString &_a, const QString &_b, Qt::CaseSensitivity cas
         {
             // one digit-sequence starts with 0 -> assume we are in a fraction part
             // do left aligned comparison (numbers are considered left aligned)
-            while (1)
+            while (true)
             {
                 if (!currA->isDigit() && !currB->isDigit())
                 {
                     break;
                 }
-                else if (!currA->isDigit())
+                if (!currA->isDigit())
                 {
                     return +1;
                 }
-                else if (!currB->isDigit())
+                if (!currB->isDigit())
                 {
                     return -1;
                 }
-                else if (*currA < *currB)
+                if (*currA < *currB)
                 {
                     return -1;
                 }
-                else if (*currA > *currB)
+                if (*currA > *currB)
                 {
                     return + 1;
                 }
@@ -1165,7 +1163,7 @@ int naturalCompare(const QString &_a, const QString &_b, Qt::CaseSensitivity cas
             bool isFirstRun = true;
             int weight = 0;
 
-            while (1)
+            while (true)
             {
                 if (!currA->isDigit() && !currB->isDigit())
                 {
@@ -1175,29 +1173,23 @@ int naturalCompare(const QString &_a, const QString &_b, Qt::CaseSensitivity cas
                     }
                     break;
                 }
-                else if (!currA->isDigit())
+                if (!currA->isDigit())
                 {
                     if (isFirstRun)
                     {
                         return *currA < *currB ? -1 : +1;
                     }
-                    else
-                    {
-                        return -1;
-                    }
+                    return -1;
                 }
-                else if (!currB->isDigit())
+                if (!currB->isDigit())
                 {
                     if (isFirstRun)
                     {
                         return *currA < *currB ? -1 : +1;
                     }
-                    else
-                    {
-                        return +1;
-                    }
+                    return +1;
                 }
-                else if ((*currA < *currB) && (weight == 0))
+                if ((*currA < *currB) && (weight == 0))
                 {
                     weight = -1;
                 }

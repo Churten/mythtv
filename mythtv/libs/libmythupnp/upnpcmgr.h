@@ -16,7 +16,7 @@
 #include "httpserver.h"
 #include "eventing.h"
               
-typedef enum 
+enum UPnpCMGRMethod
 {
     CMGRM_Unknown                  = 0,
     CMGRM_GetServiceDescription    = 1,
@@ -24,20 +24,18 @@ typedef enum
     CMGRM_GetCurrentConnectionInfo = 3,
     CMGRM_GetCurrentConnectionIDs  = 4,
     CMGRM_GetFeatureList           = 5
-
-} UPnpCMGRMethod;
+};
 
 //////////////////////////////////////////////////////////////////////////////
 
-typedef enum 
+enum UPnpCMGRConnectionStatus
 {
     CMGRSTATUS_Unknown               = 0,
     CMGRSTATUS_OK                    = 1,
     CMGRSTATUS_ContentFormatMismatch = 2,
     CMGRSTATUS_InsufficientBandwidth = 3,
     CMGRSTATUS_UnreliableChannel     = 4
-
-} UPnpCMGRConnectionStatus;
+};
 
 //////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////
@@ -56,10 +54,10 @@ class UPNP_PUBLIC UPnpCMGR : public Eventing
 
         UPnPFeatureList m_features;
 
-        UPnpCMGRMethod  GetMethod                     ( const QString &sURI );
+        static UPnpCMGRMethod  GetMethod                     ( const QString &sURI );
 
         void            HandleGetProtocolInfo         ( HTTPRequest *pRequest );
-        void            HandleGetCurrentConnectionInfo( HTTPRequest *pRequest );
+        static void            HandleGetCurrentConnectionInfo( HTTPRequest *pRequest );
         void            HandleGetCurrentConnectionIDs ( HTTPRequest *pRequest );
         void            HandleGetFeatureList          ( HTTPRequest *pRequest );
 
@@ -67,10 +65,14 @@ class UPNP_PUBLIC UPnpCMGR : public Eventing
 
         // Implement UPnpServiceImpl methods that we can
 
-        virtual QString GetServiceType      () { return "urn:schemas-upnp-org:service:ConnectionManager:3"; }
-        virtual QString GetServiceId        () { return "urn:upnp-org:serviceId:ConnectionManager"; }
-        virtual QString GetServiceControlURL() { return m_sControlUrl.mid( 1 ); }
-        virtual QString GetServiceDescURL   () { return m_sControlUrl.mid( 1 ) + "/GetServDesc"; }
+        QString GetServiceType() override // UPnpServiceImpl
+            { return "urn:schemas-upnp-org:service:ConnectionManager:3"; }
+        QString GetServiceId() override // UPnpServiceImpl
+            { return "urn:upnp-org:serviceId:ConnectionManager"; }
+        QString GetServiceControlURL() override // UPnpServiceImpl
+            { return m_sControlUrl.mid( 1 ); }
+        QString GetServiceDescURL() override // UPnpServiceImpl
+            { return m_sControlUrl.mid( 1 ) + "/GetServDesc"; }
 
     public:
                  UPnpCMGR(  UPnpDevice *pDevice,
@@ -78,14 +80,14 @@ class UPNP_PUBLIC UPnpCMGR : public Eventing
                             const QString &sSourceProtocols = "",
                             const QString &sSinkProtocols   = "" );
 
-        virtual ~UPnpCMGR();
+        ~UPnpCMGR() override = default;
 
         void    AddSourceProtocol( const QString &sProtocol );
         void    AddSinkProtocol  ( const QString &sProtocol );
 
-        virtual QStringList GetBasePaths();
+        QStringList GetBasePaths() override; // Eventing
 
-        virtual bool     ProcessRequest( HTTPRequest *pRequest );
+        bool    ProcessRequest( HTTPRequest *pRequest ) override; // Eventing
 };
 
 #endif

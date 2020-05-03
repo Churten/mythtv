@@ -1,7 +1,7 @@
 // qt
-#include <QString>
-#include <QFile>
 #include <QDir>
+#include <QFile>
+#include <QString>
 
 #include "mythdate.h"
 #include "mythdirs.h"
@@ -11,6 +11,7 @@
 #include "mythrssmanager.h"
 #include "netutils.h"
 #include "rssparse.h"
+#include "mythsorthelper.h"
 
 using namespace std;
 
@@ -48,13 +49,12 @@ void RSSManager::doUpdate()
 {
     m_sites = findAllDBRSS();
 
-    for (RSSSite::rssList::iterator i = m_sites.begin();
-            i != m_sites.end(); ++i)
+    foreach (auto & site, m_sites)
     {
         LOG(VB_GENERAL, LOG_INFO, LOC +
-            QString("Updating RSS Feed %1") .arg((*i)->GetTitle()));
+            QString("Updating RSS Feed %1") .arg(site->GetTitle()));
 
-        connect(*i, SIGNAL(finished(RSSSite*)),
+        connect(site, SIGNAL(finished(RSSSite*)),
                 this, SLOT(slotRSSRetrieved(RSSSite*)));
     }
 
@@ -71,11 +71,11 @@ void RSSManager::slotRefreshRSS()
         return;
     }
 
-    RSSSite::rssList::iterator i = m_sites.begin();
-    for (; i != m_sites.end(); ++i)
+    // NOLINTNEXTLINE(modernize-loop-convert)
+    for (auto i = m_sites.begin(); i != m_sites.end(); ++i)
     {
-            (*i)->retrieve();
-            m_inprogress.append(*i);
+        (*i)->retrieve();
+        m_inprogress.append(*i);
     }
 }
 
@@ -87,11 +87,10 @@ void RSSManager::processAndInsertRSS(RSSSite *site)
     clearRSSArticles(site->GetTitle(), site->GetType());
 
     ResultItem::resultList rss = site->GetVideoList();
-    ResultItem::resultList::iterator it = rss.begin();
-    for (; it != rss.end(); ++it)
+    foreach (auto & video, rss)
     {
         // Insert in the DB here.
-        insertRSSArticleInDB(site->GetTitle(), *it, site->GetType());
+        insertRSSArticleInDB(site->GetTitle(), video, site->GetType());
     }
 
     m_inprogress.removeOne(site);
@@ -106,24 +105,24 @@ void RSSManager::slotRSSRetrieved(RSSSite *site)
 }
 
 
-RSSSite::RSSSite(const QString& title,
-                  const QString& image,
+RSSSite::RSSSite( QString  title,
+                  QString  sortTitle,
+                  QString  image,
                   const ArticleType& type,
-                  const QString& description,
-                  const QString& url,
-                  const QString& author,
+                  QString  description,
+                  QString  url,
+                  QString  author,
                   const bool& download,
-                  const QDateTime& updated) :
-    QObject(),
-    m_title(title), m_image(image), m_type(type),
-    m_description(description), m_url(url), m_author(author),
-    m_download(download), m_updated(updated), m_lock(QMutex::Recursive),
-    m_podcast(false), m_reply(NULL), m_manager(NULL)
+                  QDateTime  updated) :
+    m_title(std::move(title)), m_sortTitle(std::move(sortTitle)),
+    m_image(std::move(image)), m_type(type),
+    m_description(std::move(description)), m_url(std::move(url)),
+    m_author(std::move(author)),
+    m_download(download), m_updated(std::move(updated))
 {
-}
-
-RSSSite::~RSSSite()
-{
+    std::shared_ptr<MythSortHelper>sh = getMythSortHelper();
+    if (m_sortTitle.isEmpty() and not m_title.isEmpty())
+        m_sortTitle = sh->doTitle(m_title);
 }
 
 void RSSSite::insertRSSArticle(ResultItem *item)
@@ -155,7 +154,7 @@ void RSSSite::retrieve(void)
 }
 
 QUrl RSSSite::redirectUrl(const QUrl& possibleRedirectUrl,
-                               const QUrl& oldRedirectUrl) const
+                               const QUrl& oldRedirectUrl)
 {
     QUrl redirectUrl;
     if(!possibleRedirectUrl.isEmpty() && possibleRedirectUrl != oldRedirectUrl)
@@ -230,25 +229,26 @@ void RSSSite::process(void)
         Parse parser;
         items = parser.parseRSS(domDoc);
 
-        for (ResultItem::resultList::iterator i = items.begin();
-                i != items.end(); ++i)
+        foreach (auto & item, items)
         {
-            insertRSSArticle(new ResultItem((*i)->GetTitle(),
-               QString(), (*i)->GetDescription(), (*i)->GetURL(),
-               (*i)->GetThumbnail(), (*i)->GetMediaURL(),
-               (*i)->GetAuthor(), (*i)->GetDate(),
-               (*i)->GetTime(), (*i)->GetRating(),
-               (*i)->GetFilesize(), (*i)->GetPlayer(),
-               (*i)->GetPlayerArguments(),
-               (*i)->GetDownloader(),
-               (*i)->GetDownloaderArguments(),
-               (*i)->GetWidth(),
-               (*i)->GetHeight(),
-               (*i)->GetLanguage(),
-               (*i)->GetDownloadable(),
-               (*i)->GetCountries(),
-               (*i)->GetSeason(),
-               (*i)->GetEpisode(), false));
+            insertRSSArticle(new ResultItem(
+               item->GetTitle(), item->GetSortTitle(),
+               item->GetSubtitle(), item->GetSortSubtitle(),
+               item->GetDescription(), item->GetURL(),
+               item->GetThumbnail(), item->GetMediaURL(),
+               item->GetAuthor(), item->GetDate(),
+               item->GetTime(), item->GetRating(),
+               item->GetFilesize(), item->GetPlayer(),
+               item->GetPlayerArguments(),
+               item->GetDownloader(),
+               item->GetDownloaderArguments(),
+               item->GetWidth(),
+               item->GetHeight(),
+               item->GetLanguage(),
+               item->GetDownloadable(),
+               item->GetCountries(),
+               item->GetSeason(),
+               item->GetEpisode(), false));
         }
     }
     else

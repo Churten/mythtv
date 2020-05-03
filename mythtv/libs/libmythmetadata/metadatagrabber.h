@@ -12,10 +12,10 @@
 //#include "metadatacommon.h"
 #include "referencecounterlist.h"
 class MetadataLookup;
-typedef RefCountedList<MetadataLookup> MetadataLookupList;
+using MetadataLookupList = RefCountedList<MetadataLookup>;
 
 class MetaGrabberScript;
-typedef QList<MetaGrabberScript> GrabberList;
+using GrabberList = QList<MetaGrabberScript>;
 
 enum GrabberType {
     kGrabberAll,
@@ -26,14 +26,14 @@ enum GrabberType {
     kGrabberInvalid
 };
 
-class META_PUBLIC MetaGrabberScript : public QObject
+class META_PUBLIC MetaGrabberScript
 {
   public:
-    MetaGrabberScript();
+    MetaGrabberScript() = default;
     explicit MetaGrabberScript(const QDomElement &dom);
     explicit MetaGrabberScript(const QString &path);
-    MetaGrabberScript(const QString &path, const QDomElement &dom);
-    MetaGrabberScript(const MetaGrabberScript &other);
+    MetaGrabberScript(QString path, const QDomElement &dom);
+    MetaGrabberScript(const MetaGrabberScript &/*other*/) = default;
 
     MetaGrabberScript& operator=(const MetaGrabberScript &other);
 
@@ -43,7 +43,7 @@ class META_PUBLIC MetaGrabberScript : public QObject
                                         bool refresh=false);
 
     static MetaGrabberScript    GetGrabber(GrabberType defaultType,
-                                           const MetadataLookup *lookup = NULL);
+                                           const MetadataLookup *lookup = nullptr);
     static MetaGrabberScript    GetType(const QString &type);
     static MetaGrabberScript    GetType(GrabberType type);
     static MetaGrabberScript    FromTag(const QString &tag,
@@ -83,16 +83,16 @@ class META_PUBLIC MetaGrabberScript : public QObject
     QString m_thumbnail;
     QString m_fullcommand;
     QString m_command;
-    GrabberType m_type;
+    GrabberType m_type    {kGrabberInvalid};
     QString m_typestring;
     QString m_description;
     QStringList m_accepts;
-    float m_version;
-    bool m_valid;
+    float m_version       {0.0};
+    bool  m_valid         {false};
 
     void ParseGrabberVersion(const QDomElement &item);
     MetadataLookupList RunGrabber(const QStringList &args, MetadataLookup *lookup, bool passseas);
-    void SetDefaultArgs(QStringList &args);
+    static void SetDefaultArgs(QStringList &args);
 };
 
 Q_DECLARE_METATYPE(MetaGrabberScript*)

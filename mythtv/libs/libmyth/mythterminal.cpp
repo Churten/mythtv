@@ -18,7 +18,8 @@
  *   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
  */
 
-#include <inttypes.h>
+#include <cinttypes>
+#include <utility>
 
 // MythTV headers
 #include "mythlogging.h"
@@ -29,10 +30,9 @@
 
 MythTerminal::MythTerminal(MythScreenStack *parent, QString _program,
                            QStringList _arguments) :
-    MythScreenType(parent, "terminal"), m_lock(QMutex::Recursive),
-    m_running(false), m_process(new QProcess()), m_program(_program),
-    m_arguments(_arguments), m_currentLine(NULL), m_output(NULL),
-    m_textEdit(NULL), m_enterButton(NULL)
+    MythScreenType(parent, "terminal"),
+    m_process(new QProcess()), m_program(std::move(_program)),
+    m_arguments(std::move(_arguments))
 {
     m_process->setProcessChannelMode(QProcess::MergedChannels);
     connect(m_process, SIGNAL(readyRead()),
@@ -53,7 +53,7 @@ void MythTerminal::TeardownAll(void)
                 Kill();
             m_process->disconnect();
             m_process->deleteLater();
-            m_process = NULL;
+            m_process = nullptr;
         }
     }
 }
@@ -131,7 +131,11 @@ void MythTerminal::ProcessFinished(
     int exitCode, QProcess::ExitStatus exitStatus)
 {
     QMutexLocker locker(&m_lock);
-    AddText(tr("*** Exited with status: %1 ***").arg(exitCode));
+    if (exitStatus == QProcess::CrashExit) {
+        AddText(tr("*** Crashed with status: %1 ***").arg(exitCode));
+    } else {
+        AddText(tr("*** Exited with status: %1 ***").arg(exitCode));
+    }
     m_running = false;
     m_enterButton->SetEnabled(false);
     m_textEdit->SetEnabled(false);
@@ -155,7 +159,7 @@ bool MythTerminal::Create(void)
 
     BuildFocusList();
 
-    MythUIButton *close = NULL;
+    MythUIButton *close = nullptr;
     UIUtilW::Assign(this, close, "close");
     if (close)
         connect(close, SIGNAL(Clicked()), this, SLOT(Close()));

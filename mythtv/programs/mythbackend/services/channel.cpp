@@ -26,7 +26,7 @@
 
 #include <QList>
 
-#include <math.h>
+#include <cmath>
 
 #include "channel.h"
 
@@ -38,7 +38,6 @@
 #include "channelutil.h"
 #include "sourceutil.h"
 #include "cardutil.h"
-#include "datadirect.h"
 #include "mythdate.h"
 
 #include "serviceUtil.h"
@@ -48,32 +47,38 @@
 /////////////////////////////////////////////////////////////////////////////
 
 DTC::ChannelInfoList* Channel::GetChannelInfoList( uint nSourceID,
+                                                   uint nChannelGroupID,
                                                    uint nStartIndex,
                                                    uint nCount,
                                                    bool bOnlyVisible,
-                                                   bool bDetails )
+                                                   bool bDetails,
+                                                   bool bOrderByName,
+                                                   bool bGroupByCallsign,
+                                                   bool bOnlyTunable )
 {
     ChannelInfoList chanList;
 
     uint nTotalAvailable = 0;
+
     chanList = ChannelUtil::LoadChannels( 0, 0, nTotalAvailable, bOnlyVisible,
-                                          ChannelUtil::kChanOrderByChanNum,
-                                          ChannelUtil::kChanGroupByChanid,
-                                          nSourceID ); //, nChanGroupID
+                                          bOrderByName ? ChannelUtil::kChanOrderByName : ChannelUtil::kChanOrderByChanNum,
+                                          bGroupByCallsign ? ChannelUtil::kChanGroupByCallsign : ChannelUtil::kChanGroupByChanid,
+                                          nSourceID, nChannelGroupID, false, "",
+                                          "", bOnlyTunable);
 
     // ----------------------------------------------------------------------
     // Build Response
     // ----------------------------------------------------------------------
 
-    DTC::ChannelInfoList *pChannelInfos = new DTC::ChannelInfoList();
+    auto *pChannelInfos = new DTC::ChannelInfoList();
 
     nStartIndex = (nStartIndex > 0) ? min( nStartIndex, nTotalAvailable ) : 0;
     nCount      = (nCount > 0) ? min(nCount, (nTotalAvailable - nStartIndex)) :
                                              (nTotalAvailable - nStartIndex);
 
     ChannelInfoList::iterator chanIt;
-    ChannelInfoList::iterator chanItBegin = chanList.begin() + nStartIndex;
-    ChannelInfoList::iterator chanItEnd   = chanItBegin      + nCount;
+    auto chanItBegin = chanList.begin() + nStartIndex;
+    auto chanItEnd   = chanItBegin      + nCount;
 
     for( chanIt = chanItBegin; chanIt < chanItEnd; ++chanIt )
     {
@@ -89,7 +94,8 @@ DTC::ChannelInfoList* Channel::GetChannelInfoList( uint nSourceID,
         }
     }
 
-    int nCurPage = 0, nTotalPages = 0;
+    int nCurPage = 0;
+    int nTotalPages = 0;
     if (nCount == 0)
         nTotalPages = 1;
     else
@@ -120,10 +126,10 @@ DTC::ChannelInfoList* Channel::GetChannelInfoList( uint nSourceID,
 
 DTC::ChannelInfo* Channel::GetChannelInfo( uint nChanID )
 {
-    if (nChanID <= 0)
+    if (nChanID == 0)
         throw( QString("Channel ID appears invalid."));
 
-    DTC::ChannelInfo *pChannelInfo = new DTC::ChannelInfo();
+    auto *pChannelInfo = new DTC::ChannelInfo();
 
     if (!FillChannelInfo(pChannelInfo, nChanID, true))
     {
@@ -145,20 +151,76 @@ bool Channel::UpdateDBChannel( uint          MplexID,
                                uint          ATSCMajorChannel,
                                uint          ATSCMinorChannel,
                                bool          UseEIT,
-                               bool          visible,
+                               bool          Visible,
+                               const QString &ExtendedVisible,
                                const QString &FrequencyID,
                                const QString &Icon,
                                const QString &Format,
                                const QString &XMLTVID,
-                               const QString &DefaultAuthority )
+                               const QString &DefaultAuthority,
+                               uint          ServiceType )
 {
-    bool bResult = false;
+    if (!HAS_PARAM("channelid"))
+        throw QString("ChannelId is required");
 
-    bResult = ChannelUtil::UpdateChannel( MplexID, SourceID, ChannelID,
-                             CallSign, ChannelName, ChannelNumber,
-                             ServiceID, ATSCMajorChannel, ATSCMinorChannel,
-                             UseEIT, !visible, false, FrequencyID,
-                             Icon, Format, XMLTVID, DefaultAuthority );
+    if (m_parsedParams.size() < 2 )
+        throw QString("Nothing to update");
+
+    ChannelInfo channel;
+    if (!channel.Load(ChannelID))
+        throw QString("ChannelId %1 doesn't exist");
+
+    if (HAS_PARAM("mplexid"))
+        channel.m_mplexId = MplexID;
+    if (HAS_PARAM("sourceid"))
+        channel.m_sourceId = SourceID;
+    if (HAS_PARAM("callsign"))
+        channel.m_callSign = CallSign;
+    if (HAS_PARAM("channelname"))
+        channel.m_name = ChannelName;
+    if (HAS_PARAM("channelnumber"))
+        channel.m_chanNum = ChannelNumber;
+    if (HAS_PARAM("serviceid"))
+        channel.m_serviceId = ServiceID;
+    if (HAS_PARAM("atscmajorchannel"))
+        channel.m_atscMajorChan = ATSCMajorChannel;
+    if (HAS_PARAM("atscminorchannel"))
+        channel.m_atscMinorChan = ATSCMinorChannel;
+    if (HAS_PARAM("useeit"))
+        channel.m_useOnAirGuide = UseEIT;
+    if (HAS_PARAM("extendedvisible"))
+        channel.m_visible = channelVisibleTypeFromString(ExtendedVisible);
+    else if (HAS_PARAM("visible"))
+    {
+        if (channel.m_visible == kChannelVisible ||
+            channel.m_visible == kChannelNotVisible)
+            channel.m_visible =
+                (Visible ? kChannelVisible : kChannelNotVisible);
+        else if ((channel.m_visible == kChannelAlwaysVisible && !Visible) ||
+                 (channel.m_visible == kChannelNeverVisible && Visible))
+            throw QString("Can't override Always/NeverVisible");
+    }
+    if (HAS_PARAM("frequencyid"))
+        channel.m_freqId = FrequencyID;
+    if (HAS_PARAM("icon"))
+        channel.m_icon = Icon;
+    if (HAS_PARAM("format"))
+        channel.m_tvFormat = Format;
+    if (HAS_PARAM("xmltvid"))
+        channel.m_xmltvId = XMLTVID;
+    if (HAS_PARAM("defaultauthority"))
+        channel.m_defaultAuthority = DefaultAuthority;
+    if (HAS_PARAM("servicetype"))
+        channel.m_serviceType = ServiceType;
+
+    bool bResult = ChannelUtil::UpdateChannel(
+        channel.m_mplexId, channel.m_sourceId, channel.m_chanId,
+        channel.m_callSign, channel.m_name, channel.m_chanNum,
+        channel.m_serviceId, channel.m_atscMajorChan,
+        channel.m_atscMinorChan, channel.m_useOnAirGuide,
+        channel.m_visible, channel.m_freqId,
+        channel.m_icon, channel.m_tvFormat, channel.m_xmltvId,
+        channel.m_defaultAuthority, channel.m_serviceType );
 
     return bResult;
 }
@@ -173,29 +235,34 @@ bool Channel::AddDBChannel( uint          MplexID,
                             uint          ATSCMajorChannel,
                             uint          ATSCMinorChannel,
                             bool          UseEIT,
-                            bool          visible,
+                            bool          Visible,
+                            const QString &ExtendedVisible,
                             const QString &FrequencyID,
                             const QString &Icon,
                             const QString &Format,
                             const QString &XMLTVID,
-                            const QString &DefaultAuthority )
+                            const QString &DefaultAuthority,
+                            uint          ServiceType )
 {
-    bool bResult = false;
-
-    bResult = ChannelUtil::CreateChannel( MplexID, SourceID, ChannelID,
+    ChannelVisibleType chan_visible = kChannelVisible;
+    if (HAS_PARAM("extendedvisible"))
+        chan_visible = channelVisibleTypeFromString(ExtendedVisible);
+    else if (HAS_PARAM("visible"))
+        chan_visible = (Visible ? kChannelVisible : kChannelNotVisible);
+    
+    bool bResult = ChannelUtil::CreateChannel( MplexID, SourceID, ChannelID,
                              CallSign, ChannelName, ChannelNumber,
                              ServiceID, ATSCMajorChannel, ATSCMinorChannel,
-                             UseEIT, !visible, false, FrequencyID,
-                             Icon, Format, XMLTVID, DefaultAuthority );
+                             UseEIT, chan_visible, FrequencyID,
+                             Icon, Format, XMLTVID, DefaultAuthority,
+                             ServiceType );
 
     return bResult;
 }
 
 bool Channel::RemoveDBChannel( uint nChannelID )
 {
-    bool bResult = false;
-
-    bResult = ChannelUtil::DeleteChannel( nChannelID );
+    bool bResult = ChannelUtil::DeleteChannel( nChannelID );
 
     return bResult;
 }
@@ -214,7 +281,7 @@ DTC::VideoSourceList* Channel::GetVideoSourceList()
 
     query.prepare("SELECT sourceid, name, xmltvgrabber, userid, "
                   "freqtable, lineupid, password, useeit, configpath, "
-                  "dvb_nit_id FROM videosource "
+                  "dvb_nit_id, bouquet_id, region_id, scanfrequency FROM videosource "
                   "ORDER BY sourceid" );
 
     if (!query.exec())
@@ -228,7 +295,7 @@ DTC::VideoSourceList* Channel::GetVideoSourceList()
     // return the results of the query
     // ----------------------------------------------------------------------
 
-    DTC::VideoSourceList* pList = new DTC::VideoSourceList();
+    auto* pList = new DTC::VideoSourceList();
 
     while (query.next())
     {
@@ -245,6 +312,9 @@ DTC::VideoSourceList* Channel::GetVideoSourceList()
         pVideoSource->setUseEIT        ( query.value(7).toBool()      );
         pVideoSource->setConfigPath    ( query.value(8).toString()    );
         pVideoSource->setNITId         ( query.value(9).toInt()       );
+        pVideoSource->setBouquetId     ( query.value(10).toUInt()     );
+        pVideoSource->setRegionId      ( query.value(11).toUInt()     );
+        pVideoSource->setScanFrequency ( query.value(12).toUInt()     );
     }
 
     pList->setAsOf          ( MythDate::current() );
@@ -268,7 +338,8 @@ DTC::VideoSource* Channel::GetVideoSource( uint nSourceID )
 
     query.prepare("SELECT name, xmltvgrabber, userid, "
                   "freqtable, lineupid, password, useeit, configpath, "
-                  "dvb_nit_id FROM videosource WHERE sourceid = :SOURCEID "
+                  "dvb_nit_id, bouquet_id, region_id, scanfrequency "
+                  "FROM videosource WHERE sourceid = :SOURCEID "
                   "ORDER BY sourceid" );
     query.bindValue(":SOURCEID", nSourceID);
 
@@ -283,7 +354,7 @@ DTC::VideoSource* Channel::GetVideoSource( uint nSourceID )
     // return the results of the query
     // ----------------------------------------------------------------------
 
-    DTC::VideoSource *pVideoSource = new DTC::VideoSource();
+    auto *pVideoSource = new DTC::VideoSource();
 
     if (query.next())
     {
@@ -297,6 +368,9 @@ DTC::VideoSource* Channel::GetVideoSource( uint nSourceID )
         pVideoSource->setUseEIT        ( query.value(6).toBool()      );
         pVideoSource->setConfigPath    ( query.value(7).toString()    );
         pVideoSource->setNITId         ( query.value(8).toInt()       );
+        pVideoSource->setBouquetId     ( query.value(9).toUInt()      );
+        pVideoSource->setRegionId      ( query.value(10).toUInt()     );
+        pVideoSource->setScanFrequency ( query.value(11).toUInt()     );
     }
 
     return pVideoSource;
@@ -306,7 +380,7 @@ DTC::VideoSource* Channel::GetVideoSource( uint nSourceID )
 //
 /////////////////////////////////////////////////////////////////////////////
 
-bool Channel::UpdateVideoSource( uint nSourceId,
+bool Channel::UpdateVideoSource( uint          nSourceId,
                                  const QString &sSourceName,
                                  const QString &sGrabber,
                                  const QString &sUserId,
@@ -315,15 +389,102 @@ bool Channel::UpdateVideoSource( uint nSourceId,
                                  const QString &sPassword,
                                  bool          bUseEIT,
                                  const QString &sConfigPath,
-                                 int           nNITId )
+                                 int           nNITId,
+                                 uint          nBouquetId,
+                                 uint          nRegionId,
+                                 uint          nScanFrequency )
 {
-    bool bResult = false;
 
-    bResult = SourceUtil::UpdateSource(nSourceId, sSourceName, sGrabber, sUserId, sFreqTable,
-                                       sLineupId, sPassword, bUseEIT, sConfigPath,
-                                       nNITId);
+    if (!HAS_PARAM("sourceid"))
+    {
+        LOG(VB_GENERAL, LOG_ERR, "SourceId is required");
+        return false;
+    }
 
-    return bResult;
+    if (!SourceUtil::IsSourceIDValid(nSourceId))
+    {
+        LOG(VB_GENERAL, LOG_ERR, QString("SourceId %1 doesn't exist")
+            .arg(nSourceId));
+        return false;
+    }
+
+    if (m_parsedParams.size() < 2 )
+    {
+        LOG(VB_GENERAL, LOG_ERR, QString("SourceId=%1 was the only parameter")
+            .arg(nSourceId));
+        return false;
+    }
+
+    MSqlBindings bindings;
+    MSqlBindings::const_iterator it;
+    QString settings;
+
+    if ( HAS_PARAM("sourcename") )
+        ADD_SQL(settings, bindings, "name", "SourceName", sSourceName)
+
+    if ( HAS_PARAM("grabber") )
+        ADD_SQL(settings, bindings, "xmltvgrabber", "Grabber", sGrabber)
+
+    if ( HAS_PARAM("userid") )
+        ADD_SQL(settings, bindings, "userid", "UserId", sUserId)
+
+    if ( HAS_PARAM("freqtable") )
+        ADD_SQL(settings, bindings, "freqtable", "FreqTable", sFreqTable)
+
+    if ( HAS_PARAM("lineupid") )
+        ADD_SQL(settings, bindings, "lineupid", "LineupId", sLineupId)
+
+    if ( HAS_PARAM("password") )
+        ADD_SQL(settings, bindings, "password", "Password", sPassword)
+
+    if ( HAS_PARAM("useeit") )
+        ADD_SQL(settings, bindings, "useeit", "UseEIT", bUseEIT)
+
+    if (HAS_PARAM("configpath"))
+    {
+        if (sConfigPath.isEmpty())
+            settings += "configpath=NULL, "; // mythfilldatabase grabber requirement
+        else
+            ADD_SQL(settings, bindings, "configpath", "ConfigPath", sConfigPath)
+    }
+
+    if ( HAS_PARAM("nitid") )
+        ADD_SQL(settings, bindings, "dvb_nit_id", "NITId", nNITId)
+
+    if ( HAS_PARAM("bouquetid") )
+        ADD_SQL(settings, bindings, "bouquet_id", "BouquetId", nBouquetId)
+
+    if ( HAS_PARAM("regionid") )
+        ADD_SQL(settings, bindings, "region_id", "RegionId", nRegionId)
+
+    if ( HAS_PARAM("scanfrequency") )
+        ADD_SQL(settings, bindings, "scanfrequency", "ScanFrequency", nScanFrequency)
+
+    if ( settings.isEmpty() )
+    {
+        LOG(VB_GENERAL, LOG_ERR, "No valid parameters were passed");
+        return false;
+    }
+
+    settings.chop(2);
+
+    MSqlQuery query(MSqlQuery::InitCon());
+
+    query.prepare(QString("UPDATE videosource SET %1 WHERE sourceid=:SOURCEID")
+                  .arg(settings));
+    bindings[":SOURCEID"] = nSourceId;
+
+    for (it = bindings.begin(); it != bindings.end(); ++it)
+        query.bindValue(it.key(), it.value());
+
+    if (!query.exec())
+    {
+        MythDB::DBError("MythAPI::UpdateVideoSource()", query);
+
+        throw( QString( "Database Error executing query." ));
+    }
+
+    return true;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -338,11 +499,14 @@ int  Channel::AddVideoSource( const QString &sSourceName,
                               const QString &sPassword,
                               bool          bUseEIT,
                               const QString &sConfigPath,
-                              int           nNITId )
+                              int           nNITId,
+                              uint          nBouquetId,
+                              uint          nRegionId,
+                              uint          nScanFrequency )
 {
     int nResult = SourceUtil::CreateSource(sSourceName, sGrabber, sUserId, sFreqTable,
                                        sLineupId, sPassword, bUseEIT, sConfigPath,
-                                       nNITId);
+                                       nNITId, nBouquetId, nRegionId, nScanFrequency);
 
     return nResult;
 }
@@ -353,9 +517,7 @@ int  Channel::AddVideoSource( const QString &sSourceName,
 
 bool Channel::RemoveVideoSource( uint nSourceID )
 {
-    bool bResult = false;
-
-    bResult = SourceUtil::DeleteSource( nSourceID );
+    bool bResult = SourceUtil::DeleteSource( nSourceID );
 
     return bResult;
 }
@@ -364,41 +526,11 @@ bool Channel::RemoveVideoSource( uint nSourceID )
 //
 /////////////////////////////////////////////////////////////////////////////
 
-DTC::LineupList* Channel::GetDDLineupList( const QString &sSource,
-                                           const QString &sUserId,
-                                           const QString &sPassword )
+DTC::LineupList* Channel::GetDDLineupList( const QString &/*sSource*/,
+                                           const QString &/*sUserId*/,
+                                           const QString &/*sPassword*/ )
 {
-    int source = 0;
-
-    DTC::LineupList *pLineups = new DTC::LineupList();
-
-    if (sSource.toLower() == "schedulesdirect1" ||
-        sSource.toLower() == "schedulesdirect" ||
-        sSource.isEmpty())
-    {
-        source = 1;
-        DataDirectProcessor ddp(source, sUserId, sPassword);
-        if (!ddp.GrabLineupsOnly())
-        {
-            delete pLineups;
-            throw( QString("Unable to grab lineups. Check info."));
-        }
-        const DDLineupList lineups = ddp.GetLineups();
-
-        DDLineupList::const_iterator it;
-        for (it = lineups.begin(); it != lineups.end(); ++it)
-        {
-            DTC::Lineup *pLineup = pLineups->AddNewLineup();
-
-            pLineup->setLineupId((*it).lineupid);
-            pLineup->setName((*it).name);
-            pLineup->setDisplayName((*it).displayname);
-            pLineup->setType((*it).type);
-            pLineup->setPostal((*it).postal);
-            pLineup->setDevice((*it).device);
-        }
-    }
-
+    auto *pLineups = new DTC::LineupList();
     return pLineups;
 }
 
@@ -467,7 +599,7 @@ DTC::VideoMultiplexList* Channel::GetVideoMultiplexList( uint nSourceID,
     // Build Response
     // ----------------------------------------------------------------------
 
-    DTC::VideoMultiplexList *pVideoMultiplexes = new DTC::VideoMultiplexList();
+    auto *pVideoMultiplexes = new DTC::VideoMultiplexList();
 
     nStartIndex   = (nStartIndex > 0) ? min( nStartIndex, muxCount ) : 0;
     nCount        = (nCount > 0) ? min( nCount, muxCount ) : muxCount;
@@ -507,7 +639,8 @@ DTC::VideoMultiplexList* Channel::GetVideoMultiplexList( uint nSourceID,
         }
     }
 
-    int curPage = 0, totalPages = 0;
+    int curPage = 0;
+    int totalPages = 0;
     if (nCount == 0)
         totalPages = 1;
     else
@@ -556,7 +689,7 @@ DTC::VideoMultiplex* Channel::GetVideoMultiplex( uint nMplexID )
         throw( QString( "Database Error executing query." ));
     }
 
-    DTC::VideoMultiplex *pVideoMultiplex = new DTC::VideoMultiplex();
+    auto *pVideoMultiplex = new DTC::VideoMultiplex();
 
     if (query.next())
     {

@@ -56,11 +56,11 @@ enum ImageSortOrder {
 
 
 // Convenience types
-typedef QList<int>                ImageIdList;
-typedef QPair<QString, QString>   StringPair;
-typedef QHash<QString, QString>   NameHash;
-typedef QMap<int, QString>        StringMap;
-typedef QPair<int, QString>       ThumbPair;
+using ImageIdList = QList<int>;
+using StringPair  = QPair<QString, QString>;
+using NameHash    = QHash<QString, QString>;
+using StringMap   = QMap<int, QString>;
+using ThumbPair   = QPair<int, QString>;
 
 
 //! Represents a picture, video or directory
@@ -68,15 +68,7 @@ class META_PUBLIC ImageItem
 {
 public:
     explicit ImageItem(int id = 0)
-        : m_id(id),
-          m_baseName(""),    m_filePath(""),     m_extension(""),
-          m_device(0),       m_parentId(0),
-          m_type(0),
-          m_modTime(0),      m_size(0),
-          m_date(0),         m_orientation(0),   m_comment(""),
-          m_isHidden(false), m_userThumbnail(0),
-          m_url(""),         m_thumbPath(""),
-          m_dirCount(0),     m_fileCount(0)
+        : m_id(id)
 #ifndef MEMORY_DEBUG
     {}
 #else
@@ -99,25 +91,33 @@ public:
     QString          m_baseName;    //!< File/Dir name with extension (no path)
     QString          m_filePath;    //!< Absolute for local images. Usually SG-relative for remotes
     QString          m_extension;   //!< Image file extension
-    int              m_device;      //!< Id of media device. Always 0 (SG) for remotes, 1+ for local devices
-    int              m_parentId;    //!< Id of parent dir
-    int              m_type;        //!< Type of node: dir, video etc
-    uint             m_modTime;     //!< Filesystem modified datestamp
-    int              m_size;        //!< Filesize (files only)
+    int              m_device      { 0 }; //!< Id of media device. Always 0 (SG) for remotes, 1+ for local devices
+    int              m_parentId    { 0 }; //!< Id of parent dir
+    int              m_type        { 0 }; //!< Type of node: dir, video etc
+#if QT_VERSION < QT_VERSION_CHECK(5,8,0)
+    uint             m_modTime     { 0 }; //!< Filesystem modified datestamp
+#else
+    qint64           m_modTime     { 0 }; //!< Filesystem modified datestamp
+#endif
+    int              m_size        { 0 }; //!< Filesize (files only)
+#if QT_VERSION < QT_VERSION_CHECK(5,8,0)
     uint             m_date;        //!< Image creation date, from Exif metadata
-    int              m_orientation; //!< Image orientation
+#else
+    qint64           m_date        { 0 }; //!< Image creation date, from Exif metadata
+#endif
+    int              m_orientation { 0 }; //!< Image orientation
     QString          m_comment;     //!< User comment, from Exif metadata
 
     // Db User attributes
-    bool             m_isHidden;      //!< If true, image won't be shown
-    int              m_userThumbnail; //!< Id of thumbnail to use as cover (dirs only)
+    bool             m_isHidden      { false }; //!< If true, image won't be shown
+    int              m_userThumbnail {     0 }; //!< Id of thumbnail to use as cover (dirs only)
 
     // Derived attributes
     QString          m_url;        //! Myth URL of image (abs filepath for locals)
     QString          m_thumbPath;  //!< Absolute path of thumbnail
     QList<ThumbPair> m_thumbNails; //! Id & URLs of thumbnail(s). 1 for a file, 4 for dirs
-    int              m_dirCount;   //!< Number of child sub-dirs (dirs only)
-    int              m_fileCount;  //!< Number of child images (dirs only)
+    int              m_dirCount  { 0 }; //!< Number of child sub-dirs (dirs only)
+    int              m_fileCount { 0 }; //!< Number of child images (dirs only)
 
     // Convenience functions
     bool IsDevice()     const { return m_type == kDevice; }
@@ -146,7 +146,8 @@ public:
     */
     static StringPair PartitionIds(const ImageIdList &ids)
     {
-        QStringList local, remote;
+        QStringList local;
+        QStringList remote;
         foreach(int id, ids)
         {
             if (ImageItem::IsLocalId(id))
@@ -162,14 +163,14 @@ private:
 };
 
 // Convenience containers
-typedef QSharedPointer<ImageItem>  ImagePtr;
-typedef QList<ImagePtr>            ImageList;
-typedef QHash<QString, ImagePtr>   ImageHash;
+using ImagePtr  = QSharedPointer<ImageItem>;
+using ImageList = QList<ImagePtr>;
+using ImageHash = QHash<QString, ImagePtr>;
 
 // Read-only images alias
-typedef const ImageItem            ImageItemK;
-typedef QSharedPointer<ImageItemK> ImagePtrK;
-typedef QList<ImagePtrK>           ImageListK;
+using ImageItemK = const ImageItem;
+using ImagePtrK  = QSharedPointer<ImageItemK>;
+using ImageListK = QList<ImagePtrK>;
 
 Q_DECLARE_METATYPE(ImagePtrK)
 

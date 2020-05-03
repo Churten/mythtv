@@ -1,6 +1,6 @@
-#include <math.h>
+#include <cinttypes>
+#include <cmath>
 #include <sys/types.h>
-#include <inttypes.h>
 
 #include "mythconfig.h"
 #include "mythlogging.h"
@@ -16,7 +16,7 @@ extern "C" {
 
 #define LOC QString("AOUtil: ")
 
-#define ISALIGN(x) (((unsigned long)x & 0xf) == 0)
+#define ISALIGN(x) (((unsigned long)(x) & 0xf) == 0)
 
 #if ARCH_X86
 static int has_sse2 = -1;
@@ -101,8 +101,8 @@ void AudioOutputUtil::MonoToStereo(void *dst, const void *src, int samples)
 void AudioOutputUtil::AdjustVolume(void *buf, int len, int volume,
                                    bool music, bool upmix)
 {
-    float g     = volume / 100.0f;
-    float *fptr = (float *)buf;
+    float g     = volume / 100.0F;
+    auto *fptr  = (float *)buf;
     int samples = len >> 2;
     int i       = 0;
 
@@ -111,13 +111,13 @@ void AudioOutputUtil::AdjustVolume(void *buf, int len, int volume,
 
     // Try to ~ match stereo volume when upmixing
     if (upmix)
-        g *= 1.5f;
+        g *= 1.5F;
 
     // Music is relatively loud
     if (music)
-        g *= 0.4f;
+        g *= 0.4F;
 
-    if (g == 1.0f)
+    if (g == 1.0F)
         return;
 
 #if ARCH_X86
@@ -203,10 +203,8 @@ char *AudioOutputUtil::GeneratePinkFrames(char *frames, int channels,
 
     initialize_pink_noise(&pink, bits);
 
-    double   res;
-    int32_t  ires;
-    int16_t *samp16 = (int16_t*) frames;
-    int32_t *samp32 = (int32_t*) frames;
+    auto *samp16 = (int16_t*) frames;
+    auto *samp32 = (int32_t*) frames;
 
     while (count-- > 0)
     {
@@ -214,8 +212,10 @@ char *AudioOutputUtil::GeneratePinkFrames(char *frames, int channels,
         {
             if (chn==channel)
             {
-                res = generate_pink_noise_sample(&pink) * 0x03fffffff; /* Don't use MAX volume */
-                ires = res;
+                /* Don't use MAX volume */
+                double res = generate_pink_noise_sample(&pink) *
+                    static_cast<float>(0x03fffffff);
+                int32_t ires = res;
                 if (bits == 16)
                     *samp16++ = LE_SHORT(ires >> 16);
                 else
@@ -245,8 +245,7 @@ int AudioOutputUtil::DecodeAudio(AVCodecContext *ctx,
                                  const AVPacket *pkt)
 {
     MythAVFrame frame;
-    int got_frame = 0;
-    int ret;
+    bool got_frame = false;
     char error[AV_ERROR_MAX_STRING_SIZE];
 
     data_size = 0;
@@ -255,8 +254,22 @@ int AudioOutputUtil::DecodeAudio(AVCodecContext *ctx,
         return AVERROR(ENOMEM);
     }
 
-    ret = avcodec_decode_audio4(ctx, frame, &got_frame, pkt);
-    if (ret < 0)
+//  SUGGESTION
+//  Now that avcodec_decode_audio4 is deprecated and replaced
+//  by 2 calls (receive frame and send packet), this could be optimized
+//  into separate routines or separate threads.
+//  Also now that it always consumes a whole buffer some code
+//  in the caller may be able to be optimized.
+    int ret = avcodec_receive_frame(ctx,frame);
+    if (ret == 0)
+        got_frame = true;
+    if (ret == AVERROR(EAGAIN))
+        ret = 0;
+    if (ret == 0)
+        ret = avcodec_send_packet(ctx, pkt);
+    if (ret == AVERROR(EAGAIN))
+        ret = 0;
+    else if (ret < 0)
     {
         LOG(VB_AUDIO, LOG_ERR, LOC +
             QString("audio decode error: %1 (%2)")
@@ -264,6 +277,8 @@ int AudioOutputUtil::DecodeAudio(AVCodecContext *ctx,
             .arg(got_frame));
         return ret;
     }
+    else
+        ret = pkt->size;
 
     if (!got_frame)
     {
@@ -272,7 +287,7 @@ int AudioOutputUtil::DecodeAudio(AVCodecContext *ctx,
         return ret;
     }
 
-    AVSampleFormat format = (AVSampleFormat)frame->format;
+    auto format = (AVSampleFormat)frame->format;
 
     data_size = frame->nb_samples * frame->channels * av_get_bytes_per_sample(format);
 

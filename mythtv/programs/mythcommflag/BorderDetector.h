@@ -12,7 +12,7 @@
 #ifndef __BORDERDETECTOR_H__
 #define __BORDERDETECTOR_H__
 
-typedef struct AVPicture AVPicture;
+using AVFrame = struct AVFrame;
 class MythPlayer;
 class TemplateFinder;
 
@@ -25,27 +25,31 @@ public:
     int MythPlayerInited(const MythPlayer *player);
     void setLogoState(TemplateFinder *finder);
 
-    static const long long UNCACHED = -1;
-    int getDimensions(const AVPicture *pgm, int pgmheight, long long frameno,
+    static const long long kUncached = -1;
+    int getDimensions(const AVFrame *pgm, int pgmheight, long long frameno,
             int *prow, int *pcol, int *pwidth, int *pheight);
 
     int reportTime(void);
 
 private:
-    TemplateFinder          *logoFinder;
-    const struct AVPicture  *logo;
-    int                     logorow, logocol;
-    int                     logowidth, logoheight;
+    TemplateFinder         *m_logoFinder      {nullptr};
+    const struct AVFrame   *m_logo            {nullptr};
+    int                     m_logoRow         {-1};
+    int                     m_logoCol         {-1};
+    int                     m_logoWidth       {-1};
+    int                     m_logoHeight      {-1};
 
-    long long               frameno;            /* frame number */
-    int                     row, col;           /* content location */
-    int                     width, height;      /* content dimensions */
-    bool                    ismonochromatic;
+    long long               m_frameNo         {-1}; /* frame number */
+    int                     m_row             {-1}; /* content location */
+    int                     m_col             {-1}; /* content location */
+    int                     m_width           {-1}; /* content dimensions */
+    int                     m_height          {-1}; /* content dimensions */
+    bool                    m_isMonochromatic {false};
 
     /* Debugging. */
-    int                     debugLevel;
-    struct timeval          analyze_time;
-    bool                    time_reported;
+    int                     m_debugLevel      {0};
+    struct timeval          m_analyzeTime     {0,0};
+    bool                    m_timeReported    {false};
 };
 
 #endif  /* !__BORDERDETECTOR_H__ */

@@ -3,45 +3,50 @@
 #ifndef _MYTHSETTINGS_H_
 #define _MYTHSETTINGS_H_
 
-#include <QStringList>
+#include <utility>
+
+// Qt headers
 #include <QMap>
+#include <QStringList>
 
 class MythSettingBase
 {
   public:
-    MythSettingBase() {}
-    virtual ~MythSettingBase() {}
-    virtual QString ToHTML(uint) const { return QString(); }
+    MythSettingBase() = default;
+    virtual ~MythSettingBase() = default;
+    virtual QString ToHTML(uint /*depth*/) const { return QString(); }
 };
-typedef QList<MythSettingBase*> MythSettingList;
+using MythSettingList = QList<MythSettingBase*>;
 
 class MythSettingGroup : public MythSettingBase
 {
   public:
-    MythSettingGroup(QString hlabel, QString ulabel,
-                     QString script = "") :
-        human_label(hlabel), unique_label(ulabel), ecma_script(script) {}
+    MythSettingGroup(QString  hlabel, QString  ulabel,
+                     QString  script = "") :
+        m_human_label(std::move(hlabel)),
+        m_unique_label(std::move(ulabel)),
+        m_ecma_script(std::move(script)) {}
 
-    QString ToHTML(uint) const;
+    QString ToHTML(uint depth) const override; // MythSettingBase
 
   public:
-    QString human_label;
-    QString unique_label; ///< div name for stylesheets & javascript
-    MythSettingList settings;
-    QString ecma_script;
+    QString         m_human_label;
+    QString         m_unique_label; ///< div name for stylesheets & javascript
+    MythSettingList m_settings;
+    QString         m_ecma_script;
 };
 
 class MythSetting : public MythSettingBase
 {
   public:
-    typedef enum {
+    enum SettingType {
         kFile,
         kHost,
         kGlobal,
         kInvalidSettingType,
-    } SettingType;
+    };
 
-    typedef enum {
+    enum DataType {
         kInteger,
         kUnsignedInteger,
         kIntegerRange,
@@ -57,63 +62,70 @@ class MythSetting : public MythSettingBase
         kTimeOfDay,
         kOther,
         kInvalidDataType,
-    } DataType;
+    };
 
-    MythSetting(QString _value, QString _default_data, SettingType _stype,
-                QString _label, QString _help_text, DataType _dtype) :
-        value(_value), data(_default_data), default_data(_default_data),
-        stype(_stype), label(_label), help_text(_help_text), dtype(_dtype),
-        range_min(-1), range_max(-1)
+    MythSetting(QString  _value, const QString& _default_data,
+                SettingType _stype, QString  _label,
+                QString  _help_text, DataType _dtype) :
+        m_value(std::move(_value)), m_data(_default_data),
+        m_default_data(_default_data), m_stype(_stype),
+        m_label(std::move(_label)), m_help_text(std::move(_help_text)),
+        m_dtype(_dtype)
     {
     }
 
-    MythSetting(QString _value, QString _default_data, SettingType _stype,
-            QString _label, QString _help_text, DataType _dtype,
-            QStringList _data_list, QStringList _display_list) :
-        value(_value), data(_default_data), default_data(_default_data),
-        stype(_stype), label(_label), help_text(_help_text), dtype(_dtype),
-        data_list(_data_list), display_list(_display_list),
-        range_min(-1), range_max(-1)
+    MythSetting(QString  _value, const QString& _default_data,
+                SettingType _stype, QString  _label,
+                QString  _help_text, DataType _dtype,
+                QStringList  _data_list, QStringList  _display_list) :
+        m_value(std::move(_value)), m_data(_default_data),
+        m_default_data(_default_data), m_stype(_stype),
+        m_label(std::move(_label)), m_help_text(std::move(_help_text)),
+        m_dtype(_dtype), m_data_list(std::move(_data_list)),
+        m_display_list(std::move(_display_list))
     {
     }
 
-    MythSetting(QString _value, QString _default_data, SettingType _stype,
-                QString _label, QString _help_text, DataType _dtype,
+    MythSetting(QString  _value, const QString& _default_data, SettingType _stype,
+                QString  _label, QString  _help_text, DataType _dtype,
                 long long _range_min, long long _range_max) :
-        value(_value), data(_default_data), default_data(_default_data),
-        stype(_stype), label(_label), help_text(_help_text), dtype(_dtype),
-        range_min(_range_min), range_max(_range_max)
+        m_value(std::move(_value)), m_data(_default_data),
+        m_default_data(_default_data), m_stype(_stype),
+        m_label(std::move(_label)), m_help_text(std::move(_help_text)),
+        m_dtype(_dtype), m_range_min(_range_min), m_range_max(_range_max)
     {
     }
 
-    MythSetting(QString _value, QString _default_data, SettingType _stype,
-                QString _label, QString _help_text, DataType _dtype,
-                QStringList _data_list, QStringList _display_list,
+    MythSetting(QString  _value, const QString& _default_data, SettingType _stype,
+                QString  _label, QString  _help_text, DataType _dtype,
+                QStringList  _data_list, QStringList  _display_list,
                 long long _range_min, long long _range_max,
-                QString _placeholder) :
-        value(_value), data(_default_data), default_data(_default_data),
-        stype(_stype), label(_label), help_text(_help_text), dtype(_dtype),
-        data_list(_data_list), display_list(_display_list),
-        range_min(_range_min), range_max(_range_max),
-        placeholder_text(_placeholder)
+                QString  _placeholder) :
+        m_value(std::move(_value)), m_data(_default_data),
+        m_default_data(_default_data), m_stype(_stype),
+        m_label(std::move(_label)), m_help_text(std::move(_help_text)),
+        m_dtype(_dtype), m_data_list(std::move(_data_list)),
+        m_display_list(std::move(_display_list)),
+        m_range_min(_range_min), m_range_max(_range_max),
+        m_placeholder_text(std::move(_placeholder))
     {
     }
 
-    QString ToHTML(uint) const;
+    QString ToHTML(uint level) const override; // MythSettingBase
 
   public:
-    QString value;
-    QString data;
-    QString default_data;
-    SettingType stype;
-    QString label;
-    QString help_text;
-    DataType dtype;
-    QStringList data_list;
-    QStringList display_list;
-    long long range_min;
-    long long range_max;
-    QString placeholder_text;
+    QString m_value;
+    QString m_data;
+    QString m_default_data;
+    SettingType m_stype;
+    QString m_label;
+    QString m_help_text;
+    DataType m_dtype;
+    QStringList m_data_list;
+    QStringList m_display_list;
+    long long m_range_min {-1};
+    long long m_range_max {-1};
+    QString m_placeholder_text;
 };
 
 bool parse_settings(MythSettingList &settings, const QString &filename,

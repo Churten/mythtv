@@ -12,7 +12,7 @@
 #define LOC QString("UDPListener: ")
 
 MythUDPListener::MythUDPListener() :
-    m_socketPool(NULL)
+    m_socketPool(nullptr)
 {
     Enable();
 }
@@ -44,7 +44,7 @@ void MythUDPListener::Enable(void)
             gCoreContext->GetNumSetting("UDPNotifyPort", 0), false))
     {
         delete m_socketPool;
-        m_socketPool = NULL;
+        m_socketPool = nullptr;
     }
 }
 
@@ -57,11 +57,11 @@ void MythUDPListener::Disable(void)
 
     m_socketPool->close();
     delete m_socketPool;
-    m_socketPool = NULL;
+    m_socketPool = nullptr;
 }
 
-void MythUDPListener::Process(const QByteArray &buf, QHostAddress sender,
-                              quint16 senderPort)
+void MythUDPListener::Process(const QByteArray &buf, const QHostAddress& /*sender*/,
+                              quint16 /*senderPort*/)
 {
     QString errorMsg;
     int errorLine = 0;
@@ -109,7 +109,7 @@ void MythUDPListener::Process(const QByteArray &buf, QHostAddress sender,
     QString description = "";
     QString extra = "";
     QString progress_text = "";
-    float progress = -1.0f;
+    float progress = -1.0F;
     bool fullscreen = false;
     bool error = false;
     int visibility = 0;
@@ -145,10 +145,10 @@ void MythUDPListener::Process(const QByteArray &buf, QHostAddress sender,
                 type = e.text();
             else if (notification && e.tagName() == "progress")
             {
-                bool ok;
+                bool ok = false;
                 progress = e.text().toFloat(&ok);
                 if (!ok)
-                    progress = -1.0f;
+                    progress = -1.0F;
             }
             else
             {
@@ -180,7 +180,7 @@ void MythUDPListener::Process(const QByteArray &buf, QHostAddress sender,
             QStringList args;
             args << QString::number(timeout);
             MythMainWindow *window = GetMythMainWindow();
-            MythEvent* me = new MythEvent(MythEvent::MythUserMessage, msg, args);
+            auto* me = new MythEvent(MythEvent::MythUserMessage, msg, args);
             qApp->postEvent(window, me);
         }
     }

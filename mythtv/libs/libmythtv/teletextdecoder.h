@@ -1,23 +1,23 @@
 #ifndef VBIDECODER_H_
 #define VBIDECODER_H_
 
-#include <stdint.h>
+#include <cstdint>
 
 class TeletextReader;
 
 class TeletextDecoder
 {
   public:
-    TeletextDecoder(TeletextReader *reader)
-      : m_teletext_reader(reader), m_decodertype(-1) {}
-    virtual ~TeletextDecoder() {}
+    explicit TeletextDecoder(TeletextReader *reader)
+      : m_teletextReader(reader) {}
+    virtual ~TeletextDecoder() = default;
 
-    int  GetDecoderType(void) const { return m_decodertype; }
+    int  GetDecoderType(void) const { return m_decoderType; }
     void Decode(const unsigned char *buf, int vbimode);
 
   private:
-    TeletextReader *m_teletext_reader;
-    int             m_decodertype;
+    TeletextReader *m_teletextReader {nullptr};
+    int             m_decoderType    {-1};
 };
 
 #endif

@@ -2,22 +2,19 @@
 #include "mythplayer.h"
 #include "videovisual.h"
 
-VideoVisualFactory* VideoVisualFactory::g_videoVisualFactory = NULL;
+VideoVisualFactory* VideoVisualFactory::g_videoVisualFactory = nullptr;
 
 bool VideoVisual::CanVisualise(AudioPlayer *audio, MythRender *render)
 {
     if (!audio)
         return false;
-    if (render && (audio->GetNumChannels() == 2 || audio->GetNumChannels() == 1))
-        return true;
-    return false;
+    return render && (audio->GetNumChannels() == 2 || audio->GetNumChannels() == 1);
 }
 
 QStringList VideoVisual::GetVisualiserList(RenderType type)
 {
     QStringList result;
-    VideoVisualFactory* factory;
-    for (factory = VideoVisualFactory::VideoVisualFactories();
+    for (auto *factory = VideoVisualFactory::VideoVisualFactories();
          factory; factory = factory->next())
     {
         if (factory->SupportedRenderer(type))
@@ -31,22 +28,21 @@ VideoVisual* VideoVisual::Create(const QString &name,
                                  AudioPlayer *audio, MythRender *render)
 {
     if (!audio || !render || name.isEmpty())
-        return NULL;
+        return nullptr;
 
-    const VideoVisualFactory* factory;
-    for (factory = VideoVisualFactory::VideoVisualFactories();
+    for (auto *factory = VideoVisualFactory::VideoVisualFactories();
          factory; factory = factory->next())
     {
         if (name.isEmpty())
             return factory->Create(audio, render);
-        else if (factory->name() == name)
+        if (factory->name() == name)
             return factory->Create(audio, render);
     }
-    return NULL;
+    return nullptr;
 }
 
 VideoVisual::VideoVisual(AudioPlayer *audio, MythRender *render)
-  : m_audio(audio), m_disabled(false), m_area(QRect()), m_render(render)
+  : m_audio(audio), m_render(render)
 {
     m_lastUpdate = MythDate::current();
     mutex()->lock();
@@ -94,14 +90,14 @@ VisualNode* VideoVisual::GetNode(void)
     int64_t timestamp = m_audio->GetAudioTime();
     while (m_nodes.size() > 1)
     {
-        if (m_nodes.front()->offset > timestamp)
+        if (m_nodes.front()->m_offset > timestamp)
             break;
         delete m_nodes.front();
         m_nodes.pop_front();
     }
 
     if (m_nodes.isEmpty())
-        return NULL;
+        return nullptr;
 
     return m_nodes.first();
 }
@@ -142,8 +138,9 @@ void VideoVisual::add(const void *b, unsigned long b_len, unsigned long w, int c
     if (m_disabled)
         return;
 
-    long len = b_len, cnt;
-    short *l = 0, *r = 0;
+    long len = b_len;
+    short *l = nullptr;
+    short *r = nullptr;
 
     len /= c;
     len /= (p / 8);
@@ -151,7 +148,7 @@ void VideoVisual::add(const void *b, unsigned long b_len, unsigned long w, int c
     if (len > 512)
         len = 512;
 
-    cnt = len;
+    long cnt = len;
 
     if (c == 2)
     {

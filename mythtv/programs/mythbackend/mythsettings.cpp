@@ -27,19 +27,17 @@ static QString extract_query_list(
 {
     QString list;
 
-    MythSettingList::const_iterator it = settings.begin();
-    for (; it != settings.end(); ++it)
+    foreach (auto val, settings)
     {
-        const MythSettingGroup *group =
-            dynamic_cast<const MythSettingGroup*>(*it);
+        const auto *group = dynamic_cast<const MythSettingGroup*>(val);
         if (group)
         {
-            list += extract_query_list(group->settings, stype);
+            list += extract_query_list(group->m_settings, stype);
             continue;
         }
-        const MythSetting *setting = dynamic_cast<const MythSetting*>(*it);
-        if (setting && (setting->stype == stype))
-            list += QString(",'%1'").arg(setting->value);
+        const auto *setting = dynamic_cast<const MythSetting*>(val);
+        if (setting && (setting->m_stype == stype))
+            list += QString(",'%1'").arg(setting->m_value);
     }
     if (!list.isEmpty() && (list[0] == QChar(',')))
         list = list.mid(1);
@@ -51,74 +49,72 @@ static void fill_setting(
     MythSettingBase *sb, const QMap<QString,QString> &map,
     MythSetting::SettingType stype)
 {
-    const MythSettingGroup *group =
-        dynamic_cast<const MythSettingGroup*>(sb);
+    const auto *group = dynamic_cast<const MythSettingGroup*>(sb);
     if (group)
     {
-        MythSettingList::const_iterator it = group->settings.begin();
-        for (; it != group->settings.end(); ++it)
-            fill_setting(*it, map, stype);
+        foreach (auto setting, group->m_settings)
+            fill_setting(setting, map, stype);
         return;
     }
 
-    MythSetting *setting = dynamic_cast<MythSetting*>(sb);
-    if (setting && (setting->stype == stype))
+    auto *setting = dynamic_cast<MythSetting*>(sb);
+    if (setting && (setting->m_stype == stype))
     {
-        QMap<QString,QString>::const_iterator it = map.find(setting->value);
+        QMap<QString,QString>::const_iterator it = map.find(setting->m_value);
         if (it != map.end())
-            setting->data = *it;
+            setting->m_data = *it;
 
         bool do_option_check = false;
-        if (MythSetting::kLocalIPAddress == setting->dtype)
+        if (MythSetting::kLocalIPAddress == setting->m_dtype)
         {
-            setting->data_list = GetSettingValueList("LocalIPAddress");
-            setting->display_list = setting->data_list;
+            setting->m_data_list = GetSettingValueList("LocalIPAddress");
+            setting->m_display_list = setting->m_data_list;
             do_option_check = true;
         }
-        else if (MythSetting::kSelect == setting->dtype)
+        else if (MythSetting::kSelect == setting->m_dtype)
         {
             do_option_check = true;
         }
-        else if (MythSetting::kTVFormat == setting->dtype)
+        else if (MythSetting::kTVFormat == setting->m_dtype)
         {
-            setting->data_list = setting->display_list =
+            setting->m_data_list = setting->m_display_list =
                 ChannelTVFormat::GetFormats();
             do_option_check = true;
         }
-        else if (MythSetting::kFrequencyTable == setting->dtype)
+        else if (MythSetting::kFrequencyTable == setting->m_dtype)
         {
-            setting->data_list.clear();
+            setting->m_data_list.clear();
             for (uint i = 0; chanlists[i].name; i++)
-                setting->data_list.push_back(chanlists[i].name);
-            setting->display_list = setting->data_list;
+                setting->m_data_list.push_back(chanlists[i].name);
+            setting->m_display_list = setting->m_data_list;
             do_option_check = true;
         }
 
         if (do_option_check)
         {
-            if (!setting->data_list.empty() &&
-                !setting->data_list.contains(setting->data.toLower(),
-                                             Qt::CaseInsensitive))
+            if (!setting->m_data_list.empty() &&
+                !setting->m_data_list.contains(setting->m_data.toLower(),
+                                               Qt::CaseInsensitive))
             {
-                bool ok;
-                long long idata = setting->data.toLongLong(&ok);
+                bool ok = false;
+                long long idata = setting->m_data.toLongLong(&ok);
                 if (ok)
                 {
                     uint sel = 0;
-                    for (int i = setting->data_list.size() - 1; i >= 0; i--)
+                    for (int i = setting->m_data_list.size() - 1; i >= 0; i--)
                     {
-                        if (idata < setting->data_list[i].toLongLong())
+                        if (idata < setting->m_data_list[i].toLongLong())
                             break;
                         sel = i;
                     }
-                    setting->data = setting->data_list[sel];
+                    setting->m_data = setting->m_data_list[sel];
                 }
                 else
                 {
-                    setting->data =
-                        (setting->data_list.contains(
-                            setting->default_data, Qt::CaseInsensitive)) ?
-                        setting->default_data : setting->data_list[0];
+                    setting->m_data =
+                        (setting->m_data_list.contains(
+                            setting->m_default_data, Qt::CaseInsensitive)) ?
+                        setting->m_default_data : setting->m_data_list[0];
                 }
             }
         }
@@ -132,9 +128,8 @@ static void fill_settings(
     while (query.next())
         map[query.value(0).toString()] = query.value(1).toString();
 
-    MythSettingList::const_iterator it = settings.begin();
-    for (; it != settings.end(); ++it)
-        fill_setting(*it, map, stype);
+    foreach (auto setting, settings)
+        fill_setting(setting, map, stype);
 }
 
 QString MythSettingGroup::ToHTML(uint depth) const
@@ -142,16 +137,15 @@ QString MythSettingGroup::ToHTML(uint depth) const
     QString ret;
 
     ret = indent(depth) +
-        QString("<div class=\"group\" id=\"%1\">\r\n").arg(unique_label);
-    if (!human_label.isEmpty())
+        QString("<div class=\"group\" id=\"%1\">\r\n").arg(m_unique_label);
+    if (!m_human_label.isEmpty())
     {
         ret += indent(depth+1) + QString("<h%1 class=\"config\">%2</h%3>\r\n")
-            .arg(depth+1).arg(human_label).arg(depth+1);
+            .arg(depth+1).arg(m_human_label).arg(depth+1);
     }
 
-    MythSettingList::const_iterator it = settings.begin();
-    for (; it != settings.end(); ++it)
-        ret += (*it)->ToHTML(depth+1);
+    foreach (auto setting, m_settings)
+        ret += setting->ToHTML(depth+1);
 
     ret += indent(depth) +"</div>";
 
@@ -161,25 +155,21 @@ QString MythSettingGroup::ToHTML(uint depth) const
 QString MythSetting::ToHTML(uint level) const
 {
     QString ret = indent(level) +
-        QString("<div class=\"setting\" id=\"%1_div\">\r\n").arg(value);
+        QString("<div class=\"setting\" id=\"%1_div\">\r\n").arg(m_value);
 
     int size = 20;
-    switch (dtype)
+    switch (m_dtype)
     {
         case kFloat:
         case kInteger:
         case kIntegerRange:
         case kUnsignedInteger:
-            size = 20;
-            break;
         case kTimeOfDay:
+        case kIPAddress:
             size = 20;
             break;
         case kString:
             size = 60;
-            break;
-        case kIPAddress:
-            size = 20;
             break;
         case kCheckBox:
         case kSelect:
@@ -192,46 +182,46 @@ QString MythSetting::ToHTML(uint level) const
             break;
     }
 
-    switch (dtype)
+    switch (m_dtype)
     {
         case kInteger:
         case kUnsignedInteger:
             ret += indent(level) +
                 QString("<p class=\"setting_paragraph\"><label class=\"setting_label\" "
                 "for=\"%1\">%2</label>")
-                .arg(value).arg(label);
+                .arg(m_value).arg(m_label);
             ret += indent(level) +
                 QString("<input class=\"setting_input\" name=\"%1\" id=\"%2\" type=\"number\""
                         " value='%3' step='1' size='%4'/>\r\n")
-                .arg(value).arg(value).arg(data).arg(size);
+                .arg(m_value).arg(m_value).arg(m_data).arg(size);
             ret += indent(level) +
                 QString("<a class=\"setting_helplink ui-icon ui-icon-help\" href=\"javascript:showSettingHelp('%1')"
-                        "\"></a></label></p>\r\n").arg(value);
+                        "\"></a></label></p>\r\n").arg(m_value);
             ret += indent(level) +
                 QString("<div class=\"form_error\""
                         "id=\"%1_error\"></div><div style=\"display:none;"
                         "position:absolute;left:-4000px\" "
                         "id=\"%2_default\">%3</div>\r\n")
-                .arg(value).arg(value).arg(default_data);
+                .arg(m_value).arg(m_value).arg(m_default_data);
             break;
          case kIntegerRange:
             ret += indent(level) +
                 QString("<p class=\"setting_paragraph\"><label class=\"setting_label\" "
                 "for=\"%1\">%2</label>")
-                .arg(value).arg(label);
+                .arg(m_value).arg(m_label);
             ret += indent(level) +
                 QString("<input class=\"setting_input\" name=\"%1\" id=\"%2\" type=\"number\""
                         " value='%3' min='%4' max='%5' step='1' size='%6'/>\r\n")
-                .arg(value).arg(value).arg(data).arg(range_min).arg(range_max).arg(size);
+                .arg(m_value).arg(m_value).arg(m_data).arg(m_range_min).arg(m_range_max).arg(size);
             ret += indent(level) +
                 QString("<a class=\"setting_helplink ui-icon ui-icon-help\" href=\"javascript:showSettingHelp('%1')"
-                        "\"></a></label></p>\r\n").arg(value);
+                        "\"></a></label></p>\r\n").arg(m_value);
             ret += indent(level) +
                 QString("<div class=\"form_error\""
                         "id=\"%1_error\"></div><div style=\"display:none;"
                         "position:absolute;left:-4000px\" "
                         "id=\"%2_default\">%3</div>\r\n")
-                .arg(value).arg(value).arg(default_data);
+                .arg(m_value).arg(m_value).arg(m_default_data);
             break;
         case kFloat:
         case kComboBox:
@@ -242,36 +232,36 @@ QString MythSetting::ToHTML(uint level) const
             ret += indent(level) +
                 QString("<p class=\"setting_paragraph\"><label class=\"setting_label\" "
                 "for=\"%1\">%2</label>")
-                .arg(value).arg(label);
+                .arg(m_value).arg(m_label);
             ret += indent(level) +
                 QString("<input class=\"setting_input\" name=\"%1\" id=\"%2\" type=\"text\""
                         " value=\"%3\" size='%4' placeholder=\"%5\"/>\r\n")
-                .arg(value).arg(value).arg(data).arg(size).arg(placeholder_text);
+                .arg(m_value).arg(m_value).arg(m_data).arg(size).arg(m_placeholder_text);
             ret += indent(level) +
                 QString("<a class=\"setting_helplink ui-icon ui-icon-help\" href=\"javascript:showSettingHelp('%1')"
-                        "\"></a></label></p>\r\n").arg(value);
+                        "\"></a></label></p>\r\n").arg(m_value);
             ret += indent(level) +
                 QString("<div class=\"form_error\""
                         "id=\"%1_error\"></div><div style=\"display:none;"
                         "position:absolute;left:-4000px\" "
                         "id=\"%2_default\">%3</div>\r\n")
-                .arg(value).arg(value).arg(default_data);
+                .arg(m_value).arg(m_value).arg(m_default_data);
             break;
         case kCheckBox:
             ret += indent(level) +
                 QString("<p class=\"setting_paragraph\">"
                         "<input class=\"setting_input\" name=\"%1_input\" id=\"%2\" type=\"checkbox\""
                         " value=\"1\" %3/><label class=\"setting_label_checkbox\" for=\"%5\">%6</label>")
-                .arg(value).arg(value).arg((data.toUInt()) ? "checked" : "").arg(value).arg(label);
+                .arg(m_value).arg(m_value).arg((m_data.toUInt()) ? "checked" : "").arg(m_value).arg(m_label);
             ret += indent(level) +
                 QString("<a class=\"setting_helplink ui-icon ui-icon-help\" href=\"javascript:showSettingHelp('%1'"
                         ")\"></a></p><div class=\"form_error\""
-                        " id=\"%2_error\"></div>").arg(value).arg(value);
+                        " id=\"%2_error\"></div>").arg(m_value).arg(m_value);
             ret += indent(level) +
                 QString("<div style=\"display:none;"
                         "position:absolute;left:-4000px\" "
                         "id=\"%1_default\">%2</div>")
-                .arg(value).arg(default_data);
+                .arg(m_value).arg(m_default_data);
             break;
         case kLocalIPAddress:
         case kTVFormat:
@@ -280,29 +270,29 @@ QString MythSetting::ToHTML(uint level) const
             ret += indent(level) +
                 QString("<p class=\"setting_paragraph\"><label class=\"setting_label\" "
                 "for=\"%1\">%2</label>")
-                .arg(value).arg(label);
+                .arg(m_value).arg(m_label);
             ret +=  indent(level) +
                 QString("<select class=\"setting_select\" name=\"%1_input\" id=\"%2\">\r\n")
-                .arg(value).arg(value);
-            for (uint i = 0; (i < (uint)data_list.size()) &&
-                     (i < (uint)display_list.size()); i++)
+                .arg(m_value).arg(m_value);
+            for (uint i = 0; (i < (uint)m_data_list.size()) &&
+                     (i < (uint)m_display_list.size()); i++)
             {
                 ret += indent(level+1) +
                     QString("<option value=\"%1\" %2>%3</option>\r\n")
-                    .arg(data_list[i])
-                    .arg((data_list[i].toLower() == data.toLower()) ?
+                    .arg(m_data_list[i])
+                    .arg((m_data_list[i].toLower() == m_data.toLower()) ?
                          "selected" : "")
-                    .arg(display_list[i]);
+                    .arg(m_display_list[i]);
             }
             ret += indent(level) + "</select>" +
                 QString("<a class=\"setting_helplink ui-icon ui-icon-help\" href=\"javascript:showSettingHelp('%1')"
-                        "\"></a></p>\r\n").arg(value);
+                        "\"></a></p>\r\n").arg(m_value);
             ret += indent(level) +
                 QString("<div class=\"form_error\""
                         "id=\"%1_error\"></div><div style=\"display:none;"
                         "position:absolute;left:-4000px\" "
                         "id=\"%2_default\">%3</div>\r\n")
-                .arg(value).arg(value).arg(default_data);
+                .arg(m_value).arg(m_value).arg(m_default_data);
             break;
         case kInvalidDataType:
             break;
@@ -414,11 +404,11 @@ QStringList GetSettingValueList(const QString &type)
     if (type == "LocalIPAddress")
     {
         QList<QHostAddress> list = QNetworkInterface::allAddresses();
-        for (uint i = 0; i < (uint)list.size(); i++)
+        foreach (auto & addr, list)
         {
-            if (list[i].toString().contains(":"))
+            if (addr.toString().contains(":"))
                 continue; // ignore IP6 addresses for now
-            sList << list[i].toString();
+            sList << addr.toString();
         }
 
         if (sList.isEmpty())
@@ -457,8 +447,7 @@ QString StringListToJSON(const QString &key,
 {
     QString result;
 
-    QStringList::const_iterator it = sList.begin();
-    for (; it != sList.end(); ++it)
+    foreach (const auto & item, sList)
     {
         if (result.isEmpty())
             result += QString("{ \"%1\" : [ ").arg(key);
@@ -466,7 +455,7 @@ QString StringListToJSON(const QString &key,
             result += ", ";
 
         // FIXME, howto encode double quotes in JSON?
-        result += "\"" + *it + "\"";
+        result += "\"" + item + "\"";
     }
 
     if (!result.isEmpty())
@@ -498,23 +487,23 @@ bool parse_dom(MythSettingList &settings, const QDomElement &element,
 
         if (e.tagName() == "group")
         {
-            QString human_label  = e.attribute("human_label");
-            QString unique_label = e.attribute("unique_label");
-            QString ecma_script  = e.attribute("ecma_script");
+            QString m_human_label  = e.attribute("human_label");
+            QString m_unique_label = e.attribute("unique_label");
+            QString m_ecma_script  = e.attribute("ecma_script");
 
             bool tmpFoundGroup = false;
-            bool tmpIncludeAllChildren = false || includeAllChildren;
-            if (group.isEmpty() || unique_label == group)
+            bool tmpIncludeAllChildren = includeAllChildren;
+            if (group.isEmpty() || m_unique_label == group)
             {
                 mFoundGroup = true;
                 tmpIncludeAllChildren = true;
             }
 
-            MythSettingGroup *g = new MythSettingGroup(
-                human_label, unique_label, ecma_script);
+            auto *g = new MythSettingGroup(
+                m_human_label, m_unique_label, m_ecma_script);
 
             if ((e.hasChildNodes()) &&
-                (!parse_dom(g->settings, e, filename, group, tmpIncludeAllChildren,
+                (!parse_dom(g->m_settings, e, filename, group, tmpIncludeAllChildren,
                             tmpFoundGroup)))
             {
                 delete g;
@@ -624,7 +613,7 @@ bool parse_dom(MythSettingList &settings, const QDomElement &element,
                 return false;
             }
 
-            MythSetting *s = new MythSetting(
+            auto *s = new MythSetting(
                 m["value"], m["default_data"], stype,
                 m["label"], m["help_text"], dtype,
                 data_list, display_list, range_min, range_max,
@@ -724,7 +713,7 @@ bool load_settings(MythSettingList &settings, const QString &hostname)
     return true;
 }
 
-bool check_settings(MythSettingList &database_settings,
+bool check_settings(MythSettingList &/*database_settings*/,
                     const QMap<QString,QString> &params,
                     QString &result)
 {

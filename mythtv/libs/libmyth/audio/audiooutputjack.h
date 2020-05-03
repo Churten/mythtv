@@ -15,28 +15,28 @@
 
 class AudioOutputJACK : public AudioOutputBase
 {
-    Q_DECLARE_TR_FUNCTIONS(AudioOutputJACK)
+    Q_DECLARE_TR_FUNCTIONS(AudioOutputJACK);
 
   public:
     explicit AudioOutputJACK(const AudioSettings &settings);
-    virtual ~AudioOutputJACK();
+    ~AudioOutputJACK() override;
 
     // Volume control
-    virtual int GetVolumeChannel(int channel) const; // Returns 0-100
-    virtual void SetVolumeChannel(int channel, int volume); // range 0-100
+    int GetVolumeChannel(int channel) const override; // VolumeBase
+    void SetVolumeChannel(int channel, int volume) override; // VolumeBase
 
   protected:
 
     // You need to implement the following functions
-    virtual bool OpenDevice(void);
-    virtual void CloseDevice(void);
-    virtual void WriteAudio(unsigned char *aubuf, int size);
-    virtual int  GetBufferedOnSoundcard(void) const;
-    AudioOutputSettings* GetOutputSettings(bool digital);
+    bool OpenDevice(void) override; // AudioOutputBase
+    void CloseDevice(void) override; // AudioOutputBase
+    void WriteAudio(unsigned char *aubuf, int size) override; // AudioOutputBase
+    int  GetBufferedOnSoundcard(void) const override; // AudioOutputBase
+    AudioOutputSettings* GetOutputSettings(bool digital) override; // AudioOutputBase
 
     // Overriding these to do nothing.  Not needed here.
-    virtual bool StartOutputThread(void);
-    virtual void StopOutputThread(void);
+    bool StartOutputThread(void) override; // AudioOutputBase
+    void StopOutputThread(void) override; // AudioOutputBase
 
   private:
 
@@ -44,27 +44,27 @@ class AudioOutputJACK : public AudioOutputBase
 
     // Our various callback functions
     inline int JackCallback(jack_nframes_t nframes);
-    static int _JackCallback(jack_nframes_t nframes, void *arg);
+    static int JackCallbackHelper(jack_nframes_t nframes, void *arg);
     inline int JackXRunCallback();
-    static int _JackXRunCallback(void *arg);
+    static int JackXRunCallbackHelper(void *arg);
     inline int JackGraphOrderCallback();
-    static int _JackGraphOrderCallback(void *arg);
+    static int JackGraphOrderCallbackHelper(void *arg);
 
-    jack_client_t* _jack_client_open(void);
-    const char** _jack_get_ports(void);
-    bool _jack_connect_ports(const char**);
-    inline void _jack_client_close(jack_client_t **client);
+    static jack_client_t* JackClientOpen(void);
+    const char** JackGetPorts(void);
+    bool JackConnectPorts(const char** /*matching_ports*/);
+    inline void JackClientClose(jack_client_t **client);
 
-    void DeinterleaveAudio(float *aubuf, float **bufs,
-                           int nframes, int* channel_volumes);
+    void DeinterleaveAudio(const float *aubuf, float **bufs,
+                           int nframes, const int* channel_volumes);
 
-    jack_port_t *ports[JACK_CHANNELS_MAX];
-    int chan_volumes[JACK_CHANNELS_MAX];
-    jack_client_t *client, *stale_client;
-    int jack_latency;
-    bool jack_underrun;
-    int jack_xruns;
-    unsigned char *aubuf;
+    jack_port_t   *m_ports[JACK_CHANNELS_MAX]       {};
+    int            m_chanVolumes[JACK_CHANNELS_MAX] {};
+    jack_client_t *m_client       {nullptr};
+    jack_client_t *m_staleClient  {nullptr};
+    int            m_jackLatency  {0};
+    int            m_jackXruns    {0};
+    unsigned char *m_auBuf        {nullptr};
 
 
 };

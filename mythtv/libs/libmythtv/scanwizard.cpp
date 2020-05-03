@@ -32,24 +32,23 @@
 #include "scanwizardconfig.h"
 #include "channelscanner_gui.h"
 #include "scanwizard.h"
-#include "sourceutil.h"
-#include "cardutil.h"
-#include "videosource.h"
-#include "scaninfo.h"
+
 #include "channelimporter.h"
 #include "mythlogging.h"
+#include "scaninfo.h"
+#include "sourceutil.h"
+#include "videosource.h"
+#include <utility>
 
 #define LOC QString("SWiz: ")
 
-ScanWizard::ScanWizard(uint    default_sourceid,
-                       uint    default_cardid,
-                       QString default_inputname) :
-    lastHWCardID(0),
-    lastHWCardType(CardUtil::ERROR_PROBE),
-    scannerPane(new ChannelScannerGUI())
+ScanWizard::ScanWizard(uint           default_sourceid,
+                       uint           default_cardid,
+                       const QString& default_inputname) :
+    m_scannerPane(new ChannelScannerGUI())
 {
     SetupConfig(default_sourceid, default_cardid, default_inputname);
-    ButtonStandardSetting *scanButton = new ButtonStandardSetting(tr("Scan"));
+    auto *scanButton = new ButtonStandardSetting(tr("Scan"));
     connect(scanButton, SIGNAL(clicked()), SLOT(Scan()));
     addChild(scanButton);
 }
@@ -57,7 +56,7 @@ ScanWizard::ScanWizard(uint    default_sourceid,
 void ScanWizard::Scan()
 {
     QMap<QString,QString> start_chan;
-    DTVTunerType parse_type = DTVTunerType::kTunerTypeUnknown;
+    DTVTunerType parse_type(DTVTunerType::kTunerTypeUnknown);
 
     uint    cardid    = GetCardID();
     QString inputname = GetInputName();
@@ -71,7 +70,7 @@ void ScanWizard::Scan()
 
     if (scantype == ScanTypeSetting::DVBUtilsImport)
     {
-        scannerPane->ImportDVBUtils(sourceid, lastHWCardType,
+        m_scannerPane->ImportDVBUtils(sourceid, m_lastHWCardType,
                                     GetFilename());
     }
     else if (scantype == ScanTypeSetting::NITAddScan_DVBT)
@@ -102,23 +101,23 @@ void ScanWizard::Scan()
     else if (scantype == ScanTypeSetting::IPTVImport)
     {
         do_scan = false;
-        scannerPane->ImportM3U(cardid, inputname, sourceid, false);
+        m_scannerPane->ImportM3U(cardid, inputname, sourceid, false);
     }
     else if (scantype == ScanTypeSetting::VBoxImport)
     {
         do_scan = false;
-        scannerPane->ImportVBox(cardid, inputname, sourceid,
+        m_scannerPane->ImportVBox(cardid, inputname, sourceid,
                                 DoFreeToAirOnly(),
                                 GetServiceRequirements());
     }
     else if (scantype == ScanTypeSetting::ExternRecImport)
     {
         do_scan = false;
-        scannerPane->ImportExternRecorder(cardid, inputname, sourceid);
+        m_scannerPane->ImportExternRecorder(cardid, inputname, sourceid);
     }
     else if (scantype == ScanTypeSetting::IPTVImportMPTS)
     {
-        scannerPane->ImportM3U(cardid, inputname, sourceid, true);
+        m_scannerPane->ImportM3U(cardid, inputname, sourceid, true);
     }
     else if ((scantype == ScanTypeSetting::FullScan_ATSC)     ||
              (scantype == ScanTypeSetting::FullTransportScan) ||
@@ -138,6 +137,10 @@ void ScanWizard::Scan()
         ScanDTVTransportList transports = LoadScan(scanid);
         ChannelImporter ci(true, true, true, true, false,
                            DoFreeToAirOnly(),
+                           DoChannelNumbersOnly(),
+                           DoCompleteChannelsOnly(),
+                           DoFullChannelSearch(),
+                           DoRemoveDuplicates(),
                            GetServiceRequirements());
         ci.Process(transports, sourceid);
     }
@@ -172,15 +175,21 @@ void ScanWizard::Scan()
 
     if (do_scan)
     {
-        QString table_start, table_end;
+        QString table_start;
+        QString table_end;
         GetFrequencyTableRange(table_start, table_end);
 
-        scannerPane->Scan(
+        m_scannerPane->Scan(
             GetScanType(),            GetCardID(),
             GetInputName(),           GetSourceID(),
             DoIgnoreSignalTimeout(),  DoFollowNIT(),
             DoTestDecryption(),       DoFreeToAirOnly(),
+            DoChannelNumbersOnly(),   DoCompleteChannelsOnly(),
+            DoFullChannelSearch(),
+            DoRemoveDuplicates(),
+            DoAddFullTS(),
             GetServiceRequirements(),
+
             // stuff needed for particular scans
             GetMultiplex(),         start_chan,
             GetFrequencyStandard(), GetModulation(),
@@ -189,21 +198,21 @@ void ScanWizard::Scan()
     }
 }
 
-void ScanWizard::SetInput(const QString &cardids_inputname)
+void ScanWizard::SetInput(const QString &cardid_inputname)
 {
-    uint    cardid;
+    uint    cardid = 0;
     QString inputname;
-    if (!InputSelector::Parse(cardids_inputname, cardid, inputname))
+    if (!InputSelector::Parse(cardid_inputname, cardid, inputname))
         return;
 
     // Work out what kind of card we've got
     // We need to check against the last capture card so that we don't
     // try and probe a card which is already open by scan()
-    if ((lastHWCardID != cardid) ||
-        (lastHWCardType == CardUtil::ERROR_OPEN))
+    if ((m_lastHWCardID != cardid) ||
+        (m_lastHWCardType == CardUtil::ERROR_OPEN))
     {
-        lastHWCardID    = cardid;
+        m_lastHWCardID    = cardid;
         QString subtype = CardUtil::ProbeSubTypeName(cardid);
-        lastHWCardType  = CardUtil::toInputType(subtype);
+        m_lastHWCardType  = CardUtil::toInputType(subtype);
     }
 }

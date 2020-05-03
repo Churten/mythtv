@@ -11,51 +11,54 @@
 
 #include "FrameAnalyzer.h"
 
-typedef struct AVPicture AVPicture;
+using AVFrame = struct AVFrame;
 class HistogramAnalyzer;
 
 class SceneChangeDetector : public FrameAnalyzer
 {
 public:
-    SceneChangeDetector(HistogramAnalyzer *ha, QString debugdir);
+    SceneChangeDetector(HistogramAnalyzer *ha, const QString& debugdir);
     virtual void deleteLater(void);
 
     /* FrameAnalyzer interface. */
-    const char *name(void) const { return "SceneChangeDetector"; }
+    const char *name(void) const override // FrameAnalyzer
+        { return "SceneChangeDetector"; }
     enum analyzeFrameResult MythPlayerInited(MythPlayer *player,
-            long long nframes);
+            long long nframes) override; // FrameAnalyzer
     enum analyzeFrameResult analyzeFrame(const VideoFrame *frame,
-            long long frameno, long long *pNextFrame);
-    int finished(long long nframes, bool final);
-    int reportTime(void) const;
-    FrameMap GetMap(unsigned int) const { return changeMap; }
+            long long frameno, long long *pNextFrame) override; // FrameAnalyzer
+    int finished(long long nframes, bool final) override; // FrameAnalyzer
+    int reportTime(void) const override; // FrameAnalyzer
+    FrameMap GetMap(unsigned int /*index*/) const override // FrameAnalyzer
+        { return m_changeMap; }
 
     /* SceneChangeDetector interface. */
-    const FrameAnalyzer::FrameMap *getChanges(void) const { return &changeMap; }
+    const FrameAnalyzer::FrameMap *getChanges(void) const { return &m_changeMap; }
 
-    typedef struct scenechange_data {
+    struct scenechange_data {
         unsigned char   color;
         unsigned char   frequency;
-    } SceneChangeData[UCHAR_MAX + 1];
+    };
+    using SceneChangeData = scenechange_data[UCHAR_MAX + 1];
 
   protected:
-    virtual ~SceneChangeDetector(void) {}
+    ~SceneChangeDetector(void) override = default;
 
   private:
-    HistogramAnalyzer       *histogramAnalyzer;
-    float                   fps;
+    HistogramAnalyzer       *m_histogramAnalyzer {nullptr};
+    float                   m_fps                {0.0F};
 
     /* per-frame info */
-    SceneChangeData         *scdata;
-    unsigned short          *scdiff;
+    SceneChangeData         *m_scData            {nullptr};
+    unsigned short          *m_scDiff            {nullptr};
 
-    FrameAnalyzer::FrameMap changeMap;
+    FrameAnalyzer::FrameMap m_changeMap;
 
     /* Debugging */
-    int                     debugLevel;
-    QString                 debugdata;              /* filename */
-    bool                    debug_scenechange;
-    bool                    scenechange_done;
+    int                     m_debugLevel         {0};
+    QString                 m_debugData;            /* filename */
+    bool                    m_debugSceneChange   {false};
+    bool                    m_sceneChangeDone    {false};
 };
 
 #endif  /* !__SCENECHANGEDETECTOR_H__ */

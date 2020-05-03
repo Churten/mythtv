@@ -1,7 +1,10 @@
+// C/C++ headers
+#include <utility>
+
 // Qt headers
-#include <QWidget>
-#include <QFile>
 #include <QCoreApplication>
+#include <QFile>
+#include <QWidget>
 
 // MythTV headers
 #include "channelsettings.h"
@@ -11,28 +14,27 @@
 #include "mythdirs.h"
 #include "cardutil.h"
 
-using std::vector;
 
 QString ChannelDBStorage::GetWhereClause(MSqlBindings &bindings) const
 {
-    QString fieldTag = (":WHERE" + id.getField().toUpper());
-    QString query(id.getField() + " = " + fieldTag);
+    QString fieldTag = (":WHERE" + m_id.getField().toUpper());
+    QString query(m_id.getField() + " = " + fieldTag);
 
-    bindings.insert(fieldTag, id.getValue());
+    bindings.insert(fieldTag, m_id.getValue());
 
     return query;
 }
 
 QString ChannelDBStorage::GetSetClause(MSqlBindings &bindings) const
 {
-    QString fieldTag = (":SET" + id.getField().toUpper());
+    QString fieldTag = (":SET" + m_id.getField().toUpper());
     QString nameTag = (":SET" + GetColumnName().toUpper());
 
-    QString query(id.getField() + " = " + fieldTag + ", " +
+    QString query(m_id.getField() + " = " + fieldTag + ", " +
                   GetColumnName() + " = " + nameTag);
 
-    bindings.insert(fieldTag, id.getValue());
-    bindings.insert(nameTag, user->GetDBValue());
+    bindings.insert(fieldTag, m_id.getValue());
+    bindings.insert(nameTag, m_user->GetDBValue());
 
     return query;
 }
@@ -68,19 +70,23 @@ class Source : public MythUIComboBoxSetting
   public:
     Source(const ChannelID &id, uint _default_sourceid) :
         MythUIComboBoxSetting(new ChannelDBStorage(this, id, "sourceid")),
-        default_sourceid(_default_sourceid)
+        m_defaultSourceId(_default_sourceid)
     {
         setLabel(QCoreApplication::translate("(Common)", "Video Source"));
+        setHelpText(QCoreApplication::translate("(Common)",
+        "It is NOT a good idea to change this value as it only changes "
+        "the sourceid in table channel but not in dtv_multiplex. "
+        "The sourceid in dtv_multiplex cannot and should not be changed."));
     }
 
-    void Load(void)
+    void Load(void) override // StandardSetting
     {
         fillSelections();
         StandardSetting::Load();
 
-        if (default_sourceid && !getValue().toUInt())
+        if (m_defaultSourceId && (getValue().toUInt() == 0U))
         {
-            uint which = sourceid_to_index[default_sourceid];
+            uint which = m_sourceIdToIndex[m_defaultSourceId];
             if (which)
                 setValue(which);
         }
@@ -104,18 +110,18 @@ class Source : public MythUIComboBoxSetting
         {
             for (uint i = 1; query.next(); i++)
             {
-                sourceid_to_index[query.value(1).toUInt()] = i;
+                m_sourceIdToIndex[query.value(1).toUInt()] = i;
                 addSelection(query.value(0).toString(),
                              query.value(1).toString());
             }
         }
 
-        sourceid_to_index[0] = 0; // Not selected entry.
+        m_sourceIdToIndex[0] = 0; // Not selected entry.
     }
 
   private:
-    uint            default_sourceid;
-    QMap<uint,uint> sourceid_to_index;
+    uint            m_defaultSourceId;
+    QMap<uint,uint> m_sourceIdToIndex;
 };
 
 class Callsign : public MythUITextEditSetting
@@ -178,8 +184,7 @@ class TimeOffset : public MythUISpinBoxSetting
         setHelpText(QCoreApplication::translate("(ChannelSettings)",
             "Offset (in minutes) to apply to the program guide data during "
             "import.  This can be used when the listings for a particular "
-            "channel are in a different time zone. (Works for DataDirect "
-            "listings only.)"));
+            "channel are in a different time zone."));
     }
 };
 
@@ -249,9 +254,9 @@ class OutputFilters : public MythUITextEditSetting
 class XmltvID : public MythUIComboBoxSetting
 {
   public:
-    XmltvID(const ChannelID &id, const QString &_sourceName) :
+    XmltvID(const ChannelID &id, QString _sourceName) :
         MythUIComboBoxSetting(new ChannelDBStorage(this, id, "xmltvid"), true),
-        sourceName(_sourceName)
+        m_sourceName(std::move(_sourceName))
     {
         setLabel(QCoreApplication::translate("(Common)", "XMLTV ID"));
 
@@ -262,7 +267,7 @@ class XmltvID : public MythUIComboBoxSetting
             "'mythfilldatabase' is run."));
     }
 
-    void Load(void)
+    void Load(void) override // StandardSetting
     {
         fillSelections();
         StandardSetting::Load();
@@ -272,7 +277,7 @@ class XmltvID : public MythUIComboBoxSetting
     {
         clearSelections();
 
-        QString xmltvFile = GetConfDir() + '/' + sourceName + ".xmltv";
+        QString xmltvFile = GetConfDir() + '/' + m_sourceName + ".xmltv";
 
         if (QFile::exists(xmltvFile))
         {
@@ -301,7 +306,7 @@ class XmltvID : public MythUIComboBoxSetting
     }
 
   private:
-    QString sourceName;
+    QString m_sourceName;
 };
 
 class ServiceID : public MythUISpinBoxSetting
@@ -309,16 +314,16 @@ class ServiceID : public MythUISpinBoxSetting
   public:
     explicit ServiceID(const ChannelID &id)
         : MythUISpinBoxSetting(new ChannelDBStorage(this, id, "serviceid"),
-                               -1, UINT16_MAX, 1, true, "NULL")
+                               -1, UINT16_MAX, 1, 1, "NULL")
     {
-        setLabel(QCoreApplication::translate("(ChannelSettings)", "ServiceID"));
+        setLabel(QCoreApplication::translate("(ChannelSettings)", "Service ID"));
 
         setHelpText(QCoreApplication::translate("(ChannelSettings)",
                 "Service ID (Program Number) of desired channel within the transport stream. "
                 "If there is only one channel, then setting this to anything will still find it."));
     }
 
-    void Load(void)
+    void Load(void) override // StandardSetting
     {
         StandardSetting::Load();
 
@@ -326,12 +331,37 @@ class ServiceID : public MythUISpinBoxSetting
             setValue("-1");
     }
 
-    QString getValue(void) const
+    QString getValue(void) const override // StandardSetting
     {
         if (StandardSetting::getValue().toInt() == -1)
             return QString();
-        else
-            return StandardSetting::getValue();
+        return StandardSetting::getValue();
+    }
+};
+
+// Transport ID in Channel Options
+class TransportID_CO : public GroupSetting
+{
+  public:
+    TransportID_CO(void)
+    {
+        setLabel(QObject::tr("Transport ID"));
+        setHelpText(
+            QObject::tr("The transport stream ID (tid) can be used to identify "
+                "the transport of this channel in the Transport Editor."));
+    }
+};
+
+// Frequency in Channel Options
+class Frequency_CO : public GroupSetting
+{
+  public:
+    Frequency_CO(void)
+    {
+        setLabel(QObject::tr("Frequency"));
+        setHelpText(
+            QObject::tr("Frequency of the transport of this channel in Hz "
+                "(for DVB-T/T2 and DVB-C) or in kHz (for DVB-S/S2)."));
     }
 };
 
@@ -353,23 +383,35 @@ class CommMethod : public MythUIComboBoxSetting
         tmp.push_front(COMM_DETECT_UNINIT);
         tmp.push_back(COMM_DETECT_COMMFREE);
 
-        for (uint i = 0; i < tmp.size(); i++)
-            addSelection(SkipTypeToString(tmp[i]), QString::number(tmp[i]));
+        for (int pref : tmp)
+            addSelection(SkipTypeToString(pref), QString::number(pref));
     }
 };
 
-class Visible : public MythUICheckBoxSetting
+class Visible : public MythUIComboBoxSetting
 {
   public:
-    explicit Visible(const ChannelID &id) :
-        MythUICheckBoxSetting(new ChannelDBStorage(this, id, "visible"))
+    Visible(const ChannelID &id) :
+        MythUIComboBoxSetting(new ChannelDBStorage(this, id, "visible"))
     {
-        setValue(true);
+        setValue(kChannelVisible);
 
         setLabel(QCoreApplication::translate("(ChannelSettings)", "Visible"));
 
         setHelpText(QCoreApplication::translate("(ChannelSettings)",
-            "If enabled, the channel will be visible in the EPG."));
+            "If set to Always Visible or Visible, the channel will be visible in the "
+            "EPG.  Set to Always Visible or Never Visible to prevent MythTV and other "
+            "utilities from automatically managing the value for this "
+            "channel."));
+
+        addSelection(QCoreApplication::translate("(Common)", "Always Visible"),
+                     QString::number(kChannelAlwaysVisible));
+        addSelection(QCoreApplication::translate("(Common)", "Visible"),
+                     QString::number(kChannelVisible));
+        addSelection(QCoreApplication::translate("(Common)", "Not Visible"),
+                     QString::number(kChannelNotVisible));
+        addSelection(QCoreApplication::translate("(Common)", "Never Visible"),
+                     QString::number(kChannelNeverVisible));
     }
 };
 
@@ -401,6 +443,7 @@ class Freqid : public MythUITextEditSetting
         setLabel(QCoreApplication::translate("(ChannelSettings)",
                                              "Freq/Channel"));
         setHelpText(QCoreApplication::translate("(ChannelSettings)",
+            "N.B. This setting is only used for analog channels. "
             "Depending on the tuner type, specify either the exact "
             "frequency (in kHz) or a valid channel "
             "number that will be understood by your tuners."));
@@ -476,18 +519,17 @@ ChannelOptionsCommon::ChannelOptionsCommon(const ChannelID &id,
                                          "Channel Options - Common"));
     addChild(new Name(id));
 
-    Source *source = new Source(id, default_sourceid);
-    source->Load();
+    auto *source = new Source(id, default_sourceid);
 
-    Channum *channum = new Channum(id);
+    auto *channum = new Channum(id);
     addChild(channum);
     if (add_freqid)
     {
-        freqid = new Freqid(id);
-        addChild(freqid);
+        m_freqId = new Freqid(id);
+        addChild(m_freqId);
     }
     else
-        freqid = 0;
+        m_freqId = nullptr;
     addChild(new Callsign(id));
 
 
@@ -495,21 +537,41 @@ ChannelOptionsCommon::ChannelOptionsCommon(const ChannelID &id,
     addChild(new Visible(id));
     addChild(new ServiceID(id));
 
+    addChild(m_transportId = new TransportID_CO());
+    addChild(m_frequency = new Frequency_CO());
+
     addChild(source);
     addChild(new ChannelTVFormat(id));
     addChild(new Priority(id));
 
-    addChild(onairguide = new OnAirGuide(id));
-    addChild(xmltvID = new XmltvID(id, source->getValueLabel()));
+    addChild(m_onAirGuide = new OnAirGuide(id));
+    addChild(m_xmltvID = new XmltvID(id, source->getValueLabel()));
     addChild(new TimeOffset(id));
 
     addChild(new CommMethod(id));
     addChild(new Icon(id));
 
-    connect(onairguide, SIGNAL(valueChanged(     bool)),
-            this,       SLOT(  onAirGuideChanged(bool)));
-    connect(source,     SIGNAL(valueChanged( const QString&)),
-            this,       SLOT(  sourceChanged(const QString&)));
+    connect(m_onAirGuide, SIGNAL(valueChanged(     bool)),
+            this,         SLOT(  onAirGuideChanged(bool)));
+    connect(source,       SIGNAL(valueChanged( const QString&)),
+            this,         SLOT(  sourceChanged(const QString&)));
+
+    // Transport stream ID and frequency from dtv_multiplex
+    MSqlQuery query(MSqlQuery::InitCon());
+    query.prepare(
+        "SELECT transportid, frequency FROM dtv_multiplex "
+        "JOIN channel ON channel.mplexid = dtv_multiplex.mplexid "
+        "WHERE channel.chanid = :CHANID");
+
+    query.bindValue(":CHANID", id.getValue().toUInt());
+
+    if (!query.exec())
+        MythDB::DBError("ChannelOptionsCommon::ChannelOptionsCommon", query);
+    else if (query.next())
+    {
+        m_transportId->setValue(query.value(0).toString());
+        m_frequency->setValue(query.value(1).toString());
+    }
 };
 
 void ChannelOptionsCommon::onAirGuideChanged(bool fValue)
@@ -533,7 +595,7 @@ void ChannelOptionsCommon::sourceChanged(const QString& sourceid)
         MythDB::DBError("sourceChanged -- supports eit", query);
     else
     {
-        supports_eit = (query.size()) ? false : true;
+        supports_eit = (query.size() == 0);
         while (query.next())
         {
             supports_eit |= CardUtil::IsEITCapable(
@@ -549,7 +611,7 @@ void ChannelOptionsCommon::sourceChanged(const QString& sourceid)
             MythDB::DBError("sourceChanged -- eit only", query);
         else
         {
-            uses_eit_only = (query.size()) ? true : false;
+            uses_eit_only = (query.size() != 0);
             while (query.next())
             {
                 uses_eit_only &= (query.value(0).toString() == "eitonly");
@@ -557,9 +619,9 @@ void ChannelOptionsCommon::sourceChanged(const QString& sourceid)
         }
     }
 
-    onairguide->setEnabled(supports_eit);
-    xmltvID->setEnabled(!uses_eit_only);
-    xmltvID->Load();
+    m_onAirGuide->setEnabled(supports_eit);
+    m_xmltvID->setEnabled(!uses_eit_only);
+    m_xmltvID->Load();
 }
 
 ChannelOptionsFilters::ChannelOptionsFilters(const ChannelID& id)
@@ -589,38 +651,42 @@ ChannelOptionsV4L::ChannelOptionsV4L(const ChannelID& id)
  *****************************************************************************/
 
 ChannelOptionsRawTS::ChannelOptionsRawTS(const ChannelID &id) :
-    cid(id)
+    m_cid(id)
 {
     setLabel(QCoreApplication::translate("(ChannelSettings)",
         "Channel Options - Raw Transport Stream"));
 
     const uint mx = kMaxPIDs;
-    pids.resize(mx);
-    sids.resize(mx);
-    pcrs.resize(mx);
+    m_pids.resize(mx);
+    m_sids.resize(mx);
+    m_pcrs.resize(mx);
 
     for (uint i = 0; i < mx; i++)
     {
-        addChild((pids[i] = new TransTextEditSetting()));
-        pids[i]->setLabel("PID");
-        addChild((sids[i] = new TransMythUIComboBoxSetting()));
-        sids[i]->setLabel("    StreamID");
+        addChild((m_pids[i] = new TransTextEditSetting()));
+        m_pids[i]->setLabel("PID");
+        addChild((m_sids[i] = new TransMythUIComboBoxSetting()));
+        m_sids[i]->setLabel("    StreamID");
         for (uint j = 0x101; j <= 0x1ff; j++)
         {
             QString desc = StreamID::GetDescription(j&0xff);
             if (!desc.isEmpty())
-                sids[i]->addSelection(
+            {
+                m_sids[i]->addSelection(
                     QString("%1 (0x%2)")
                     .arg(desc).arg(j&0xff,2,16,QLatin1Char('0')),
                     QString::number(j), false);
+            }
         }
         for (uint j = 0x101; j <= 0x1ff; j++)
         {
             QString desc = StreamID::GetDescription(j&0xff);
             if (desc.isEmpty())
-                sids[i]->addSelection(
+            {
+                m_sids[i]->addSelection(
                     QString("0x%1").arg(j&0xff,2,16,QLatin1Char('0')),
                     QString::number(j), false);
+            }
         }
 /* we don't allow tables right now, PAT & PMT generated on the fly
         for (uint j = 0; j <= 0xff; j++)
@@ -628,21 +694,21 @@ ChannelOptionsRawTS::ChannelOptionsRawTS(const ChannelID &id) :
             QString desc = TableID::GetDescription(j);
             if (!desc.isEmpty())
             {
-                sids[i]->addSelection(
+                m_sids[i]->addSelection(
                     QString("%1 (0x%2)").arg(j,0,16,QLatin1Char('0')),
                     QString::number(j),
                     false);
             }
         }
 */
-        addChild((pcrs[i] = new TransMythUICheckBoxSetting()));
-        pcrs[i]->setLabel("    Is PCR");
+        addChild((m_pcrs[i] = new TransMythUICheckBoxSetting()));
+        m_pcrs[i]->setLabel("    Is PCR");
     }
 };
 
 void ChannelOptionsRawTS::Load(void)
 {
-    uint chanid = cid.getValue().toUInt();
+    uint chanid = m_cid.getValue().toUInt();
 
     pid_cache_t pid_cache;
     if (!ChannelUtil::GetCachedPids(chanid, pid_cache))
@@ -657,10 +723,10 @@ void ChannelOptionsRawTS::Load(void)
             continue;
         }
 
-        pids[i]->setValue(QString("0x%1")
+        m_pids[i]->setValue(QString("0x%1")
                           .arg(it->GetPID(),2,16,QLatin1Char('0')));
-        sids[i]->setValue(QString::number(it->GetComposite()&0x1ff));
-        pcrs[i]->setValue(it->IsPCRPID());
+        m_sids[i]->setValue(QString::number(it->GetComposite()&0x1ff));
+        m_pcrs[i]->setValue(it->IsPCRPID());
 
         ++it;
         ++i;
@@ -669,20 +735,20 @@ void ChannelOptionsRawTS::Load(void)
 
 void ChannelOptionsRawTS::Save(void)
 {
-    uint chanid = cid.getValue().toUInt();
+    uint chanid = m_cid.getValue().toUInt();
 
     pid_cache_t pid_cache;
     for (uint i = 0; i < kMaxPIDs; i++)
     {
-        bool ok;
-        uint pid = pids[i]->getValue().toUInt(&ok, 0);
-        if (!ok || !sids[i]->getValue().toUInt())
+        bool ok = false;
+        uint pid = m_pids[i]->getValue().toUInt(&ok, 0);
+        if (!ok || (m_sids[i]->getValue().toUInt() == 0U))
             continue;
 
         pid_cache.push_back(
             pid_cache_item_t(
-                pid, sids[i]->getValue().toUInt() | 0x10000 |
-                (pcrs[i]->getValue().toUInt() ? 0x200 : 0x0)));
+                pid, m_sids[i]->getValue().toUInt() | 0x10000 |
+                (m_pcrs[i]->getValue().toUInt() ? 0x200 : 0x0)));
     }
 
     ChannelUtil::SaveCachedPids(chanid, pid_cache, true /* delete_all */);

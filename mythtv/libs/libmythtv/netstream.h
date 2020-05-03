@@ -33,17 +33,17 @@ class NetStream : public QObject
 
 public:
     enum EMode { kNeverCache, kPreferCache, kAlwaysCache };
-    NetStream(const QUrl &, EMode mode = kPreferCache,
-              const QByteArray &cert = QByteArray());
-    virtual ~NetStream();
+    explicit NetStream(const QUrl &url, EMode mode = kPreferCache,
+                       QByteArray cert = QByteArray());
+    ~NetStream() override;
 
 public:
     // RingBuffer interface
-    static bool IsSupported(const QUrl &);
+    static bool IsSupported(const QUrl &url);
     bool IsOpen() const;
     void Abort();
-    int safe_read(void *data, unsigned size, unsigned millisecs = 0);
-    qlonglong Seek(qlonglong);
+    int safe_read(void *data, unsigned sz, unsigned millisecs = 0);
+    qlonglong Seek(qlonglong pos);
     qlonglong GetReadPosition() const;
     qlonglong GetSize() const;
 
@@ -51,8 +51,8 @@ public:
     const QUrl &Url() const { return m_url; }
 
     // Synchronous interface
-    bool WaitTillReady(unsigned long millisecs);
-    bool WaitTillFinished(unsigned long millisecs);
+    bool WaitTillReady(unsigned long milliseconds);
+    bool WaitTillFinished(unsigned long milliseconds);
     QNetworkReply::NetworkError GetError() const;
     QString GetErrorString() const;
     qlonglong BytesAvailable() const;
@@ -76,7 +76,7 @@ public:
     // Implementation
 private slots:
     // NAMThread signals
-    void slotRequestStarted(int, QNetworkReply *);
+    void slotRequestStarted(int id, QNetworkReply *reply);
     // QNetworkReply signals
     void slotFinished();
 #ifndef QT_NO_OPENSSL
@@ -88,22 +88,22 @@ private slots:
 private:
     Q_DISABLE_COPY(NetStream)
 
-    bool Request(const QUrl &);
+    bool Request(const QUrl &url);
 
     const int m_id; // Unique request ID
     const QUrl m_url;
 
-    mutable QMutex m_mutex; // Protects r/w access to the following data
-    QNetworkRequest m_request;
-    enum { kClosed, kPending, kStarted, kReady, kFinished } m_state;
-    NetStreamRequest* m_pending;
-    QNetworkReply* m_reply;
-    int m_nRedirections;
-    qlonglong m_size;
-    qlonglong m_pos;
-    QByteArray m_cert;
-    QWaitCondition m_ready;
-    QWaitCondition m_finished;
+    mutable QMutex    m_mutex; // Protects r/w access to the following data
+    QNetworkRequest   m_request;
+    enum { kClosed, kPending, kStarted, kReady, kFinished } m_state {kClosed};
+    NetStreamRequest* m_pending       {nullptr};
+    QNetworkReply*    m_reply         {nullptr};
+    int               m_nRedirections {0};
+    qlonglong         m_size          {-1};
+    qlonglong         m_pos           {0};
+    QByteArray        m_cert;
+    QWaitCondition    m_ready;
+    QWaitCondition    m_finished;
 };
 
 
@@ -119,7 +119,7 @@ class NAMThread : public QThread
 
 public:
     static NAMThread & manager(); // Singleton
-    virtual ~NAMThread();
+    ~NAMThread() override;
 
     static inline void PostEvent(QEvent *e) { manager().Post(e); }
     void Post(QEvent *event);
@@ -134,10 +134,10 @@ signals:
 
     // Implementation
 protected:
-    virtual void run(); // QThread override
-    bool NewRequest(QEvent *);
-    bool StartRequest(NetStreamRequest *);
-    bool AbortRequest(NetStreamAbort *);
+    void run() override; // QThread
+    bool NewRequest(QEvent *event);
+    bool StartRequest(NetStreamRequest *p);
+    static bool AbortRequest(NetStreamAbort *p);
 
 private slots:
     void quit();
@@ -145,13 +145,13 @@ private slots:
 private:
     Q_DISABLE_COPY(NAMThread)
 
-    volatile bool m_bQuit;
-    QSemaphore m_running;
-    mutable QMutex m_mutexNAM; // Provides recursive access to m_nam
-    QNetworkAccessManager *m_nam;
-    mutable QMutex m_mutex; // Protects r/w access to the following data
-    QQueue< QEvent * > m_workQ;
-    QWaitCondition m_work;
+    volatile bool          m_bQuit    {false};
+    QSemaphore             m_running;
+    mutable QMutex         m_mutexNAM {QMutex::Recursive}; // Provides recursive access to m_nam
+    QNetworkAccessManager *m_nam      {nullptr};
+    mutable QMutex         m_mutex; // Protects r/w access to the following data
+    QQueue< QEvent * >     m_workQ;
+    QWaitCondition         m_work;
 };
 
 #endif /* ndef NETSTREAM_H */

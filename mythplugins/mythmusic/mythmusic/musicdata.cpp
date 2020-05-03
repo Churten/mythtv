@@ -17,45 +17,37 @@
 #include <unistd.h> // for usleep()
 
 // this is the global MusicData object shared thoughout MythMusic
-MusicData  *gMusicData = NULL;
+MusicData  *gMusicData = nullptr;
 
 
 ///////////////////////////////////////////////////////////////////////////////
 
 
-MusicData::MusicData(void)
-{
-    all_playlists = NULL;
-    all_music = NULL;
-    all_streams = NULL;
-    initialized = false;
-}
-
 MusicData::~MusicData(void)
 {
-    if (all_playlists)
+    if (m_all_playlists)
     {
-        delete all_playlists;
-        all_playlists = NULL;
+        delete m_all_playlists;
+        m_all_playlists = nullptr;
     }
 
-    if (all_music)
+    if (m_all_music)
     {
-        delete all_music;
-        all_music = NULL;
+        delete m_all_music;
+        m_all_music = nullptr;
     }
 
-    if (all_streams)
+    if (m_all_streams)
     {
-        delete all_streams;
-        all_streams = NULL;
+        delete m_all_streams;
+        m_all_streams = nullptr;
     }
 }
 
 void MusicData::scanMusic (void)
 {
     QStringList strList("SCAN_MUSIC");
-    SendStringListThread *thread = new SendStringListThread(strList);
+    auto *thread = new SendStringListThread(strList);
     MThreadPool::globalInstance()->start(thread, "Send SCAN_MUSIC");
 
     LOG(VB_GENERAL, LOG_INFO, "Requested a music file scan");
@@ -64,19 +56,18 @@ void MusicData::scanMusic (void)
 /// reload music after a scan, rip or import
 void MusicData::reloadMusic(void)
 {
-    if (!all_music || !all_playlists)
+    if (!m_all_music || !m_all_playlists)
         return;
 
     MythScreenStack *popupStack = GetMythMainWindow()->GetStack("popup stack");
     QString message = tr("Rebuilding music tree");
 
-    MythUIBusyDialog *busy = new MythUIBusyDialog(message, popupStack,
-                                                  "musicscanbusydialog");
+    auto *busy = new MythUIBusyDialog(message, popupStack, "musicscanbusydialog");
 
     if (busy->Create())
         popupStack->AddScreen(busy, false);
     else
-        busy = NULL;
+        busy = nullptr;
 
     // TODO make it so the player isn't interupted
     // for the moment stop playing and try to resume after reloading
@@ -88,14 +79,14 @@ void MusicData::reloadMusic(void)
         wasPlaying = true;
     }
 
-    all_music->startLoading();
-    while (!all_music->doneLoading())
+    m_all_music->startLoading();
+    while (!m_all_music->doneLoading())
     {
         qApp->processEvents();
         usleep(50000);
     }
 
-    all_playlists->resync();
+    m_all_playlists->resync();
 
     if (busy)
         busy->Close();
@@ -107,35 +98,35 @@ void MusicData::reloadMusic(void)
 void MusicData::loadMusic(void)
 {
     // only do this once
-    if (initialized)
+    if (m_initialized)
         return;
 
     MythScreenStack *popupStack = GetMythMainWindow()->GetStack("popup stack");
     QString message = qApp->translate("(MythMusicMain)",
                                       "Loading Music. Please wait ...");
 
-    MythUIBusyDialog *busy = new MythUIBusyDialog(message, popupStack,
-                                                  "musicscanbusydialog");
+    auto *busy = new MythUIBusyDialog(message, popupStack, "musicscanbusydialog");
     if (busy->Create())
         popupStack->AddScreen(busy, false);
     else
-        busy = NULL;
+        busy = nullptr;
 
     // Set the various track formatting modes
     MusicMetadata::setArtistAndTrackFormats();
 
-    AllMusic *all_music = new AllMusic();
+    auto *all_music = new AllMusic();
 
     //  Load all playlists into RAM (once!)
-    PlaylistContainer *all_playlists = new PlaylistContainer(all_music);
+    auto *all_playlists = new PlaylistContainer(all_music);
 
-    gMusicData->all_music = all_music;
-    gMusicData->all_streams = new AllStream();
-    gMusicData->all_playlists = all_playlists;
+    gMusicData->m_all_music = all_music;
+    gMusicData->m_all_streams = new AllStream();
+    gMusicData->m_all_playlists = all_playlists;
 
-    gMusicData->initialized = true;
+    gMusicData->m_initialized = true;
 
-    while (!gMusicData->all_playlists->doneLoading() || !gMusicData->all_music->doneLoading())
+    while (!gMusicData->m_all_playlists->doneLoading()
+           || !gMusicData->m_all_music->doneLoading())
     {
         qApp->processEvents();
         usleep(50000);

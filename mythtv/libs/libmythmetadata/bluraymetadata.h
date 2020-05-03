@@ -1,26 +1,31 @@
 #ifndef BLURAYMETADATA_H_
 #define BLURAYMETADATA_H_
 
+#include <utility>
+
+// Qt headers
 #include <QList>
 #include <QPair>
 #include <QString>
 
+// MythTV headers
 #include "mythtypes.h"
 #include "mythmetaexp.h"
 #include "libbluray/bluray.h"
 
 class QStringList;
 
-typedef QList< QPair < uint,QString > > BlurayTitles;
+using BlurayTitles = QList< QPair < uint,QString > >;
 
 struct meta_dl;
 class META_PUBLIC BlurayMetadata : public QObject
 {
-    Q_DECLARE_TR_FUNCTIONS(BlurayMetadata)
+    Q_DECLARE_TR_FUNCTIONS(BlurayMetadata);
 
   public:
-    explicit BlurayMetadata(const QString &path);
-    ~BlurayMetadata();
+    explicit BlurayMetadata(QString path)
+        : m_path(std::move(path)) {}
+    ~BlurayMetadata() override;
 
     void toMap(InfoMap &metadataMap);
 
@@ -57,31 +62,31 @@ class META_PUBLIC BlurayMetadata : public QObject
     bool         GetBDPlusHandled(void) { return m_bdplusHandled; };
 
   private:
-    BLURAY              *m_bdnav;
+    BLURAY              *m_bdnav               {nullptr};
 
     QString              m_title;
     QString              m_alttitle;
     QString              m_language;
 
-    uint                 m_discnumber;
-    uint                 m_disctotal;
+    uint                 m_discnumber           {0};
+    uint                 m_disctotal            {0};
 
     QString              m_path;
 
     BlurayTitles         m_titles;
     QStringList          m_images;
 
-    bool                 m_topMenuSupported;
-    bool                 m_firstPlaySupported;
-    uint32_t             m_numHDMVTitles;
-    uint32_t             m_numBDJTitles;
-    uint32_t             m_numUnsupportedTitles;
-    bool                 m_aacsDetected;
-    bool                 m_libaacsDetected;
-    bool                 m_aacsHandled;
-    bool                 m_bdplusDetected;
-    bool                 m_libbdplusDetected;
-    bool                 m_bdplusHandled;
+    bool                 m_topMenuSupported     {false};
+    bool                 m_firstPlaySupported   {false};
+    uint32_t             m_numHDMVTitles        {0};
+    uint32_t             m_numBDJTitles         {0};
+    uint32_t             m_numUnsupportedTitles {0};
+    bool                 m_aacsDetected         {false};
+    bool                 m_libaacsDetected      {false};
+    bool                 m_aacsHandled          {false};
+    bool                 m_bdplusDetected       {false};
+    bool                 m_libbdplusDetected    {false};
+    bool                 m_bdplusHandled        {false};
 };
 
 #endif

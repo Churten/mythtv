@@ -23,16 +23,16 @@ class MythUDPListener : public QObject
     virtual void deleteLater(void);
 
   private slots:
-    void Process(const QByteArray &buf, QHostAddress sender,
+    static void Process(const QByteArray &buf, const QHostAddress& sender,
                  quint16 senderPort);
 
   private:
-    ~MythUDPListener(void) { Disable(); }
+    ~MythUDPListener(void) override { Disable(); }
 
     void TeardownAll(void) { Disable(); }
 
   private:
-    ServerPool *m_socketPool;
+    ServerPool *m_socketPool {nullptr};
 };
 
 #endif // MYTHUDPLISTENER_H

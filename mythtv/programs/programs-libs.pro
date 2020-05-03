@@ -2,7 +2,7 @@
 win32-msvc*:INCLUDEPATH -= $$SRC_PATH_BARE/../platform/win32/msvc/external/pthreads.2
 
 INCLUDEPATH += ../.. ../../libs/ ../../libs/libmyth ../../libs/libmyth/audio
-INCLUDEPATH +=  ../../libs/libmythtv ../../external/FFmpeg
+INCLUDEPATH +=  ../../libs/libmythtv ../.. ../../external/FFmpeg
 INCLUDEPATH += ../../libs/libmythupnp ../../libs/libmythui ../../libs/libmythmetadata
 INCLUDEPATH += ../../libs/libmythlivemedia ../../libs/libmythbase
 
@@ -16,10 +16,9 @@ win32-msvc* {
   INCLUDEPATH += ../../external/libmythdvdnav/dvdread
 }
 
-INCLUDEPATH += ../../external/libmythbluray/src
+!using_libbluray_external:INCLUDEPATH += ../../external/libmythbluray/src
 INCLUDEPATH += ../../external/libmythsoundtouch
 INCLUDEPATH += ../../external/libudfread
-INCLUDEPATH += ../../external/libsamplerate
 INCLUDEPATH += ../../libs/libmythtv/mpeg
 INCLUDEPATH += ../../libs/libmythtv/vbitext
 INCLUDEPATH += ../../libs/libmythservicecontracts
@@ -42,6 +41,13 @@ LIBS += -L../../libs/libmythmetadata
 LIBS += -L../../libs/libmythservicecontracts
 LIBS += -L../../libs/libmythprotoserver
 
+# Insist that /usr/local/lib come after all the libraries provided
+# in the MythTV sources.
+contains (QMAKE_LIBDIR_POST, /usr/local/lib) {
+  QMAKE_LIBDIR_POST -= /usr/local/lib
+  LIBS += -L/usr/local/lib
+}
+
 LIBS += -lmythswscale
 LIBS += -lmythavformat
 LIBS += -lmythswresample
@@ -60,7 +66,7 @@ LIBS += -lmythprotoserver-$$LIBVERSION
 
 using_live:LIBS += -L../../libs/libmythlivemedia -lmythlivemedia-$$LIBVERSION
 using_mheg:LIBS += -L../../libs/libmythfreemheg -lmythfreemheg-$$LIBVERSION
-using_hdhomerun:LIBS += -L../../external/libhdhomerun -lmythhdhomerun-$$LIBVERSION
+using_hdhomerun:LIBS += -lhdhomerun
 using_taglib: LIBS += $$CONFIG_TAGLIB_LIBS
 
 win32 {
@@ -85,18 +91,16 @@ win32 {
     POST_TARGETDEPS += ../../libs/libmythprotoserver/libmythprotoserver-$${MYTH_SHLIB_EXT}
 
     using_live: POST_TARGETDEPS += ../../libs/libmythlivemedia/libmythlivemedia-$${MYTH_SHLIB_EXT}
-    using_hdhomerun: POST_TARGETDEPS += ../../external/libhdhomerun/libmythhdhomerun-$${LIBVERSION}.$${QMAKE_EXTENSION_SHLIB}
 }
 
 DEPENDPATH += ../.. ../../libs ../../libs/libmyth ../../libs/libmyth/audio
 DEPENDPATH += ../../libs/libmythtv
 DEPENDPATH += ../../libs/libmythtv/mpeg ../../libs/libmythtv/vbitext
-DEPENDPATH += ../../external/FFmpeg
+DEPENDPATH += ../.. ../../external/FFmpeg
 DEPENDPATH += ../../libs/libmythupnp ../../libs/libmythui
 DEPENDPATH += ../../libs/libmythlivemedia ../../libmythbase
 DEPENDPATH +=../../libs/libmythservicecontracts ../../libs/libmythprotoserver
 
-using_opengl:CONFIG += opengl
 using_mingw:DEFINES += USING_MINGW
 
 macx:using_firewire:using_backend:LIBS += -F$${CONFIG_MAC_AVC} -framework AVCVideoServices

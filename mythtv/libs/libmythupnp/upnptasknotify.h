@@ -35,12 +35,11 @@ class UPnpDevice;
 // Typedefs
 /////////////////////////////////////////////////////////////////////////////
 
-typedef enum
+enum UPnpNotifyNTS
 {
     NTS_alive   = 0,
     NTS_byebye  = 1
-
-} UPnpNotifyNTS;
+};
 
 /////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////
@@ -58,25 +57,25 @@ class UPnpNotifyTask : public Task
 
         QString         m_sMasterIP;
         int             m_nServicePort;
-        int             m_nMaxAge;
+        int             m_nMaxAge       {3600};
 
-        UPnpNotifyNTS   m_eNTS;
+        UPnpNotifyNTS   m_eNTS          {NTS_alive};
 
     protected:
 
         // Destructor protected to force use of Release Method
 
-        virtual ~UPnpNotifyTask();
+        ~UPnpNotifyTask() override = default;
 
         void     ProcessDevice( MSocketDevice *pSocket, UPnpDevice *pDevice );
-        void     SendNotifyMsg( MSocketDevice *pSocket, QString sNT, QString sUDN );
+        void     SendNotifyMsg( MSocketDevice *pSocket, const QString& sNT, const QString& sUDN );
 
     public:
 
         explicit UPnpNotifyTask( int nServicePort );
 
-        virtual QString Name   ()               { return( "Notify" );   }
-        virtual void    Execute( TaskQueue * );
+        QString Name() override { return( "Notify" ); } // Task
+        void Execute( TaskQueue *pQueue ) override; // Task
 
         // ------------------------------------------------------------------
 

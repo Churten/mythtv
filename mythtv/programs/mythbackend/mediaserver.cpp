@@ -13,7 +13,6 @@
 #include "internetContent.h"
 #include "mythdirs.h"
 #include "htmlserver.h"
-#include <websocket.h>
 
 #include "upnpcdstv.h"
 #include "upnpcdsmusic.h"
@@ -50,10 +49,6 @@
 //////////////////////////////////////////////////////////////////////////////
 
 MediaServer::MediaServer(void) :
-#ifdef USING_LIBDNS_SD
-    m_bonjour(NULL),
-#endif
-    m_pUPnpCDS(NULL), m_pUPnpCMGR(NULL),
     m_sSharePath(GetShareDir())
 {
     LOG(VB_UPNP, LOG_INFO, "MediaServer(): Begin");
@@ -79,7 +74,7 @@ void MediaServer::Init(bool bIsMaster, bool bDisableUPnp /* = false */)
     int     nSSLPort  = g_pConfig->GetValue( "BackendSSLPort", (g_pConfig->GetValue( "BackendStatusPort", 6544 ) + 10) );
     int     nWSPort   = (g_pConfig->GetValue( "BackendStatusPort", 6544 ) + 5);
 
-    HttpServer *pHttpServer = new HttpServer();
+    auto *pHttpServer = new HttpServer();
 
     if (!pHttpServer->isListening())
     {
@@ -89,7 +84,7 @@ void MediaServer::Init(bool bIsMaster, bool bDisableUPnp /* = false */)
         {
             LOG(VB_GENERAL, LOG_ERR, "MediaServer: HttpServer Create Error");
             delete pHttpServer;
-            pHttpServer = NULL;
+            pHttpServer = nullptr;
             return;
         }
 
@@ -102,11 +97,11 @@ void MediaServer::Init(bool bIsMaster, bool bDisableUPnp /* = false */)
 #endif
     }
 
-    WebSocketServer *pWebSocketServer = new WebSocketServer();
+    m_webSocketServer = new WebSocketServer();
 
-    if (!pWebSocketServer->isListening())
+    if (!m_webSocketServer->isListening())
     {
-        if (!pWebSocketServer->listen(nWSPort))
+        if (!m_webSocketServer->listen(nWSPort))
         {
             LOG(VB_GENERAL, LOG_ERR, "MediaServer: WebSocketServer Create Error");
         }
@@ -135,8 +130,8 @@ void MediaServer::Init(bool bIsMaster, bool bDisableUPnp /* = false */)
 
     LOG(VB_UPNP, LOG_INFO, "MediaServer: Registering Http Server Extensions.");
 
-    HtmlServerExtension *pHtmlServer;
-    pHtmlServer = new HtmlServerExtension(m_sSharePath + "html", "backend_");
+    auto *pHtmlServer =
+        new HtmlServerExtension(m_sSharePath + "html", "backend_");
     pHttpServer->RegisterExtension( pHtmlServer );
     pHttpServer->RegisterExtension( new HttpConfig() );
     pHttpServer->RegisterExtension( new InternetContent   ( m_sSharePath ));
@@ -298,6 +293,7 @@ MediaServer::~MediaServer()
     gCoreContext->removeListener(this);
 #endif
 
+    delete m_webSocketServer;
     delete m_pHttpServer;
 
 #ifdef USING_LIBDNS_SD
@@ -313,7 +309,7 @@ void MediaServer::customEvent( QEvent *e )
 {
     if (MythEvent::Type(e->type()) == MythEvent::MythEventMessage)
     {
-        MythEvent *me = (MythEvent *)e;
+        MythEvent *me = static_cast<MythEvent *>(e);
         QString message = me->Message();
 
         //-=>TODO: Need to handle events to notify clients of changes

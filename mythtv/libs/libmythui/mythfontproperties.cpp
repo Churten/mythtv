@@ -1,11 +1,15 @@
 
 #include "mythfontproperties.h"
+#include "mythcorecontext.h"
+
+#include <cmath>
 
 #include <QCoreApplication>
 #include <QDomDocument>
 #include <QFontInfo>
 #include <QFontDatabase>
 #include <QRect>
+#include <QRegularExpression>
 
 #include "mythlogging.h"
 #include "mythdb.h"
@@ -16,11 +20,12 @@
 
 #define LOC      QString("MythFontProperties: ")
 
-MythFontProperties::MythFontProperties() :
-    m_brush(QColor(Qt::white)), m_hasShadow(false), m_shadowAlpha(255),
-    m_hasOutline(false), m_outlineSize(0), m_outlineAlpha(255),
-    m_relativeSize(0.05f), m_bFreeze(false), m_stretch(100)
+QMutex MythFontProperties::s_zoomLock;
+uint MythFontProperties::s_zoomPercent = 0;
+
+MythFontProperties::MythFontProperties(void)
 {
+    Zoom();
     CalcHash();
 }
 
@@ -28,6 +33,15 @@ void MythFontProperties::SetFace(const QFont &face)
 {
     m_face = face;
     CalcHash();
+}
+
+QFont MythFontProperties::face(void) const
+{
+    QFont face = m_face;
+
+    face.setPixelSize(face.pixelSize() *
+                      (static_cast<double>(s_zoomPercent) / 100.0));
+    return face;
 }
 
 void MythFontProperties::SetColor(const QColor &color)
@@ -81,13 +95,32 @@ void MythFontProperties::CalcHash(void)
                                 .arg(m_hasOutline);
 
     if (m_hasShadow)
+    {
         m_hash += QString("%1%2%3%4").arg(m_shadowOffset.x())
                  .arg(m_shadowOffset.y()).arg(m_shadowColor.name())
                  .arg(m_shadowAlpha);
+    }
 
     if (m_hasOutline)
         m_hash += QString("%1%2%3").arg(m_outlineColor.name())
                  .arg(m_outlineSize).arg(m_outlineAlpha);
+
+    m_hash += QString("Z%1").arg(s_zoomPercent);
+}
+
+void MythFontProperties::Zoom(void)
+{
+    QMutexLocker locker(&s_zoomLock);
+    if (s_zoomPercent == 0)
+        s_zoomPercent = gCoreContext->GetNumSetting("GUITEXTZOOM", 100);
+}
+
+void MythFontProperties::SetZoom(uint percent)
+{
+    QMutexLocker locker(&s_zoomLock);
+
+    gCoreContext->SaveSetting("GUITEXTZOOM", QString::number(percent));
+    s_zoomPercent = percent;
 }
 
 void MythFontProperties::Rescale(int height)
@@ -103,7 +136,7 @@ void MythFontProperties::Rescale(void)
 
 void MythFontProperties::AdjustStretch(int stretch)
 {
-    int newStretch = (int)(((float)m_stretch * ((float)stretch / 100.0f)) + 0.5f);
+    int newStretch = lroundf((float)m_stretch * ((float)stretch / 100.0F));
 
     if (newStretch <= 0)
         newStretch = 1;
@@ -115,12 +148,12 @@ void MythFontProperties::SetPixelSize(float size)
 {
     QSize baseSize = GetMythUI()->GetBaseSize();
     m_relativeSize = size / (float)(baseSize.height());
-    m_face.setPixelSize(GetMythMainWindow()->NormY((int)(size + 0.5f)));
+    m_face.setPixelSize(GetMythMainWindow()->NormY(lroundf(size)));
 }
 
 void MythFontProperties::SetPointSize(uint points)
 {
-    float pixels = (float)points / 72.0 * 100.0;
+    float pixels = (float)points / 72.0F * 100.0F;
     SetPixelSize(pixels);
 }
 
@@ -144,15 +177,17 @@ MythFontProperties *MythFontProperties::ParseFromXml(
 {
     // Crappy, but cached.  Move to GlobalFontMap?
 
-    static bool show_available = true;
+    static bool s_showAvailable = true;
     bool fromBase = false;
-    MythFontProperties *newFont = new MythFontProperties();
+    auto *newFont = new MythFontProperties();
     newFont->Freeze();
 
     if (element.tagName() == "font")
+    {
         LOG(VB_GENERAL, LOG_WARNING, LOC +
             QString("File %1: Use of 'font' is deprecated in favour of "
                     "'fontdef'") .arg(filename));
+    }
 
     QString name = element.attribute("name", "");
     if (name.isEmpty())
@@ -160,14 +195,14 @@ MythFontProperties *MythFontProperties::ParseFromXml(
         VERBOSE_XML(VB_GENERAL, LOG_ERR,
                     filename, element, "Font requires a name");
         delete newFont;
-        return NULL;
+        return nullptr;
     }
 
     QString base = element.attribute("from", "");
 
     if (!base.isEmpty())
     {
-        MythFontProperties *tmp = NULL;
+        MythFontProperties *tmp = nullptr;
 
         if (parent)
             tmp = parent->GetFont(base);
@@ -181,15 +216,15 @@ MythFontProperties *MythFontProperties::ParseFromXml(
                 QString("Specified base font '%1' does not exist.").arg(base));
 
             delete newFont;
-            return NULL;
+            return nullptr;
         }
 
         *newFont = *tmp;
         fromBase = true;
     }
 
-    int size, pixelsize;
-    size = pixelsize = -1;
+    int size = -1;
+    int pixelsize = -1;
 
     QString face = element.attribute("face", "");
     if (face.isEmpty())
@@ -199,7 +234,7 @@ MythFontProperties *MythFontProperties::ParseFromXml(
             VERBOSE_XML(VB_GENERAL, LOG_ERR, filename, element,
                         "Font needs a face");
             delete newFont;
-            return NULL;
+            return nullptr;
         }
     }
     else
@@ -220,7 +255,7 @@ MythFontProperties *MythFontProperties::ParseFromXml(
                 .arg((tmp) ? QFontInfo(tmp->m_face).family() : "ERROR"));
         }
         delete newFont;
-        return NULL;
+        return nullptr;
     }
 
     QString hint = element.attribute("stylehint", "");
@@ -318,7 +353,7 @@ MythFontProperties *MythFontProperties::ParseFromXml(
                     newFont->m_face.setWeight(QFont::Light);
                 else if (weight == "normal" ||
                          weight == "3")
-                    newFont->m_face.setWeight(QFont::Normal);
+                    newFont->m_face.setWeight(QFont::Normal);    // NOLINT(bugprone-branch-clone)
                 else if (weight == "demibold" ||
                          weight == "4")
                     newFont->m_face.setWeight(QFont::DemiBold);
@@ -352,7 +387,7 @@ MythFontProperties *MythFontProperties::ParseFromXml(
                     newFont->m_stretch = QFont::SemiCondensed;
                 else if (stretch == "unstretched" ||
                          stretch == "5")
-                    newFont->m_stretch = QFont::Unstretched;
+                    newFont->m_stretch = QFont::Unstretched;    // NOLINT(bugprone-branch-clone)
                 else if (stretch == "semiexpanded" ||
                          stretch == "6")
                     newFont->m_stretch = QFont::SemiExpanded;
@@ -375,7 +410,7 @@ MythFontProperties *MythFontProperties::ParseFromXml(
                 VERBOSE_XML(VB_GENERAL, LOG_ERR, filename, info,
                             QString("Unknown tag in font '%1'").arg(name));
                 delete newFont;
-                return NULL;
+                return nullptr;
             }
         }
     }
@@ -385,9 +420,9 @@ MythFontProperties *MythFontProperties::ParseFromXml(
         VERBOSE_XML(VB_GENERAL, LOG_ERR, filename, element,
                     "Font size must be greater than 0.");
         delete newFont;
-        return NULL;
+        return nullptr;
     }
-    else if (pixelsize > 0)
+    if (pixelsize > 0)
     {
         newFont->SetPixelSize(pixelsize);
     }
@@ -399,13 +434,15 @@ MythFontProperties *MythFontProperties::ParseFromXml(
     newFont->Unfreeze();
 
     QFontInfo fi(newFont->m_face);
-    if (newFont->m_face.family() != fi.family())
+    QString fi_family =
+        fi.family().remove(QRegularExpression("\\[.*]")).trimmed();
+    if (newFont->m_face.family() != fi_family)
     {
         VERBOSE_XML(VB_GENERAL, LOG_ERR, filename, element,
                     QString("Failed to load '%1', got '%2' instead")
             .arg(newFont->m_face.family()).arg(fi.family()));
 
-        if (show_available)
+        if (s_showAvailable)
         {
             LOG(VB_GUI, LOG_DEBUG, "Available fonts:");
 
@@ -435,7 +472,7 @@ MythFontProperties *MythFontProperties::ParseFromXml(
                 }
                 LOG(VB_GUI, LOG_DEBUG, family_styles.join(" "));
             }
-            show_available = false;
+            s_showAvailable = false;
         }
     }
     else
@@ -450,7 +487,7 @@ MythFontProperties *MythFontProperties::ParseFromXml(
     return newFont;
 }
 
-static FontMap *gFontMap = NULL;
+static FontMap *gFontMap = nullptr;
 
 // FIXME: remove
 QMap<QString, fontProp> globalFontMap;
@@ -458,11 +495,11 @@ QMap<QString, fontProp> globalFontMap;
 MythFontProperties *FontMap::GetFont(const QString &text)
 {
     if (text.isEmpty())
-        return NULL;
+        return nullptr;
 
-    if (m_FontMap.contains(text))
-        return &(m_FontMap[text]);
-    return NULL;
+    if (m_fontMap.contains(text))
+        return &(m_fontMap[text]);
+    return nullptr;
 }
 
 bool FontMap::AddFont(const QString &text, MythFontProperties *font)
@@ -470,14 +507,14 @@ bool FontMap::AddFont(const QString &text, MythFontProperties *font)
     if (!font || text.isEmpty())
         return false;
 
-    if (m_FontMap.contains(text))
+    if (m_fontMap.contains(text))
     {
         LOG(VB_GENERAL, LOG_ERR, LOC +
             QString("Already have a font: %1").arg(text));
         return false;
     }
 
-    m_FontMap[text] = *font;
+    m_fontMap[text] = *font;
 
     {
         /* FIXME backwards compat, remove */
@@ -499,12 +536,12 @@ bool FontMap::AddFont(const QString &text, MythFontProperties *font)
 
 bool FontMap::Contains(const QString &text)
 {
-    return m_FontMap.contains(text);
+    return m_fontMap.contains(text);
 }
 
 void FontMap::Clear(void)
 {
-    m_FontMap.clear();
+    m_fontMap.clear();
 
     //FIXME: remove
     globalFontMap.clear();
@@ -519,7 +556,7 @@ void FontMap::Rescale(int height)
     }
 
     QMap<QString, MythFontProperties>::iterator it;
-    for (it = m_FontMap.begin(); it != m_FontMap.end(); ++it)
+    for (it = m_fontMap.begin(); it != m_fontMap.end(); ++it)
     {
         (*it).Rescale(height);
     }

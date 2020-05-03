@@ -1,5 +1,6 @@
 // qt
 #include <QKeyEvent>
+#include <utility>
 
 // mythtv
 #include <mythcontext.h>
@@ -33,26 +34,20 @@
 #include "editmetadata.h"
 
 // these need to be static so both screens can pick them up
-bool EditMetadataCommon::metadataOnly = false;
-MusicMetadata *EditMetadataCommon::m_metadata = NULL;
-MusicMetadata *EditMetadataCommon::m_sourceMetadata = NULL;
+bool           EditMetadataCommon::s_metadataOnly = false;
+MusicMetadata *EditMetadataCommon::s_metadata = nullptr;
+MusicMetadata *EditMetadataCommon::s_sourceMetadata = nullptr;
 
 EditMetadataCommon::EditMetadataCommon(MythScreenStack *parent,
                                        MusicMetadata *source_metadata,
                                        const QString &name) :
-    MythScreenType(parent, name), m_albumArtChanged(false), m_doneButton(NULL)
+    MythScreenType(parent, name)
 {
     // make a copy so we can abandon changes
-    m_metadata = new MusicMetadata(*source_metadata);
-    m_sourceMetadata = source_metadata;
+    s_metadata = new MusicMetadata(*source_metadata);
+    s_sourceMetadata = source_metadata;
 
-    metadataOnly = false;
-}
-
-EditMetadataCommon::EditMetadataCommon(MythScreenStack *parent,
-                                       const QString &name) :
-    MythScreenType(parent, name), m_albumArtChanged(false), m_doneButton(NULL)
-{
+    s_metadataOnly = false;
 }
 
 EditMetadataCommon::~EditMetadataCommon()
@@ -60,14 +55,14 @@ EditMetadataCommon::~EditMetadataCommon()
         // do we need to save anything?
     if (m_albumArtChanged)
     {
-        m_metadata->getAlbumArtImages()->dumpToDatabase();
+        s_metadata->getAlbumArtImages()->dumpToDatabase();
 
         // force a reload of the images for any tracks affected
-        MetadataPtrList *allMusic =  gMusicData->all_music->getAllMetadata();
+        MetadataPtrList *allMusic =  gMusicData->m_all_music->getAllMetadata();
         for (int x = 0; x < allMusic->count(); x++)
         {
-            if ((allMusic->at(x)->ID() == m_sourceMetadata->ID()) ||
-                (allMusic->at(x)->getDirectoryId() == m_sourceMetadata->getDirectoryId()))
+            if ((allMusic->at(x)->ID() == s_sourceMetadata->ID()) ||
+                (allMusic->at(x)->getDirectoryId() == s_sourceMetadata->getDirectoryId()))
             {
                 allMusic->at(x)->reloadAlbumArtImages();
                 gPlayer->sendAlbumArtChangedEvent(allMusic->at(x)->ID());
@@ -92,9 +87,8 @@ bool EditMetadataCommon::keyPressEvent(QKeyEvent *event)
     if (GetFocusWidget() && GetFocusWidget()->keyPressEvent(event))
         return true;
 
-    bool handled = false;
     QStringList actions;
-    handled = GetMythMainWindow()->TranslateKeyPress("Music", event, actions);
+    bool handled = GetMythMainWindow()->TranslateKeyPress("Music", event, actions);
 
     for (int i = 0; i < actions.size() && !handled; i++)
     {
@@ -115,47 +109,45 @@ bool EditMetadataCommon::keyPressEvent(QKeyEvent *event)
 
 void EditMetadataCommon::updateMetadata()
 {
-    MythUITextEdit *edit = NULL;
-
-    edit = dynamic_cast<MythUITextEdit *>(GetChild("albumedit"));
+    MythUITextEdit *edit = dynamic_cast<MythUITextEdit *>(GetChild("albumedit"));
     if (edit)
-        m_metadata->setAlbum(edit->GetText());
+        s_metadata->setAlbum(edit->GetText());
 
     edit = dynamic_cast<MythUITextEdit *>(GetChild("artistedit"));
     if (edit)
-        m_metadata->setArtist(edit->GetText());
+        s_metadata->setArtist(edit->GetText());
 
     edit = dynamic_cast<MythUITextEdit *>(GetChild("compartistedit"));
     if (edit)
-        m_metadata->setCompilationArtist(edit->GetText());
+        s_metadata->setCompilationArtist(edit->GetText());
 
     edit = dynamic_cast<MythUITextEdit *>(GetChild("titleedit"));
     if (edit)
-        m_metadata->setTitle(edit->GetText());
+        s_metadata->setTitle(edit->GetText());
 
     edit = dynamic_cast<MythUITextEdit *>(GetChild("genreedit"));
     if (edit)
-        m_metadata->setGenre(edit->GetText());
+        s_metadata->setGenre(edit->GetText());
 
     MythUISpinBox *spin = dynamic_cast<MythUISpinBox *>(GetChild("yearspin"));
     if (spin)
-        m_metadata->setYear(spin->GetIntValue());
+        s_metadata->setYear(spin->GetIntValue());
 
     spin = dynamic_cast<MythUISpinBox *>(GetChild("tracknumspin"));
     if (spin)
-        m_metadata->setTrack(spin->GetIntValue());
+        s_metadata->setTrack(spin->GetIntValue());
 
     spin = dynamic_cast<MythUISpinBox *>(GetChild("discnumspin"));
     if (spin)
-        m_metadata->setDiscNumber(spin->GetIntValue());
+        s_metadata->setDiscNumber(spin->GetIntValue());
 
     spin = dynamic_cast<MythUISpinBox *>(GetChild("ratingspin"));
     if (spin)
-        m_metadata->setRating(spin->GetIntValue());
+        s_metadata->setRating(spin->GetIntValue());
 
     MythUICheckBox *check = dynamic_cast<MythUICheckBox *>(GetChild("compilationcheck"));
     if (check)
-        m_metadata->setCompilation(check->GetBooleanCheckState());
+        s_metadata->setCompilation(check->GetBooleanCheckState());
 }
 
 void EditMetadataCommon::showSaveMenu()
@@ -172,7 +164,7 @@ void EditMetadataCommon::showSaveMenu()
 
     MythScreenStack *popupStack = GetMythMainWindow()->GetStack("popup stack");
 
-    MythDialogBox *menu = new MythDialogBox(label, popupStack, "savechangesmenu");
+    auto *menu = new MythDialogBox(label, popupStack, "savechangesmenu");
 
     if (!menu->Create())
     {
@@ -182,7 +174,7 @@ void EditMetadataCommon::showSaveMenu()
 
     menu->SetReturnEvent(this, "savechangesmenu");
 
-    if (metadataOnly)
+    if (s_metadataOnly)
         menu->AddButton(tr("Save Changes"), SLOT(saveToMetadata()));
     else
         menu->AddButton(tr("Save Changes"), SLOT(saveAll()));
@@ -194,10 +186,10 @@ void EditMetadataCommon::showSaveMenu()
 
 void EditMetadataCommon::cleanupAndClose(void)
 {
-    if (m_metadata)
+    if (s_metadata)
     {
-        delete m_metadata;
-        m_metadata = NULL;
+        delete s_metadata;
+        s_metadata = nullptr;
     }
 
     Close();
@@ -205,21 +197,21 @@ void EditMetadataCommon::cleanupAndClose(void)
 
 void EditMetadataCommon::saveToMetadata()
 {
-    *m_sourceMetadata = *m_metadata;
+    *s_sourceMetadata = *s_metadata;
     emit metadataChanged();
     cleanupAndClose();
 }
 
 void EditMetadataCommon::saveToDatabase()
 {
-    m_metadata->setAlbumId(-1);
-    m_metadata->setGenreId(-1);
-    m_metadata->setArtistId(-1);
+    s_metadata->setAlbumId(-1);
+    s_metadata->setGenreId(-1);
+    s_metadata->setArtistId(-1);
 
-    m_metadata->dumpToDatabase();
-    *m_sourceMetadata = *m_metadata;
+    s_metadata->dumpToDatabase();
+    *s_sourceMetadata = *s_metadata;
 
-    gPlayer->sendMetadataChangedEvent(m_sourceMetadata->ID());
+    gPlayer->sendMetadataChangedEvent(s_sourceMetadata->ID());
 }
 
 void EditMetadataCommon::saveAll()
@@ -227,14 +219,14 @@ void EditMetadataCommon::saveAll()
     saveToDatabase();
 
     // only write to the tag if it's enabled by the user
-    if (GetMythDB()->GetNumSetting("AllowTagWriting", 0))
+    if (GetMythDB()->GetBoolSetting("AllowTagWriting", false))
     {
         QStringList strList;
         strList << "MUSIC_TAG_UPDATE_METADATA %1 %2"
-                << m_metadata->Hostname()
-                << QString::number(m_metadata->ID());
+                << s_metadata->Hostname()
+                << QString::number(s_metadata->ID());
 
-        SendStringListThread *thread = new SendStringListThread(strList);
+        auto *thread = new SendStringListThread(strList);
         MThreadPool::globalInstance()->start(thread, "UpdateMetadata");
     }
 
@@ -243,7 +235,7 @@ void EditMetadataCommon::saveAll()
 
 void EditMetadataCommon::setSaveMetadataOnly(void)
 {
-    metadataOnly = true;
+    s_metadataOnly = true;
 
     MythUIButton *albumartButton = dynamic_cast<MythUIButton *>(GetChild("albumartbutton"));
     if (albumartButton)
@@ -254,16 +246,16 @@ bool EditMetadataCommon::hasMetadataChanged(void)
 {
     bool changed = false;
 
-    changed |= (m_metadata->Album() != m_sourceMetadata->Album());
-    changed |= (m_metadata->Artist() != m_sourceMetadata->Artist());
-    changed |= (m_metadata->CompilationArtist() != m_sourceMetadata->CompilationArtist());
-    changed |= (m_metadata->Title() != m_sourceMetadata->Title());
-    changed |= (m_metadata->Genre() != m_sourceMetadata->Genre());
-    changed |= (m_metadata->Year() != m_sourceMetadata->Year());
-    changed |= (m_metadata->Track() != m_sourceMetadata->Track());
-    changed |= (m_metadata->DiscNumber() != m_sourceMetadata->DiscNumber());
-    changed |= (m_metadata->Compilation() != m_sourceMetadata->Compilation());
-    changed |= (m_metadata->Rating() != m_sourceMetadata->Rating());
+    changed |= (s_metadata->Album() != s_sourceMetadata->Album());
+    changed |= (s_metadata->Artist() != s_sourceMetadata->Artist());
+    changed |= (s_metadata->CompilationArtist() != s_sourceMetadata->CompilationArtist());
+    changed |= (s_metadata->Title() != s_sourceMetadata->Title());
+    changed |= (s_metadata->Genre() != s_sourceMetadata->Genre());
+    changed |= (s_metadata->Year() != s_sourceMetadata->Year());
+    changed |= (s_metadata->Track() != s_sourceMetadata->Track());
+    changed |= (s_metadata->DiscNumber() != s_sourceMetadata->DiscNumber());
+    changed |= (s_metadata->Compilation() != s_sourceMetadata->Compilation());
+    changed |= (s_metadata->Rating() != s_sourceMetadata->Rating());
 
     return changed;
 }
@@ -271,10 +263,10 @@ bool EditMetadataCommon::hasMetadataChanged(void)
 /// search Google for images
 void EditMetadataCommon::searchForAlbumImages(void)
 {
-    QString artist = m_metadata->Artist().replace(' ', '+');
+    QString artist = s_metadata->Artist().replace(' ', '+');
     artist = QUrl::toPercentEncoding(artist, "+");
 
-    QString album = m_metadata->Album().replace(' ', '+');
+    QString album = s_metadata->Album().replace(' ', '+');
     album = QUrl::toPercentEncoding(album, "+");
 
     QUrl url("http://www.google.co.uk/images?q=" + artist + "+" + album, QUrl::TolerantMode);
@@ -286,42 +278,20 @@ void EditMetadataCommon::searchForAlbumImages(void)
 
 void EditMetadataCommon::scanForImages(void)
 {
-    m_metadata->getAlbumArtImages()->scanForImages();
+    s_metadata->getAlbumArtImages()->scanForImages();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 // EditMatadataDialog
 
 EditMetadataDialog::EditMetadataDialog(MythScreenStack *parent, MusicMetadata *source_metadata)
-                  : EditMetadataCommon(parent, source_metadata, "EditMetadataDialog"),
-    m_artistEdit(NULL),             m_compArtistEdit(NULL),
-    m_albumEdit(NULL),              m_titleEdit(NULL),
-    m_genreEdit(NULL),              m_yearSpin(NULL),
-    m_trackSpin(NULL),              m_discSpin(NULL),
-    m_ratingSpin(NULL),             m_ratingState(NULL),
-    m_incRatingButton(NULL),        m_decRatingButton(NULL),
-    m_searchArtistButton(NULL),     m_searchCompArtistButton(NULL),
-    m_searchAlbumButton(NULL),      m_searchGenreButton(NULL),
-    m_artistIcon(NULL),             m_albumIcon(NULL),
-    m_genreIcon(NULL),              m_compilationCheck(NULL),
-    m_albumartButton(NULL)
+    : EditMetadataCommon(parent, source_metadata, "EditMetadataDialog")
 {
     gCoreContext->addListener(this);
 }
 
 EditMetadataDialog::EditMetadataDialog(MythScreenStack *parent)
-                  : EditMetadataCommon(parent, "EditMetadataDialog"),
-    m_artistEdit(NULL),             m_compArtistEdit(NULL),
-    m_albumEdit(NULL),              m_titleEdit(NULL),
-    m_genreEdit(NULL),              m_yearSpin(NULL),
-    m_trackSpin(NULL),              m_discSpin(NULL),
-    m_ratingSpin(NULL),             m_ratingState(NULL),
-    m_incRatingButton(NULL),        m_decRatingButton(NULL),
-    m_searchArtistButton(NULL),     m_searchCompArtistButton(NULL),
-    m_searchAlbumButton(NULL),      m_searchGenreButton(NULL),
-    m_artistIcon(NULL),             m_albumIcon(NULL),
-    m_genreIcon(NULL),              m_compilationCheck(NULL),
-    m_albumartButton(NULL)
+    : EditMetadataCommon(parent, "EditMetadataDialog")
 {
     gCoreContext->addListener(this);
 }
@@ -415,17 +385,17 @@ bool EditMetadataDialog::Create(void)
 
 void EditMetadataDialog::fillWidgets()
 {
-    m_compArtistEdit->SetText(m_metadata->CompilationArtist());
-    m_albumEdit->SetText(m_metadata->Album());
-    m_artistEdit->SetText(m_metadata->Artist());
-    m_genreEdit->SetText(m_metadata->Genre());
-    m_titleEdit->SetText(m_metadata->Title());
-    m_yearSpin->SetValue(m_metadata->Year());
-    m_trackSpin->SetValue(m_metadata->Track());
-    m_compilationCheck->SetCheckState(m_metadata->Compilation());
+    m_compArtistEdit->SetText(s_metadata->CompilationArtist());
+    m_albumEdit->SetText(s_metadata->Album());
+    m_artistEdit->SetText(s_metadata->Artist());
+    m_genreEdit->SetText(s_metadata->Genre());
+    m_titleEdit->SetText(s_metadata->Title());
+    m_yearSpin->SetValue(s_metadata->Year());
+    m_trackSpin->SetValue(s_metadata->Track());
+    m_compilationCheck->SetCheckState(s_metadata->Compilation());
 
     if (m_discSpin)
-        m_discSpin->SetValue(m_metadata->DiscNumber());
+        m_discSpin->SetValue(s_metadata->DiscNumber());
 
     updateRating();
 
@@ -436,13 +406,13 @@ void EditMetadataDialog::fillWidgets()
 
 void EditMetadataDialog::incRating(void)
 {
-    m_metadata->incRating();
+    s_metadata->incRating();
     updateRating();
 }
 
 void EditMetadataDialog::decRating(void)
 {
-    m_metadata->decRating();
+    s_metadata->decRating();
     updateRating();
 }
 
@@ -451,20 +421,20 @@ void EditMetadataDialog::ratingSpinChanged(MythUIButtonListItem *item)
     if (item)
     {
         int rating = item->GetData().value<int>();
-        m_metadata->setRating(rating);
+        s_metadata->setRating(rating);
 
         if (m_ratingState)
-            m_ratingState->DisplayState(QString("%1").arg(m_metadata->Rating()));
+            m_ratingState->DisplayState(QString("%1").arg(s_metadata->Rating()));
     }
 }
 
 void EditMetadataDialog::updateRating(void)
 {
     if (m_ratingState)
-        m_ratingState->DisplayState(QString("%1").arg(m_metadata->Rating()));
+        m_ratingState->DisplayState(QString("%1").arg(s_metadata->Rating()));
 
     if (m_ratingSpin)
-        m_ratingSpin->SetValue(m_metadata->Rating());
+        m_ratingSpin->SetValue(s_metadata->Rating());
 }
 
 bool EditMetadataDialog::keyPressEvent(QKeyEvent *event)
@@ -472,9 +442,8 @@ bool EditMetadataDialog::keyPressEvent(QKeyEvent *event)
     if (GetFocusWidget() && GetFocusWidget()->keyPressEvent(event))
         return true;
 
-    bool handled = false;
     QStringList actions;
-    handled = GetMythMainWindow()->TranslateKeyPress("Music", event, actions);
+    bool handled = GetMythMainWindow()->TranslateKeyPress("Music", event, actions);
 
     for (int i = 0; i < actions.size() && !handled; i++)
     {
@@ -499,14 +468,14 @@ bool EditMetadataDialog::keyPressEvent(QKeyEvent *event)
 
 void EditMetadataDialog::showMenu(void )
 {
-    if (metadataOnly)
+    if (s_metadataOnly)
         return;
 
     QString label = tr("Options");
 
     MythScreenStack *popupStack = GetMythMainWindow()->GetStack("popup stack");
 
-    MythDialogBox *menu = new MythDialogBox(label, popupStack, "optionsmenu");
+    auto *menu = new MythDialogBox(label, popupStack, "optionsmenu");
 
     if (!menu->Create())
     {
@@ -531,7 +500,7 @@ void EditMetadataDialog::switchToAlbumArt()
 
     MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
 
-    EditAlbumartDialog *editDialog = new EditAlbumartDialog(mainStack);
+    auto *editDialog = new EditAlbumartDialog(mainStack);
 
     if (!editDialog->Create())
     {
@@ -548,7 +517,7 @@ void EditMetadataDialog::checkClicked(bool state)
 {
     if (!state)
     {
-        m_compArtistEdit->SetText(m_metadata->Artist());
+        m_compArtistEdit->SetText(s_metadata->Artist());
     }
     else
     {
@@ -564,10 +533,10 @@ void EditMetadataDialog::searchArtist()
 {
     QString msg = tr("Select an Artist");
     QStringList searchList = MusicMetadata::fillFieldList("artist");
-    QString s = m_metadata->Artist();
+    QString s = s_metadata->Artist();
 
     MythScreenStack *popupStack = GetMythMainWindow()->GetStack("popup stack");
-    MythUISearchDialog *searchDlg = new MythUISearchDialog(popupStack, msg, searchList, false, s);
+    auto *searchDlg = new MythUISearchDialog(popupStack, msg, searchList, false, s);
 
     if (!searchDlg->Create())
     {
@@ -580,7 +549,7 @@ void EditMetadataDialog::searchArtist()
     popupStack->AddScreen(searchDlg);
 }
 
-void EditMetadataDialog::setArtist(QString artist)
+void EditMetadataDialog::setArtist(const QString& artist)
 {
     m_artistEdit->SetText(artist);
     updateArtistImage();
@@ -609,10 +578,10 @@ void EditMetadataDialog::searchCompilationArtist()
 {
     QString msg = tr("Select a Compilation Artist");
     QStringList searchList = MusicMetadata::fillFieldList("compilation_artist");
-    QString s = m_metadata->CompilationArtist();
+    QString s = s_metadata->CompilationArtist();
 
     MythScreenStack *popupStack = GetMythMainWindow()->GetStack("popup stack");
-    MythUISearchDialog *searchDlg = new MythUISearchDialog(popupStack, msg, searchList, false, s);
+    auto *searchDlg = new MythUISearchDialog(popupStack, msg, searchList, false, s);
 
     if (!searchDlg->Create())
     {
@@ -625,7 +594,7 @@ void EditMetadataDialog::searchCompilationArtist()
     popupStack->AddScreen(searchDlg);
 }
 
-void EditMetadataDialog::setCompArtist(QString compArtist)
+void EditMetadataDialog::setCompArtist(const QString& compArtist)
 {
     m_compArtistEdit->SetText(compArtist);
 }
@@ -634,10 +603,10 @@ void EditMetadataDialog::searchAlbum()
 {
     QString msg = tr("Select an Album");
     QStringList searchList = MusicMetadata::fillFieldList("album");
-    QString s = m_metadata->Album();
+    QString s = s_metadata->Album();
 
     MythScreenStack *popupStack = GetMythMainWindow()->GetStack("popup stack");
-    MythUISearchDialog *searchDlg = new MythUISearchDialog(popupStack, msg, searchList, false, s);
+    auto *searchDlg = new MythUISearchDialog(popupStack, msg, searchList, false, s);
 
     if (!searchDlg->Create())
     {
@@ -650,7 +619,7 @@ void EditMetadataDialog::searchAlbum()
     popupStack->AddScreen(searchDlg);
 }
 
-void EditMetadataDialog::setAlbum(QString album)
+void EditMetadataDialog::setAlbum(const QString& album)
 {
     m_albumEdit->SetText(album);
     updateAlbumImage();
@@ -662,7 +631,7 @@ void EditMetadataDialog::updateAlbumImage(void)
 
     if (m_albumIcon)
     {
-        file = m_metadata->getAlbumArtFile();
+        file = s_metadata->getAlbumArtFile();
         if (!file.isEmpty())
         {
             m_albumIcon->SetFilename(file);
@@ -685,10 +654,10 @@ void EditMetadataDialog::searchGenre()
     searchList.sort();
     */
 
-    QString s = m_metadata->Genre();
+    QString s = s_metadata->Genre();
 
     MythScreenStack *popupStack = GetMythMainWindow()->GetStack("popup stack");
-    MythUISearchDialog *searchDlg = new MythUISearchDialog(popupStack, msg, searchList, false, s);
+    auto *searchDlg = new MythUISearchDialog(popupStack, msg, searchList, false, s);
 
     if (!searchDlg->Create())
     {
@@ -701,7 +670,7 @@ void EditMetadataDialog::searchGenre()
     popupStack->AddScreen(searchDlg);
 }
 
-void EditMetadataDialog::setGenre(QString genre)
+void EditMetadataDialog::setGenre(const QString& genre)
 {
     m_genreEdit->SetText(genre);
     updateGenreImage();
@@ -743,7 +712,7 @@ void EditMetadataDialog::genreLostFocus(void)
 /// search flickr for genre images
 void EditMetadataDialog::searchForGenreImages(void)
 {
-    QString genre= m_metadata->Genre().replace(' ', '+');
+    QString genre= s_metadata->Genre().replace(' ', '+');
     genre = QUrl::toPercentEncoding(genre, "+");
 
     QUrl url("http://www.flickr.com/search/groups/?w=908425%40N22&m=pool&q=" + genre, QUrl::TolerantMode);
@@ -755,7 +724,7 @@ void EditMetadataDialog::searchForGenreImages(void)
 /// search google for artist images
 void EditMetadataDialog::searchForArtistImages(void)
 {
-    QString artist = m_metadata->Artist().replace(' ', '+');
+    QString artist = s_metadata->Artist().replace(' ', '+');
     artist = QUrl::toPercentEncoding(artist, "+");
 
     QUrl url("http://www.google.co.uk/images?q=" + artist, QUrl::TolerantMode);
@@ -768,10 +737,9 @@ void EditMetadataDialog::customEvent(QEvent *event)
 {
     if (event->type() == DialogCompletionEvent::kEventType)
     {
-        DialogCompletionEvent *dce = (DialogCompletionEvent*)(event);
-
+        auto *dce = dynamic_cast<DialogCompletionEvent*>(event);
         // make sure the user didn't ESCAPE out of the menu
-        if (dce->GetResult() < 0)
+        if ((dce == nullptr) || (dce->GetResult() < 0))
             return;
 
         QString resultid   = dce->GetId();
@@ -801,10 +769,10 @@ void EditMetadataDialog::customEvent(QEvent *event)
             {
                 QStringList strList;
                 strList << "MUSIC_CALC_TRACK_LENGTH"
-                        << m_metadata->Hostname()
-                        << QString::number(m_metadata->ID());
+                        << s_metadata->Hostname()
+                        << QString::number(s_metadata->ID());
 
-                SendStringListThread *thread = new SendStringListThread(strList);
+                auto *thread = new SendStringListThread(strList);
                 MThreadPool::globalInstance()->start(thread, "Send MUSIC_CALC_TRACK_LENGTH");
 
                 ShowOkPopup(tr("Asked the backend to check the tracks length"));
@@ -813,7 +781,9 @@ void EditMetadataDialog::customEvent(QEvent *event)
     }
     else if (event->type() == MythEvent::MythEventMessage)
     {
-        MythEvent *me = (MythEvent *)event;
+        auto *me = dynamic_cast<MythEvent *>(event);
+        if (me == nullptr)
+            return;
         QStringList tokens = me->Message().split(" ", QString::SkipEmptyParts);
 
         if (!tokens.isEmpty())
@@ -832,23 +802,23 @@ void EditMetadataDialog::customEvent(QEvent *event)
 
                 if (m_searchType == "artist")
                 {
-                    QString cleanName = fixFilename(m_metadata->Artist().toLower());
+                    QString cleanName = fixFilename(s_metadata->Artist().toLower());
                     QString file = QString("Icons/%1/%2.jpg").arg("artist").arg(cleanName);
-                    newFilename = gCoreContext->GenMythURL(gCoreContext->GetMasterHostName(),
-                                                           0, file, "MusicArt");
+                    newFilename = MythCoreContext::GenMythURL(gCoreContext->GetMasterHostName(),
+                                                              0, file, "MusicArt");
                 }
                 else if (m_searchType == "genre")
                 {
-                    QString cleanName = fixFilename(m_metadata->Genre().toLower());
+                    QString cleanName = fixFilename(s_metadata->Genre().toLower());
                     QString file = QString("Icons/%1/%2.jpg").arg("genre").arg(cleanName);
-                    newFilename = gCoreContext->GenMythURL(gCoreContext->GetMasterHostName(),
-                                                           0, file, "MusicArt");
+                    newFilename = MythCoreContext::GenMythURL(gCoreContext->GetMasterHostName(),
+                                                              0, file, "MusicArt");
                 }
                 else if (m_searchType == "album")
                 {
                     // move the image from the MythMusic config dir to the tracks
                     // dir in the 'Music' storage group
-                    newFilename = m_metadata->Filename();
+                    newFilename = s_metadata->Filename();
                     newFilename = newFilename.section( '/', 0, -2);
                     newFilename = newFilename + '/' +  oldFilename.section( '/', -1, -1);
                 }
@@ -871,13 +841,13 @@ void EditMetadataDialog::customEvent(QEvent *event)
                 updateArtistImage();
                 updateGenreImage();
 
-                m_metadata->getAlbumArtImages()->dumpToDatabase();
+                s_metadata->getAlbumArtImages()->dumpToDatabase();
                 // force a reload of the images for any tracks affected
-                MetadataPtrList *allMusic =  gMusicData->all_music->getAllMetadata();
+                MetadataPtrList *allMusic =  gMusicData->m_all_music->getAllMetadata();
                 for (int x = 0; x < allMusic->count(); x++)
                 {
-                    if ((allMusic->at(x)->ID() == m_sourceMetadata->ID()) ||
-                        (allMusic->at(x)->getDirectoryId() == m_sourceMetadata->getDirectoryId()))
+                    if ((allMusic->at(x)->ID() == s_sourceMetadata->ID()) ||
+                        (allMusic->at(x)->getDirectoryId() == s_sourceMetadata->getDirectoryId()))
                     {
                         allMusic->at(x)->reloadAlbumArtImages();
                         gPlayer->sendAlbumArtChangedEvent(allMusic->at(x)->ID());
@@ -892,10 +862,7 @@ void EditMetadataDialog::customEvent(QEvent *event)
 // EditAlbumartDialog
 
 EditAlbumartDialog::EditAlbumartDialog(MythScreenStack *parent)
-                  : EditMetadataCommon(parent, "EditAlbumartDialog"),
-    m_metadataButton(NULL), m_coverartImage(NULL),
-    m_coverartList(NULL), m_imagetypeText(NULL),
-    m_imagefilenameText(NULL)
+    : EditMetadataCommon(parent, "EditAlbumartDialog")
 {
     gCoreContext->addListener(this);
 }
@@ -944,16 +911,16 @@ void EditAlbumartDialog::gridItemChanged(MythUIButtonListItem *item)
 
     if (m_coverartImage)
     {
-        AlbumArtImage *image = item->GetData().value<AlbumArtImage*>();
+        auto *image = item->GetData().value<AlbumArtImage*>();
         if (image)
         {
-            m_coverartImage->SetFilename(image->filename);
+            m_coverartImage->SetFilename(image->m_filename);
             m_coverartImage->Load();
             if (m_imagetypeText)
-                m_imagetypeText->SetText(AlbumArtImages::getTypeName(image->imageType));
+                m_imagetypeText->SetText(AlbumArtImages::getTypeName(image->m_imageType));
             if (m_imagefilenameText)
             {
-                QFileInfo fi(image->filename);
+                QFileInfo fi(image->m_filename);
                 m_imagefilenameText->SetText(fi.fileName());
             }
         }
@@ -962,18 +929,17 @@ void EditAlbumartDialog::gridItemChanged(MythUIButtonListItem *item)
 
 void EditAlbumartDialog::updateImageGrid(void)
 {
-    AlbumArtList *albumArtList = m_metadata->getAlbumArtImages()->getImageList();
+    AlbumArtList *albumArtList = s_metadata->getAlbumArtImages()->getImageList();
 
     m_coverartList->Reset();
 
-    for (int x = 0; x < albumArtList->size(); x++)
+    foreach (auto art, *albumArtList)
     {
-        MythUIButtonListItem *item =
-            new MythUIButtonListItem(m_coverartList,
-                                     AlbumArtImages::getTypeName(albumArtList->at(x)->imageType),
-                                     qVariantFromValue(albumArtList->at(x)));
-        item->SetImage(albumArtList->at(x)->filename);
-        QString state = albumArtList->at(x)->embedded ? "tag" : "file";
+        auto *item = new MythUIButtonListItem(m_coverartList,
+                                     AlbumArtImages::getTypeName(art->m_imageType),
+                                     QVariant::fromValue(art));
+        item->SetImage(art->m_filename);
+        QString state = art->m_embedded ? "tag" : "file";
         item->DisplayState(state, "locationstate");
     }
 }
@@ -983,9 +949,8 @@ bool EditAlbumartDialog::keyPressEvent(QKeyEvent *event)
     if (GetFocusWidget() && GetFocusWidget()->keyPressEvent(event))
         return true;
 
-    bool handled = false;
     QStringList actions;
-    handled = GetMythMainWindow()->TranslateKeyPress("Music", event, actions);
+    bool handled = GetMythMainWindow()->TranslateKeyPress("Music", event, actions);
 
     for (int i = 0; i < actions.size() && !handled; i++)
     {
@@ -996,13 +961,11 @@ bool EditAlbumartDialog::keyPressEvent(QKeyEvent *event)
             showMenu();
         else if (action == "INFO")
             showTypeMenu();
-        else if (action == "ESCAPE")
-            showSaveMenu();
         else
             handled = false;
     }
 
-    if (!handled && MythScreenType::keyPressEvent(event))
+    if (!handled && EditMetadataCommon::keyPressEvent(event))
         handled = true;
 
     return handled;
@@ -1012,7 +975,7 @@ void EditAlbumartDialog::switchToMetadata(void)
 {
     MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
 
-    EditMetadataDialog *editDialog = new EditMetadataDialog(mainStack);
+    auto *editDialog = new EditMetadataDialog(mainStack);
 
     if (!editDialog->Create())
     {
@@ -1039,7 +1002,7 @@ void EditAlbumartDialog::showTypeMenu(bool changeType)
 
     MythScreenStack *popupStack = GetMythMainWindow()->GetStack("popup stack");
 
-    MythDialogBox *menu = new MythDialogBox(label, popupStack, "typemenu");
+    auto *menu = new MythDialogBox(label, popupStack, "typemenu");
 
     if (!menu->Create())
     {
@@ -1056,14 +1019,12 @@ void EditAlbumartDialog::showTypeMenu(bool changeType)
         imageType = AlbumArtImages::guessImageType(m_imageFilename);
     }
 
-    AlbumArtImages *albumArt = m_metadata->getAlbumArtImages();
-
-    menu->AddButton(albumArt->getTypeName(IT_UNKNOWN),    qVariantFromValue((int)IT_UNKNOWN),    false, (imageType == IT_UNKNOWN));
-    menu->AddButton(albumArt->getTypeName(IT_FRONTCOVER), qVariantFromValue((int)IT_FRONTCOVER), false, (imageType == IT_FRONTCOVER));
-    menu->AddButton(albumArt->getTypeName(IT_BACKCOVER),  qVariantFromValue((int)IT_BACKCOVER),  false, (imageType == IT_BACKCOVER));
-    menu->AddButton(albumArt->getTypeName(IT_CD),         qVariantFromValue((int)IT_CD),         false, (imageType == IT_CD));
-    menu->AddButton(albumArt->getTypeName(IT_INLAY),      qVariantFromValue((int)IT_INLAY),      false, (imageType == IT_INLAY));
-    menu->AddButton(albumArt->getTypeName(IT_ARTIST),     qVariantFromValue((int)IT_ARTIST),     false, (imageType == IT_ARTIST));
+    menu->AddButton(AlbumArtImages::getTypeName(IT_UNKNOWN),    QVariant::fromValue((int)IT_UNKNOWN),    false, (imageType == IT_UNKNOWN));
+    menu->AddButton(AlbumArtImages::getTypeName(IT_FRONTCOVER), QVariant::fromValue((int)IT_FRONTCOVER), false, (imageType == IT_FRONTCOVER));
+    menu->AddButton(AlbumArtImages::getTypeName(IT_BACKCOVER),  QVariant::fromValue((int)IT_BACKCOVER),  false, (imageType == IT_BACKCOVER));
+    menu->AddButton(AlbumArtImages::getTypeName(IT_CD),         QVariant::fromValue((int)IT_CD),         false, (imageType == IT_CD));
+    menu->AddButton(AlbumArtImages::getTypeName(IT_INLAY),      QVariant::fromValue((int)IT_INLAY),      false, (imageType == IT_INLAY));
+    menu->AddButton(AlbumArtImages::getTypeName(IT_ARTIST),     QVariant::fromValue((int)IT_ARTIST),     false, (imageType == IT_ARTIST));
 
     popupStack->AddScreen(menu);
 }
@@ -1074,7 +1035,7 @@ void EditAlbumartDialog::showMenu(void )
 
     MythScreenStack *popupStack = GetMythMainWindow()->GetStack("popup stack");
 
-    MythDialogBox *menu = new MythDialogBox(label, popupStack, "optionsmenu");
+    auto *menu = new MythDialogBox(label, popupStack, "optionsmenu");
 
     if (!menu->Create())
     {
@@ -1090,21 +1051,21 @@ void EditAlbumartDialog::showMenu(void )
 
     menu->AddButton(tr("Search Internet For Images"));
 
-    MetaIO *tagger = MetaIO::createTagger(m_metadata->Filename(false));
+    MetaIO *tagger = MetaIO::createTagger(s_metadata->Filename(false));
 
     if (m_coverartList->GetItemCurrent())
     {
-        menu->AddButton(tr("Change Image Type"), NULL, true);
+        menu->AddButton(tr("Change Image Type"), nullptr, true);
 
-        if (GetMythDB()->GetNumSetting("AllowTagWriting", 0))
+        if (GetMythDB()->GetBoolSetting("AllowTagWriting", false))
         {
             MythUIButtonListItem *item = m_coverartList->GetItemCurrent();
             if (item)
             {
-                AlbumArtImage *image = item->GetData().value<AlbumArtImage*>();
+                auto *image = item->GetData().value<AlbumArtImage*>();
                 if (image)
                 {
-                    if (!image->embedded)
+                    if (!image->m_embedded)
                     {
                         if (tagger && tagger->supportsEmbeddedImages())
                             menu->AddButton(tr("Copy Selected Image To Tag"));
@@ -1119,14 +1080,13 @@ void EditAlbumartDialog::showMenu(void )
         }
     }
 
-    if (GetMythDB()->GetNumSetting("AllowTagWriting", 0))
+    if (GetMythDB()->GetBoolSetting("AllowTagWriting", false))
     {
         if (tagger && tagger->supportsEmbeddedImages())
             menu->AddButton(tr("Copy Image To Tag"));
     }
 
-    if (tagger)
-        delete tagger;
+    delete tagger;
 
     popupStack->AddScreen(menu);
 }
@@ -1135,10 +1095,9 @@ void EditAlbumartDialog::customEvent(QEvent *event)
 {
     if (event->type() == DialogCompletionEvent::kEventType)
     {
-        DialogCompletionEvent *dce = (DialogCompletionEvent*)(event);
-
+        auto *dce = dynamic_cast<DialogCompletionEvent*>(event);
         // make sure the user didn't ESCAPE out of the menu
-        if (dce->GetResult() < 0)
+        if ((dce == nullptr) || (dce->GetResult() < 0))
             return;
 
         QString resultid   = dce->GetId();
@@ -1154,15 +1113,14 @@ void EditAlbumartDialog::customEvent(QEvent *event)
                 MythUIButtonListItem *item = m_coverartList->GetItemCurrent();
                 if (item)
                 {
-                    AlbumArtImages *albumArt = m_metadata->getAlbumArtImages();
-                    item->SetText(albumArt->getTypeName((ImageType) type));
-                    AlbumArtImage *image = item->GetData().value<AlbumArtImage*>();
+                    item->SetText(AlbumArtImages::getTypeName((ImageType) type));
+                    auto *image = item->GetData().value<AlbumArtImage*>();
                     if (image)
                     {
                         QStringList strList("MUSIC_TAG_CHANGEIMAGE");
-                        strList << m_metadata->Hostname()
-                                << QString::number(m_metadata->ID())
-                                << QString::number(image->imageType)
+                        strList << s_metadata->Hostname()
+                                << QString::number(s_metadata->ID())
+                                << QString::number(image->m_imageType)
                                 << QString::number(type);
 
                         gCoreContext->SendReceiveStringList(strList);
@@ -1211,7 +1169,9 @@ void EditAlbumartDialog::customEvent(QEvent *event)
     }
     else if (event->type() == MythEvent::MythEventMessage)
     {
-        MythEvent *me = (MythEvent *)event;
+        auto *me = dynamic_cast<MythEvent *>(event);
+        if (me == nullptr)
+            return;
         QStringList tokens = me->Message().split(" ", QString::SkipEmptyParts);
 
         if (!tokens.isEmpty())
@@ -1222,13 +1182,13 @@ void EditAlbumartDialog::customEvent(QEvent *event)
             {
                 if (tokens.size() >= 2)
                 {
-                    MusicMetadata::IdType songID = (MusicMetadata::IdType)tokens[1].toInt();
+                    auto songID = (MusicMetadata::IdType)tokens[1].toInt();
 
-                    if (m_metadata->ID() == songID)
+                    if (s_metadata->ID() == songID)
                     {
                         // force all the image to reload
-                        for (uint x = 0; x < m_metadata->getAlbumArtImages()->getImageCount(); x++)
-                            removeCachedImage(m_metadata->getAlbumArtImages()->getImageAt(x));
+                        for (uint x = 0; x < s_metadata->getAlbumArtImages()->getImageCount(); x++)
+                            removeCachedImage(s_metadata->getAlbumArtImages()->getImageAt(x));
 
                         updateImageGrid();
                     }
@@ -1246,7 +1206,7 @@ void EditAlbumartDialog::rescanForImages(void)
 
     updateImageGrid();
 
-    AlbumArtImages *albumArt = m_metadata->getAlbumArtImages();
+    AlbumArtImages *albumArt = s_metadata->getAlbumArtImages();
     if (albumArt->getImageCount() > 0)
         m_albumArtChanged = true;
 }
@@ -1256,7 +1216,7 @@ void EditAlbumartDialog::startCopyImageToTag(void)
     QString lastLocation = gCoreContext->GetSetting("MusicLastImageLocation", "/");
 
     MythScreenStack *popupStack = GetMythMainWindow()->GetStack("popup stack");
-    MythUIFileBrowser *fb = new MythUIFileBrowser(popupStack, lastLocation);
+    auto *fb = new MythUIFileBrowser(popupStack, lastLocation);
 
     fb->SetTypeFilter(QDir::AllDirs | QDir::Files | QDir::Readable);
 
@@ -1276,8 +1236,8 @@ void EditAlbumartDialog::startCopyImageToTag(void)
 void EditAlbumartDialog::copyImageToTag(ImageType imageType)
 {
     AlbumArtImage image;
-    image.filename = m_imageFilename;
-    image.imageType = imageType;
+    image.m_filename = m_imageFilename;
+    image.m_imageType = imageType;
 
     doCopyImageToTag(&image);
 }
@@ -1287,7 +1247,7 @@ void EditAlbumartDialog::copySelectedImageToTag(void)
     MythUIButtonListItem *item = m_coverartList->GetItemCurrent();
     if (item)
     {
-        AlbumArtImage *image = item->GetData().value<AlbumArtImage*>();
+        auto *image = item->GetData().value<AlbumArtImage*>();
         if (image)
             doCopyImageToTag(image);
     }
@@ -1298,7 +1258,7 @@ void EditAlbumartDialog::removeSelectedImageFromTag(void)
     MythUIButtonListItem *item = m_coverartList->GetItemCurrent();
     if (item)
     {
-        AlbumArtImage *image = item->GetData().value<AlbumArtImage*>();
+        auto *image = item->GetData().value<AlbumArtImage*>();
         if (image)
         {
             QString msg = tr("Are you sure you want to permanently remove this image from the tag?");
@@ -1315,14 +1275,14 @@ void EditAlbumartDialog::doRemoveImageFromTag(bool doIt)
     MythUIButtonListItem *item = m_coverartList->GetItemCurrent();
     if (item)
     {
-        AlbumArtImage *image = item->GetData().value<AlbumArtImage*>();
+        auto *image = item->GetData().value<AlbumArtImage*>();
         if (image)
         {
             // ask the backend to remove the image from the tracks tag
             QStringList strList("MUSIC_TAG_REMOVEIMAGE");
-            strList << m_metadata->Hostname()
-                    << QString::number(m_metadata->ID())
-                    << QString::number(image->id);
+            strList << s_metadata->Hostname()
+                    << QString::number(s_metadata->ID())
+                    << QString::number(image->m_id);
 
             gCoreContext->SendReceiveStringList(strList);
 
@@ -1336,9 +1296,9 @@ class CopyImageThread: public MThread
 {
   public:
     explicit CopyImageThread(QStringList strList) :
-            MThread("CopyImage"), m_strList(strList) {}
+            MThread("CopyImage"), m_strList(std::move(strList)) {}
 
-    virtual void run()
+    void run() override // MThread
     {
         RunProlog();
         gCoreContext->SendReceiveStringList(m_strList);
@@ -1354,8 +1314,8 @@ class CopyImageThread: public MThread
 void EditAlbumartDialog::doCopyImageToTag(const AlbumArtImage *image)
 {
     MythScreenStack *popupStack = GetMythMainWindow()->GetStack("popup stack");
-    MythUIBusyDialog *busy = new MythUIBusyDialog(tr("Copying image to tag..."),
-                                                  popupStack, "copyimagebusydialog");
+    auto *busy = new MythUIBusyDialog(tr("Copying image to tag..."),
+                                      popupStack, "copyimagebusydialog");
 
     if (busy->Create())
     {
@@ -1364,25 +1324,25 @@ void EditAlbumartDialog::doCopyImageToTag(const AlbumArtImage *image)
     else
     {
         delete busy;
-        busy = NULL;
+        busy = nullptr;
     }
 
     // copy the image to the tracks host
-    QFileInfo fi(image->filename);
-    QString saveFilename = gCoreContext->GenMythURL(m_metadata->Hostname(), 0,
-                                                    QString("AlbumArt/") + fi.fileName(),
-                                                    "MusicArt");
+    QFileInfo fi(image->m_filename);
+    QString saveFilename = MythCoreContext::GenMythURL(s_metadata->Hostname(), 0,
+                                                       QString("AlbumArt/") + fi.fileName(),
+                                                       "MusicArt");
 
-    RemoteFile::CopyFile(image->filename, saveFilename, true);
+    RemoteFile::CopyFile(image->m_filename, saveFilename, true);
 
     // ask the backend to add the image to the tracks tag
     QStringList strList("MUSIC_TAG_ADDIMAGE");
-    strList << m_metadata->Hostname()
-            << QString::number(m_metadata->ID())
+    strList << s_metadata->Hostname()
+            << QString::number(s_metadata->ID())
             << fi.fileName()
-            << QString::number(image->imageType);
+            << QString::number(image->m_imageType);
 
-    CopyImageThread *copyThread = new CopyImageThread(strList);
+    auto *copyThread = new CopyImageThread(strList);
     copyThread->start();
 
     while (copyThread->isRunning())
@@ -1405,8 +1365,8 @@ void EditAlbumartDialog::doCopyImageToTag(const AlbumArtImage *image)
 
 void EditAlbumartDialog::removeCachedImage(const AlbumArtImage *image)
 {
-    if (!image->embedded)
+    if (!image->m_embedded)
         return;
 
-    GetMythUI()->RemoveFromCacheByFile(image->filename);
+    GetMythUI()->RemoveFromCacheByFile(image->m_filename);
 }

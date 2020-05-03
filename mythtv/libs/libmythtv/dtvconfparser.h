@@ -32,11 +32,10 @@
 #ifndef _DTVCONFPARSER_H_
 #define _DTVCONFPARSER_H_
 
-// POSIX headers
-#include <stdint.h>
-#include <unistd.h>
-
 // C++ headers
+#include <cstdint>
+#include <unistd.h>
+#include <utility>
 #include <vector>
 using namespace std;
 
@@ -51,27 +50,25 @@ class QStringList;
 class DTVChannelInfo
 {
   public:
-    DTVChannelInfo() :
-        name(QString::null), serviceid(0), lcn(-1) {}
-
+    DTVChannelInfo() = default;
     QString toString() const;
 
  public:
-    QString name;
-    uint    serviceid;
-    int     lcn;
+    QString m_name;
+    uint    m_serviceid {0};
+    int     m_lcn       {-1};
 };
-typedef vector<DTVChannelInfo> DTVChannelInfoList;
+using DTVChannelInfoList = vector<DTVChannelInfo>;
 
 class DTVTransport : public DTVMultiplex
 {
   public:
-    DTVTransport(const DTVMultiplex &other) : DTVMultiplex(other) { }
+    explicit DTVTransport(const DTVMultiplex &other) : DTVMultiplex(other) { }
 
   public:
     DTVChannelInfoList channels;
 };
-typedef vector<DTVTransport> DTVChannelList;
+using DTVChannelList = vector<DTVTransport>;
 
 /** \class DTVConfParser
  *  \brief Parses dvb-utils channel scanner output files.
@@ -82,12 +79,13 @@ class DTVConfParser
     enum return_t   { ERROR_CARDTYPE, ERROR_OPEN, ERROR_PARSE, OK };
     enum cardtype_t { ATSC, OFDM, QPSK, QAM, DVBS2, UNKNOWN };
 
-    DTVConfParser(enum cardtype_t _type, uint sourceid, const QString &_file);
-    virtual ~DTVConfParser() { }
+    DTVConfParser(enum cardtype_t type, uint sourceid, QString file)
+        : m_type(type), m_sourceid(sourceid), m_filename(std::move(file)) {}
+    virtual ~DTVConfParser() = default;
 
     return_t Parse(void);
 
-    DTVChannelList GetChannels(void) const { return channels; }
+    DTVChannelList GetChannels(void) const { return m_channels; }
 
   private:
     bool ParseVDR(     const QStringList &tokens, int channelNo = -1);
@@ -98,13 +96,13 @@ class DTVConfParser
     bool ParseConfATSC(const QStringList &tokens);
 
   private:
-    cardtype_t type;
-    uint       sourceid;
-    QString    filename;
+    cardtype_t     m_type;
+    uint           m_sourceid;
+    QString        m_filename;
 
     void AddChannel(const DTVMultiplex &mux, DTVChannelInfo &chan);
 
-    DTVChannelList channels;
+    DTVChannelList m_channels;
 };
 
 #endif // _DTVCONFPARSER_H_

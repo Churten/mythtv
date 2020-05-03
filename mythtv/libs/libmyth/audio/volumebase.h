@@ -3,18 +3,18 @@
 
 #include "mythexp.h"
 
-typedef enum {
+enum MuteState {
     kMuteOff = 0,
     kMuteLeft,
     kMuteRight,
     kMuteAll,
-} MuteState;
+};
 
 class MPUBLIC VolumeBase
 {
   public:
     VolumeBase();
-    virtual ~VolumeBase() {};
+    virtual ~VolumeBase() = default;
 
     void SWVolume(bool set);
     bool SWVolume(void) const;
@@ -24,9 +24,9 @@ class MPUBLIC VolumeBase
     virtual void ToggleMute(void);
 
     virtual MuteState GetMuteState(void) const;
-    virtual MuteState SetMuteState(MuteState);
+    virtual MuteState SetMuteState(MuteState /*mstate*/);
 
-    static MuteState NextMuteState(MuteState);
+    static MuteState NextMuteState(MuteState /*cur*/);
 
   protected:
 
@@ -38,15 +38,15 @@ class MPUBLIC VolumeBase
     void UpdateVolume(void);
     void SyncVolume(void);
     void SetChannels(int new_channels);
-    bool internal_vol;
+    bool      m_internalVol        {false};
 
  private:
 
-    int volume;
-    MuteState current_mute_state;
-    bool swvol;
-    bool swvol_setting;
-    int channels;
+    int       m_volume             {80};
+    MuteState m_currentMuteState   {kMuteOff};
+    bool      m_swvol              {false};
+    bool      m_swvolSetting       {false};
+    int       m_channels           {0};
 
 };
 

@@ -25,9 +25,9 @@ class MythContextSlotHandler : public QObject
     void OnCloseDialog(void);
 
   private:
-    ~MythContextSlotHandler() {}
+    ~MythContextSlotHandler() override = default;
 
-    MythContextPrivate *d;
+    MythContextPrivate *d {nullptr}; // NOLINT(readability-identifier-naming)
 };
 
 /** \class MythContext
@@ -42,13 +42,13 @@ class MythContextSlotHandler : public QObject
 class MPUBLIC MythContext
 {
   public:
-    MythContext(const QString &binversion, bool needsBackend = false);
+    explicit MythContext(QString binversion, bool needsBackend = false);
     virtual ~MythContext();
 
-    bool Init(const bool gui = true,
-              const bool promptForBackend = false,
-              const bool bypassAutoDiscovery = false,
-              const bool ignoreDB = false);
+    bool Init(bool gui = true,
+              bool promptForBackend = false,
+              bool disableAutoDiscovery = false,
+              bool ignoreDB = false);
 
     DatabaseParams GetDatabaseParams(void);
     bool SaveDatabaseParams(const DatabaseParams &params);
@@ -57,15 +57,15 @@ class MPUBLIC MythContext
     void SetDisableEventPopup(bool check);
 
   private:
-    MythContextPrivate *d;
-    QString app_binary_version;
+    MythContextPrivate *d {nullptr}; // NOLINT(readability-identifier-naming)
+    QString             m_appBinaryVersion;
 };
 
 /// This global variable contains the MythContext instance for the application
 extern MPUBLIC MythContext *gContext;
 
 /// Service type for the backend's UPnP server
-extern const QString gBackendURI;
+extern const QString kBackendURI;
 
 #endif
 

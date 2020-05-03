@@ -50,8 +50,7 @@ static QSet<QString> kBasicInfoSet = QSet<QString>::fromList(kBasicInfoFields);
 
 //! Constructor
 InfoList::InfoList(MythScreenType &screen)
-    : m_screen(screen), m_btnList(NULL),
-      m_infoVisible(kNoInfo), m_mgr(ImageManagerFe::getInstance())
+    : m_screen(screen), m_mgr(ImageManagerFe::getInstance())
 {
     m_timer.setSingleShot(true);
     m_timer.setInterval(1000);
@@ -82,7 +81,7 @@ bool InfoList::Create(bool focusable)
  Basic & Full info. Non-focusable widgets toggle between Basic & Off.
  \param im The image/dir for which info is shown
 */
-void InfoList::Toggle(ImagePtrK im)
+void InfoList::Toggle(const ImagePtrK& im)
 {
     if (!im)
         return;
@@ -90,11 +89,12 @@ void InfoList::Toggle(ImagePtrK im)
     // Only focusable lists have an extra 'full' state as they can
     // be scrolled to view it all
     if (m_btnList->CanTakeFocus())
-
+    {
         // Start showing basic info then toggle between basic/full
         m_infoVisible = m_infoVisible == kBasicInfo ? kFullInfo : kBasicInfo;
 
     // Toggle between off/basic
+    }
     else if (m_infoVisible == kBasicInfo)
     {
         m_infoVisible = kNoInfo;
@@ -132,12 +132,12 @@ bool InfoList::Hide()
  \param name Exif tag name
  \param value Exif tag value
 */
-void InfoList::CreateButton(QString name, QString value)
+void InfoList::CreateButton(const QString& name, const QString& value)
 {
     if (value.isEmpty())
         return;
 
-    MythUIButtonListItem *item = new MythUIButtonListItem(m_btnList, "");
+    auto *item = new MythUIButtonListItem(m_btnList, "");
 
     InfoMap infoMap;
     infoMap.insert("name", name);
@@ -153,7 +153,10 @@ void InfoList::CreateButton(QString name, QString value)
 */
 void InfoList::CreateCount(ImageItemK &im)
 {
-    int dirCount = 0, imageCount = 0, videoCount = 0, size = 0;
+    int dirCount = 0;
+    int imageCount = 0;
+    int videoCount = 0;
+    int size = 0;
     m_mgr.GetDescendantCount(im.m_id, dirCount, imageCount, videoCount, size);
 
     QStringList report;
@@ -170,14 +173,17 @@ void InfoList::CreateCount(ImageItemK &im)
     if (im.IsDevice() && im.IsLocal())
     {
         // Returns KiB
-        int64_t total, used;
+        int64_t total = 0;
+        int64_t used = 0;
         int64_t free = getDiskSpace(im.m_filePath, total, used);
         if (total > 0)
+        {
             CreateButton(tr("Free space"), tr("%L1 (%L2\%) Used: %L3 / %L4")
                          .arg(ImageAdapterBase::FormatSize(free))
                          .arg(100 * free / total)
                          .arg(ImageAdapterBase::FormatSize(used),
                               ImageAdapterBase::FormatSize(total)));
+        }
     }
 }
 
@@ -186,7 +192,7 @@ void InfoList::CreateCount(ImageItemK &im)
  \brief Populates available exif details for the current image/dir.
  \param im An image or dir
 */
-void InfoList::Update(ImagePtrK im)
+void InfoList::Update(const ImagePtrK& im)
 {
     if (!im || m_infoVisible == kNoInfo)
         return;
@@ -240,17 +246,33 @@ void InfoList::Display(ImageItemK &im, const QStringList &tagStrings)
     CreateButton(tr("Path"), QString("%1%2 %3").arg(host, tagPath, clone));
 
     if (im.IsDevice())
+    {
+#if QT_VERSION < QT_VERSION_CHECK(5,8,0)
         CreateButton(tr("Last scan"),
                      MythDate::toString(QDateTime::fromTime_t(im.m_date),
                                         MythDate::kDateTimeFull | MythDate::kAddYear));
+#else
+        CreateButton(tr("Last scan"),
+                     MythDate::toString(QDateTime::fromSecsSinceEpoch(im.m_date),
+                                        MythDate::kDateTimeFull | MythDate::kAddYear));
+#endif
+    }
 
     if (im.IsDirectory())
         CreateCount(im);
 
     if (!im.IsDevice())
+    {
+#if QT_VERSION < QT_VERSION_CHECK(5,8,0)
         CreateButton(tr("Modified"),
                      MythDate::toString(QDateTime::fromTime_t(im.m_modTime),
                                         MythDate::kDateTimeFull | MythDate::kAddYear));
+#else
+        CreateButton(tr("Modified"),
+                     MythDate::toString(QDateTime::fromSecsSinceEpoch(im.m_modTime),
+                                        MythDate::kDateTimeFull | MythDate::kAddYear));
+#endif
+    }
 
     if (im.IsFile())
     {
@@ -262,7 +284,7 @@ void InfoList::Display(ImageItemK &im, const QStringList &tagStrings)
         foreach (const QString &group, tags.uniqueKeys())
         {
             // Iterate earliest->latest to preserve tag order
-            typedef QList<QStringList> TagList;
+            using TagList = QList<QStringList>;
             TagList tagList = tags.values(group);
             TagList::const_iterator i = tagList.constEnd();
 

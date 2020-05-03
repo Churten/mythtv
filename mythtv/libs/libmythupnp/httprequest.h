@@ -13,13 +13,17 @@
 #ifndef HTTPREQUEST_H_
 #define HTTPREQUEST_H_
 
+#include <utility>
+
+// Qt headers
+#include <QBuffer>
+#include <QDateTime>
 #include <QFile>
 #include <QRegExp>
-#include <QBuffer>
-#include <QTextStream>
 #include <QTcpSocket>
-#include <QDateTime>
+#include <QTextStream>
 
+// MythTV headers
 #include "mythsession.h"
 
 #include "upnpexp.h"
@@ -36,7 +40,7 @@
 // Typedefs / Defines
 /////////////////////////////////////////////////////////////////////////////
 
-typedef enum
+enum HttpRequestType
 {
     RequestTypeUnknown      = 0x0000,
     // HTTP 1.1
@@ -56,17 +60,16 @@ typedef enum
     // Not a request type
     RequestTypeResponse     = 0x1000
 
-} RequestType;
+};
 
-typedef enum
+enum HttpContentType
 {
     ContentType_Unknown    = 0,
     ContentType_Urlencoded = 1,
     ContentType_XML        = 2
+};
 
-} ContentType;
-
-typedef enum
+enum HttpResponseType
 {
     ResponseTypeNone     = -1,
     ResponseTypeUnknown  =  0,
@@ -79,15 +82,14 @@ typedef enum
     ResponseTypeFile     =  7,
     ResponseTypeOther    =  8,
     ResponseTypeHeader   =  9
+};
 
-} ResponseType;
-
-typedef struct
+struct MIMETypes
 {
     const char *pszExtension;
     const char *pszType;
 
-} MIMETypes;
+};
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -95,7 +97,7 @@ class IPostProcess
 {
     public:
         virtual void ExecutePostProcess( ) = 0;
-        virtual ~IPostProcess() {};
+        virtual ~IPostProcess() = default;
 };
 
 /////////////////////////////////////////////////////////////////////////////
@@ -106,15 +108,15 @@ class UPNP_PUBLIC HTTPRequest
 {
     protected:
 
-        static const char  *m_szServerHeaders;
+        static const char  *s_szServerHeaders;
 
-        QRegExp             m_procReqLineExp;
-        QRegExp             m_parseRangeExp;
+        QRegExp             m_procReqLineExp    {"[ \r\n][ \r\n]*"};
+        QRegExp             m_parseRangeExp     {"(\\d|\\-)"};
 
     public:
 
-        RequestType         m_eType;
-        ContentType         m_eContentType;
+        HttpRequestType     m_eType             {RequestTypeUnknown};
+        HttpContentType     m_eContentType      {ContentType_Unknown};
 
         QString             m_sRawRequest; // e.g. GET /foo/bar.html HTTP/1.1
 
@@ -131,42 +133,42 @@ class UPNP_PUBLIC HTTPRequest
         QString             m_sPayload;
 
         QString             m_sProtocol;
-        int                 m_nMajor;
-        int                 m_nMinor;
+        int                 m_nMajor            {0};
+        int                 m_nMinor            {0};
 
-        bool                m_bProtected;
-        bool                m_bEncrypted;
+        bool                m_bProtected        {false};
+        bool                m_bEncrypted        {false};
 
-        bool                m_bSOAPRequest;
+        bool                m_bSOAPRequest      {false};
         QString             m_sNameSpace;
 
         // Response
 
-        ResponseType        m_eResponseType;
+        HttpResponseType    m_eResponseType     {ResponseTypeUnknown};
         QString             m_sResponseTypeText;    // used for ResponseTypeOther
 
-        long                m_nResponseStatus;
+        long                m_nResponseStatus   {200};
         QStringMap          m_mapRespHeaders;
 
         QString             m_sFileName;
 
         QBuffer             m_response;
 
-        IPostProcess       *m_pPostProcess;
+        IPostProcess       *m_pPostProcess      {nullptr};
 
         QString             m_sPrivateToken;
         MythUserSession     m_userSession;
 
     private:
 
-        bool                m_bKeepAlive;
-        uint                m_nKeepAliveTimeout;
+        bool                m_bKeepAlive        {true};
+        uint                m_nKeepAliveTimeout {0};
 
     protected:
 
-        RequestType     SetRequestType      ( const QString &sType  );
+        HttpRequestType SetRequestType      ( const QString &sType  );
         void            SetRequestProtocol  ( const QString &sLine  );
-        ContentType     SetContentType      ( const QString &sType  );
+        HttpContentType SetContentType      ( const QString &sType  );
 
         void            ProcessRequestLine  ( const QString &sLine  );
         bool            ProcessSOAPPayload  ( const QString &sSOAPAction );
@@ -203,8 +205,8 @@ class UPNP_PUBLIC HTTPRequest
 
     public:
 
-                        HTTPRequest     ();
-        virtual        ~HTTPRequest     () {};
+                        HTTPRequest     () { m_response.open( QIODevice::ReadWrite ); }
+        virtual        ~HTTPRequest     () = default;
 
         bool            ParseRequest    ();
 
@@ -218,14 +220,14 @@ class UPNP_PUBLIC HTTPRequest
         void            FormatRawResponse   ( const QString &sXML );
 
         qint64          SendResponse    ( void );
-        qint64          SendResponseFile( QString sFileName );
+        qint64          SendResponseFile( const QString& sFileName );
 
         void            SetResponseHeader ( const QString &sKey,
                                             const QString &sValue,
                                             bool replace = false );
 
         void            SetCookie ( const QString &sKey, const QString &sValue,
-                                    const QDateTime &dtExpires,
+                                    const QDateTime &expiryDate,
                                     bool secure );
 
         QString         GetRequestHeader  ( const QString &sKey, QString sDefault );
@@ -237,7 +239,7 @@ class UPNP_PUBLIC HTTPRequest
         QByteArray      GetResponsePage     ( void ); // Static response e.g. 400, 404, 501
 
         QString         GetRequestProtocol  () const;
-        QString         GetResponseProtocol () const;
+        static QString         GetResponseProtocol () ;
 
         QString         GetRequestType () const;
 
@@ -251,7 +253,7 @@ class UPNP_PUBLIC HTTPRequest
 
         void            SetKeepAliveTimeout ( int nTimeout ) { m_nKeepAliveTimeout = nTimeout; }
 
-        bool            IsUrlProtected      ( const QString &sBaseUrl );
+        static bool            IsUrlProtected      ( const QString &sBaseUrl );
 
         // ------------------------------------------------------------------
 
@@ -274,20 +276,22 @@ class BufferedSocketDeviceRequest : public HTTPRequest
 {
     public:
 
-        QTcpSocket    *m_pSocket;
+        QTcpSocket    *m_pSocket {nullptr};
 
     public:
 
-        explicit BufferedSocketDeviceRequest( QTcpSocket *pSocket );
-        virtual ~BufferedSocketDeviceRequest() {};
+        explicit BufferedSocketDeviceRequest( QTcpSocket *pSocket )
+            : m_pSocket(pSocket) {}
+        ~BufferedSocketDeviceRequest() override = default;
 
-        virtual QString  ReadLine        ( int msecs );
-        virtual qint64   ReadBlock       ( char *pData, qint64 nMaxLen, int msecs = 0  );
-        virtual qint64   WriteBlock      ( const char *pData, qint64 nLen    );
-        virtual QString  GetHostAddress  ();
-        virtual quint16  GetHostPort     ();
-        virtual QString  GetPeerAddress  ();
-        virtual int      getSocketHandle () {return( m_pSocket->socketDescriptor() ); }
+        QString  ReadLine        ( int msecs ) override; // HTTPRequest
+        qint64   ReadBlock       ( char *pData, qint64 nMaxLen, int msecs = 0  ) override; // HTTPRequest
+        qint64   WriteBlock      ( const char *pData, qint64 nLen    ) override; // HTTPRequest
+        QString  GetHostAddress  () override; // HTTPRequest
+        quint16  GetHostPort     () override; // HTTPRequest
+        QString  GetPeerAddress  () override; // HTTPRequest
+        int      getSocketHandle () override // HTTPRequest
+            {return( m_pSocket->socketDescriptor() ); }
 
 };
 
@@ -298,33 +302,31 @@ class BufferedSocketDeviceRequest : public HTTPRequest
 class UPNP_PUBLIC HttpException
 {
     public:
-        int     code;
-        QString msg;
+        int     m_code {-1};
+        QString m_msg;
 
-        HttpException( int nCode = -1, const QString &sMsg = "")
-               : code( nCode ), msg ( sMsg  )
+        explicit HttpException( int nCode = -1, QString sMsg = "")
+               : m_code( nCode ), m_msg (std::move( sMsg  ))
         {}
 
         // Needed to force a v-table.
-        virtual ~HttpException()
-        {}
+        virtual ~HttpException() = default;
 };
 
 class UPNP_PUBLIC HttpRedirectException : public HttpException
 {
     public:
 
-        QString hostName;
-      //int     port;
+        QString m_hostName;
+      //int     m_port;
 
-        HttpRedirectException( const QString &sHostName = "",
+        explicit HttpRedirectException( QString sHostName = "",
                                      int      nCode     = -1,
                                const QString &sMsg      = "" )
-               : HttpException( nCode, sMsg ), hostName( sHostName )
+               : HttpException( nCode, sMsg ), m_hostName(std::move( sHostName ))
         {}
 
-        virtual ~HttpRedirectException()
-        {}
+        ~HttpRedirectException() override = default;
 
 };
 

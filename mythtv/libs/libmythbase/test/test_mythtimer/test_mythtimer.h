@@ -30,93 +30,93 @@ class TestMythTimer: public QObject
     Q_OBJECT
 
   private slots:
-    void StartsNotRunning(void)
+    static void StartsNotRunning(void)
     {
         MythTimer t;
         QVERIFY(!t.isRunning());
     }
 
-    void StartsOnStart(void)
+    static void StartsOnStart(void)
     {
         MythTimer t;
         t.start();
         QVERIFY(t.isRunning());
     }
 
-    void TimeElapsesAfterStart(void)
+    static void TimeElapsesAfterStart(void)
     {
         MythTimer t;
         t.start();
-        std::this_thread::sleep_for(std::chrono::milliseconds(52));
-        QVERIFY(t.elapsed() > 50);
+        std::this_thread::sleep_for(std::chrono::milliseconds(520));
+        QVERIFY(t.elapsed() > 500);
     }
 
-    void TimeElapsesAfterRestart(void)
+    static void TimeElapsesAfterRestart(void)
     {
         MythTimer t;
         t.restart();
-        std::this_thread::sleep_for(std::chrono::milliseconds(52));
-        QVERIFY(t.elapsed() > 50);
+        std::this_thread::sleep_for(std::chrono::milliseconds(520));
+        QVERIFY(t.elapsed() > 500);
     }
 
-    void TimeDoesNotElapseImmediatelyAfterConstructionByDefault(void)
+    static void TimeDoesNotElapseImmediatelyAfterConstructionByDefault(void)
     {
         MythTimer t;
-        std::this_thread::sleep_for(std::chrono::milliseconds(52));
+        std::this_thread::sleep_for(std::chrono::milliseconds(520));
         QVERIFY(t.elapsed() == 0);
     }
 
-    void TimeDoesNotElapsesImmediatelyAfterContructionIfIntended(void)
+    static void TimeDoesNotElapsesImmediatelyAfterContructionIfIntended(void)
     {
         MythTimer t(MythTimer::kStartRunning);
-        std::this_thread::sleep_for(std::chrono::milliseconds(52));
-        QVERIFY(t.elapsed() > 50);
+        std::this_thread::sleep_for(std::chrono::milliseconds(520));
+        QVERIFY(t.elapsed() > 500);
     }
 
-    void TimeElapsesContinually(void)
+    static void TimeElapsesContinually(void)
     {
         MythTimer t;
         t.start();
-        std::this_thread::sleep_for(std::chrono::milliseconds(52));
-        QVERIFY(t.elapsed() > 50);
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
-        QVERIFY(t.elapsed() > 100);
+        std::this_thread::sleep_for(std::chrono::milliseconds(520));
+        QVERIFY(t.elapsed() > 500);
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        QVERIFY(t.elapsed() > 1000);
     }
 
-    void TimeResetsOnRestart(void)
+    static void TimeResetsOnRestart(void)
     {
         MythTimer t;
         t.start();
-        std::this_thread::sleep_for(std::chrono::milliseconds(52));
-        QVERIFY(t.restart() > 50);
-        std::this_thread::sleep_for(std::chrono::milliseconds(52));
-        QVERIFY(t.elapsed() > 50 && t.elapsed() < 75);
+        std::this_thread::sleep_for(std::chrono::milliseconds(520));
+        QVERIFY(t.restart() > 500);
+        std::this_thread::sleep_for(std::chrono::milliseconds(520));
+        QVERIFY(t.elapsed() > 500 && t.elapsed() < 750);
     }
 
-    void AddMSecsWorks(void)
+    static void AddMSecsWorks(void)
     {
         MythTimer t;
         t.start();
-        t.addMSecs(-25);
-        std::this_thread::sleep_for(std::chrono::milliseconds(52));
-        QVERIFY(t.elapsed() > 25 && t.elapsed() < 50);
+        t.addMSecs(-250);
+        std::this_thread::sleep_for(std::chrono::milliseconds(520));
+        QVERIFY(t.elapsed() > 250 && t.elapsed() < 500);
     }
 
-    void AddMSecsIsResetOnStart(void)
+    static void AddMSecsIsResetOnStart(void)
     {
         MythTimer t;
-        t.addMSecs(-25);
+        t.addMSecs(-250);
         t.start();
-        std::this_thread::sleep_for(std::chrono::milliseconds(52));
-        QVERIFY(t.elapsed() > 50);
+        std::this_thread::sleep_for(std::chrono::milliseconds(520));
+        QVERIFY(t.elapsed() > 500);
     }
 
-    void AddMSecsIsResetOnRestart(void)
+    static void AddMSecsIsResetOnRestart(void)
     {
         MythTimer t;
-        t.addMSecs(-25);
+        t.addMSecs(-250);
         t.restart();
-        std::this_thread::sleep_for(std::chrono::milliseconds(52));
-        QVERIFY(t.elapsed() > 50);
+        std::this_thread::sleep_for(std::chrono::milliseconds(520));
+        QVERIFY(t.elapsed() > 500);
     }
 };

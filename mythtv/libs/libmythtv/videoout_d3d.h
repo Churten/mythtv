@@ -12,37 +12,32 @@
 #include "dxva2decoder.h"
 #endif
 
-class VideoOutputD3D : public VideoOutput
+class VideoOutputD3D : public MythVideoOutput
 {
   public:
-    static void GetRenderOptions(render_opts &opts, QStringList &cpudeints);
+    static void GetRenderOptions(RenderOptions &Options);
     VideoOutputD3D();
    ~VideoOutputD3D();
 
     bool Init(const QSize &video_dim_buf,
               const QSize &video_dim_disp,
               float aspect,
-              WId winid, const QRect &win_rect, MythCodecID codec_id);
-    void PrepareFrame(VideoFrame *buffer, FrameScanType, OSD *osd);
+              WId winid, const QRect &win_rect, MythCodecID codec_id) override; // VideoOutput
+    void PrepareFrame(VideoFrame *buffer, FrameScanType, OSD *osd) override; // VideoOutput
     void ProcessFrame(VideoFrame *frame, OSD *osd,
-                      FilterChain *filterList,
                       const PIPMap &pipPlayers,
-                      FrameScanType scan);
-    void Show(FrameScanType );
-    void WindowResized(const QSize &new_size);
+                      FrameScanType scan) override; // VideoOutput
+    void Show(FrameScanType ) override; // VideoOutput
+    void WindowResized(const QSize &new_size) override; // VideoOutput
     bool InputChanged(const QSize &video_dim_buf,
                       const QSize &video_dim_disp,
                       float        aspect,
                       MythCodecID  av_codec_id,
-                      void        *codec_private,
-                      bool        &aspect_only);
-    void MoveResizeWindow(QRect new_rect) {;}
-    void UpdatePauseFrame(int64_t &disp_timecode);
-    virtual void DrawUnusedRects(bool) {;} // VideoOutput
-    void Zoom(ZoomDirection direction);
-    void EmbedInWidget(const QRect &rect);
-    void StopEmbedding(void);
-    bool hasFullScreenOSD(void) const { return true; }
+                      bool        &aspect_only,
+                      MythMultiLocker *Locks) override; // VideoOutput
+    void UpdatePauseFrame(int64_t &disp_timecode, FrameScanType Scan = kScan_Progressive) override; // VideoOutput
+    void EmbedInWidget(const QRect &rect) override; // VideoOutput
+    void StopEmbedding(void) override; // VideoOutput
     static QStringList GetAllowedRenderers(MythCodecID myth_codec_id,
                                            const QSize &video_dim);
     static MythCodecID GetBestSupportedCodec(uint width, uint height,
@@ -53,19 +48,17 @@ class VideoOutputD3D : public VideoOutput
 
     void ShowPIP(VideoFrame  *frame,
                  MythPlayer  *pipplayer,
-                 PIPLocation  loc);
-    void RemovePIP(MythPlayer *pipplayer);
-    bool IsPIPSupported(void) const { return true; }
-    virtual MythPainter *GetOSDPainter(void);
-    bool hasHWAcceleration(void) const { return !codec_is_std(video_codec_id); }
-    virtual bool ApproveDeintFilter(const QString& filtername) const;
-    virtual void* GetDecoderContext(unsigned char* buf, uint8_t*& id);
+                 PIPLocation  loc) override; // VideoOutput
+    void RemovePIP(MythPlayer *pipplayer) override; // VideoOutput
+    bool IsPIPSupported(void) const override // VideoOutput
+        { return true; }
+    MythPainter *GetOSDPainter(void) override; // VideoOutput
 
-    virtual bool CanVisualise(AudioPlayer *audio, MythRender *render)
-        { return VideoOutput::CanVisualise(audio, (MythRender*)m_render); }
-    virtual bool SetupVisualisation(AudioPlayer *audio, MythRender *render,
-                                    const QString &name)
-        { return VideoOutput::SetupVisualisation(audio, (MythRender*)m_render, name); }
+    bool CanVisualise(AudioPlayer *audio, MythRender */*render*/) override // VideoOutput
+        { return MythVideoOutput::CanVisualise(audio, (MythRender*)m_render); }
+    bool SetupVisualisation(AudioPlayer *audio, MythRender */*render*/,
+                            const QString &name) override // VideoOutput
+        { return MythVideoOutput::SetupVisualisation(audio, (MythRender*)m_render, name); }
 
   private:
     void TearDown(void);
@@ -79,26 +72,26 @@ class VideoOutputD3D : public VideoOutput
 
   private:
     VideoFrame              m_pauseFrame;
-    QMutex                  m_lock;
-    HWND                    m_hWnd;
-    HWND                    m_hEmbedWnd;
-    MythRenderD3D9         *m_render;
-    D3D9Image              *m_video;
-    bool                    m_render_valid;
-    bool                    m_render_reset;
+    QMutex                  m_lock           {QMutex::Recursive};
+    HWND                    m_hWnd           {nullptr};
+    HWND                    m_hEmbedWnd      {nullptr};
+    MythRenderD3D9         *m_render         {nullptr};
+    D3D9Image              *m_video          {nullptr};
+    bool                    m_renderValid    {false};
+    bool                    m_renderReset    {false};
 
     QMap<MythPlayer*,D3D9Image*> m_pips;
-    QMap<MythPlayer*,bool>       m_pip_ready;
-    D3D9Image                   *m_pip_active;
+    QMap<MythPlayer*,bool>       m_pipReady  {nullptr};
+    D3D9Image                   *m_pipActive {nullptr};
 
-    MythD3D9Painter        *m_osd_painter;
+    MythD3D9Painter        *m_osdPainter     {nullptr};
 
     bool CreateDecoder(void);
     void DeleteDecoder(void);
 #ifdef USING_DXVA2
-    DXVA2Decoder *m_decoder;
+    DXVA2Decoder *m_decoder      {nullptr};
 #endif
-    void         *m_pause_surface;
+    void         *m_pauseSurface {nullptr};
 };
 
 #endif

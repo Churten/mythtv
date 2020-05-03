@@ -36,60 +36,60 @@ class Content : public ContentServices
 
     public:
 
-        Q_INVOKABLE explicit Content( QObject */*parent*/ = 0 ) {}
+        Q_INVOKABLE explicit Content( QObject */*parent*/ = nullptr ) {}
 
     public:
 
         QFileInfo           GetFile             ( const QString   &StorageGroup,
-                                                  const QString   &FileName );
+                                                  const QString   &FileName ) override; // ContentServices
 
         QFileInfo           GetImageFile        ( const QString   &StorageGroup,
                                                   const QString   &FileName,
-                                                  int Width, int Height );
+                                                  int Width, int Height ) override; // ContentServices
 
-        QStringList         GetFileList         ( const QString   &StorageGroup );
+        QStringList         GetFileList         ( const QString   &StorageGroup ) override; // ContentServices
 
-        QStringList         GetDirList          ( const QString   &StorageGroup );
+        QStringList         GetDirList          ( const QString   &StorageGroup ) override; // ContentServices
 
         QFileInfo           GetRecordingArtwork ( const QString   &Type,
                                                   const QString   &Inetref,
                                                   int Season, int Width,
-                                                  int Height);
+                                                  int Height) override; // ContentServices
 
         DTC::ArtworkInfoList*
                             GetRecordingArtworkList( int              RecordedId,
                                                      int              ChanId,
-                                                     const QDateTime &StartTime  );
+                                                     const QDateTime &recstarttsRaw  ) override; // ContentServices
 
         DTC::ArtworkInfoList*
                             GetProgramArtworkList( const QString &Inetref,
-                                                   int            Season  );
+                                                   int            Season  ) override; // ContentServices
 
         QFileInfo           GetVideoArtwork     ( const QString   &Type,
-                                                  int Id, int Width, int Height );
+                                                  int Id, int Width, int Height ) override; // ContentServices
 
-        QFileInfo           GetAlbumArt         ( int Id, int Width, int Height );
+        QFileInfo           GetAlbumArt         ( int Id, int Width, int Height ) override; // ContentServices
 
         QFileInfo           GetPreviewImage     ( int              RecordedId,
                                                   int              ChanId,
-                                                  const QDateTime &StartTime,
+                                                  const QDateTime &recstarttsRaw,
                                                   int              Width,
                                                   int              Height,
                                                   int              SecsIn,
-                                                  const QString   &Format);
+                                                  const QString   &Format) override; // ContentServices
 
         QFileInfo           GetRecording        ( int              RecordedId,
                                                   int              ChanId,
-                                                  const QDateTime &StartTime );
+                                                  const QDateTime &recstarttsRaw ) override; // ContentServices
 
-        QFileInfo           GetMusic            ( int Id );
-        QFileInfo           GetVideo            ( int Id );
+        QFileInfo           GetMusic            ( int Id ) override; // ContentServices
+        QFileInfo           GetVideo            ( int Id ) override; // ContentServices
 
         QString             GetHash             ( const QString   &StorageGroup,
-                                                  const QString   &FileName );
+                                                  const QString   &FileName ) override; // ContentServices
 
         bool                DownloadFile        ( const QString   &URL,
-                                                  const QString   &StorageGroup );
+                                                  const QString   &StorageGroup ) override; // ContentServices
 
         // HTTP Live Streaming
         DTC::LiveStreamInfo     *AddLiveStream          ( const QString   &StorageGroup,
@@ -100,17 +100,17 @@ class Content : public ContentServices
                                                           int              Height,
                                                           int              Bitrate,
                                                           int              AudioBitrate,
-                                                          int              SampleRate );
+                                                          int              SampleRate ) override; // ContentServices
 
         DTC::LiveStreamInfo     *AddRecordingLiveStream ( int              RecordedId,
                                                           int              ChanId,
-                                                          const QDateTime &StartTime,
+                                                          const QDateTime &recstarttsRaw,
                                                           int              MaxSegments,
                                                           int              Width,
                                                           int              Height,
                                                           int              Bitrate,
                                                           int              AudioBitrate,
-                                                          int              SampleRate );
+                                                          int              SampleRate ) override; // ContentServices
 
         DTC::LiveStreamInfo     *AddVideoLiveStream     ( int              Id,
                                                           int              MaxSegments,
@@ -118,13 +118,13 @@ class Content : public ContentServices
                                                           int              Height,
                                                           int              Bitrate,
                                                           int              AudioBitrate,
-                                                          int              SampleRate );
+                                                          int              SampleRate ) override; // ContentServices
 
-        DTC::LiveStreamInfo     *GetLiveStream            ( int Id );
-        DTC::LiveStreamInfoList *GetLiveStreamList        ( const QString &FileName );
+        DTC::LiveStreamInfo     *GetLiveStream            ( int Id ) override; // ContentServices
+        DTC::LiveStreamInfoList *GetLiveStreamList        ( const QString &FileName ) override; // ContentServices
 
-        DTC::LiveStreamInfo     *StopLiveStream         ( int Id );
-        bool                     RemoveLiveStream       ( int Id );
+        DTC::LiveStreamInfo     *StopLiveStream         ( int Id ) override; // ContentServices
+        bool                     RemoveLiveStream       ( int Id ) override; // ContentServices
 };
 
 // --------------------------------------------------------------------------
@@ -153,7 +153,7 @@ class ScriptableContent : public QObject
 
     public:
 
-        Q_INVOKABLE ScriptableContent( QScriptEngine *pEngine, QObject *parent = 0 ) : QObject( parent )
+        Q_INVOKABLE explicit ScriptableContent( QScriptEngine *pEngine, QObject *parent = nullptr ) : QObject( parent )
         {
             m_pEngine = pEngine;
         }
@@ -162,7 +162,7 @@ class ScriptableContent : public QObject
 
         QObject* GetRecordingArtworkList( int RecordedId )
         {
-            SCRIPT_CATCH_EXCEPTION( NULL,
+            SCRIPT_CATCH_EXCEPTION( nullptr,
                 return m_obj.GetRecordingArtworkList( RecordedId, 0, QDateTime() );
             )
         }
@@ -170,7 +170,7 @@ class ScriptableContent : public QObject
         QObject* GetProgramArtworkList( const QString &Inetref,
                                               int      Season  )
         {
-            SCRIPT_CATCH_EXCEPTION( NULL,
+            SCRIPT_CATCH_EXCEPTION( nullptr,
                 return m_obj.GetProgramArtworkList( Inetref, Season );
             )
         }
@@ -194,7 +194,7 @@ class ScriptableContent : public QObject
                                  int              AudioBitrate,
                                  int              SampleRate )
         {
-            SCRIPT_CATCH_EXCEPTION( NULL,
+            SCRIPT_CATCH_EXCEPTION( nullptr,
                 return m_obj.AddLiveStream(StorageGroup, FileName, HostName,
                                        MaxSegments, Width, Height, Bitrate,
                                        AudioBitrate, SampleRate);
@@ -209,7 +209,7 @@ class ScriptableContent : public QObject
                                          int              AudioBitrate,
                                          int              SampleRate )
         {
-            SCRIPT_CATCH_EXCEPTION( NULL,
+            SCRIPT_CATCH_EXCEPTION( nullptr,
                 return m_obj.AddRecordingLiveStream(RecordedId, 0, QDateTime(),
                                                 MaxSegments,
                                                 Width, Height, Bitrate,
@@ -225,7 +225,7 @@ class ScriptableContent : public QObject
                                      int              AudioBitrate,
                                      int              SampleRate )
         {
-            SCRIPT_CATCH_EXCEPTION( NULL,
+            SCRIPT_CATCH_EXCEPTION( nullptr,
                 return m_obj.AddVideoLiveStream(Id, MaxSegments, Width, Height,
                                             Bitrate, AudioBitrate, SampleRate);
             )
@@ -233,21 +233,21 @@ class ScriptableContent : public QObject
 
         QObject* GetLiveStream( int Id )
         {
-            SCRIPT_CATCH_EXCEPTION( NULL,
+            SCRIPT_CATCH_EXCEPTION( nullptr,
                 return m_obj.GetLiveStream( Id );
             )
         }
 
         QObject* GetLiveStreamList( const QString &FileName )
         {
-            SCRIPT_CATCH_EXCEPTION( NULL,
+            SCRIPT_CATCH_EXCEPTION( nullptr,
                 return m_obj.GetLiveStreamList( FileName );
             )
         }
 
         QObject* StopLiveStream( int Id )
         {
-            SCRIPT_CATCH_EXCEPTION( NULL,
+            SCRIPT_CATCH_EXCEPTION( nullptr,
                 return m_obj.StopLiveStream(Id);
             )
         }
@@ -260,6 +260,7 @@ class ScriptableContent : public QObject
         }
 };
 
+// NOLINTNEXTLINE(modernize-use-auto)
 Q_SCRIPT_DECLARE_QMETAOBJECT_MYTHTV( ScriptableContent, QObject*);
 
 #endif

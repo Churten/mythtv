@@ -53,7 +53,7 @@ static void runZMConsole(void)
 
     MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
 
-    ZMConsole *console = new ZMConsole(mainStack);
+    auto *console = new ZMConsole(mainStack);
 
     if (console->Create())
         mainStack->AddScreen(console);
@@ -67,7 +67,7 @@ static void runZMLiveView(void)
 
     MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
 
-    ZMLivePlayer *player = new ZMLivePlayer(mainStack);
+    auto *player = new ZMLivePlayer(mainStack);
 
     if (player->Create())
         mainStack->AddScreen(player);
@@ -80,7 +80,7 @@ static void runZMEventView(void)
 
     MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
 
-    ZMEvents *events = new ZMEvents(mainStack);
+    auto *events = new ZMEvents(mainStack);
 
     if (events->Create())
         mainStack->AddScreen(events);
@@ -96,15 +96,15 @@ static void runZMMiniPlayer(void)
 
     MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
 
-    ZMMiniPlayer *miniPlayer = new ZMMiniPlayer(mainStack);
+    auto *miniPlayer = new ZMMiniPlayer(mainStack);
 
     if (miniPlayer->Create())
         mainStack->AddScreen(miniPlayer);
 }
 
 // these point to the the mainmenu callback if found
-static void (*m_callback)(void *, QString &) = NULL;
-static void *m_callbackdata = NULL;
+static void (*m_callback)(void *, QString &) = nullptr;
+static void *m_callbackdata = nullptr;
 
 static void ZoneMinderCallback(void *data, QString &selection)
 {
@@ -127,12 +127,12 @@ static void ZoneMinderCallback(void *data, QString &selection)
     }
 }
 
-static int runMenu(QString which_menu)
+static int runMenu(const QString& which_menu)
 {
     QString themedir = GetMythUI()->GetThemeDir();
 
     // find the 'mainmenu' MythThemedMenu so we can use the callback from it
-    MythThemedMenu *mainMenu = NULL;
+    MythThemedMenu *mainMenu = nullptr;
     QObject *parentObject = GetMythMainWindow()->GetMainStack()->GetTopScreen();
 
     while (parentObject)
@@ -145,7 +145,7 @@ static int runMenu(QString which_menu)
         parentObject = parentObject->parent();
     }
 
-    MythThemedMenu *diag = new MythThemedMenu(
+    auto *diag = new MythThemedMenu(
         themedir, which_menu, GetMythMainWindow()->GetMainStack(),
         "zoneminder menu");
 
@@ -154,11 +154,11 @@ static int runMenu(QString which_menu)
         mainMenu->getCallback(&m_callback, &m_callbackdata);
     else
     {
-        m_callback = NULL;
-        m_callbackdata = NULL;
+        m_callback = nullptr;
+        m_callbackdata = nullptr;
     }
 
-    diag->setCallback(ZoneMinderCallback, NULL);
+    diag->setCallback(ZoneMinderCallback, nullptr);
     diag->setKillable();
 
     if (diag->foundTheme())
@@ -166,13 +166,10 @@ static int runMenu(QString which_menu)
         GetMythMainWindow()->GetMainStack()->AddScreen(diag);
         return 0;
     }
-    else
-    {
-        LOG(VB_GENERAL, LOG_ERR, QString("Couldn't find menu %1 or theme %2")
-                .arg(which_menu).arg(themedir));
-        delete diag;
-        return -1;
-    }
+    LOG(VB_GENERAL, LOG_ERR, QString("Couldn't find menu %1 or theme %2")
+        .arg(which_menu).arg(themedir));
+    delete diag;
+    return -1;
 }
 
 static void setupKeys(void)
@@ -189,9 +186,9 @@ static void setupKeys(void)
 
 int mythplugin_init(const char *libversion)
 {
-    if (!gCoreContext->TestPluginVersion("mythzoneminder",
-                                    libversion,
-                                    MYTH_BINARY_VERSION))
+    if (!MythCoreContext::TestPluginVersion("mythzoneminder",
+                                            libversion,
+                                            MYTH_BINARY_VERSION))
         return -1;
 
     // setup a connection to the mythzmserver
@@ -214,9 +211,8 @@ int mythplugin_run(void)
 int mythplugin_config(void)
 {
     MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
-    StandardSettingDialog *ssd =
-        new StandardSettingDialog(mainStack, "zonemindersettings",
-                                  new ZMSettings());
+    auto *ssd = new StandardSettingDialog(mainStack, "zonemindersettings",
+                                          new ZMSettings());
 
     if (ssd->Create())
         mainStack->AddScreen(ssd);

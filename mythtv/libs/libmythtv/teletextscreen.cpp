@@ -30,10 +30,9 @@ static int gTTBackgroundAlpha;
 
 static QChar cvt_char(char ch, int lang)
 {
-    int c = 0;
     for (int j = 0; j < 14; j++)
     {
-        c = ch & 0x7F;
+        int c = ch & 0x7F;
         if (c == lang_chars[0][j])
             ch = lang_chars[lang + 1][j];
     }
@@ -42,13 +41,9 @@ static QChar cvt_char(char ch, int lang)
 
 TeletextScreen::TeletextScreen(MythPlayer *player, const char * name,
                                int fontStretch) :
-    MythScreenType((MythScreenType*)NULL, name),
-    m_player(player),           m_teletextReader(NULL),
-    m_safeArea(QRect()),
-    m_colWidth(10),             m_rowHeight(10),
-    m_bgColor(QColor(kColorBlack)),
-    m_displaying(false),        m_fontStretch(fontStretch),
-    m_fontHeight(10)
+    MythScreenType((MythScreenType*)nullptr, name),
+    m_player(player),
+    m_fontStretch(fontStretch)
 {
 }
 
@@ -67,12 +62,8 @@ bool TeletextScreen::Create(void)
 void TeletextScreen::ClearScreen(void)
 {
     DeleteAllChildren();
-    QHash<int, QImage*>::iterator it = m_rowImages.begin();
-    for (; it != m_rowImages.end(); ++it)
-    {
-        if (*it)
-            delete (*it);
-    }
+    foreach (auto & img, m_rowImages)
+        delete img;
     m_rowImages.clear();
     SetRedraw();
 }
@@ -83,7 +74,7 @@ QImage* TeletextScreen::GetRowImage(int row, QRect &rect)
     rect.translate(0, -(y * m_rowHeight));
     if (!m_rowImages.contains(y))
     {
-        QImage* img = new QImage(m_safeArea.width(), m_rowHeight * 2,
+        auto* img = new QImage(m_safeArea.width(), m_rowHeight * 2,
                                  QImage::Format_ARGB32);
         if (img)
         {
@@ -91,14 +82,14 @@ QImage* TeletextScreen::GetRowImage(int row, QRect &rect)
             m_rowImages.insert(y, img);
         }
         else
-            return NULL;
+            return nullptr;
     }
     return m_rowImages.value(y);
 }
 
 void TeletextScreen::OptimiseDisplayedArea(void)
 {
-    VideoOutput *vo = m_player->GetVideoOutput();
+    MythVideoOutput *vo = m_player->GetVideoOutput();
     if (!vo)
         return;
     MythPainter *osd_painter = vo->GetOSDPainter();
@@ -115,8 +106,7 @@ void TeletextScreen::OptimiseDisplayedArea(void)
 
         int row = it.key();
         image->Assign(*(it.value()));
-        MythUIImage *uiimage = new MythUIImage(this, QString("ttrow%1")
-                                                        .arg(row));
+        auto *uiimage = new MythUIImage(this, QString("ttrow%1").arg(row));
         if (uiimage)
         {
             uiimage->SetImage(image);
@@ -159,7 +149,7 @@ void TeletextScreen::Pulse(void)
 
     if (m_player && m_player->GetVideoOutput())
     {
-        static const float kTextPadding = 0.96f;
+        static const float kTextPadding = 0.96F;
         QRect oldsafe = m_safeArea;
         m_safeArea = m_player->GetVideoOutput()->GetSafeRect();
         m_colWidth = (int)((float)m_safeArea.width() / (float)kTeletextColumns);
@@ -205,7 +195,7 @@ void TeletextScreen::Pulse(void)
     if (!ttpage)
     {
         // no page selected so show the header and a list of available pages
-        DrawHeader(NULL, 0);
+        DrawHeader(nullptr, 0);
         m_teletextReader->SetPageChanged(false);
         OptimiseDisplayedArea();
         return;
@@ -268,7 +258,7 @@ void TeletextScreen::DrawHeader(const uint8_t *page, int lang)
     if (!m_displaying)
         return;
 
-    if (page != NULL)
+    if (page != nullptr)
         DrawLine(page, 1, lang);
 
     DrawStatus();
@@ -329,34 +319,19 @@ void TeletextScreen::SetBackgroundColor(int ttcolor)
 
 void TeletextScreen::DrawLine(const uint8_t *page, uint row, int lang)
 {
-    bool mosaic;
-    bool conceal;
-    MUNUSED bool seperation;
-    MUNUSED bool flash;
-    bool doubleheight;
-    MUNUSED bool blink;
-    bool hold;
-    bool endbox;
-    bool startbox;
-    bool withinbox;
-
     unsigned char last_ch = ' ';
-    unsigned char ch;
 
     uint fgcolor    = kTTColorWhite;
     uint bgcolor    = kTTColorBlack;
-    uint newfgcolor = kTTColorWhite;
-    uint newbgcolor = kTTColorBlack;
 
     if (m_teletextReader->IsSubtitle() || m_teletextReader->IsTransparent())
     {
         bgcolor    = kTTColorTransparent;
-        newbgcolor = kTTColorTransparent;
 
         bool isBlank = true;
         for (uint i = (row == 1 ? 8 : 0); i < (uint) kTeletextColumns; i++)
         {
-            ch = page[i] & 0x7F;
+            unsigned char ch = page[i] & 0x7F;
             if (ch != ' ')
             {
                 isBlank = false;
@@ -371,16 +346,16 @@ void TeletextScreen::DrawLine(const uint8_t *page, uint row, int lang)
     SetForegroundColor(fgcolor);
     SetBackgroundColor(bgcolor);
 
-    mosaic = false;
-    seperation = false;
-    conceal = false;
-    flash = false;
-    doubleheight = false;
-    blink = false;
-    hold = false;
-    endbox = false;
-    startbox = false;
-    withinbox = false;
+    bool mosaic = false;
+    bool seperation = false;
+    bool conceal = false;
+    bool flash = false;
+    bool doubleheight = false;
+    bool blink = false;
+    bool hold = false;
+    bool endbox = false;
+    bool startbox = false;
+    bool withinbox = false;
     uint flof_link_count = 0;
     uint old_bgcolor = bgcolor;
 
@@ -411,7 +386,7 @@ void TeletextScreen::DrawLine(const uint8_t *page, uint row, int lang)
         SetForegroundColor(fgcolor);
         SetBackgroundColor(bgcolor);
 
-        ch = page[x] & 0x7F;
+        unsigned char ch = page[x] & 0x7F;
         switch (ch)
         {
             case 0x00: case 0x01: case 0x02: case 0x03:
@@ -498,13 +473,13 @@ void TeletextScreen::DrawLine(const uint8_t *page, uint row, int lang)
 
             if (ttpage)
             {
-                bool has_flof = ttpage->floflink[flof_link_count - 1];
+                bool has_flof = ttpage->floflink[flof_link_count - 1] != 0;
                 ch = (has_flof) ? ch : ' ';
             }
         }
 
-        newfgcolor = fgcolor;
-        newbgcolor = bgcolor;
+        uint newfgcolor = fgcolor;
+        uint newbgcolor = bgcolor;
 
         SetForegroundColor(newfgcolor);
         SetBackgroundColor(newbgcolor);
@@ -532,9 +507,12 @@ void TeletextScreen::DrawLine(const uint8_t *page, uint row, int lang)
             }
         }
     }
+    Q_UNUSED(seperation);
+    Q_UNUSED(flash);
+    Q_UNUSED(blink);
 }
 
-void TeletextScreen::DrawCharacter(int x, int y, QChar ch, int doubleheight)
+void TeletextScreen::DrawCharacter(int x, int y, QChar ch, bool doubleheight)
 {
     QString line = ch;
     if (line == " ")
@@ -601,13 +579,13 @@ void TeletextScreen::DrawRect(int row, QRect rect)
 
     QBrush bgfill = QBrush(m_bgColor, Qt::SolidPattern);
     QPainter painter(image);
-    painter.setBrush(QBrush(bgfill));
+    painter.setBrush(bgfill);
     painter.setPen(QPen(Qt::NoPen));
     painter.drawRect(rect);
     painter.end();
 }
 
-void TeletextScreen::DrawMosaic(int x, int y, int code, int doubleheight)
+void TeletextScreen::DrawMosaic(int x, int y, int code, bool doubleheight)
 {
     int row = y;
     x *= m_colWidth;
@@ -640,10 +618,10 @@ void TeletextScreen::DrawStatus(void)
         for (int i = 0; i < 40; ++i)
             DrawBackground(i, 0);
 
-    DrawCharacter(1, 0, 'P', 0);
-    DrawCharacter(2, 0, m_teletextReader->GetPageInput(0), 0);
-    DrawCharacter(3, 0, m_teletextReader->GetPageInput(1), 0);
-    DrawCharacter(4, 0, m_teletextReader->GetPageInput(2), 0);
+    DrawCharacter(1, 0, 'P', false);
+    DrawCharacter(2, 0, m_teletextReader->GetPageInput(0), false);
+    DrawCharacter(3, 0, m_teletextReader->GetPageInput(1), false);
+    DrawCharacter(4, 0, m_teletextReader->GetPageInput(2), false);
 
     const TeletextSubPage *ttpage = m_teletextReader->FindSubPage();
 
@@ -652,7 +630,7 @@ void TeletextScreen::DrawStatus(void)
         QString str = QObject::tr("Page Not Available",
                                   "Requested Teletext page not available");
         for (int i = 0; (i < 30) && i < str.length(); i++)
-            DrawCharacter(i+10, 0, str[i], 0);
+            DrawCharacter(i+10, 0, str[i], false);
 
         return;
     }
@@ -680,17 +658,17 @@ void TeletextScreen::DrawStatus(void)
         DrawBackground(x * 3 + 8, 0);
         DrawBackground(x * 3 + 9, 0);
 
-        DrawCharacter(x * 3 + 7, 0, str[x * 3], 0);
-        DrawCharacter(x * 3 + 8, 0, str[x * 3 + 1], 0);
-        DrawCharacter(x * 3 + 9, 0, str[x * 3 + 2], 0);
+        DrawCharacter(x * 3 + 7, 0, str[x * 3], false);
+        DrawCharacter(x * 3 + 8, 0, str[x * 3 + 1], false);
+        DrawCharacter(x * 3 + 9, 0, str[x * 3 + 2], false);
     }
 }
 
 bool TeletextScreen::InitialiseFont()
 {
-    static bool initialised = false;
+    static bool s_initialised = false;
     //QString font = gCoreContext->GetSetting("DefaultSubtitleFont", "FreeMono");
-    if (initialised)
+    if (s_initialised)
     {
         return true;
 #if 0
@@ -700,12 +678,11 @@ bool TeletextScreen::InitialiseFont()
 #endif // 0
     }
 
-    MythFontProperties *mythfont = new MythFontProperties();
+    auto *mythfont = new MythFontProperties();
     QString font = SubtitleScreen::GetTeletextFontName();
     if (mythfont)
     {
         QFont newfont(font);
-        font.detach();
         mythfont->SetFace(newfont);
         gTTFont = mythfont;
     }
@@ -714,7 +691,7 @@ bool TeletextScreen::InitialiseFont()
 
     gTTBackgroundAlpha = SubtitleScreen::GetTeletextBackgroundAlpha();
 
-    initialised = true;
+    s_initialised = true;
     LOG(VB_PLAYBACK, LOG_INFO, LOC + QString("Loaded main subtitle font '%1'")
         .arg(font));
     return true;

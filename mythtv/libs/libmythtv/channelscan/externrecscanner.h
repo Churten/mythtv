@@ -24,9 +24,9 @@ class ExternRecChannelScanner : public QRunnable
     Q_DECLARE_TR_FUNCTIONS(ExternRecChannelScanner);
 
   public:
-    ExternRecChannelScanner(uint cardid, const QString &inputname, uint sourceid,
+    ExternRecChannelScanner(uint cardid, QString inputname, uint sourceid,
                             ScanMonitor *monitor = nullptr);
-    ~ExternRecChannelScanner();
+    ~ExternRecChannelScanner() override;
 
     void Scan(void);
     void Stop(void);
@@ -37,18 +37,18 @@ class ExternRecChannelScanner : public QRunnable
     void SetMessage(const QString &status);
 
   protected:
-    virtual void run(void); // QRunnable
+    void run(void) override; // QRunnable
 
   private:
-    ScanMonitor *m_scan_monitor;
-    uint         m_cardid;
-    QString      m_inputname;
-    uint         m_sourceid;
-    uint         m_channel_total;
-    uint         m_channel_cnt;
-    bool         m_thread_running;
-    bool         m_stop_now;
-    MThread     *m_thread;
+    ScanMonitor *m_scanMonitor   {nullptr};
+    uint         m_cardId;
+    QString      m_inputName;
+    uint         m_sourceId;
+    uint         m_channelTotal  {0};
+    uint         m_channelCnt    {1};
+    bool         m_threadRunning {false};
+    bool         m_stopNow       {false};
+    MThread     *m_thread        {nullptr};
     QMutex       m_lock;
 };
 

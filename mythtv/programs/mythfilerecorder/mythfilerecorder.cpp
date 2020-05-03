@@ -8,10 +8,10 @@
 
 using namespace std;
 
-#include <QDir>
 #include <QCoreApplication>
-#include <QTime>
+#include <QDir>
 #include <QThread>
+#include <QTime>
 
 #include "commandlineparser.h"
 #include "mythfilerecorder.h"
@@ -21,19 +21,18 @@ using namespace std;
 #include "mythversion.h"
 #include "mythlogging.h"
 
-
+#define API_VERSION 1
 #define VERSION "1.0.0"
 #define LOC QString("File(%1): ").arg(m_fileName)
 
-Streamer::Streamer(Commands *parent, const QString &fname,
+Streamer::Streamer(Commands *parent, QString fname,
                    int data_rate, bool loopinput) :
-    m_parent(parent), m_fileName(fname), m_file(NULL), m_loop(loopinput),
-    m_bufferMax(188 * 100000), m_blockSize(m_bufferMax / 4),
-    m_data_rate(data_rate), m_data_read(0)
+    m_parent(parent), m_fileName(std::move(fname)),
+    m_loop(loopinput), m_dataRate(data_rate)
 {
     setObjectName("Streamer");
     OpenFile();
-    LOG(VB_RECORD, LOG_INFO, LOC + QString("Data Rate: %1").arg(m_data_rate));
+    LOG(VB_RECORD, LOG_INFO, LOC + QString("Data Rate: %1").arg(m_dataRate));
 }
 
 Streamer::~Streamer(void)
@@ -60,7 +59,7 @@ void Streamer::CloseFile(void)
     if (m_file)
     {
         delete m_file;
-        m_file = NULL;
+        m_file = nullptr;
     }
 
     LOG(VB_RECORD, LOG_INFO, LOC + "Streamer::Close -- end");
@@ -68,7 +67,8 @@ void Streamer::CloseFile(void)
 
 void Streamer::SendBytes(void)
 {
-    int read_sz = 0, pkt_size = 0, buf_size = 0, write_len = 0, wrote = 0;
+    int pkt_size = 0;
+    int buf_size = 0;
 
     LOG(VB_RECORD, LOG_DEBUG, LOC + "SendBytes -- start");
 
@@ -88,15 +88,11 @@ void Streamer::SendBytes(void)
 
     if (!m_file->atEnd())
     {
-#if QT_VERSION >= QT_VERSION_CHECK(5,0,0)
-        read_sz = m_blockSize.loadAcquire();
-#else
-        read_sz = (int)m_blockSize;
-#endif
-        if (!m_start_time.isValid())
-            m_start_time = MythDate::current();
-        int delta = m_start_time.secsTo(MythDate::current()) + 1;
-        int rate  = (delta * m_data_rate) - m_data_read;
+        int read_sz = m_blockSize.loadAcquire();
+        if (!m_startTime.isValid())
+            m_startTime = MythDate::current();
+        int delta = m_startTime.secsTo(MythDate::current()) + 1;
+        int rate  = (delta * m_dataRate) - m_dataRead;
 
         read_sz = min(rate, read_sz);
         read_sz = min(m_bufferMax - m_buffer.size(), read_sz);
@@ -108,7 +104,7 @@ void Streamer::SendBytes(void)
             pkt_size = buffer.size();
             if (pkt_size > 0)
             {
-                m_data_read += pkt_size;
+                m_dataRead += pkt_size;
                 if (m_buffer.size() + pkt_size > m_bufferMax)
                 {
                     // This should never happen
@@ -134,17 +130,13 @@ void Streamer::SendBytes(void)
         QString("SendBytes -- Read %1 from file.  %2 bytes buffered")
         .arg(pkt_size).arg(buf_size));
 
-#if QT_VERSION >= QT_VERSION_CHECK(5,0,0)
-    write_len = m_blockSize.loadAcquire();
-#else
-    write_len = (int)m_blockSize;
-#endif
+    int write_len = m_blockSize.loadAcquire();
     if (write_len > buf_size)
         write_len = buf_size;
     LOG(VB_RECORD, LOG_DEBUG, LOC +
         QString("SendBytes -- writing %1 bytes").arg(write_len));
 
-    wrote = write(1, m_buffer.constData(), write_len);
+    int wrote = write(1, m_buffer.constData(), write_len);
 
     LOG(VB_RECORD, LOG_DEBUG, LOC +
         QString("SendBytes -- wrote %1 bytes").arg(wrote));
@@ -162,14 +154,9 @@ void Streamer::SendBytes(void)
 }
 
 
-Commands::Commands(void) : m_streamer(NULL), m_timeout(10), m_run(true),
-    m_eof(false)
+Commands::Commands(void)
 {
     setObjectName("Command");
-}
-
-Commands::~Commands(void)
-{
 }
 
 bool Commands::send_status(const QString & status) const
@@ -183,8 +170,7 @@ bool Commands::send_status(const QString & status) const
             .arg(len).arg(status.size()).arg(status));
         return false;
     }
-    else
-        LOG(VB_RECORD, LOG_DEBUG, "Status: " + status);
+    LOG(VB_RECORD, LOG_DEBUG, "Status: " + status);
     return true;
 }
 
@@ -195,6 +181,17 @@ bool Commands::process_command(QString & cmd)
     if (cmd.startsWith("Version?"))
     {
         send_status(QString("OK:%1").arg(VERSION));
+        return true;
+    }
+    if (cmd.startsWith("APIVersion?"))
+    {
+        send_status(QString("OK:%1").arg(API_VERSION));
+        return true;
+    }
+    if (cmd.startsWith("APIVersion:1"))
+    {
+        QString reply = (API_VERSION == 1) ? "OK:Yes": "OK:No";
+        send_status(reply);
         return true;
     }
     if (cmd.startsWith("HasLock?"))
@@ -240,11 +237,7 @@ bool Commands::process_command(QString & cmd)
         }
         else
         {
-#if QT_VERSION >= QT_VERSION_CHECK(5,0,0)
-        if (m_eof.loadAcquire() != 0)
-#else
-        if (m_eof != 0)
-#endif
+            if (m_eof.loadAcquire() != 0)
                 send_status("ERR:End of file");
             else
             {
@@ -319,7 +312,6 @@ bool Commands::Run(const QString & filename, int data_rate, bool loopinput)
 {
     QString cmd;
 
-    int ret;
     int poll_cnt = 1;
     struct pollfd polls[2];
     memset(polls, 0, sizeof(polls));
@@ -331,7 +323,7 @@ bool Commands::Run(const QString & filename, int data_rate, bool loopinput)
     m_fileName = filename;
 
     m_streamer = new Streamer(this, m_fileName, data_rate, loopinput);
-    QThread *streamThread = new QThread(this);
+    auto *streamThread = new QThread(this);
 
     m_streamer->moveToThread(streamThread);
     connect(streamThread, SIGNAL(finished(void)),
@@ -350,14 +342,14 @@ bool Commands::Run(const QString & filename, int data_rate, bool loopinput)
 
     while (m_run)
     {
-        ret = poll(polls, poll_cnt, m_timeout);
+        int ret = poll(polls, poll_cnt, m_timeout);
 
         if (polls[0].revents & POLLHUP)
         {
             LOG(VB_RECORD, LOG_ERR, LOC + "poll eof (POLLHUP)");
             break;
         }
-        else if (polls[0].revents & POLLNVAL)
+        if (polls[0].revents & POLLNVAL)
         {
             LOG(VB_RECORD, LOG_ERR, LOC + "poll error");
             return false;
@@ -373,8 +365,8 @@ bool Commands::Run(const QString & filename, int data_rate, bool loopinput)
                     streamThread->quit();
                     streamThread->wait();
                     delete streamThread;
-                    streamThread = NULL;
-                    m_streamer = NULL;
+                    streamThread = nullptr;
+                    m_streamer = nullptr;
                     m_run = false;
                 }
             }
@@ -419,7 +411,7 @@ int main(int argc, char *argv[])
 
     if (cmdline.toBool("showversion"))
     {
-        cmdline.PrintVersion();
+        MythFileRecorderCommandLineParser::PrintVersion();
         return GENERIC_EXIT_OK;
     }
 
@@ -429,14 +421,14 @@ int main(int argc, char *argv[])
     QCoreApplication a(argc, argv);
     QCoreApplication::setApplicationName("mythfilerecorder");
 
-    int retval;
-    if ((retval = cmdline.ConfigureLogging()) != GENERIC_EXIT_OK)
+    int retval = cmdline.ConfigureLogging();
+    if (retval != GENERIC_EXIT_OK)
         return retval;
 
     QString filename = "";
     if (!cmdline.toString("infile").isEmpty())
         filename = cmdline.toString("infile");
-    else if (cmdline.GetArgs().size() >= 1)
+    else if (!cmdline.GetArgs().empty())
         filename = cmdline.GetArgs()[0];
 
     Commands recorder;

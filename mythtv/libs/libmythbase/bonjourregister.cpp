@@ -1,7 +1,7 @@
+#include <cstdlib>
+
 #include <QSocketNotifier>
 #include <QtEndian>
-
-#include <stdlib.h>
 
 #include "mythlogging.h"
 #include "bonjourregister.h"
@@ -11,15 +11,18 @@
 QMutex BonjourRegister::g_lock;
 
 BonjourRegister::BonjourRegister(QObject *parent)
-    : QObject(parent), m_dnssref(0), m_socket(NULL), m_lock(NULL)
+    : QObject(parent)
 {
     setenv("AVAHI_COMPAT_NOWARN", "1", 1);
 }
 
 BonjourRegister::~BonjourRegister()
 {
-    if (m_socket)
+    if (m_socket) {
         m_socket->setEnabled(false);
+        m_socket->deleteLater();
+        m_socket = nullptr;
+    }
 
     if (m_dnssref)
     {
@@ -28,12 +31,10 @@ BonjourRegister::~BonjourRegister()
             .arg(m_type.data()).arg(m_name.data()));
         DNSServiceRefDeallocate(m_dnssref);
     }
-    m_dnssref = 0;
+    m_dnssref = nullptr;
 
-    m_socket->deleteLater();
-    m_socket = NULL;
     delete m_lock;
-    m_lock = NULL;
+    m_lock = nullptr;
 }
 
 bool BonjourRegister::Register(uint16_t port, const QByteArray &type,
@@ -50,9 +51,8 @@ bool BonjourRegister::Register(uint16_t port, const QByteArray &type,
 
     uint16_t qport = qToBigEndian(port);
     DNSServiceErrorType res =
-        DNSServiceRegister(&m_dnssref, 0, 0, (const char*)name.data(),
-                           (const char*)type.data(),
-                           NULL, 0, qport, txt.size(), (void*)txt.data(),
+        DNSServiceRegister(&m_dnssref, 0, 0, name.data(), type.data(),
+                           nullptr, nullptr, qport, txt.size(), (void*)txt.data(),
                            BonjourCallback, this);
 
     if (kDNSServiceErr_NoError != res)
@@ -69,14 +69,14 @@ bool BonjourRegister::Register(uint16_t port, const QByteArray &type,
             connect(m_socket, SIGNAL(activated(int)),
                     this, SLOT(socketReadyRead()));
             delete m_lock; // would already have been deleted, but just in case
-            m_lock = NULL;
+            m_lock = nullptr;
             return true;
         }
     }
 
     LOG(VB_GENERAL, LOG_ERR, LOC + "Failed to register service.");
     delete m_lock;
-    m_lock = NULL;
+    m_lock = nullptr;
 
     return false;
 }
@@ -98,11 +98,11 @@ void BonjourRegister::BonjourCallback(DNSServiceRef ref, DNSServiceFlags flags,
     (void)ref;
     (void)flags;
 
-    BonjourRegister *bonjour = static_cast<BonjourRegister *>(object);
+    auto *bonjour = static_cast<BonjourRegister *>(object);
     if (bonjour)
     {
         delete bonjour->m_lock;
-        bonjour->m_lock = NULL;
+        bonjour->m_lock = nullptr;
     }
 
     if (kDNSServiceErr_NoError != errorcode)
@@ -151,7 +151,7 @@ bool BonjourRegister::ReAnnounceService(void)
 
     DNSServiceErrorType res =
         DNSServiceUpdateRecord(m_dnssref,           /* DNSServiceRef sdRef */
-                               NULL,                /* DNSRecordRef RecordRef */
+                               nullptr,             /* DNSRecordRef RecordRef */
                                0,                   /* DNSServiceFlags flags */
                                data.size(),         /* uint16_t rdlen */
                                (void*)data.data(),  /* const void *rdata */

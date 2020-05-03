@@ -33,19 +33,13 @@ been done before the binary was produced.  Creates a MHParseNode tree structure.
 #include "Groups.h"
 #include "Logging.h"
 
-MHParseBinary::MHParseBinary(QByteArray &program)
-{
-    m_data = program;
-    m_p = 0;
-}
-
 #define INDEFINITE_LENGTH   (-1)
 
 // Get the next byte.  In most all cases it's an error if we reach end-of-file
 // and we throw an exception.
 unsigned char MHParseBinary::GetNextChar()
 {
-    if (m_p >= (int)m_data.size())
+    if (m_p >= m_data.size())
     {
         MHERROR("Unexpected end of file");
     }
@@ -64,8 +58,8 @@ void MHParseBinary::ParseString(int endStr, MHOctetString &str)
     }
 
     int nLength = endStr - m_p;
-    unsigned char *stringValue = (unsigned char *)malloc(nLength + 1);
-    if (stringValue == NULL)
+    auto *stringValue = (unsigned char *)malloc(nLength + 1);
+    if (stringValue == nullptr)
     {
         MHERROR("Out of memory");
     }
@@ -104,6 +98,7 @@ int MHParseBinary::ParseInt(int endInt)
         }
 
         firstByte = false;
+        // NOLINTNEXTLINE(clang-analyzer-core.UndefinedBinaryOperatorResult)
         intVal = (intVal << 8) | ch;
     }
 
@@ -114,15 +109,14 @@ int MHParseBinary::ParseInt(int endInt)
 //  Simple recursive parser for ASN1 BER.
 MHParseNode *MHParseBinary::DoParse()
 {
-    unsigned char ch;
     // Tag class
     enum { Universal, Context/*, Pseudo*/ } tagClass = Universal;
     // Byte count of end of this item.  Set to INDEFINITE_LENGTH if the length is Indefinite.
-    int endOfItem;
+    int endOfItem = 0;
     unsigned int tagNumber = 0;
 
     // Read the first character.
-    ch = GetNextChar();
+    unsigned char ch = GetNextChar();
 
     // ASN1 Coding rules: Top two bits (0 and 1) indicate the tag class.
     // 0x00 - Universal,  0x40 - Application, 0x80 - Context-specific, 0xC0 - Private
@@ -152,7 +146,7 @@ MHParseNode *MHParseBinary::DoParse()
             ch = GetNextChar();
             tagNumber = (tagNumber << 7) | (ch & 0x7f);
         }
-        while (ch & 0x80);   // Top bit set means there's more to come.
+        while ((ch & 0x80) != 0);   // Top bit set means there's more to come.
     }
 
     // Next byte is the length.  If it is less than 128 it is the actual length, otherwise it
@@ -188,7 +182,7 @@ MHParseNode *MHParseBinary::DoParse()
 
     if (tagClass == Context)
     {
-        MHPTagged *pNode = new MHPTagged(tagNumber);
+        auto *pNode = new MHPTagged(tagNumber);
 
         try
         {
@@ -317,64 +311,63 @@ MHParseNode *MHParseBinary::DoParse()
 
         return pNode;
     }
-    else   // Universal - i.e. a primitive type.
+
+    // Universal - i.e. a primitive type.
+    // Tag values
+
+    switch (tagNumber)
     {
-        // Tag values
+    case U_BOOL: // Boolean
+    {
+        int intVal = ParseInt(endOfItem);
+        return new MHPBool(intVal != 0);
+    }
+    case U_INT: // Integer
+    {
+        int intVal = ParseInt(endOfItem);
+        return new MHPInt(intVal);
+    }
+    case U_ENUM: // ENUM
+    {
+        int intVal = ParseInt(endOfItem);
+        return new MHPEnum(intVal);
+    }
+    case U_STRING: // String
+    {
+        MHOctetString str;
+        ParseString(endOfItem, str);
+        return new MHPString(str);
+    }
+    case U_NULL: // ASN1 NULL
+    {
+        return new MHPNull;
+    }
+    case U_SEQUENCE: // Sequence
+    {
+        auto *pNode = new MHParseSequence();
 
-        switch (tagNumber)
+        if (endOfItem == INDEFINITE_LENGTH)
         {
-            case U_BOOL: // Boolean
-            {
-                int intVal = ParseInt(endOfItem);
-                return new MHPBool(intVal != 0);
-            }
-            case U_INT: // Integer
-            {
-                int intVal = ParseInt(endOfItem);
-                return new MHPInt(intVal);
-            }
-            case U_ENUM: // ENUM
-            {
-                int intVal = ParseInt(endOfItem);
-                return new MHPEnum(intVal);
-            }
-            case U_STRING: // String
-            {
-                MHOctetString str;
-                ParseString(endOfItem, str);
-                return new MHPString(str);
-            }
-            case U_NULL: // ASN1 NULL
-            {
-                return new MHPNull;
-            }
-            case U_SEQUENCE: // Sequence
-            {
-                MHParseSequence *pNode = new MHParseSequence();
-
-                if (endOfItem == INDEFINITE_LENGTH)
-                {
-                    MHERROR("Indefinite length sequences are not implemented");
-                }
-
-                try
-                {
-                    while (m_p < endOfItem)
-                    {
-                        pNode->Append(DoParse());
-                    }
-                }
-                catch (...)
-                {
-                    // Memory clean-up if error.
-                    delete pNode;
-                    throw;
-                }
-
-                return pNode;
-            }
-            default:
-                MHERROR(QString("Unknown universal %1").arg(tagNumber));
+            MHERROR("Indefinite length sequences are not implemented");
         }
+
+        try
+        {
+            while (m_p < endOfItem)
+            {
+                pNode->Append(DoParse());
+            }
+        }
+        catch (...)
+        {
+            // Memory clean-up if error.
+            delete pNode;
+            throw;
+        }
+
+        return pNode;
+    }
+    default:
+        MHERROR(QString("Unknown universal %1").arg(tagNumber));
     }
 }

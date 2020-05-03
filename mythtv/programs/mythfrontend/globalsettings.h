@@ -19,8 +19,8 @@ class PlaybackSettingsDialog : public StandardSettingDialog
     Q_OBJECT
 
   public:
-    PlaybackSettingsDialog(MythScreenStack *stack);
-    void ShowMenu(void);
+    explicit PlaybackSettingsDialog(MythScreenStack *stack);
+    void ShowMenu(void) override; // StandardSettingDialog
 
   protected slots:
     void ShowPlaybackProfileMenu(MythUIButtonListItem *item);
@@ -35,15 +35,15 @@ class PlaybackSettings : public GroupSetting
 
   public:
     PlaybackSettings();
-    virtual void Load(void);
+    void Load(void) override; // StandardSetting
 
   private slots:
     void NewPlaybackProfileSlot(void);
     void CreateNewPlaybackProfileSlot(const QString &name);
 
   private:
-    ButtonStandardSetting *m_newPlaybackProfileButton;
-    MythUIComboBoxSetting *m_playbackProfiles;
+    ButtonStandardSetting *m_newPlaybackProfileButton {nullptr};
+    MythUIComboBoxSetting *m_playbackProfiles {nullptr};
 };
 
 class VideoModeSettings : public HostCheckBoxSetting
@@ -51,10 +51,8 @@ class VideoModeSettings : public HostCheckBoxSetting
     Q_OBJECT
 
   public:
-    VideoModeSettings(const char *c);
-#if defined(USING_XRANDR) || CONFIG_DARWIN
-    virtual void updateButton(MythUIButtonListItem *item);
-#endif
+    explicit VideoModeSettings(const char *c);
+    void updateButton(MythUIButtonListItem *item) override;
 };
 
 class LcdSettings
@@ -111,7 +109,7 @@ class MacDesktopSettings : public GroupSetting
 
 class OSDSettings: public GroupSetting
 {
-    Q_DECLARE_TR_FUNCTIONS(OSDSettings)
+    Q_DECLARE_TR_FUNCTIONS(OSDSettings);
 
   public:
     OSDSettings();
@@ -119,7 +117,7 @@ class OSDSettings: public GroupSetting
 
 class GeneralSettings : public GroupSetting
 {
-    Q_DECLARE_TR_FUNCTIONS(GeneralSettings)
+    Q_DECLARE_TR_FUNCTIONS(GeneralSettings);
 
   public:
     GeneralSettings();
@@ -127,19 +125,29 @@ class GeneralSettings : public GroupSetting
 
 class EPGSettings : public GroupSetting
 {
-    Q_DECLARE_TR_FUNCTIONS(EPGSettings)
+    Q_DECLARE_TR_FUNCTIONS(EPGSettings);
 
   public:
     EPGSettings();
 };
 
+class MythDisplay;
 class AppearanceSettings : public GroupSetting
 {
-    Q_DECLARE_TR_FUNCTIONS(AppearanceSettings)
+    Q_OBJECT
 
   public:
     AppearanceSettings();
-    virtual void applyChange();
+   ~AppearanceSettings() override;
+    void applyChange() override; // GroupSetting
+
+  public slots:
+    void PopulateScreens(int Screens);
+
+  private:
+    HostComboBoxSetting *m_screen       { nullptr };
+    HostComboBoxSetting *m_screenAspect { nullptr };
+    MythDisplay         *m_display      { nullptr };
 };
 
 class HostRefreshRateComboBoxSetting : public HostComboBoxSetting
@@ -147,31 +155,39 @@ class HostRefreshRateComboBoxSetting : public HostComboBoxSetting
     Q_OBJECT
 
   public:
-    HostRefreshRateComboBoxSetting(const QString &name) :
+    explicit HostRefreshRateComboBoxSetting(const QString &name) :
         HostComboBoxSetting(name) { }
-    virtual ~HostRefreshRateComboBoxSetting() { }
+    ~HostRefreshRateComboBoxSetting() override = default;
 
   public slots:
-#if defined(USING_XRANDR) || CONFIG_DARWIN
-    virtual void ChangeResolution(StandardSetting *);
-#endif
+    virtual void ChangeResolution(StandardSetting *setting);
 
   private:
-    static const vector<double> GetRefreshRates(const QString &resolution);
+    static vector<double> GetRefreshRates(const QString &resolution);
 };
 
 class MainGeneralSettings : public GroupSetting
 {
-    Q_DECLARE_TR_FUNCTIONS(MainGeneralSettings)
+    Q_OBJECT
 
   public:
     MainGeneralSettings();
-    virtual void applyChange();
+    void applyChange() override; // GroupSetting
+
+#ifdef USING_LIBCEC
+  public slots:
+    void cecChanged(bool setting);
+  protected:
+    HostCheckBoxSetting *m_cecPowerOnTVAllowed  {nullptr};
+    HostCheckBoxSetting *m_cecPowerOffTVAllowed {nullptr};
+    HostCheckBoxSetting *m_cecPowerOnTVOnStart  {nullptr};
+    HostCheckBoxSetting *m_cecPowerOffTVOnExit  {nullptr};
+#endif  // USING_LIBCEC
 };
 
 class GeneralRecPrioritiesSettings : public GroupSetting
 {
-    Q_DECLARE_TR_FUNCTIONS(GeneralRecPrioritiesSettings)
+    Q_DECLARE_TR_FUNCTIONS(GeneralRecPrioritiesSettings);
 
   public:
     GeneralRecPrioritiesSettings();
@@ -186,45 +202,51 @@ class PlaybackProfileItemConfig : public GroupSetting
     PlaybackProfileItemConfig(PlaybackProfileConfig *parent, uint idx,
                               ProfileItem &_item);
 
-    virtual void Load(void);
-    virtual void Save(void);
+    void Load(void) override; // StandardSetting
+    void Save(void) override; // StandardSetting
 
-    bool keyPressEvent(QKeyEvent *);
+    bool keyPressEvent(QKeyEvent *e) override; // StandardSetting
     uint GetIndex(void) const;
     void ShowDeleteDialog(void);
     void DecreasePriority(void);
     void IncreasePriority(void);
 
   private slots:
-    void framerateChanged(const QString &dec);
+    void widthChanged(const QString &val);
+    void heightChanged(const QString &val);
+    void framerateChanged(const QString &val);
     void decoderChanged(const QString &dec);
     void vrenderChanged(const QString &renderer);
-    void orenderChanged(const QString &renderer);
-    void deint0Changed(const QString &deint);
-    void deint1Changed(const QString &deint);
+    void SingleQualityChanged(const QString &Quality);
+    void DoubleQualityChanged(const QString &Quality);
+    static void LoadQuality(TransMythUIComboBoxSetting *Deint,
+                            TransMythUICheckBoxSetting *Shader,
+                            TransMythUICheckBoxSetting *Driver,
+                            QString &Value);
+    static QString GetQuality(TransMythUIComboBoxSetting *Deint,
+                              TransMythUICheckBoxSetting *Shader,
+                              TransMythUICheckBoxSetting *Driver);
     void InitLabel(void);
-    void DoDeleteSlot(bool);
+    void DoDeleteSlot(bool doDelete);
 
   private:
-    ProfileItem          &item;
-    TransMythUIComboBoxSetting *cmp[2];
-    TransMythUISpinBoxSetting  *width[2];
-    TransMythUISpinBoxSetting  *height[2];
-    TransTextEditSetting      *width_range;
-    TransTextEditSetting      *height_range;
-    MythUIComboBoxSetting      *codecs;
-    TransTextEditSetting      *framerate;
-    TransMythUIComboBoxSetting *decoder;
-    TransMythUISpinBoxSetting  *max_cpus;
-    TransMythUICheckBoxSetting *skiploop;
-    TransMythUIComboBoxSetting *vidrend;
-    TransMythUIComboBoxSetting *osdrend;
-    TransMythUICheckBoxSetting *osdfade;
-    TransMythUIComboBoxSetting *deint0;
-    TransMythUIComboBoxSetting *deint1;
-    TransTextEditSetting *filters;
-    PlaybackProfileConfig *parentConfig;
-    uint index;
+    ProfileItem                &m_item;
+    TransTextEditSetting       *m_widthRange   {nullptr};
+    TransTextEditSetting       *m_heightRange  {nullptr};
+    MythUIComboBoxSetting      *m_codecs       {nullptr};
+    TransTextEditSetting       *m_framerate    {nullptr};
+    TransMythUIComboBoxSetting *m_decoder      {nullptr};
+    TransMythUISpinBoxSetting  *m_maxCpus      {nullptr};
+    TransMythUICheckBoxSetting *m_skipLoop     {nullptr};
+    TransMythUIComboBoxSetting *m_vidRend      {nullptr};
+    TransMythUIComboBoxSetting *m_singleDeint  {nullptr};
+    TransMythUICheckBoxSetting *m_singleShader {nullptr};
+    TransMythUICheckBoxSetting *m_singleDriver {nullptr};
+    TransMythUIComboBoxSetting *m_doubleDeint  {nullptr};
+    TransMythUICheckBoxSetting *m_doubleShader {nullptr};
+    TransMythUICheckBoxSetting *m_doubleDriver {nullptr};
+    PlaybackProfileConfig      *m_parentConfig {nullptr};
+    uint                        m_index        {0};
 };
 
 class PlaybackProfileConfig : public GroupSetting
@@ -232,49 +254,49 @@ class PlaybackProfileConfig : public GroupSetting
     Q_OBJECT
 
   public:
-    PlaybackProfileConfig(const QString &profilename, StandardSetting *parent);
-    virtual ~PlaybackProfileConfig();
+    PlaybackProfileConfig(QString profilename, StandardSetting *parent);
+    ~PlaybackProfileConfig() override = default;
 
-    virtual void Save(void);
+    void Save(void) override; // StandardSetting
 
     void DeleteProfileItem(PlaybackProfileItemConfig *profile);
 
-    void swap(int indexA, int intexB);
+    void swap(int indexA, int indexB);
 
   private slots:
     void AddNewEntry(void);
 
   private:
     void InitUI(StandardSetting *parent);
-    StandardSetting * InitProfileItem(uint, StandardSetting *);
+    StandardSetting * InitProfileItem(uint i, StandardSetting *parent);
 
   private:
     void ReloadSettings(void);
-    item_list_t items;
-    item_list_t del_items;
-    QString     profile_name;
-    uint        groupid;
+    vector<ProfileItem> m_items;
+    vector<ProfileItem> m_delItems;
+    QString     m_profileName;
+    uint        m_groupId {0};
 
-    TransMythUICheckBoxSetting *m_markForDeletion;
-    ButtonStandardSetting* m_addNewEntry;
+    TransMythUICheckBoxSetting *m_markForDeletion {nullptr};
+    ButtonStandardSetting      *m_addNewEntry     {nullptr};
     vector<PlaybackProfileItemConfig*> m_profiles;
-    vector<TransMythUISpinBoxSetting*> priority;
+    vector<TransMythUISpinBoxSetting*> m_priority;
 };
 
 class ChannelGroupSetting : public GroupSetting
 {
+    Q_OBJECT
+
   public:
     ChannelGroupSetting(const QString &groupName, int groupId);
-    virtual void Load();
-    virtual void Save();
-    virtual bool canDelete(void);
-    virtual void deleteEntry(void);
+    void Load() override; // StandardSetting
+    void Save() override; // StandardSetting
+    bool canDelete(void) override; // GroupSetting
+    void deleteEntry(void) override; // GroupSetting
 
   private:
-    int m_groupId;
-    TransTextEditSetting       *m_groupName;
-    TransMythUICheckBoxSetting *m_markForDeletion;
-
+    int                   m_groupId   {-1};
+    TransTextEditSetting *m_groupName {nullptr};
 };
 
 class ChannelGroupsSetting : public GroupSetting
@@ -283,14 +305,14 @@ class ChannelGroupsSetting : public GroupSetting
 
   public:
     ChannelGroupsSetting();
-    virtual void Load();
+    void Load() override; // StandardSetting
 
   public slots:
     void ShowNewGroupDialog(void);
-    void CreateNewGroup(QString name);
+    void CreateNewGroup(const QString& name);
 
   private:
-    ButtonStandardSetting *m_addGroupButton;
+    ButtonStandardSetting *m_addGroupButton {nullptr};
 };
 
 #endif

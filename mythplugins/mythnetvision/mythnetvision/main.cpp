@@ -20,25 +20,22 @@
 
 using namespace std;
 
-GrabberManager *grabMan = 0;
-RSSManager *rssMan = 0;
+GrabberManager *grabMan = nullptr;
+RSSManager *rssMan = nullptr;
 
 static int RunNetVision(void)
 {
     MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
 
-    NetSearch *netsearch = new NetSearch(mainStack, "mythnetsearch");
+    auto *netsearch = new NetSearch(mainStack, "mythnetsearch");
 
     if (netsearch->Create())
     {
         mainStack->AddScreen(netsearch);
         return 0;
     }
-    else
-    {
-        delete netsearch;
-        return -1;
-    }
+    delete netsearch;
+    return -1;
 }
 
 static int RunNetTree(void)
@@ -48,18 +45,15 @@ static int RunNetTree(void)
     DialogType type = static_cast<DialogType>(gCoreContext->GetNumSetting(
                        "mythnetvision.ViewMode", DLG_TREE));
 
-    NetTree *nettree = new NetTree(type, mainStack, "mythnettree");
+    auto *nettree = new NetTree(type, mainStack, "mythnettree");
 
     if (nettree->Create())
     {
         mainStack->AddScreen(nettree);
         return 0;
     }
-    else
-    {
-        delete nettree;
-        return -1;
-    }
+    delete nettree;
+    return -1;
 }
 
 static void runNetVision(void)
@@ -87,9 +81,9 @@ static void setupKeys(void)
 
 int mythplugin_init(const char *libversion)
 {
-    if (!gCoreContext->TestPluginVersion("mythnetvision",
-                                    libversion,
-                                    MYTH_BINARY_VERSION))
+    if (!MythCoreContext::TestPluginVersion("mythnetvision",
+                                            libversion,
+                                            MYTH_BINARY_VERSION))
         return -1;
 
     setupKeys();

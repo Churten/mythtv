@@ -33,6 +33,7 @@
 #include "mythcorecontext.h"
 #include "mythlocale.h"
 
+// Frequency tables for USA/ATSC broadcast and cable networks
 ScanFrequencyTable::ScanFrequencyTable()
 {
     addSelection(QObject::tr("Broadcast"),        "us",          true);
@@ -54,10 +55,11 @@ ScanFrequencyTable::ScanFrequencyTable()
                     "digital channels are on the higher frequencies."));
 }
 
+// Frequency tables for DVB-T/T2 terrestrial broadcast per country
 ScanCountry::ScanCountry()
 {
-    QString country = "au"; // Default to first in list
-    country = gCoreContext->GetLocale()->GetCountryCode().toLower();
+    // Default to saved country
+    QString country = gCoreContext->GetLocale()->GetCountryCode().toLower();
 
     setLabel(QObject::tr("Country"));
     addSelection(QObject::tr("Australia"),      "au", country == "au");
@@ -70,19 +72,21 @@ ScanCountry::ScanCountry()
     addSelection(QObject::tr("Greece"),         "gr", country == "gr");
     addSelection(QObject::tr("Israel"),         "il", country == "il");
     addSelection(QObject::tr("Italy"),          "it", country == "it");
+    addSelection(QObject::tr("Netherlands"),    "nl", country == "nl");
     addSelection(QObject::tr("New Zealand"),    "nz", country == "nz");
     addSelection(QObject::tr("Spain"),          "es", country == "es");
     addSelection(QObject::tr("Sweden"),         "se", country == "se");
     addSelection(QObject::tr("United Kingdom"), "gb", country == "gb");
 }
 
-
+// Frequency tables for DVB-C cable networks per country
 ScanNetwork::ScanNetwork()
 {
-    QString country = "de"; // Default to first in list
-    country = gCoreContext->GetLocale()->GetCountryCode().toLower();
+    // Default to saved country
+    QString country = gCoreContext->GetLocale()->GetCountryCode().toLower();
 
     setLabel(QObject::tr("Country"));
     addSelection(QObject::tr("Germany"),        "de", country == "de");
+    addSelection(QObject::tr("Netherlands"),    "nl", country == "nl");
     addSelection(QObject::tr("United Kingdom"), "gb", country == "gb");
 }

@@ -115,6 +115,7 @@ bool CleanupTask::DoRun(void)
     CleanupInUsePrograms();
     CleanupOrphanedLiveTV();
     CleanupRecordedTables();
+    CleanupChannelTables();
     CleanupProgramListings();
     return true;
 }
@@ -160,12 +161,15 @@ void CleanupTask::CleanupOrphanedLiveTV(void)
         return;
     }
 
-    QString msg, keepChains;
+    QString msg;
+    QString keepChains;
     while (query.next())
+    {
         if (keepChains.isEmpty())
             keepChains = "'" + query.value(0).toString() + "'";
         else
             keepChains += ", '" + query.value(0).toString() + "'";
+    }
 
     if (keepChains.isEmpty())
         msg = "DELETE FROM tvchain WHERE endtime < now();";
@@ -277,6 +281,36 @@ void CleanupTask::CleanupRecordedTables(void)
                                 "(deleting temporary table)", query);
 }
 
+void CleanupTask::CleanupChannelTables(void)
+{
+    MSqlQuery query(MSqlQuery::InitCon());
+    MSqlQuery deleteQuery(MSqlQuery::InitCon());
+
+    query.prepare(QString("DELETE channel "
+                          "FROM channel "
+                          "LEFT JOIN recorded r "
+                          "    ON r.chanid = channel.chanid "
+                          "LEFT JOIN oldrecorded o "
+                          "    ON o.chanid = channel.chanid "
+                          "WHERE channel.deleted IS NOT NULL "
+                          "      AND channel.deleted < "
+                          "          DATE_SUB(NOW(), INTERVAL 1 DAY) "
+                          "      AND r.chanid IS NULL "
+                          "      AND o.chanid IS NULL"));
+    if (!query.exec())
+        MythDB::DBError("CleanupTask::CleanupChannelTables "
+                        "(channel table)", query);
+
+    query.prepare(QString("DELETE dtv_multiplex "
+                          "FROM dtv_multiplex "
+                          "LEFT JOIN channel c "
+                          "    ON c.mplexid = dtv_multiplex.mplexid "
+                          "WHERE c.chanid IS NULL"));
+    if (!query.exec())
+        MythDB::DBError("CleanupTask::CleanupChannelTables "
+                        "(dtv_multiplex table)", query);
+}
+
 void CleanupTask::CleanupProgramListings(void)
 {
     MSqlQuery query(MSqlQuery::InitCon());
@@ -364,13 +398,10 @@ void CleanupTask::CleanupProgramListings(void)
         MythDB::DBError("HouseKeeper Cleaning Program Listings", query);
 }
 
-bool ThemeUpdateTask::DoCheckRun(QDateTime now)
+bool ThemeUpdateTask::DoCheckRun(const QDateTime& now)
 {
-    if (gCoreContext->GetNumSetting("ThemeUpdateNofications", 1) &&
-            PeriodicHouseKeeperTask::DoCheckRun(now))
-        return true;
-
-    return false;
+    return gCoreContext->GetBoolSetting("ThemeUpdateNofications", true) &&
+            PeriodicHouseKeeperTask::DoCheckRun(now);
 }
 
 bool ThemeUpdateTask::DoRun(void)
@@ -445,7 +476,7 @@ bool ThemeUpdateTask::LoadVersion(const QString &version, int download_log_level
 
     if (!result)
     {
-        LOG(VB_GENERAL, download_log_level,
+        LOG(VB_GENERAL, (LogLevel_t)download_log_level,
             QString("HouseKeeper: Failed to download %1 "
                     "remote themes info package.").arg(m_url));
         return false;
@@ -470,9 +501,8 @@ void ThemeUpdateTask::Terminate(void)
     m_running = false;
 }
 
-RadioStreamUpdateTask::RadioStreamUpdateTask(void) : DailyHouseKeeperTask("UpdateRadioStreams",
-                                                       kHKGlobal, kHKRunOnStartup),
-    m_msMU(NULL)
+RadioStreamUpdateTask::RadioStreamUpdateTask(void)
+    : DailyHouseKeeperTask("UpdateRadioStreams", kHKGlobal, kHKRunOnStartup)
 {
 }
 
@@ -484,7 +514,7 @@ bool RadioStreamUpdateTask::DoRun(void)
         if (m_msMU->GetStatus() == GENERIC_EXIT_RUNNING)
             m_msMU->Term(true);
         delete m_msMU;
-        m_msMU = NULL;
+        m_msMU = nullptr;
     }
 
     QString command = GetAppBinDir() + "mythutil";
@@ -501,7 +531,7 @@ bool RadioStreamUpdateTask::DoRun(void)
     uint result = m_msMU->Wait();
 
     delete m_msMU;
-    m_msMU = NULL;
+    m_msMU = nullptr;
 
     if (result != GENERIC_EXIT_OK)
     {
@@ -517,20 +547,17 @@ bool RadioStreamUpdateTask::DoRun(void)
 RadioStreamUpdateTask::~RadioStreamUpdateTask(void)
 {
     delete m_msMU;
-    m_msMU = NULL;
+    m_msMU = nullptr;
 }
 
-bool RadioStreamUpdateTask::DoCheckRun(QDateTime now)
+bool RadioStreamUpdateTask::DoCheckRun(const QDateTime& now)
 {
     // we are only interested in the global setting so remove any local host setting just in case
     GetMythDB()->ClearSetting("MusicStreamListModified");
 
     // check we are not already running a radio stream update
-    if (gCoreContext->GetSetting("MusicStreamListModified") == "Updating" &&
-            PeriodicHouseKeeperTask::DoCheckRun(now))
-        return true;
-
-    return false;
+    return gCoreContext->GetSetting("MusicStreamListModified") == "Updating" &&
+            PeriodicHouseKeeperTask::DoCheckRun(now);
 }
 
 void RadioStreamUpdateTask::Terminate(void)
@@ -540,9 +567,8 @@ void RadioStreamUpdateTask::Terminate(void)
         m_msMU->Term(true);
 }
 
-ArtworkTask::ArtworkTask(void) : DailyHouseKeeperTask("RecordedArtworkUpdate",
-                                         kHKGlobal, kHKRunOnStartup),
-    m_msMML(NULL)
+ArtworkTask::ArtworkTask(void)
+    : DailyHouseKeeperTask("RecordedArtworkUpdate", kHKGlobal, kHKRunOnStartup)
 {
 }
 
@@ -554,7 +580,7 @@ bool ArtworkTask::DoRun(void)
         if (m_msMML->GetStatus() == GENERIC_EXIT_RUNNING)
             m_msMML->Term(true);
         delete m_msMML;
-        m_msMML = NULL;
+        m_msMML = nullptr;
     }
 
     QString command = GetAppBinDir() + "mythmetadatalookup";
@@ -571,7 +597,7 @@ bool ArtworkTask::DoRun(void)
     uint result = m_msMML->Wait();
 
     delete m_msMML;
-    m_msMML = NULL;
+    m_msMML = nullptr;
 
     if (result != GENERIC_EXIT_OK)
     {
@@ -586,15 +612,13 @@ bool ArtworkTask::DoRun(void)
 ArtworkTask::~ArtworkTask(void)
 {
     delete m_msMML;
-    m_msMML = NULL;
+    m_msMML = nullptr;
 }
 
-bool ArtworkTask::DoCheckRun(QDateTime now)
+bool ArtworkTask::DoCheckRun(const QDateTime& now)
 {
-    if (gCoreContext->GetNumSetting("DailyArtworkUpdates", 0) &&
-            PeriodicHouseKeeperTask::DoCheckRun(now))
-        return true;
-    return false;
+    return gCoreContext->GetBoolSetting("DailyArtworkUpdates", false) &&
+            PeriodicHouseKeeperTask::DoCheckRun(now);
 }
 
 void ArtworkTask::Terminate(void)
@@ -611,7 +635,7 @@ bool JobQueueRecoverTask::DoRun(void)
 }
 
 MythFillDatabaseTask::MythFillDatabaseTask(void) :
-    DailyHouseKeeperTask("MythFillDB"), m_msMFD(NULL)
+    DailyHouseKeeperTask("MythFillDB")
 {
     SetHourWindowFromDB();
 }
@@ -640,7 +664,7 @@ void MythFillDatabaseTask::SetHourWindowFromDB(void)
 
 bool MythFillDatabaseTask::UseSuggestedTime(void)
 {
-//     if (!gCoreContext->GetNumSetting("MythFillGrabberSuggestsTime", 1))
+//     if (!gCoreContext->GetBoolSetting("MythFillGrabberSuggestsTime", true))
 //         // this feature is disabled, so don't bother with a deeper check
 //         return false;
 //
@@ -651,21 +675,19 @@ bool MythFillDatabaseTask::UseSuggestedTime(void)
 //         // TODO: this is really cludgy. there has to be a better way to test
 //         result.prepare("SELECT COUNT(*) FROM videosource"
 //                        " WHERE xmltvgrabber IN"
-//                        "        ( 'datadirect',"
-//                        "          'technovera',"
-//                        "          'schedulesdirect1' );");
+//                        "        ( 'technovera' );");
 //         if ((result.exec()) &&
 //             (result.next()) &&
 //             (result.value(0).toInt() > 0))
 //                 return true;
 //     }
 
-    return gCoreContext->GetNumSetting("MythFillGrabberSuggestsTime", 1);
+    return gCoreContext->GetBoolSetting("MythFillGrabberSuggestsTime", true);
 }
 
-bool MythFillDatabaseTask::DoCheckRun(QDateTime now)
+bool MythFillDatabaseTask::DoCheckRun(const QDateTime& now)
 {
-    if (!gCoreContext->GetNumSetting("MythFillEnabled", 1))
+    if (!gCoreContext->GetBoolSetting("MythFillEnabled", true))
     {
         // we don't want to run this manually, so abort early
         LOG(VB_GENERAL, LOG_DEBUG, "MythFillDatabase is disabled. Cannot run.");
@@ -684,22 +706,16 @@ bool MythFillDatabaseTask::DoCheckRun(QDateTime now)
         LOG(VB_GENERAL, LOG_DEBUG,
                 QString("MythFillDatabase scheduled to run at %1.")
                     .arg(nextRun.toString()));
-        if (nextRun > now)
-            // not yet time
-            return false;
-
-        return true;
+        // is it yet time
+        return nextRun <= now;
     }
-    else if (InWindow(now))
+    if (InWindow(now))
         // we're inside our permitted window
         return true;
 
-    else
-    {
-        // just let DailyHouseKeeperTask handle things
-        LOG(VB_GENERAL, LOG_DEBUG, "Performing daily run check.");
-        return DailyHouseKeeperTask::DoCheckRun(now);
-    }
+    // just let DailyHouseKeeperTask handle things
+    LOG(VB_GENERAL, LOG_DEBUG, "Performing daily run check.");
+    return DailyHouseKeeperTask::DoCheckRun(now);
 }
 
 bool MythFillDatabaseTask::DoRun(void)
@@ -710,7 +726,7 @@ bool MythFillDatabaseTask::DoRun(void)
         if (m_msMFD->GetStatus() == GENERIC_EXIT_RUNNING)
             m_msMFD->Term(true);
         delete m_msMFD;
-        m_msMFD = NULL;
+        m_msMFD = nullptr;
     }
 
     QString mfpath = gCoreContext->GetSetting("MythFillDatabasePath",
@@ -732,7 +748,7 @@ bool MythFillDatabaseTask::DoRun(void)
     uint result = m_msMFD->Wait();
 
     delete m_msMFD;
-    m_msMFD = NULL;
+    m_msMFD = nullptr;
 
     if (result != GENERIC_EXIT_OK)
     {
@@ -747,7 +763,7 @@ bool MythFillDatabaseTask::DoRun(void)
 MythFillDatabaseTask::~MythFillDatabaseTask(void)
 {
     delete m_msMFD;
-    m_msMFD = NULL;
+    m_msMFD = nullptr;
 }
 
 void MythFillDatabaseTask::Terminate(void)

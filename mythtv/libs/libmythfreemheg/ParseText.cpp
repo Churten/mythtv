@@ -30,7 +30,7 @@ This is very basic and is only there to enable some test programs to be run.
 #include "ASN1Codes.h"
 #include "Root.h"
 #include "Groups.h"
-#include <ctype.h>
+#include <cctype>
 #include "Ingredients.h" // For GetEventType
 #include "Text.h" // For GetJustification etc
 #include "Engine.h"
@@ -42,19 +42,9 @@ This is very basic and is only there to enable some test programs to be run.
 #endif
 
 
-MHParseText::MHParseText(QByteArray &program)
-            :   m_lineCount(1),     m_nType(PTNull),
-                m_ch(0),            m_nTag(0),
-                m_nInt(0),          m_fBool(false),
-                m_String((unsigned char *)malloc(100)),
-                m_nStringLength(0), m_p(0)
-
-{
-}
-
 MHParseText::~MHParseText()
 {
-    free(m_String);
+    free(m_string);
 }
 
 // Get the next character.
@@ -335,8 +325,8 @@ const char *rchTagNames[] =
 // Some example programs use these colour names
 static struct
 {
-    const char *name;
-    unsigned char r, g, b, t;
+    const char *m_name;
+    unsigned char m_r, m_g, m_b, m_t;
 } colourTable[] =
 {
     { "black",          0,  0,  0,  0   },
@@ -381,13 +371,14 @@ void MHParseText::Error(const char *str)
 // Lexical analysis.  Get the next symbol.
 void MHParseText::NextSym()
 {
-    while (1)
+    while (true)
     {
 
         switch (m_ch)
         {
             case '\n':
-                m_lineCount++; // And drop to next
+                m_lineCount++;
+                [[clang::fallthrough]];
             case ' ':
             case '\r':
             case '\t':
@@ -445,16 +436,17 @@ void MHParseText::NextSym()
 
                 // Unrecognised tag.
                 Error("Unrecognised tag");
+                break;
             }
 
             case '"': // Start of a string
             {
                 m_nType = PTString;
-                // MHEG strings can include NULLs.  For the moment we pass back the length and also
+                // MHEG strings can include NULs.  For the moment we pass back the length and also
                 // null-terminate the strings.
                 m_nStringLength = 0;
 
-                while (1)
+                while (true)
                 {
                     GetNextChar();
 
@@ -474,19 +466,19 @@ void MHParseText::NextSym()
                     }
 
                     // We grow the buffer to the largest string in the input.
-                    unsigned char *str = (unsigned char *)realloc(m_String, m_nStringLength + 2);
+                    auto *str = (unsigned char *)realloc(m_string, m_nStringLength + 2);
 
-                    if (str == NULL)
+                    if (str == nullptr)
                     {
                         Error("Insufficient memory");
                     }
 
-                    m_String = str;
-                    m_String[m_nStringLength++] = m_ch;
+                    m_string = str;
+                    m_string[m_nStringLength++] = m_ch;
                 }
 
                 GetNextChar(); // Skip the closing quote
-                m_String[m_nStringLength] = 0;
+                m_string[m_nStringLength] = 0;
                 return;
             }
 
@@ -498,7 +490,7 @@ void MHParseText::NextSym()
                 // Quotable printable strings contain escape sequences beginning with the
                 // escape character '='.  The strings can span lines but each line must
                 // end with an equal sign.
-                while (1)
+                while (true)
                 {
                     GetNextChar();
 
@@ -532,65 +524,63 @@ void MHParseText::NextSym()
 
                             continue; // continue with the first character on the next line
                         }
+
+                        int byte = 0;
+
+                        if (m_ch >= '0' && m_ch <= '9')
+                        {
+                            byte = m_ch - '0';
+                        }
+                        else if (m_ch >= 'A' && m_ch <= 'F')
+                        {
+                            byte = m_ch - 'A' + 10;
+                        }
+                        else if (m_ch >= 'a' && m_ch <= 'f')
+                        {
+                            byte = m_ch - 'a' + 10;
+                        }
                         else
                         {
-                            int byte = 0;
-
-                            if (m_ch >= '0' && m_ch <= '9')
-                            {
-                                byte = m_ch - '0';
-                            }
-                            else if (m_ch >= 'A' && m_ch <= 'F')
-                            {
-                                byte = m_ch - 'A' + 10;
-                            }
-                            else if (m_ch >= 'a' && m_ch <= 'f')
-                            {
-                                byte = m_ch - 'a' + 10;
-                            }
-                            else
-                            {
-                                Error("Malformed quoted printable string");
-                            }
-
-                            byte *= 16;
-                            GetNextChar();
-
-                            if (m_ch >= '0' && m_ch <= '9')
-                            {
-                                byte += m_ch - '0';
-                            }
-                            else if (m_ch >= 'A' && m_ch <= 'F')
-                            {
-                                byte += m_ch - 'A' + 10;
-                            }
-                            else if (m_ch >= 'a' && m_ch <= 'f')
-                            {
-                                byte += m_ch - 'a' + 10;
-                            }
-                            else
-                            {
-                                Error("Malformed quoted printable string");
-                            }
-
-                            m_ch = byte; // Put this into the string.
+                            Error("Malformed quoted printable string");
                         }
+
+                        byte *= 16;
+                        GetNextChar();
+
+                        if (m_ch >= '0' && m_ch <= '9')
+                        {
+                            byte += m_ch - '0';
+                        }
+                        else if (m_ch >= 'A' && m_ch <= 'F')
+                        {
+                            byte += m_ch - 'A' + 10;
+                        }
+                        else if (m_ch >= 'a' && m_ch <= 'f')
+                        {
+                            byte += m_ch - 'a' + 10;
+                        }
+                        else
+                        {
+                            Error("Malformed quoted printable string");
+                        }
+
+                        m_ch = byte; // Put this into the string.
                     }
 
                     // We grow the buffer to the largest string in the input.
-                    unsigned char *str = (unsigned char *)realloc(m_String, m_nStringLength + 2);
+                    auto *str = (unsigned char *)realloc(m_string, m_nStringLength + 2);
 
-                    if (str == NULL)
+                    if (str == nullptr)
                     {
                         Error("Insufficient memory");
                     }
 
-                    m_String = str;
-                    m_String[m_nStringLength++] = m_ch;
+                    m_string = str;
+                    m_string[m_nStringLength++] = m_ch;
                 }
 
                 GetNextChar(); // Skip the closing quote
-                m_String[m_nStringLength] = 0;
+                m_string[m_nStringLength] = 0;
                 return;
             }
 
@@ -790,25 +780,25 @@ void MHParseText::NextSym()
                 }
 
                 // Check the colour table.  If it's there generate a string containing the colour info.
-                for (int i = 0; i < (int)(sizeof(colourTable) / sizeof(colourTable[0])); i++)
+                for (auto & colour : colourTable)
                 {
-                    if (stricmp(buff, colourTable[i].name) == 0)
+                    if (stricmp(buff, colour.m_name) == 0)
                     {
                         m_nType = PTString;
-                        unsigned char *str = (unsigned char *)realloc(m_String, 4 + 1);
+                        auto *str = (unsigned char *)realloc(m_string, 4 + 1);
 
-                        if (str == NULL)
+                        if (str == nullptr)
                         {
                             Error("Insufficient memory");
                         }
 
-                        m_String = str;
-                        m_String[0] = colourTable[i].r;
-                        m_String[1] = colourTable[i].g;
-                        m_String[2] = colourTable[i].b;
-                        m_String[3] = colourTable[i].t;
+                        m_string = str;
+                        m_string[0] = colour.m_r;
+                        m_string[1] = colour.m_g;
+                        m_string[2] = colour.m_b;
+                        m_string[3] = colour.m_t;
                         m_nStringLength = 4;
-                        m_String[m_nStringLength] = 0;
+                        m_string[m_nStringLength] = 0;
                         return;
                     }
                 }
@@ -852,7 +842,7 @@ void MHParseText::NextSym()
 
 MHParseNode *MHParseText::DoParse()
 {
-    MHParseNode *pRes = NULL;
+    MHParseNode *pRes = nullptr;
 
     try
     {
@@ -868,7 +858,7 @@ MHParseNode *MHParseText::DoParse()
                     Error("Expected ':' after '{'");
                 }
 
-                MHPTagged *pTag = new MHPTagged(m_nTag);
+                auto *pTag = new MHPTagged(m_nTag);
                 pRes = pTag;
                 NextSym();
 
@@ -884,7 +874,7 @@ MHParseNode *MHParseText::DoParse()
             case PTTag: // Tag on its own.
             {
                 int nTag = m_nTag;
-                MHPTagged *pTag = new MHPTagged(nTag);
+                auto *pTag = new MHPTagged(nTag);
                 pRes = pTag;
                 NextSym();
 
@@ -1069,7 +1059,7 @@ MHParseNode *MHParseText::DoParse()
             case PTString:
             {
                 MHOctetString str;
-                str.Copy(MHOctetString((const char *)m_String, m_nStringLength));
+                str.Copy(MHOctetString((const char *)m_string, m_nStringLength));
                 pRes = new MHPString(str);
                 NextSym();
                 break;
@@ -1091,7 +1081,7 @@ MHParseNode *MHParseText::DoParse()
 
             case PTStartSeq: // Open parenthesis.
             {
-                MHParseSequence *pSeq = new MHParseSequence;
+                auto *pSeq = new MHParseSequence;
                 pRes = pSeq;
                 NextSym();
 

@@ -20,6 +20,9 @@
 #define LOC_ERR  QString("MythNewsEditor, Error: ")
 
 /** \brief Creates a new MythNewsEditor Screen
+ *  \param site The web page for which an entry is being created.
+ *  \param edit If true, then editing an existing entry instead of
+ *              creating a new entry.
  *  \param parent Pointer to the screen stack
  *  \param name The name of the window
  */
@@ -27,17 +30,9 @@ MythNewsEditor::MythNewsEditor(NewsSite *site, bool edit,
                                MythScreenStack *parent,
                                const QString &name) :
     MythScreenType(parent, name),
-    m_lock(QMutex::Recursive),
     m_site(site),
     m_siteName((edit && site) ? site->name() : QString()),
-    m_editing(edit),
-    m_titleText(NULL),     m_nameLabelText(NULL),
-    m_urlLabelText(NULL),  m_iconLabelText(NULL),
-    m_podcastLabelText(NULL),
-    m_nameEdit(NULL),      m_urlEdit(NULL),
-    m_iconEdit(NULL),
-    m_okButton(NULL),      m_cancelButton(NULL),
-    m_podcastCheck(NULL)
+    m_editing(edit)
 {
 }
 
@@ -101,7 +96,7 @@ bool MythNewsEditor::Create(void)
         m_nameEdit->SetText(m_site->name());
         m_urlEdit->SetText(m_site->url());
         m_iconEdit->SetText(m_site->imageURL());
-        if (m_site->podcast() == 1)
+        if (m_site->podcast())
            m_podcastCheck->SetCheckState(MythUIStateType::Full);
     }
 
@@ -117,9 +112,8 @@ bool MythNewsEditor::keyPressEvent(QKeyEvent *event)
     if (GetFocusWidget()->keyPressEvent(event))
         return true;
 
-    bool handled = false;
     QStringList actions;
-    handled = GetMythMainWindow()->TranslateKeyPress("News", event, actions);
+    bool handled = GetMythMainWindow()->TranslateKeyPress("News", event, actions);
 
     if (!handled && MythScreenType::keyPressEvent(event))
         handled = true;

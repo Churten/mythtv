@@ -1,7 +1,10 @@
 #include "galleryviews.h"
 
 #include <cmath> // for qsrand
-
+#include <random>
+#if QT_VERSION >= QT_VERSION_CHECK(5,10,0)
+#include <QRandomGenerator>
+#endif
 
 #define LOC QString("Galleryviews: ")
 
@@ -24,6 +27,21 @@ const double DEFAULT_WEIGHT = std::pow(0.5, TRAILING_BETA_SHAPE - 1) *
 //! The edges of the distribution get clipped to avoid a singularity.
 const qint64 BETA_CLIP = 60 * 60 * 24;
 
+void MarkedFiles::Add(const ImageIdList& newIds)
+{
+    for (int newid : newIds)
+        insert(newid);
+}
+
+void MarkedFiles::Invert(const ImageIdList &all)
+{
+    QSet tmp;
+    for (int tmpint : all)
+        tmp.insert(tmpint);
+    for (int tmpint : *this)
+        tmp.remove(tmpint);
+    swap(tmp);
+}
 
 /*!
  \brief Get all images/dirs in view
@@ -40,7 +58,7 @@ ImageListK FlatView::GetAllNodes() const
 
 /*!
  \brief Get current selection
- \return ImagePtr An image or NULL
+ \return ImagePtr An image or nullptr
 */
 ImagePtrK FlatView::GetSelected() const
 {
@@ -61,7 +79,7 @@ QString FlatView::GetPosition() const
 
 /*!
  \brief Updates view with images that have been updated.
- \param idList List of image ids that have been updated
+ \param id Image id to update
  \return bool True if the current selection has been updated
 */
 bool FlatView::Update(int id)
@@ -71,7 +89,8 @@ bool FlatView::Update(int id)
         return false;
 
     // Get updated image
-    ImageList files, dirs;
+    ImageList files;
+    ImageList dirs;
     ImageIdList ids = ImageIdList() << id;
     if (m_mgr.GetImages(ids, files, dirs) != 1 || files.size() != 1)
         return false;
@@ -127,7 +146,7 @@ void FlatView::Clear(bool resetParent)
 
 /*!
  \brief Peeks at next image in view but does not advance iterator
- \return ImageItem The next image or NULL
+ \return ImageItem The next image or nullptr
 */
 ImagePtrK FlatView::HasNext(int inc) const
 {
@@ -139,7 +158,7 @@ ImagePtrK FlatView::HasNext(int inc) const
 /*!
  \brief Advance iterator and return next image, wrapping if necessary.
  Regenerates unordered views on wrap.
- \return ImageItem Next image or NULL if empty
+ \return ImageItem Next image or nullptr if empty
 */
 ImagePtrK FlatView::Next(int inc)
 {
@@ -161,7 +180,7 @@ ImagePtrK FlatView::Next(int inc)
 
 /*!
  \brief Peeks at previous image in view but does not decrement iterator
- \return ImageItem The previous image or NULL
+ \return ImageItem The previous image or nullptr
 */
 ImagePtrK FlatView::HasPrev(int inc) const
 {
@@ -172,7 +191,7 @@ ImagePtrK FlatView::HasPrev(int inc) const
 
 /*!
  \brief Decrements iterator and returns previous image. Wraps at start.
- \return ImageItem Previous image or NULL if empty
+ \return ImageItem Previous image or nullptr if empty
 */
 ImagePtrK FlatView::Prev(int inc)
 {
@@ -222,17 +241,28 @@ void FlatView::Populate(ImageList &files)
         // Modify viewing sequence
         if (m_order == kShuffle)
         {
-            std::random_shuffle(m_sequence.begin(), m_sequence.end());
+            std::shuffle(m_sequence.begin(), m_sequence.end(),
+                         std::mt19937(std::random_device()()));
         }
         else if (m_order == kRandom)
         {
+#if QT_VERSION >= QT_VERSION_CHECK(5,10,0)
+            QVector<quint32> rands;
+            rands.resize(files.size());
+            QRandomGenerator::global()->fillRange(rands.data(), rands.size());
+#else
             qsrand(QTime::currentTime().msec());
+#endif
             // An image is not a valid candidate for its successor
             int range = files.size() - 1;
             int index = range;
             for (int count = 0; count < files.size(); ++count)
             {
+#if QT_VERSION >= QT_VERSION_CHECK(5,10,0)
+                int rand = rands[count] % range;
+#else
                 int rand = qrand() % range;
+#endif
                 // Avoid consecutive repeats
                 index = (rand < index) ? rand : rand + 1;
                 m_sequence.append(files.at(index)->m_id);
@@ -243,10 +273,19 @@ void FlatView::Populate(ImageList &files)
             WeightList weights   = CalculateSeasonalWeights(files);
             double     maxWeight = weights.last();
 
+#if QT_VERSION >= QT_VERSION_CHECK(5,10,0)
+            auto *randgen = QRandomGenerator::global();
+#else
             qsrand(QTime::currentTime().msec());
+#endif
             for (int count = 0; count < files.size(); ++count)
             {
+#if QT_VERSION >= QT_VERSION_CHECK(5,10,0)
+                // generateDouble() returns in the range [0, 1)
+                double randWeight = randgen->generateDouble() * maxWeight;
+#else
                 double randWeight = qrand() * maxWeight / RAND_MAX;
+#endif
                 WeightList::iterator it =
                         std::upper_bound(weights.begin(), weights.end(), randWeight);
                 int    index      = std::distance(weights.begin(), it);
@@ -276,13 +315,17 @@ WeightList FlatView::CalculateSeasonalWeights(ImageList &files)
     for (int i = 0; i < files.size(); ++i)
     {
         ImagePtrK im = files.at(i);
-        double weight;
+        double weight = 0;
 
         if (im->m_date == 0)
             weight = DEFAULT_WEIGHT;
         else
         {
+#if QT_VERSION < QT_VERSION_CHECK(5,8,0)
             QDateTime timestamp = QDateTime::fromTime_t(im->m_date);
+#else
+            QDateTime timestamp = QDateTime::fromSecsSinceEpoch(im->m_date);
+#endif
             QDateTime curYearAnniversary =
                     QDateTime(QDate(now.date().year(),
                                     timestamp.date().month(),
@@ -298,7 +341,7 @@ WeightList FlatView::CalculateSeasonalWeights(ImageList &files)
                                     timestamp.date().day()),
                               timestamp.time());
 
-            double range = abs(curYearAnniversary.secsTo(
+            double range = llabs(curYearAnniversary.secsTo(
                                    adjacentYearAnniversary)) + BETA_CLIP;
 
             // This calculation is not normalized, because that would require the
@@ -308,9 +351,9 @@ WeightList FlatView::CalculateSeasonalWeights(ImageList &files)
                                            : adjacentYearAnniversary);
             QDateTime d2(isAnniversaryPast ? adjacentYearAnniversary
                                            : curYearAnniversary);
-            weight = std::pow(abs(now.secsTo(d1) + BETA_CLIP) / range,
+            weight = std::pow(llabs(now.secsTo(d1) + BETA_CLIP) / range,
                               TRAILING_BETA_SHAPE - 1)
-                    * std::pow(abs(now.secsTo(d2) + BETA_CLIP) / range,
+                    * std::pow(llabs(now.secsTo(d2) + BETA_CLIP) / range,
                                LEADING_BETA_SHAPE - 1);
         }
         totalWeight += weight;
@@ -331,7 +374,8 @@ bool FlatView::LoadFromDb(int parentId)
     m_parentId = parentId;
 
     // Load child images of the parent
-    ImageList files, dirs;
+    ImageList files;
+    ImageList dirs;
     m_mgr.GetChildren(m_parentId, files, dirs);
 
     // Load gallery datastore with current dir
@@ -418,8 +462,8 @@ void FlatView::Cache(int id, int parent, const QString &url, const QString &thum
 QString DirCacheEntry::ToString(int id) const
 {
     QStringList ids;
-    for (int i = 0; i < m_thumbs.size(); ++i)
-        ids << QString::number(m_thumbs.at(i).first);
+    foreach (const auto & thumb, m_thumbs)
+        ids << QString::number(thumb.first);
     return QString("Dir %1 (%2, %3) Thumbs %4 (%5) Parent %6")
             .arg(id).arg(m_fileCount).arg(m_dirCount).arg(ids.join(","))
             .arg(m_thumbCount).arg(m_parent);
@@ -459,9 +503,10 @@ subtree.
 bool DirectoryView::LoadFromDb(int parentId)
 {
     // Determine parent (defaulting to ancestor) & get initial children
-    ImageList files, dirs;
+    ImageList files;
+    ImageList dirs;
     ImagePtr parent;
-    int count;
+    int count = 0;
     // Root is guaranteed to return at least 1 item
     while ((count = m_mgr.GetDirectory(parentId, parent, files, dirs)) == 0)
     {
@@ -534,7 +579,8 @@ void DirectoryView::LoadDirThumbs(ImageItem &parent, int thumbsNeeded, int level
         return;
 
     // Load child images & dirs
-    ImageList files, dirs;
+    ImageList files;
+    ImageList dirs;
     m_mgr.GetChildren(parent.m_id, files, dirs);
 
     PopulateThumbs(parent, thumbsNeeded, files, dirs, level);
@@ -546,7 +592,9 @@ void DirectoryView::LoadDirThumbs(ImageItem &parent, int thumbsNeeded, int level
 Use user cover, if assigned. Otherwise derive 4 thumbnails from: first 4 images,
 then 1st thumbnail from first 4 sub-dirs, then 2nd thumbnail from sub-dirs etc
  \param parent The parent dir
- \param limit Number of thumbnails required
+ \param thumbsNeeded Number of thumbnails required
+ \param files A list of files to process
+ \param dirs A list of directories to process
  \param level Recursion level (to detect recursion deadlocks)
 */
 void DirectoryView::PopulateThumbs(ImageItem &parent, int thumbsNeeded,
@@ -572,7 +620,8 @@ void DirectoryView::PopulateThumbs(ImageItem &parent, int thumbsNeeded,
     }
 
     // Children to use as thumbnails
-    ImageList thumbFiles, thumbDirs;
+    ImageList thumbFiles;
+    ImageList thumbDirs;
 
     if (!userIm)
     {
@@ -602,8 +651,10 @@ void DirectoryView::PopulateThumbs(ImageItem &parent, int thumbsNeeded,
         // Prevent lengthy/infinite recursion due to deep/cyclic folder
         // structures
         if (++level > 10)
+        {
             LOG(VB_GENERAL, LOG_NOTICE, LOC +
                 "Directory thumbnails are more than 10 levels deep");
+        }
         else
         {
             // Recursively load subdir thumbs to try to get 1 thumb from each
@@ -616,7 +667,7 @@ void DirectoryView::PopulateThumbs(ImageItem &parent, int thumbsNeeded,
                 // be empty
                 LoadDirThumbs(*im, thumbsNeeded, level);
 
-                if (im->m_thumbNails.size() > 0)
+                if (!im->m_thumbNails.empty())
                 {
                     // Add first thumbnail to parent thumb
                     parent.m_thumbNails.append(im->m_thumbNails.at(0));
@@ -661,7 +712,7 @@ void DirectoryView::PopulateThumbs(ImageItem &parent, int thumbsNeeded,
  \brief Resets view
  \param resetParent parent id is only reset to root when this is set
 */
-void DirectoryView::Clear(bool)
+void DirectoryView::Clear(bool /*resetParent*/)
 {
     ClearMarked();
     ClearCache();
@@ -848,7 +899,7 @@ void DirectoryView::ClearCache()
  \brief Clear file/dir and all its ancestors from UI cache so that ancestor
  thumbnails are recalculated. Optionally deletes file/dir from view.
  \param id Image id
- \param remove If true, file is also deleted from view
+ \param deleted If true, file is also deleted from view
  \return QStringList Url of image & thumbnail to remove from image cache
 */
 QStringList DirectoryView::RemoveImage(int id, bool deleted)

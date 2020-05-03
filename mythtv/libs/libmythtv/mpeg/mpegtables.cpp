@@ -99,7 +99,7 @@ bool PSIPTable::HasCRC(void) const
     switch (TableID())
     {
         // MPEG
-        case TableID::PAT:
+        case TableID::PAT: // NOLINT(bugprone-branch-clone)
         case TableID::CAT:
         case TableID::PMT:
             has_crc = true;
@@ -138,7 +138,7 @@ bool PSIPTable::HasCRC(void) const
         case TableID::DIT:
             has_crc = false;
             break;
-        case TableID::SIT:
+        case TableID::SIT: // NOLINT(bugprone-branch-clone)
             has_crc = true;
             break;
 
@@ -244,9 +244,9 @@ bool PSIPTable::VerifyPSIP(bool verify_crc) const
         return false;
     }
 
-    unsigned char *bufend = _fullbuffer + _allocSize;
+    unsigned char *bufend = m_fullBuffer + m_allocSize;
 
-    if ((_pesdata + 2) >= bufend)
+    if ((m_pesData + 2) >= bufend)
         return false; // can't query length
 
     if (psipdata() >= bufend)
@@ -254,7 +254,7 @@ bool PSIPTable::VerifyPSIP(bool verify_crc) const
 
     if (TableID::PAT == TableID())
     {
-        uint pcnt = (SectionLength() - PSIP_OFFSET - 2) >> 2;
+        uint pcnt = (SectionLength() - kPsipOffset - 2) >> 2;
         bool ok = (psipdata() + (pcnt << 2) + 3 < bufend);
         if (!ok)
         {
@@ -337,7 +337,7 @@ ProgramAssociationTable* ProgramAssociationTable::CreateBlank(bool smallPacket)
     psip.SetLength(TSPacket::kPayloadSize
                    - 1 /* for start of field pointer */
                    - 3 /* for data before data last byte of pes length */);
-    ProgramAssociationTable *pat = new ProgramAssociationTable(psip);
+    auto *pat = new ProgramAssociationTable(psip);
     pat->SetTotalLength(sizeof(DEFAULT_PAT_HEADER));
     delete tspacket;
     return pat;
@@ -351,18 +351,18 @@ ProgramAssociationTable* ProgramAssociationTable::Create(
     ProgramAssociationTable* pat = CreateBlank();
     pat->SetVersionNumber(version);
     pat->SetTranportStreamID(tsid);
-    pat->SetTotalLength(PSIP_OFFSET + (count * 4));
+    pat->SetTotalLength(kPsipOffset + (count * 4));
 
     // create PAT data
-    if ((count * 4) >= (184 - (PSIP_OFFSET+1)))
+    if ((count * 4) >= (184 - (kPsipOffset+1)))
     { // old PAT must be in single TS for this create function
         LOG(VB_GENERAL, LOG_ERR,
             "PAT::Create: Error, old PAT size exceeds maximum PAT size.");
         delete pat;
-        return 0;
+        return nullptr;
     }
 
-    uint offset = PSIP_OFFSET;
+    uint offset = kPsipOffset;
     for (uint i = 0; i < count; i++)
     {
         // pnum
@@ -380,7 +380,7 @@ ProgramAssociationTable* ProgramAssociationTable::Create(
 
 ProgramMapTable* ProgramMapTable::CreateBlank(bool smallPacket)
 {
-    ProgramMapTable *pmt = NULL;
+    ProgramMapTable *pmt = nullptr;
     TSPacket *tspacket = TSPacket::CreatePayloadOnlyPacket();
     memcpy(tspacket->data() + sizeof(TSHeader) + 1/* start of field pointer */,
            DEFAULT_PMT_HEADER, sizeof(DEFAULT_PMT_HEADER));
@@ -440,21 +440,20 @@ ProgramMapTable* ProgramMapTable::Create(
     pmt->SetVersionNumber(version);
 
     vector<unsigned char> gdesc;
-    for (uint i=0; i<global_desc.size(); i++)
+    for (const auto *gd : global_desc)
     {
-        uint len = global_desc[i][1] + 2;
-        gdesc.insert(gdesc.end(), global_desc[i], global_desc[i] + len);
+        uint len = gd[1] + 2;
+        gdesc.insert(gdesc.end(), gd, gd + len);
     }
     pmt->SetProgramInfo(gdesc.data(), gdesc.size());
 
     for (uint i = 0; i < count; i++)
     {
         vector<unsigned char> pdesc;
-        for (uint j = 0; j < prog_desc[i].size(); j++)
+        for (const auto *pd : prog_desc[i])
         {
-            uint len = prog_desc[i][j][1] + 2;
-            pdesc.insert(pdesc.end(),
-                         prog_desc[i][j], prog_desc[i][j] + len);
+            uint len = pd[1] + 2;
+            pdesc.insert(pdesc.end(), pd, pd + len);
         }
 
         pmt->AppendStream(pids[i], types[i], pdesc.data(), pdesc.size());
@@ -468,19 +467,19 @@ ProgramMapTable* ProgramMapTable::Create(
 
 void ProgramMapTable::Parse() const
 {
-    _ptrs.clear();
-    const unsigned char *cpos = psipdata() + pmt_header + ProgramInfoLength();
-    unsigned char *pos = const_cast<unsigned char*>(cpos);
+    m_ptrs.clear();
+    const unsigned char *cpos = psipdata() + kPmtHeaderMinOffset + ProgramInfoLength();
+    auto *pos = const_cast<unsigned char*>(cpos);
     for (uint i = 0; pos < psipdata() + Length() - 9; i++)
     {
-        _ptrs.push_back(pos);
+        m_ptrs.push_back(pos);
         pos += 5 + StreamInfoLength(i);
 #if 0
         LOG(VB_SIPARSER, LOG_DEBUG, QString("Parsing PMT(0x%1) i(%2) len(%3)")
                 .arg((uint64_t)this, 0, 16) .arg(i) .arg(StreamInfoLength(i)));
 #endif
     }
-    _ptrs.push_back(pos);
+    m_ptrs.push_back(pos);
 #if 0
     LOG(VB_SIPARSER, LOG_DEBUG, QString("Parsed PMT(0x%1)\n%2")
             .arg((uint64_t)this, 0, 16) .arg(toString()));
@@ -492,16 +491,16 @@ void ProgramMapTable::AppendStream(
     unsigned char* streamInfo, uint infoLength)
 {
     if (!StreamCount())
-        _ptrs.push_back(psipdata() + pmt_header + ProgramInfoLength());
-    memset(_ptrs[StreamCount()], 0xff, 5);
+        m_ptrs.push_back(psipdata() + kPmtHeaderMinOffset + ProgramInfoLength());
+    memset(m_ptrs[StreamCount()], 0xff, 5);
     SetStreamPID(StreamCount(), pid);
     SetStreamType(StreamCount(), type);
     SetStreamProgramInfo(StreamCount(), streamInfo, infoLength);
-    _ptrs.push_back(_ptrs[StreamCount()]+5+StreamInfoLength(StreamCount()));
-    SetTotalLength(_ptrs[StreamCount()] - pesdata());
+    m_ptrs.push_back(m_ptrs[StreamCount()]+5+StreamInfoLength(StreamCount()));
+    SetTotalLength(m_ptrs[StreamCount()] - pesdata());
 }
 
-/** \fn ProgramMapTable::IsVideo(uint,QString) const
+/**
  *  \brief Returns true iff the stream at index i is a video stream.
  *
  *   This of course returns true if StreamID::IsVideo() is true.
@@ -509,8 +508,9 @@ void ProgramMapTable::AppendStream(
  *   StreamID::Normalize() is used on the stream type.
  *
  *  \param i index of stream
+ *  \param sistandard standard to use in determining if this is a A/V stream
  */
-bool ProgramMapTable::IsVideo(uint i, QString sistandard) const
+bool ProgramMapTable::IsVideo(uint i, const QString& sistandard) const
 {
     if (StreamID::IsVideo(StreamType(i)))
         return true;
@@ -522,7 +522,7 @@ bool ProgramMapTable::IsVideo(uint i, QString sistandard) const
     return StreamID::IsVideo(stream_id);
 }
 
-/** \fn ProgramMapTable::IsAudio(uint,QString) const
+/**
  *  \brief Returns true iff the stream at index i is an audio stream.
  *
  *   This of course returns true if StreamID::IsAudio() is true.
@@ -530,8 +530,9 @@ bool ProgramMapTable::IsVideo(uint i, QString sistandard) const
  *   StreamID::Normalize() is used on the stream type.
  *
  *  \param i index of stream
+ *  \param sistandard standard to use in determining if this is a A/V stream
  */
-bool ProgramMapTable::IsAudio(uint i, QString sistandard) const
+bool ProgramMapTable::IsAudio(uint i, const QString& sistandard) const
 {
     if (StreamID::IsAudio(StreamType(i)))
         return true;
@@ -543,10 +544,11 @@ bool ProgramMapTable::IsAudio(uint i, QString sistandard) const
     return StreamID::IsAudio(stream_id);
 }
 
-/** \fn ProgramMapTable::IsEncrypted(QString sistandard) const
+/**
  *  \brief Returns true iff PMT contains CA descriptor for a vid/aud stream.
+ *  \param sistandard standard to use in determining if this is a A/V stream
  */
-bool ProgramMapTable::IsEncrypted(QString sistandard) const
+bool ProgramMapTable::IsEncrypted(const QString& sistandard) const
 {
     bool encrypted = IsProgramEncrypted();
 
@@ -569,9 +571,11 @@ bool ProgramMapTable::IsProgramEncrypted(void) const
 
     uint encrypted = 0;
     QMap<uint,uint> encryption_system;
-    for (uint i = 0; i < descs.size(); i++)
+    for (auto & desc : descs)
     {
-        ConditionalAccessDescriptor cad(descs[i]);
+        ConditionalAccessDescriptor cad(desc);
+        if (!cad.IsValid())
+            continue;
         encryption_system[cad.PID()] = cad.SystemID();
         encrypted |= cad.SystemID();
 
@@ -588,19 +592,20 @@ bool ProgramMapTable::IsProgramEncrypted(void) const
  *
  *  \param i index of stream
  */
-bool ProgramMapTable::IsStreamEncrypted(uint i) const
+bool ProgramMapTable::IsStreamEncrypted(uint pid) const
 {
     desc_list_t descs = MPEGDescriptor::ParseOnlyInclude(
-        StreamInfo(i), StreamInfoLength(i), DescriptorID::conditional_access);
+        StreamInfo(pid), StreamInfoLength(pid), DescriptorID::conditional_access);
 
     uint encrypted = 0;
     QMap<uint,uint> encryption_system;
-    for (uint j = 0; j < descs.size(); j++)
+    for (auto & desc : descs)
     {
-        ConditionalAccessDescriptor cad(descs[j]);
+        ConditionalAccessDescriptor cad(desc);
+        if (!cad.IsValid())
+            continue;
         encryption_system[cad.PID()] = cad.SystemID();
         encrypted |= cad.SystemID();
-
 #if 0
         LOG(VB_GENERAL, LOG_INFO, "DTVsm: " + cad.toString());
 #endif
@@ -609,16 +614,16 @@ bool ProgramMapTable::IsStreamEncrypted(uint i) const
     return encrypted != 0;
 }
 
-bool ProgramMapTable::IsStillPicture(QString sistandard) const
+bool ProgramMapTable::IsStillPicture(const QString& sistandard) const
 {
-    static const unsigned char STILL_PICTURE_FLAG = 0x01;
+    static constexpr unsigned char kStillPictureFlag = 0x01;
 
     for (uint i = 0; i < StreamCount(); i++)
     {
         if (IsVideo(i, sistandard))
         {
             return StreamInfoLength(i) > 2 &&
-                   (StreamInfo(i)[2] & STILL_PICTURE_FLAG);
+                   ((StreamInfo(i)[2] & kStillPictureFlag) != 0);
         }
     }
     return false;
@@ -680,35 +685,41 @@ uint ProgramMapTable::FindPIDs(uint           type,
     if ((StreamID::AnyMask & type) != StreamID::AnyMask)
     {
         for (uint i=0; i < StreamCount(); i++)
+        {
             if (type == StreamType(i))
             {
                 pids.push_back(StreamPID(i));
                 types.push_back(StreamType(i));
             }
+        }
     }
     else if (StreamID::AnyVideo == type)
     {
         for (uint i=0; i < StreamCount(); i++)
+        {
             if (IsVideo(i, sistandard))
             {
                 pids.push_back(StreamPID(i));
                 types.push_back(StreamType(i));
             }
+        }
     }
     else if (StreamID::AnyAudio == type)
     {
         for (uint i=0; i < StreamCount(); i++)
+        {
             if (IsAudio(i, sistandard))
             {
                 pids.push_back(StreamPID(i));
                 types.push_back(StreamType(i));
             }
+        }
     }
 
     if (!normalize)
         return pids.size();
 
-    for (uint i = pids_start; i < pids.size(); i++)
+    for (size_t i = pids_start; i < pids.size(); i++)
     {
         int index = FindPID(pids[i]);
         if (index >= 0)
@@ -808,7 +819,8 @@ QString ProgramAssociationTable::toString(void) const
     str.append(QString("      tsid(%1) ").arg(TransportStreamID()));
     str.append(QString("programCount(%1)\n").arg(ProgramCount()));
 
-    uint cnt0 = 0, cnt1fff = 0;
+    uint cnt0 = 0;
+    uint cnt1fff = 0;
     for (uint i = 0; i < ProgramCount(); i++)
     {
         if (0x1fff == ProgramPID(i))
@@ -869,7 +881,7 @@ QString ProgramMapTable::toString(void) const
     QString str =
         QString("Program Map Section"
                 "\n%1"
-                "      pnum(%2) pid(0x%3) pcrpid(%4)\n")
+                "      pnum(%2) pid(0x%3) pcrpid(0x%4)\n")
         .arg(PSIPTable::toString())
         .arg(ProgramNumber())
         .arg(tsheader()->PID(),0,16)
@@ -877,10 +889,10 @@ QString ProgramMapTable::toString(void) const
 
     vector<const unsigned char*> desc =
         MPEGDescriptor::Parse(ProgramInfo(), ProgramInfoLength());
-    for (uint i = 0; i < desc.size(); i++)
+    for (auto & d : desc)
     {
         str.append(QString("  %1\n")
-                   .arg(MPEGDescriptor(desc[i], 300).toString()));
+                   .arg(MPEGDescriptor(d, 300).toString()));
     }
 
     for (uint i = 0; i < StreamCount(); i++)
@@ -889,12 +901,11 @@ QString ProgramMapTable::toString(void) const
                    .arg(i).arg(StreamPID(i), 0, 16)
                    .arg(StreamType(i), 2, 16, QChar('0'))
                    .arg(StreamTypeString(i)));
-        vector<const unsigned char*> desc =
-            MPEGDescriptor::Parse(StreamInfo(i), StreamInfoLength(i));
-        for (uint i = 0; i < desc.size(); i++)
+        desc = MPEGDescriptor::Parse(StreamInfo(i), StreamInfoLength(i));
+        for (auto & d : desc)
         {
             str.append(QString("    %1\n")
-                       .arg(MPEGDescriptor(desc[i], 300).toString()));
+                       .arg(MPEGDescriptor(d, 300).toString()));
         }
     }
     return str;
@@ -918,9 +929,9 @@ QString ProgramMapTable::toStringXML(uint indent_level) const
 
     vector<const unsigned char*> gdesc =
         MPEGDescriptor::Parse(ProgramInfo(), ProgramInfoLength());
-    for (uint i = 0; i < gdesc.size(); i++)
+    for (auto & gd : gdesc)
     {
-        str += MPEGDescriptor(gdesc[i], 300)
+        str += MPEGDescriptor(gd, 300)
             .toStringXML(indent_level + 1) + "\n";
     }
 
@@ -936,9 +947,9 @@ QString ProgramMapTable::toStringXML(uint indent_level) const
         vector<const unsigned char*> ldesc =
             MPEGDescriptor::Parse(StreamInfo(i), StreamInfoLength(i));
         str += (ldesc.empty()) ? " />\n" : ">\n";
-        for (uint i = 0; i < ldesc.size(); i++)
+        for (auto & ld : ldesc)
         {
-            str += MPEGDescriptor(ldesc[i], 300)
+            str += MPEGDescriptor(ld, 300)
                 .toStringXML(indent_level + 2) + "\n";
         }
         if (!ldesc.empty())
@@ -1115,9 +1126,11 @@ QString ProgramMapTable::GetLanguage(uint i) const
         list, DescriptorID::iso_639_language);
 
     if (!lang_desc)
-        return QString::null;
+        return QString();
 
     ISO639LanguageDescriptor iso_lang(lang_desc);
+    if (!iso_lang.IsValid())
+        return "";
     return iso_lang.CanonicalLanguageString();
 }
 
@@ -1132,6 +1145,8 @@ uint ProgramMapTable::GetAudioType(uint i) const
         return 0;
 
     ISO639LanguageDescriptor iso_lang(lang_desc);
+    if (!iso_lang.IsValid())
+        return 0;
 
     // Hack for non-standard AD labelling on UK Satellite and Irish DTTV
     // Language string of 'nar' for narrative indicates an AD track
@@ -1142,7 +1157,7 @@ uint ProgramMapTable::GetAudioType(uint i) const
     return iso_lang.AudioType();
 }
 
-QString ProgramMapTable::StreamDescription(uint i, QString sistandard) const
+QString ProgramMapTable::StreamDescription(uint i, const QString& sistandard) const
 {
     desc_list_t list;
 
@@ -1165,8 +1180,8 @@ QString ConditionalAccessTable::toString(void) const
 
     vector<const unsigned char*> gdesc =
         MPEGDescriptor::Parse(Descriptors(), DescriptorsLength());
-    for (uint i = 0; i < gdesc.size(); i++)
-        str += "  " + MPEGDescriptor(gdesc[i], 300).toString() + "\n";
+    for (auto & gd : gdesc)
+        str += "  " + MPEGDescriptor(gd, 300).toString() + "\n";
 
     str += "\n";
 
@@ -1185,9 +1200,9 @@ QString ConditionalAccessTable::toStringXML(uint indent_level) const
     vector<const unsigned char*> gdesc =
         MPEGDescriptor::Parse(Descriptors(), DescriptorsLength());
     str += (gdesc.empty()) ? " />\n" : ">\n";
-    for (uint i = 0; i < gdesc.size(); i++)
+    for (auto & gd : gdesc)
     {
-        str += MPEGDescriptor(gdesc[i], 300)
+        str += MPEGDescriptor(gd, 300)
             .toStringXML(indent_level + 1) + "\n";
     }
     if (!gdesc.empty())
@@ -1257,17 +1272,17 @@ QString SpliceTimeView::toStringXML(
 
 /// \brief Returns decrypted version of this packet.
 SpliceInformationTable *SpliceInformationTable::GetDecrypted(
-    const QString &/*codeWord*/) const
+    const QString &/*codeWord*/)
 {
     // TODO
-    return NULL;
+    return nullptr;
 }
 
 bool SpliceInformationTable::Parse(void)
 {
-    _epilog = NULL;
-    _ptrs0.clear();
-    _ptrs1.clear();
+    m_epilog = nullptr;
+    m_ptrs0.clear();
+    m_ptrs1.clear();
 
     if (TableID::SITscte != TableID())
         return false;
@@ -1281,11 +1296,11 @@ bool SpliceInformationTable::Parse(void)
     uint type = SpliceCommandType();
     if (kSCTNull == type || kSCTBandwidthReservation == type)
     {
-        _epilog = pesdata() + 14;
+        m_epilog = pesdata() + 14;
     }
     else if (kSCTTimeSignal == type)
     {
-        _epilog = pesdata() + 14 + TimeSignal().size();
+        m_epilog = pesdata() + 14 + TimeSignal().size();
     }
     else if (kSCTSpliceSchedule == type)
     {
@@ -1293,41 +1308,41 @@ bool SpliceInformationTable::Parse(void)
         const unsigned char *cur = pesdata() + 15;
         for (uint i = 0; i < splice_count; i++)
         {
-            _ptrs0.push_back(cur);
-            bool event_cancel = cur[4] & 0x80;
+            m_ptrs0.push_back(cur);
+            bool event_cancel = (cur[4] & 0x80) != 0;
             if (event_cancel)
             {
-                _ptrs1.push_back(NULL);
+                m_ptrs1.push_back(nullptr);
                 cur += 5;
                 continue;
             }
-            bool program_slice = cur[5] & 0x40;
+            bool program_slice = (cur[5] & 0x40) != 0;
             uint component_count = cur[6];
-            _ptrs1.push_back(cur + (program_slice ? 10 : 7 * component_count));
+            m_ptrs1.push_back(cur + (program_slice ? 10 : 7 * component_count));
         }
         if (splice_count)
         {
-            bool duration = _ptrs0.back()[5] & 0x2;
-            _epilog = _ptrs1.back() + ((duration) ? 9 : 4);
+            bool duration = (m_ptrs0.back()[5] & 0x2) != 0;
+            m_epilog = m_ptrs1.back() + ((duration) ? 9 : 4);
         }
         else
         {
-            _epilog = cur;
+            m_epilog = cur;
         }
     }
     else if (kSCTSpliceInsert == type)
     {
-        _ptrs1.push_back(pesdata() + 14);
-        bool splice_cancel = pesdata()[18] & 0x80;
+        m_ptrs1.push_back(pesdata() + 14);
+        bool splice_cancel = (pesdata()[18] & 0x80) != 0;
         if (splice_cancel)
         {
-            _epilog = pesdata() + 19;
+            m_epilog = pesdata() + 19;
         }
         else
         {
-            bool program_splice = pesdata()[19] & 0x40;
-            bool duration = pesdata()[19] & 0x20;
-            bool splice_immediate = pesdata()[19] & 0x10;
+            bool program_splice = (pesdata()[19] & 0x40) != 0;
+            bool duration = (pesdata()[19] & 0x20) != 0;
+            bool splice_immediate = (pesdata()[19] & 0x10) != 0;
             const unsigned char *cur = pesdata() + 20;
             if (program_splice && !splice_immediate)
             {
@@ -1339,21 +1354,21 @@ bool SpliceInformationTable::Parse(void)
                 cur = pesdata() + 21;
                 for (uint i = 0; i < component_count; i++)
                 {
-                    _ptrs0.push_back(cur);
+                    m_ptrs0.push_back(cur);
                     cur += (splice_immediate) ?
                         1 : 1 + SpliceTimeView(cur).size();
                 }
             }
-            _ptrs1.push_back(cur);
-            _ptrs1.push_back(cur + (duration ? 5 : 0));
+            m_ptrs1.push_back(cur);
+            m_ptrs1.push_back(cur + (duration ? 5 : 0));
         }
     }
     else
     {
-        _epilog = NULL;
+        m_epilog = nullptr;
     }
 
-    return _epilog != NULL;
+    return m_epilog != nullptr;
 }
 
 QString SpliceInformationTable::EncryptionAlgorithmString(void) const
@@ -1399,9 +1414,10 @@ QString SpliceInformationTable::toString(int64_t first, int64_t last) const
         .arg(IsEncryptedPacket()?EncryptionAlgorithmString():"None")
         .arg(PTSAdjustment());
     str += IsEncryptedPacket() ? QString(" cw_index(%1)") : QString("");
-    str += QString(" command_len(%1) command_type(%2)")
+    str += QString(" command_len(%1) command_type(%2) scte_pid(0x%3)")
         .arg(SpliceCommandLength())
-        .arg(SpliceCommandTypeString());
+        .arg(SpliceCommandTypeString()
+        .arg(getSCTEPID(), 0, 16));
 
     if (IsEncryptedPacket())
         return str;
@@ -1466,13 +1482,14 @@ QString SpliceInformationTable::toStringXML(
 
     QString str = QString(
         "%1<SpliceInformationSection %2 encryption_algorithm=\"%3\" "
-        "pts_adjustment=\"%4\" code_word_index=\"%5\" command_type=\"%6\">\n")
+        "pts_adjustment=\"%4\" code_word_index=\"%5\" command_type=\"%6\" scte_pid=\"0x%7\" >\n")
         .arg(indent)
         .arg(cap_time)
         .arg(EncryptionAlgorithmString())
         .arg(PTSAdjustment())
         .arg(CodeWordIndex())
-        .arg(SpliceCommandTypeString());
+        .arg(SpliceCommandTypeString())
+        .arg(getSCTEPID(), 0 ,16);
 
     if (IsEncryptedPacket())
         return str + indent + "</SpliceInformationSection>";

@@ -39,15 +39,15 @@ class ProgLister : public ScheduleCommon
 
   public:
     ProgLister(MythScreenStack *parent, ProgListType pltype,
-               const QString &view, const QString &extraArg,
-               const QDateTime &selectedTime = QDateTime());
+               QString view, QString extraArg,
+               QDateTime selectedTime = QDateTime());
     explicit ProgLister(MythScreenStack *parent, uint recid = 0,
-                        const QString &title = QString());
-    ~ProgLister();
+                        QString title = QString());
+    ~ProgLister() override;
 
-    bool Create(void);
-    bool keyPressEvent(QKeyEvent *);
-    void customEvent(QEvent *);
+    bool Create(void) override; // MythScreenType
+    bool keyPressEvent(QKeyEvent *event) override; // MythScreenType
+    void customEvent(QEvent *event) override; // ScheduleCommon
 
   protected slots:
     void HandleSelected(MythUIButtonListItem *item);
@@ -56,7 +56,7 @@ class ProgLister : public ScheduleCommon
     void DeleteOldEpisode(bool ok);
     void DeleteOldSeries(bool ok);
 
-    void SetViewFromList(QString item);
+    void SetViewFromList(const QString& item);
     void SetViewFromTime(QDateTime searchTime);
 
     void ShowDeleteRuleMenu(void);
@@ -65,36 +65,36 @@ class ProgLister : public ScheduleCommon
     void ShowOldRecordedMenu(void);
 
   private:
-    void Load(void);
+    void Load(void) override; // MythScreenType
 
     void FillViewList(const QString &view);
     void FillItemList(bool restorePosition, bool updateDisp = true);
 
     void ClearCurrentProgramInfo(void);
-    void UpdateDisplay(const ProgramInfo *selected = NULL);
+    void UpdateDisplay(const ProgramInfo *selected = nullptr);
     void RestoreSelection(const ProgramInfo *selected, int selectedOffset);
     void UpdateButtonList(void);
     void UpdateKeywordInDB(const QString &text, const QString &oldValue);
 
-    virtual void ShowMenu(void); // MythScreenType
+    void ShowMenu(void) override; // MythScreenType
     void ShowDeleteItemMenu(void);
     void ShowDeleteOldSeriesMenu(void);
 
     void SwitchToPreviousView(void);
     void SwitchToNextView(void);
 
-    typedef enum { kTimeSort, kPrevTitleSort, kTitleSort, } SortBy;
+    enum SortBy { kTimeSort, kPrevTitleSort, kTitleSort, };
     SortBy GetSortBy(void) const;
     void SortList(SortBy sortby, bool reverseSort);
 
-    virtual ProgramInfo *GetCurrentProgram(void) const;
+    ProgramInfo *GetCurrentProgram(void) const override; // ScheduleCommon
 
-    bool PowerStringToSQL(
-        const QString &qphrase, QString &output, MSqlBindings &bindings) const;
+    static bool PowerStringToSQL(
+        const QString &qphrase, QString &output, MSqlBindings &bindings) ;
 
   private:
     ProgListType      m_type;
-    uint              m_recid;
+    uint              m_recid           {0};
     QString           m_title;
     QString           m_extraArg;
     QDateTime         m_startTime;
@@ -102,10 +102,10 @@ class ProgLister : public ScheduleCommon
     QDateTime         m_selectedTime;
     QString           m_channelOrdering;
 
-    RecSearchType     m_searchType;
+    RecSearchType     m_searchType      {kNoSearch};
 
     QString           m_view;
-    int               m_curView;
+    int               m_curView         {-1};
     QStringList       m_viewList;
     QStringList       m_viewTextList;
 
@@ -117,18 +117,18 @@ class ProgLister : public ScheduleCommon
     QStringList       m_genreList;
     QStringList       m_stationList;
 
-    bool              m_allowEvents;
-    bool              m_titleSort;
-    bool              m_reverseSort;
-    bool              m_useGenres;
+    bool              m_allowEvents     {true};
+    bool              m_titleSort       {false};
+    bool              m_reverseSort     {false};
+    bool              m_useGenres       {false};
 
-    MythUIText       *m_schedText;
-    MythUIText       *m_curviewText;
-    MythUIText       *m_positionText;
-    MythUIButtonList *m_progList;
-    MythUIText       *m_messageText;
+    MythUIText       *m_schedText       {nullptr};
+    MythUIText       *m_curviewText     {nullptr};
+    MythUIText       *m_positionText    {nullptr};
+    MythUIButtonList *m_progList        {nullptr};
+    MythUIText       *m_messageText     {nullptr};
 
-    bool              m_allowViewDialog;
+    bool              m_allowViewDialog {true};
 };
 
 #endif

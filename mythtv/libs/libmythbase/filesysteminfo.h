@@ -2,7 +2,7 @@
 #define DISKINFO_H_
 #define NUMDISKINFOLINES 8
 
-#include <stdint.h>
+#include <cstdint>
 
 #include <QList>
 #include <QString>
@@ -12,19 +12,18 @@
 #include "mythsocket.h"
 #include "mythcorecontext.h"
 
-class MBASE_PUBLIC FileSystemInfo : public QObject
+class MBASE_PUBLIC FileSystemInfo
 {
-    Q_OBJECT
   public:
-    FileSystemInfo();
+    FileSystemInfo() = default;
     FileSystemInfo(const FileSystemInfo &other);
     FileSystemInfo(QString hostname, QString path, bool local, int fsid,
              int groupid, int blksize, int64_t total, int64_t used);
     FileSystemInfo(QStringList::const_iterator &it,
-            QStringList::const_iterator end);
+            const QStringList::const_iterator& end);
     explicit FileSystemInfo(const QStringList &slist);
 
-   ~FileSystemInfo(void) {};
+    virtual ~FileSystemInfo(void) = default;
 
     FileSystemInfo &operator=(const FileSystemInfo &other);
     virtual void clone(const FileSystemInfo &other);
@@ -45,8 +44,8 @@ class MBASE_PUBLIC FileSystemInfo : public QObject
     int64_t     getFreeSpace(void)    const { return m_total-m_used; }
 
     // information puts
-    void setHostname(QString hostname)      { m_hostname = hostname; }
-    void setPath(QString path)              { m_path = path; }
+    void setHostname(const QString& hostname) { m_hostname = hostname; }
+    void setPath(const QString& path)         { m_path = path; }
     void setLocal(bool local = true)        { m_local = local; }
     void setFSysID(int id)                  { m_fsid = id; }
     void setGroupID(int id)                 { m_grpid = id; }
@@ -57,7 +56,7 @@ class MBASE_PUBLIC FileSystemInfo : public QObject
 
     bool        ToStringList(QStringList &slist) const;
 
-    static const QList<FileSystemInfo> RemoteGetInfo(MythSocket *sock=NULL);
+    static QList<FileSystemInfo> RemoteGetInfo(MythSocket *sock=nullptr);
     static void Consolidate(QList<FileSystemInfo> &disks, bool merge=true,
                             int64_t fuzz=14000);
     void PopulateDiskSpace(void);
@@ -66,16 +65,16 @@ class MBASE_PUBLIC FileSystemInfo : public QObject
   private:
     bool        FromStringList(const QStringList &slist);
     bool        FromStringList(QStringList::const_iterator &it,
-                               QStringList::const_iterator listend);
+                               const QStringList::const_iterator& listend);
 
     QString m_hostname;
     QString m_path;
-    bool m_local;
-    int m_fsid;
-    int m_grpid;
-    int m_blksize;
-    int64_t m_total;
-    int64_t m_used;
-    int m_weight;
+    bool m_local    {false};
+    int m_fsid      {-1};
+    int m_grpid     {-1};
+    int m_blksize   {4096};
+    int64_t m_total {0};
+    int64_t m_used  {0};
+    int m_weight    {0};
 };
 #endif

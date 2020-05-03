@@ -5,7 +5,8 @@ QT += xml sql network testlib
 TEMPLATE = app
 TARGET = test_audioconvert
 DEPENDPATH += . ../.. ../../audio ../../logging ../../../libmythbase
-INCLUDEPATH += . ../.. ../../audio ../../../../external/FFmpeg ../../logging ../../../libmythbase
+INCLUDEPATH += . ../.. ../../audio ../../../.. ../../../../external/FFmpeg
+ INCLUDEPATH += ../../logging ../../../libmythbase
 INCLUDEPATH += ../../../libmythservicecontracts
 LIBS += -L../../../libmythbase -lmythbase-$$LIBVERSION
 LIBS += -L../../../libmythui -lmythui-$$LIBVERSION
@@ -22,8 +23,6 @@ contains(QMAKE_CXX, "g++") {
   QMAKE_LFLAGS += -fprofile-arcs 
 }
 
-QMAKE_LFLAGS += -Wl,$$_RPATH_$(PWD)/../../../../external/zeromq/src/.libs/
-QMAKE_LFLAGS += -Wl,$$_RPATH_$(PWD)/../../../../external/nzmqt/src/
 QMAKE_LFLAGS += -Wl,$$_RPATH_$(PWD)/../../../../external/FFmpeg/libswresample
 QMAKE_LFLAGS += -Wl,$$_RPATH_$(PWD)/../../../../external/FFmpeg/libavutil
 QMAKE_LFLAGS += -Wl,$$_RPATH_$(PWD)/../../../../external/FFmpeg/libavcodec
@@ -39,6 +38,9 @@ HEADERS += test_audioconvert.h
 SOURCES += test_audioconvert.cpp
 
 QMAKE_CLEAN += $(TARGET) $(TARGETA) $(TARGETD) $(TARGET0) $(TARGET1) $(TARGET2)
-QMAKE_CLEAN += ; rm -f *.gcov *.gcda *.gcno
+QMAKE_CLEAN += ; ( cd $(OBJECTS_DIR) && rm -f *.gcov *.gcda *.gcno )
 
 LIBS += $$EXTRA_LIBS $$LATE_LIBS
+
+# Fix runtime linking on Ubuntu 17.10.
+linux:QMAKE_LFLAGS += -Wl,--disable-new-dtags

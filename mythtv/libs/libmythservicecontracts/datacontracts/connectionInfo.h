@@ -33,64 +33,50 @@ class SERVICE_PUBLIC ConnectionInfo : public QObject
 
     PROPERTYIMP_PTR( VersionInfo , Version    )
     PROPERTYIMP_PTR( DatabaseInfo, Database   )
-    PROPERTYIMP_PTR( WOLInfo     , WOL        )
+    PROPERTYIMP_PTR( WOLInfo     , WOL        );
 
     public:
 
         static inline void InitializeCustomTypes();
 
-    public:
-
-        ConnectionInfo(QObject *parent = 0) 
-            : QObject        ( parent ),
-              m_Version      ( NULL   ),
-              m_Database     ( NULL   ),
-              m_WOL          ( NULL   )             
+        Q_INVOKABLE ConnectionInfo(QObject *parent = nullptr)
+            : QObject        ( parent  ),
+              m_Version      ( nullptr ),
+              m_Database     ( nullptr ),
+              m_WOL          ( nullptr )
         {
         }
-        
-        ConnectionInfo( const ConnectionInfo &src ) 
-            : m_Version   ( NULL ),
-              m_Database  ( NULL ),
-              m_WOL       ( NULL )                  
-        {
-            Copy( src );
-        }
 
-        void Copy( const ConnectionInfo &src ) 
+        void Copy( const ConnectionInfo *src )
         {
             // We always need to make sure the child object is
             // created with the correct parent *
 
-            if (src.m_Version)
-                Version()->Copy( src.m_Version );
+            if (src->m_Version)
+                Version()->Copy( src->m_Version );
 
-            if (src.m_Database)
-                Database()->Copy( src.m_Database );
+            if (src->m_Database)
+                Database()->Copy( src->m_Database );
 
-            if (src.m_WOL)
-                WOL     ()->Copy( src.m_WOL      );
+            if (src->m_WOL)
+                WOL     ()->Copy( src->m_WOL      );
         }
+
+    private:
+        Q_DISABLE_COPY(ConnectionInfo);
 };
 
-typedef ConnectionInfo* ConnectionInfoPtr;
+using ConnectionInfoPtr = ConnectionInfo*;
 
-} // namespace DTC
-
-Q_DECLARE_METATYPE( DTC::ConnectionInfo  )
-Q_DECLARE_METATYPE( DTC::ConnectionInfo* )
-
-namespace DTC
-{
 inline void ConnectionInfo::InitializeCustomTypes()
 {
-    qRegisterMetaType< ConnectionInfo   >();
     qRegisterMetaType< ConnectionInfo*  >();
 
     VersionInfo ::InitializeCustomTypes();
     DatabaseInfo::InitializeCustomTypes();
     WOLInfo     ::InitializeCustomTypes();
 }
-}
+
+} // namespace DTC
 
 #endif

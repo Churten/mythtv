@@ -10,15 +10,12 @@ extern "C" {
 
 
 AudioBuffer::AudioBuffer()
-  : m_frames(0), m_time(-1)
 {
-    m_size      = 0;
     m_buffer    = (uint8_t *)av_malloc(ABLOCK_SIZE);
-    if (m_buffer == NULL)
+    if (m_buffer == nullptr)
     {
         throw std::bad_alloc();
     }
-    m_realsize  = ABLOCK_SIZE;
 }
 
 AudioBuffer::AudioBuffer(const AudioBuffer &old)
@@ -26,7 +23,7 @@ AudioBuffer::AudioBuffer(const AudioBuffer &old)
     m_frames(old.m_frames), m_time(old.m_time)
 {
     m_buffer = (uint8_t *)av_malloc(m_realsize);
-    if (m_buffer == NULL)
+    if (m_buffer == nullptr)
     {
         throw std::bad_alloc();
     }
@@ -47,8 +44,8 @@ void AudioBuffer::appendData(unsigned char *buffer, int len, int frames,
         // can't use av_realloc as it doesn't guarantee reallocated memory
         // to be 16 bytes aligned
         m_realsize = ((m_size + len) / ABLOCK_SIZE + 1 ) * ABLOCK_SIZE;
-        uint8_t *tmp = (uint8_t *)av_malloc(m_realsize);
-        if (tmp == NULL)
+        auto *tmp = (uint8_t *)av_malloc(m_realsize);
+        if (tmp == nullptr)
         {
             throw std::bad_alloc();
         }
@@ -67,19 +64,17 @@ void AudioBuffer::appendData(unsigned char *buffer, int len, int frames,
 
 AudioReencodeBuffer::AudioReencodeBuffer(AudioFormat audio_format,
                                          int audio_channels, bool passthru)
-  : m_last_audiotime(0),        m_audioFrameSize(0),
-    m_initpassthru(passthru),   m_saveBuffer(NULL)
+  : m_initpassthru(passthru)
 {
-    Reset();
-    const AudioSettings settings(audio_format, audio_channels, 0, 0, false);
-    Reconfigure(settings);
+    AudioReencodeBuffer::Reset();
+    const AudioSettings settings(audio_format, audio_channels, AV_CODEC_ID_NONE, 0, false);
+    AudioReencodeBuffer::Reconfigure(settings);
 }
 
 AudioReencodeBuffer::~AudioReencodeBuffer()
 {
-    Reset();
-    if (m_saveBuffer)
-        delete m_saveBuffer;
+    AudioReencodeBuffer::Reset();
+    delete m_saveBuffer;
 }
 
 /**
@@ -89,11 +84,11 @@ void AudioReencodeBuffer::Reconfigure(const AudioSettings &settings)
 {
     ClearError();
 
-    m_passthru        = settings.use_passthru;
-    m_channels        = settings.channels;
+    m_passthru        = settings.m_usePassthru;
+    m_channels        = settings.m_channels;
     m_bytes_per_frame = m_channels *
-        AudioOutputSettings::SampleSize(settings.format);
-    m_eff_audiorate   = settings.samplerate;
+        AudioOutputSettings::SampleSize(settings.m_format);
+    m_eff_audiorate   = settings.m_sampleRate;
 }
 
 /**
@@ -115,7 +110,14 @@ void AudioReencodeBuffer::Reset(void)
 }
 
 /**
- * \param timecode is in milliseconds.
+ * Add frames to the audiobuffer for playback
+ *
+ * \param[in] buffer pointer to audio data
+ * \param[in] frames number of frames added.
+ * \param[in] timecode timecode of the first sample added (in msec)
+ *
+ * \return false if there wasn't enough space in audio buffer to
+ *     process all the data
  */
 bool AudioReencodeBuffer::AddFrames(void *buffer, int frames, int64_t timecode)
 {
@@ -123,12 +125,20 @@ bool AudioReencodeBuffer::AddFrames(void *buffer, int frames, int64_t timecode)
 }
 
 /**
-  * \param timecode is in milliseconds.
-  */
+ * Add data to the audiobuffer for playback
+ *
+ * \param[in] buffer pointer to audio data
+ * \param[in] len length of audio data added
+ * \param[in] timecode timecode of the first sample added (in msec)
+ * \param[in] frames number of frames added.
+ *
+ * \return false if there wasn't enough space in audio buffer to
+ *     process all the data
+ */
 bool AudioReencodeBuffer::AddData(void *buffer, int len, int64_t timecode,
                                   int frames)
 {
-    unsigned char *buf = (unsigned char *)buffer;
+    auto *buf = (unsigned char *)buffer;
 
     // Test if target is using a fixed buffer size.
     if (m_audioFrameSize)
@@ -164,7 +174,7 @@ bool AudioReencodeBuffer::AddData(void *buffer, int len, int64_t timecode,
                 // store the buffer
                 m_bufferList.append(m_saveBuffer);
                 // mark m_saveBuffer as emtpy.
-                m_saveBuffer = NULL;
+                m_saveBuffer = nullptr;
                 // m_last_audiotime is updated iff we store a buffer.
                 m_last_audiotime = timecode;
             }
@@ -183,7 +193,7 @@ bool AudioReencodeBuffer::AddData(void *buffer, int len, int64_t timecode,
 
         QMutexLocker locker(&m_bufferMutex);
         m_bufferList.append(m_saveBuffer);
-        m_saveBuffer = NULL;
+        m_saveBuffer = nullptr;
         m_last_audiotime = timecode;
     }
 
@@ -195,7 +205,7 @@ AudioBuffer *AudioReencodeBuffer::GetData(long long time)
     QMutexLocker locker(&m_bufferMutex);
 
     if (m_bufferList.isEmpty())
-        return NULL;
+        return nullptr;
 
     AudioBuffer *ab = m_bufferList.front();
 
@@ -205,7 +215,7 @@ AudioBuffer *AudioReencodeBuffer::GetData(long long time)
         return ab;
     }
 
-    return NULL;
+    return nullptr;
 }
 
 long long AudioReencodeBuffer::GetSamples(long long time)
@@ -216,11 +226,8 @@ long long AudioReencodeBuffer::GetSamples(long long time)
         return 0;
 
     long long samples = 0;
-    for (QList<AudioBuffer *>::iterator it = m_bufferList.begin();
-         it != m_bufferList.end(); ++it)
+    foreach (auto ab, m_bufferList)
     {
-        AudioBuffer *ab = *it;
-
         if (ab->m_time <= time)
             samples += ab->m_frames;
         else

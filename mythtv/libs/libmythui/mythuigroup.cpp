@@ -1,15 +1,6 @@
 
 #include "mythuigroup.h"
 
-MythUIGroup::MythUIGroup(MythUIType *parent, const QString &name)
-    : MythUIComposite(parent, name)
-{
-}
-
-MythUIGroup::~MythUIGroup()
-{
-}
-
 void MythUIGroup::Reset()
 {
     MythUIType::Reset();
@@ -17,8 +8,7 @@ void MythUIGroup::Reset()
 
 void MythUIGroup::CopyFrom(MythUIType *base)
 {
-    MythUIGroup *group = dynamic_cast<MythUIGroup *>(base);
-
+    auto *group = dynamic_cast<MythUIGroup *>(base);
     if (!group)
         return;
 
@@ -27,6 +17,6 @@ void MythUIGroup::CopyFrom(MythUIType *base)
 
 void MythUIGroup::CreateCopy(MythUIType *parent)
 {
-    MythUIGroup *group = new MythUIGroup(parent, objectName());
+    auto *group = new MythUIGroup(parent, objectName());
     group->CopyFrom(this);
 }

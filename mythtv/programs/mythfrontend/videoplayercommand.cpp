@@ -58,11 +58,12 @@ namespace
 struct VideoPlayProc
 {
   protected:
-    VideoPlayProc() {}
+    VideoPlayProc() = default;
     VideoPlayProc &operator=(const VideoPlayProc &);
 
   public:
-    virtual ~VideoPlayProc() {}
+    virtual ~VideoPlayProc() = default;
+    VideoPlayProc(const VideoPlayProc&) = default;
 
     // returns true if item played
     virtual bool Play() const = 0;
@@ -77,14 +78,17 @@ struct VideoPlayProc
 class VideoPlayHandleMedia : public VideoPlayProc
 {
   private:
-    VideoPlayHandleMedia(const QString &handler, const QString &mrl,
-            const QString &plot, const QString &title, const QString &subtitle,
-            const QString &director, int season, int episode, const QString &inetref,
-            int length, const QString &year, const QString &id) :
-        m_handler(handler), m_mrl(mrl), m_plot(plot), m_title(title),
-        m_subtitle(subtitle), m_director(director), m_season(season),
-        m_episode(episode), m_inetref(inetref), m_length(length), m_year(year),
-        m_id(id)
+    VideoPlayHandleMedia(QString handler, QString mrl,
+            QString plot, QString title, QString subtitle,
+            QString director, int season, int episode, QString inetref,
+            int length, QString year, QString id) :
+        m_handler(std::move(handler)), m_mrl(std::move(mrl)),
+        m_plot(std::move(plot)), m_title(std::move(title)),
+        m_subtitle(std::move(subtitle)),
+        m_director(std::move(director)), m_season(season),
+        m_episode(episode), m_inetref(std::move(inetref)),
+        m_length(length), m_year(std::move(year)),
+        m_id(std::move(id))
     {
     }
 
@@ -99,19 +103,19 @@ class VideoPlayHandleMedia : public VideoPlayProc
                 director, season, episode, inetref, length, year, id);
     }
 
-    bool Play() const
+    bool Play() const override // VideoPlayProc
     {
         return GetMythMainWindow()->HandleMedia(m_handler, m_mrl,
                 m_plot, m_title, m_subtitle, m_director, m_season,
                 m_episode, m_inetref, m_length, m_year, m_id, true);
     }
 
-    QString GetCommandDisplayName() const
+    QString GetCommandDisplayName() const override // VideoPlayProc
     {
         return m_handler;
     }
 
-    VideoPlayHandleMedia *Clone() const
+    VideoPlayHandleMedia *Clone() const override // VideoPlayProc
     {
         return new VideoPlayHandleMedia(*this);
     }
@@ -136,9 +140,9 @@ class VideoPlayHandleMedia : public VideoPlayProc
 class VideoPlayMythSystem : public VideoPlayProc
 {
   private:
-    VideoPlayMythSystem(const QString &disp_command,
-            const QString &play_command) :
-        m_display_command(disp_command), m_play_command(play_command)
+    VideoPlayMythSystem(QString disp_command,
+            QString play_command) :
+        m_displayCommand(std::move(disp_command)), m_playCommand(std::move(play_command))
     {
     }
 
@@ -150,46 +154,44 @@ class VideoPlayMythSystem : public VideoPlayProc
                 ExpandPlayCommand(command, filename));
     }
 
-    bool Play() const
+    bool Play() const override // VideoPlayProc
     {
-        myth_system(m_play_command);
+        myth_system(m_playCommand);
 
         return true;
     }
 
-    QString GetCommandDisplayName() const
+    QString GetCommandDisplayName() const override // VideoPlayProc
     {
-        return m_display_command;
+        return m_displayCommand;
     }
 
-    VideoPlayMythSystem *Clone() const
+    VideoPlayMythSystem *Clone() const override // VideoPlayProc
     {
         return new VideoPlayMythSystem(*this);
     }
 
   private:
-    QString m_display_command;
-    QString m_play_command;
+    QString m_displayCommand;
+    QString m_playCommand;
 };
 
 ////////////////////////////////////////////////////////////////////////
 
 class VideoPlayerCommandPrivate
 {
-  private:
-    VideoPlayerCommandPrivate &operator=(const VideoPlayerCommandPrivate &rhs);
-
   public:
-    VideoPlayerCommandPrivate() {}
+    VideoPlayerCommandPrivate() = default;
 
     VideoPlayerCommandPrivate(const VideoPlayerCommandPrivate &other)
     {
-        for (player_list::const_iterator p = other.m_player_procs.begin();
-                p != other.m_player_procs.end(); ++p)
+        for (auto *player : other.m_playerProcs)
         {
-            m_player_procs.push_back((*p)->Clone());
+            m_playerProcs.push_back(player->Clone());
         }
     }
+
+    VideoPlayerCommandPrivate &operator=(const VideoPlayerCommandPrivate &rhs) = delete;
 
     ~VideoPlayerCommandPrivate()
     {
@@ -205,10 +207,14 @@ class VideoPlayerCommandPrivate
             QString filename;
 
             if (item->IsHostSet())
+            {
                 filename = generate_file_url("Videos", item->GetHost(),
                         item->GetFilename());
+            }
             else
+            {
                 filename = item->GetFilename();
+            }
 
             if (play_command.length())
             {
@@ -234,10 +240,14 @@ class VideoPlayerCommandPrivate
             QString filename;
 
             if (item->IsHostSet())
+            {
                 filename = generate_file_url("Videos", item->GetHost(),
                         item->GetFilename());
+            }
             else
+            {
                 filename = item->GetFilename();
+            }
 
             if (play_command.length())
             {
@@ -255,7 +265,7 @@ class VideoPlayerCommandPrivate
         }
     }
 
-    void PlayerFor(const QString &filename, const VideoMetadata *extraData = 0)
+    void PlayerFor(const QString &filename, const VideoMetadata *extraData = nullptr)
     {
         QString extension = filename.section(".", -1, -1);
         QDir dir_test(QString("%1/VIDEO_TS").arg(filename));
@@ -269,13 +279,12 @@ class VideoPlayerCommandPrivate
 
         const FileAssociations::association_list fa_list =
                 FileAssociations::getFileAssociation().getList();
-        for (FileAssociations::association_list::const_iterator p =
-                fa_list.begin(); p != fa_list.end(); ++p)
+        for (const auto & fa : fa_list)
         {
-            if (p->extension.toLower() == extension.toLower() &&
-                    !p->use_default)
+            if (fa.extension.toLower() == extension.toLower() &&
+                    !fa.use_default)
             {
-                play_command = p->playcommand;
+                play_command = fa.playcommand;
                 break;
             }
         }
@@ -314,27 +323,22 @@ class VideoPlayerCommandPrivate
 
     void ClearPlayerList()
     {
-        for (player_list::iterator p = m_player_procs.begin();
-                        p != m_player_procs.end(); ++p)
-        {
-            delete *p;
-        }
-        m_player_procs.clear();
+        for (auto & player : m_playerProcs)
+            delete player;
+        m_playerProcs.clear();
     }
 
     void Play() const
     {
-        for (player_list::const_iterator p = m_player_procs.begin();
-                p != m_player_procs.end(); ++p)
-        {
-            if ((*p)->Play()) break;
-        }
+        for (auto *player : m_playerProcs)
+            if (player->Play())
+                break;
     }
 
     QString GetCommandDisplayName() const
     {
-        if (!m_player_procs.empty())
-            return m_player_procs.front()->GetCommandDisplayName();
+        if (!m_playerProcs.empty())
+            return m_playerProcs.front()->GetCommandDisplayName();
         return QString();
     }
 
@@ -344,15 +348,15 @@ class VideoPlayerCommandPrivate
             const QString &director, int season, int episode, const QString &inetref,
             int length, const QString &year, const QString &id)
     {
-        m_player_procs.push_back(VideoPlayHandleMedia::Create(player, filename,
+        m_playerProcs.push_back(VideoPlayHandleMedia::Create(player, filename,
                         plot, title, subtitle, director, season, episode, inetref,
                         length, year, id));
-        m_player_procs.push_back(VideoPlayMythSystem::Create(player, filename));
+        m_playerProcs.push_back(VideoPlayMythSystem::Create(player, filename));
     }
 
   private:
-    typedef std::vector<VideoPlayProc *> player_list;
-    player_list m_player_procs;
+    using player_list = std::vector<VideoPlayProc *>;
+    player_list m_playerProcs;
 };
 
 ////////////////////////////////////////////////////////////////////////
@@ -378,7 +382,7 @@ VideoPlayerCommand VideoPlayerCommand::PlayerFor(const QString &filename)
     return ret;
 }
 
-VideoPlayerCommand::VideoPlayerCommand() : m_d(0)
+VideoPlayerCommand::VideoPlayerCommand()
 {
     m_d = new VideoPlayerCommandPrivate;
 }
@@ -386,7 +390,7 @@ VideoPlayerCommand::VideoPlayerCommand() : m_d(0)
 VideoPlayerCommand::~VideoPlayerCommand()
 {
     delete m_d;
-    m_d = 0;
+    m_d = nullptr;
 }
 
 VideoPlayerCommand::VideoPlayerCommand(const VideoPlayerCommand &other)
@@ -412,15 +416,13 @@ void VideoPlayerCommand::Play() const
         lcd->setFunctionLEDs(FUNC_TV, false);
         lcd->setFunctionLEDs(FUNC_MOVIE, true);
     }
-    gCoreContext->WantingPlayback(NULL);
+    gCoreContext->WantingPlayback(nullptr);
     GetMythMainWindow()->PauseIdleTimer(true);
     m_d->Play();
     gCoreContext->emitTVPlaybackStopped();
     GetMythMainWindow()->PauseIdleTimer(false);
     GetMythMainWindow()->raise();
     GetMythMainWindow()->activateWindow();
-    if (GetMythMainWindow()->currentWidget())
-        GetMythMainWindow()->currentWidget()->setFocus();
     if (lcd)
         lcd->setFunctionLEDs(FUNC_MOVIE, false);
 }

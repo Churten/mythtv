@@ -8,29 +8,31 @@
 using std::getenv;
 #include <cstddef>
 #include <cstdio>
+#include <utility>
 
 // Qt
+#include <QAtomicInt>
+#include <QCoreApplication>
+#include <QDesktopServices>
+#include <QElapsedTimer>
+#include <QEvent>
+#include <QFile>
+#include <QMetaType> // qRegisterMetaType
+#include <QMutexLocker>
 #include <QNetworkAccessManager>
-#include <QNetworkRequest>
-#include <QNetworkReply>
-#include <QNetworkProxy>
 #include <QNetworkDiskCache>
+#include <QNetworkProxy>
+#include <QNetworkReply>
+#include <QNetworkRequest>
+#include <QScopedPointer>
+#include <QThread>
+#include <QUrl>
 #ifndef QT_NO_OPENSSL
 #include <QSslConfiguration>
 #include <QSslError>
 #include <QSslSocket>
 #include <QSslKey>
 #endif
-#include <QFile>
-#include <QUrl>
-#include <QThread>
-#include <QMutexLocker>
-#include <QEvent>
-#include <QCoreApplication>
-#include <QAtomicInt>
-#include <QMetaType> // qRegisterMetaType
-#include <QDesktopServices>
-#include <QScopedPointer>
 
 // Myth
 #include "mythlogging.h"
@@ -93,16 +95,10 @@ public:
  * Network streaming request
  */
 NetStream::NetStream(const QUrl &url, EMode mode /*= kPreferCache*/,
-        const QByteArray &cert) :
+        QByteArray cert) :
     m_id(s_nRequest.fetchAndAddRelaxed(1)),
     m_url(url),
-    m_state(kClosed),
-    m_pending(0),
-    m_reply(0),
-    m_nRedirections(0),
-    m_size(-1),
-    m_pos(0),
-    m_cert(cert)
+    m_cert(std::move(cert))
 {
     setObjectName("NetStream " + url.toString());
 
@@ -172,7 +168,7 @@ bool NetStream::Request(const QUrl& url)
     {
         // Cancel the pending request
         m_pending->m_bCancelled = true;
-        m_pending = 0;
+        m_pending = nullptr;
     }
 
     if (m_reply)
@@ -182,7 +178,7 @@ bool NetStream::Request(const QUrl& url)
         m_reply->disconnect(this);
         NAMThread::PostEvent(new NetStreamAbort(m_id, m_reply));
         // NAMthread will delete the reply
-        m_reply = 0;
+        m_reply = nullptr;
     }
 
     m_request.setUrl(url);
@@ -209,10 +205,14 @@ bool NetStream::Request(const QUrl& url)
         }
 
         if (clist.isEmpty())
+        {
             // The BBC servers use a self certified cert so don't verify it
             ssl.setPeerVerifyMode(QSslSocket::VerifyNone);
+        }
         else
+        {
             ssl.setCaCertificates(clist);
+        }
 
         // We need to provide a client certificate for the BBC,  See:
         // openssl s_client -state -prexit -connect securegate.iplayer.bbc.co.uk:443
@@ -220,40 +220,44 @@ bool NetStream::Request(const QUrl& url)
         QString fname = gCoreContext->GetSetting("MhegClientCert", "");
         if (!fname.isEmpty())
         {
-            QFile f(QFile::exists(fname) ? fname : GetShareDir() + fname);
-            if (f.open(QIODevice::ReadOnly))
+            QFile f1(QFile::exists(fname) ? fname : GetShareDir() + fname);
+            if (f1.open(QIODevice::ReadOnly))
             {
-                QSslCertificate cert(&f, QSsl::Pem);
+                QSslCertificate cert(&f1, QSsl::Pem);
                 if (!cert.isNull())
                     ssl.setLocalCertificate(cert);
                 else
                     LOG(VB_GENERAL, LOG_WARNING, LOC +
-                        QString("'%1' is an invalid certificate").arg(f.fileName()) );
+                        QString("'%1' is an invalid certificate").arg(f1.fileName()) );
             }
             else
+            {
                 LOG(VB_GENERAL, LOG_WARNING, LOC +
                     QString("Opening client certificate '%1': %2")
-                    .arg(f.fileName()).arg(f.errorString()) );
+                    .arg(f1.fileName()).arg(f1.errorString()) );
+            }
 
             // Get the private key
             fname = gCoreContext->GetSetting("MhegClientKey", "");
             if (!fname.isEmpty())
             {
-                QFile f(QFile::exists(fname) ? fname : GetShareDir() + fname);
-                if (f.open(QIODevice::ReadOnly))
+                QFile f2(QFile::exists(fname) ? fname : GetShareDir() + fname);
+                if (f2.open(QIODevice::ReadOnly))
                 {
-                    QSslKey key(&f, QSsl::Rsa, QSsl::Pem, QSsl::PrivateKey,
+                    QSslKey key(&f2, QSsl::Rsa, QSsl::Pem, QSsl::PrivateKey,
                         gCoreContext->GetSetting("MhegClientKeyPass", "").toLatin1());
                     if (!key.isNull())
                         ssl.setPrivateKey(key);
                     else
                         LOG(VB_GENERAL, LOG_WARNING, LOC +
-                            QString("'%1' is an invalid key").arg(f.fileName()) );
+                            QString("'%1' is an invalid key").arg(f2.fileName()) );
                 }
                 else
+                {
                     LOG(VB_GENERAL, LOG_WARNING, LOC +
                         QString("Opening private key '%1': %2")
-                        .arg(f.fileName()).arg(f.errorString()) );
+                        .arg(f2.fileName()).arg(f2.errorString()) );
+                }
             }
         }
 
@@ -277,7 +281,7 @@ void NetStream::slotRequestStarted(int id, QNetworkReply *reply)
     if (m_id != id)
         return;
 
-    m_pending = 0; // Event is no longer valid
+    m_pending = nullptr; // Event is no longer valid
 
     if (!m_reply)
     {
@@ -308,23 +312,21 @@ void NetStream::slotRequestStarted(int id, QNetworkReply *reply)
 
 static qlonglong inline ContentLength(const QNetworkReply *reply)
 {
-    bool ok;
+    bool ok = false;
     qlonglong len = reply->header(QNetworkRequest::ContentLengthHeader)
         .toLongLong(&ok);
     return ok ? len : -1;
 }
 
 static qlonglong inline ContentRange(const QNetworkReply *reply,
-    qlonglong &first, qlonglong &last)
+                                     qulonglong &first, qulonglong &last)
 {
-    first = last = -1;
-
     QByteArray range = reply->rawHeader("Content-Range");
     if (range.isEmpty())
         return -1;
 
     // See RFC 2616 14.16: 'bytes begin-end/size'
-    qlonglong len;
+    qulonglong len = 0;
     if (3 != std::sscanf(range.constData(), " bytes %20lld - %20lld / %20lld", &first, &last, &len))
     {
         LOG(VB_GENERAL, LOG_ERR, LOC + QString("Invalid Content-Range:'%1'")
@@ -332,9 +334,10 @@ static qlonglong inline ContentRange(const QNetworkReply *reply,
         return -1;
     }
 
-    return len;
+    return static_cast<qlonglong>(len);
 }
 
+#if 0
 static bool inline RequestRange(const QNetworkRequest &request,
     qlonglong &first, qlonglong &last)
 {
@@ -353,6 +356,7 @@ static bool inline RequestRange(const QNetworkRequest &request,
 
     return true;
 }
+#endif
 
 // signal from QNetworkReply
 void NetStream::slotReadyRead()
@@ -369,7 +373,9 @@ void NetStream::slotReadyRead()
 
         if (m_size < 0 || m_state < kReady)
         {
-            qlonglong first, last, len = ContentRange(m_reply, first, last);
+            qulonglong first = 0;
+            qulonglong last = 0;
+            qlonglong len = ContentRange(m_reply, first, last);
             if (len >= 0)
             {
                 m_size = len;
@@ -380,9 +386,11 @@ void NetStream::slotReadyRead()
             {
                 m_size = ContentLength(m_reply);
                 if (m_state < kReady || m_size >= 0)
+                {
                     LOG(VB_FILE, LOG_INFO, LOC +
                         QString("(%1) Ready 0x%2, content length %3")
                         .arg(m_id).arg(quintptr(m_reply),0,16).arg(m_size) );
+                }
             }
         }
 
@@ -526,7 +534,7 @@ void NetStream::Abort()
     {
         LOG(VB_FILE, LOG_INFO, LOC + QString("(%1) Cancelled").arg(m_id) );
         m_pending->m_bCancelled = true;
-        m_pending = 0;
+        m_pending = nullptr;
     }
 
     if (m_reply)
@@ -537,7 +545,7 @@ void NetStream::Abort()
 
         NAMThread::PostEvent(new NetStreamAbort(m_id, m_reply));
         // NAMthread will delete the reply
-        m_reply = 0;
+        m_reply = nullptr;
     }
 
     m_state = kFinished;
@@ -545,7 +553,7 @@ void NetStream::Abort()
 
 int NetStream::safe_read(void *data, unsigned sz, unsigned millisecs /* = 0 */)
 {
-    QTime t; t.start();
+    QElapsedTimer t; t.start();
     QMutexLocker locker(&m_mutex);
 
     if (m_size >= 0 && m_pos >= m_size)
@@ -614,35 +622,35 @@ qlonglong NetStream::GetSize() const
 /**
  * Synchronous interface
  */
-bool NetStream::WaitTillReady(unsigned long time)
+bool NetStream::WaitTillReady(unsigned long milliseconds)
 {
     QMutexLocker locker(&m_mutex);
 
-    QTime t; t.start();
+    QElapsedTimer t; t.start();
     while (m_state < kReady)
     {
         unsigned elapsed = t.elapsed();
-        if (elapsed > time)
+        if (elapsed > milliseconds)
             return false;
 
-        m_ready.wait(&m_mutex, time - elapsed);
+        m_ready.wait(&m_mutex, milliseconds - elapsed);
     }
 
     return true;
 }
 
-bool NetStream::WaitTillFinished(unsigned long time)
+bool NetStream::WaitTillFinished(unsigned long milliseconds)
 {
     QMutexLocker locker(&m_mutex);
 
-    QTime t; t.start();
+    QElapsedTimer t; t.start();
     while (m_state < kFinished)
     {
         unsigned elapsed = t.elapsed();
-        if (elapsed > time)
+        if (elapsed > milliseconds)
             return false;
 
-        m_finished.wait(&m_mutex, time - elapsed);
+        m_finished.wait(&m_mutex, milliseconds - elapsed);
     }
 
     return true;
@@ -671,7 +679,7 @@ QByteArray NetStream::ReadAll()
     QMutexLocker locker(&m_mutex);
 
     if (!m_reply)
-        return 0;
+        return nullptr;
 
     QByteArray data =  m_reply->readAll();
     m_pos += data.size();
@@ -725,12 +733,12 @@ NAMThread & NAMThread::manager()
     QMutexLocker locker(&s_mtx);
 
     // Singleton
-    static NAMThread thread;
-    thread.start();
-    return thread;
+    static NAMThread s_thread;
+    s_thread.start();
+    return s_thread;
 }
 
-NAMThread::NAMThread() : m_bQuit(false), m_mutexNAM(QMutex::Recursive), m_nam(0)
+NAMThread::NAMThread()
 {
     setObjectName("NAMThread");
 
@@ -821,7 +829,7 @@ void NAMThread::run()
     m_running.acquire();
 
     delete m_nam;
-    m_nam = 0;
+    m_nam = nullptr;
 
     LOG(VB_FILE, LOG_INFO, LOC "NAMThread stopped");
 }
@@ -845,8 +853,11 @@ bool NAMThread::NewRequest(QEvent *event)
     {
     case NetStreamRequest::kType:
         return StartRequest(dynamic_cast< NetStreamRequest* >(event));
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wswitch"
     case NetStreamAbort::kType:
         return AbortRequest(dynamic_cast< NetStreamAbort* >(event));
+#pragma GCC diagnostic pop
     default:
         break;
     }
@@ -953,7 +964,7 @@ QDateTime NAMThread::GetLastModified(const QUrl &url)
     Q_FOREACH(const QNetworkCacheMetaData::RawHeader &h, headers)
     {
         // RFC 1123 date format: Thu, 01 Dec 1994 16:00:00 GMT
-        static const char kszFormat[] = "ddd, dd MMM yyyy HH:mm:ss 'GMT'";
+        static constexpr char kSzFormat[] = "ddd, dd MMM yyyy HH:mm:ss 'GMT'";
 
         QString const first(h.first.toLower());
         if (first == "cache-control")
@@ -970,7 +981,7 @@ QDateTime NAMThread::GetLastModified(const QUrl &url)
         }
         else if (first == "date")
         {
-            QDateTime d = QDateTime::fromString(h.second, kszFormat);
+            QDateTime d = QDateTime::fromString(h.second, kSzFormat);
             if (!d.isValid())
             {
                 LOG(VB_GENERAL, LOG_WARNING, LOC +

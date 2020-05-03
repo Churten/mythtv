@@ -43,7 +43,7 @@ class Guide : public GuideServices
 
     public:
 
-        Q_INVOKABLE explicit Guide( QObject */*parent*/ = 0 ) {}
+        Q_INVOKABLE explicit Guide( QObject */*parent*/ = nullptr ) {}
 
     public:
 
@@ -53,7 +53,8 @@ class Guide : public GuideServices
                                                   bool             Details,
                                                   int              ChannelGroupId,
                                                   int              StartIndex,
-                                                  int              Count);
+                                                  int              Count,
+                                                  bool             WithInvisible) override; // GuideServices
 
         DTC::ProgramList*   GetProgramList      ( int              StartIndex,
                                                   int              Count,
@@ -67,26 +68,27 @@ class Guide : public GuideServices
                                                   bool             OnlyNew,
                                                   bool             Details,
                                                   const QString   &Sort,
-                                                  bool             Descending );
+                                                  bool             Descending,
+                                                  bool             WithInvisible) override; // GuideServices
 
         DTC::Program*       GetProgramDetails   ( int              ChanId,
-                                                  const QDateTime &StartTime );
+                                                  const QDateTime &StartTime ) override; // GuideServices
 
         QFileInfo           GetChannelIcon      ( int              ChanId,
                                                   int              Width ,
-                                                  int              Height );
+                                                  int              Height ) override; // GuideServices
 
-        DTC::ChannelGroupList*  GetChannelGroupList ( bool         IncludeEmpty );
+        DTC::ChannelGroupList*  GetChannelGroupList ( bool         IncludeEmpty ) override; // GuideServices
 
-        QStringList         GetCategoryList     ( );
+        QStringList         GetCategoryList     ( ) override; // GuideServices
 
-        QStringList         GetStoredSearches( const QString   &Type );
+        QStringList         GetStoredSearches( const QString   &Type ) override; // GuideServices
 
         bool                AddToChannelGroup   ( int              ChannelGroupId,
-                                                  int              ChanId );
+                                                  int              ChanId ) override; // GuideServices
 
         bool                RemoveFromChannelGroup ( int           ChannelGroupId,
-                                                     int           ChanId );
+                                                     int           ChanId ) override; // GuideServices
 };
 
 // --------------------------------------------------------------------------
@@ -115,7 +117,7 @@ class ScriptableGuide : public QObject
 
     public:
 
-        Q_INVOKABLE ScriptableGuide( QScriptEngine *pEngine, QObject *parent = 0 ) : QObject( parent )
+        Q_INVOKABLE explicit ScriptableGuide( QScriptEngine *pEngine, QObject *parent = nullptr ) : QObject( parent )
         {
             m_pEngine = pEngine;
         }
@@ -127,11 +129,13 @@ class ScriptableGuide : public QObject
                                   bool             Details,
                                   int              ChannelGroupId,
                                   int              StartIndex,
-                                  int              Count )
+                                  int              Count,
+                                  bool             WithInvisible)
         {
-            SCRIPT_CATCH_EXCEPTION( NULL,
+            SCRIPT_CATCH_EXCEPTION( nullptr,
                 return m_obj.GetProgramGuide( StartTime, EndTime, Details,
-                                              ChannelGroupId, StartIndex, Count );
+                                              ChannelGroupId, StartIndex, Count,
+                                              WithInvisible );
             )
         }
 
@@ -147,21 +151,22 @@ class ScriptableGuide : public QObject
                                 bool             OnlyNew,
                                 bool             Details,
                                 const QString   &Sort,
-                                bool             Descending)
+                                bool             Descending,
+                                bool             WithInvisible)
         {
-            SCRIPT_CATCH_EXCEPTION( NULL,
+            SCRIPT_CATCH_EXCEPTION( nullptr,
                 return m_obj.GetProgramList( StartIndex, Count,
-                                         StartTime, EndTime, ChanId,
-                                         TitleFilter, CategoryFilter,
-                                         PersonFilter, KeywordFilter,
-                                         OnlyNew, Details,
-                                         Sort, Descending );
+                                             StartTime, EndTime, ChanId,
+                                             TitleFilter, CategoryFilter,
+                                             PersonFilter, KeywordFilter,
+                                             OnlyNew, Details,
+                                             Sort, Descending, WithInvisible );
             )
         }
 
         QObject* GetProgramDetails( int ChanId, const QDateTime &StartTime )
         {
-            SCRIPT_CATCH_EXCEPTION( NULL,
+            SCRIPT_CATCH_EXCEPTION( nullptr,
                 return m_obj.GetProgramDetails( ChanId, StartTime );
             )
         }
@@ -173,7 +178,7 @@ class ScriptableGuide : public QObject
 
         QObject* GetChannelGroupList( bool IncludeEmpty = false )
         {
-            SCRIPT_CATCH_EXCEPTION( NULL,
+            SCRIPT_CATCH_EXCEPTION( nullptr,
                 return m_obj.GetChannelGroupList( IncludeEmpty );
             )
         }
@@ -185,7 +190,7 @@ class ScriptableGuide : public QObject
             )
         }
 
-        QStringList GetStoredSearches( QString Type )
+        QStringList GetStoredSearches( const QString& Type )
         {
             SCRIPT_CATCH_EXCEPTION( QStringList(),
                 return m_obj.GetStoredSearches( Type );
@@ -209,6 +214,7 @@ class ScriptableGuide : public QObject
         }
 };
 
+// NOLINTNEXTLINE(modernize-use-auto)
 Q_SCRIPT_DECLARE_QMETAOBJECT_MYTHTV( ScriptableGuide, QObject*);
 
 #endif

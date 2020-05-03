@@ -5,6 +5,7 @@
 
 // Myth headers
 #include "mythlogging.h"
+#include "mythsorthelper.h"
 
 // QT headers
 #include <algorithm>
@@ -12,8 +13,7 @@
 class SortableMythGenericTreeList : public QList<MythGenericTree*>
 {
   public:
-    SortableMythGenericTreeList() : m_sortType(SORT_STRING),
-                                    m_attributeIndex(0) { }
+    SortableMythGenericTreeList() = default;
     enum SortType {SORT_STRING=0, SORT_SELECTABLE=1};
 
     void SetSortType(SortType stype) { m_sortType = stype; }
@@ -32,10 +32,9 @@ class SortableMythGenericTreeList : public QList<MythGenericTree*>
 
         if (onesel == twosel)
             return 0;
-        else if (onesel && !twosel)
+        if (onesel && !twosel)
             return 1;
-        else
-            return -1;
+        return -1;
     }
 
     void Sort(SortType stype, int attributeIndex = 0)
@@ -54,8 +53,8 @@ class SortableMythGenericTreeList : public QList<MythGenericTree*>
     }
 
   private:
-    SortType m_sortType;
-    int m_attributeIndex; // for getAttribute
+    SortType m_sortType  {SORT_STRING};
+    int m_attributeIndex {0}; // for getAttribute
 };
 
 ///////////////////////////////////////////////////////
@@ -65,18 +64,11 @@ MythGenericTree::MythGenericTree(const QString &a_string, int an_int,
 {
     m_subnodes = new SortableMythGenericTreeList;
 
-    m_parent = NULL;
-    m_selectedSubnode = NULL;
-
     m_text = a_string;
-    m_sortText = a_string;
-
     m_int = an_int;
-    m_data = 0;
-
     m_selectable = selectable_flag;
-    m_visible = true;
-    m_visibleCount = 0;
+
+    ensureSortFields();
 }
 
 MythGenericTree::~MythGenericTree()
@@ -85,10 +77,17 @@ MythGenericTree::~MythGenericTree()
     delete m_subnodes;
 }
 
+void MythGenericTree::ensureSortFields(void)
+{
+    std::shared_ptr<MythSortHelper>sh = getMythSortHelper();
+    if (m_sortText.isEmpty() and not m_text.isEmpty())
+        m_sortText = sh->doTitle(m_text);
+}
+
 MythGenericTree* MythGenericTree::addNode(const QString &a_string, int an_int,
                                   bool selectable_flag, bool visible)
 {
-    MythGenericTree *new_node = new MythGenericTree(a_string.simplified(),
+    auto *new_node = new MythGenericTree(a_string.simplified(),
                                                     an_int, selectable_flag);
     new_node->SetVisible(visible);
     return addNode(new_node);
@@ -98,7 +97,7 @@ MythGenericTree* MythGenericTree::addNode(const QString &a_string,
                                   const QString &sortText, int an_int, bool
                                   selectable_flag, bool visible)
 {
-    MythGenericTree *new_node = new MythGenericTree(a_string.simplified(),
+    auto *new_node = new MythGenericTree(a_string.simplified(),
                                                     an_int, selectable_flag);
     new_node->SetVisible(visible);
     new_node->SetSortText(sortText);
@@ -130,10 +129,10 @@ void MythGenericTree::removeNode(MythGenericTree *child)
         return;
 
     if (m_selectedSubnode == child)
-        m_selectedSubnode = NULL;
+        m_selectedSubnode = nullptr;
 
     m_subnodes->removeAll(child);
-    child->setParent(NULL);
+    child->setParent(nullptr);
 
     if (child && child->IsVisible())
         DecVisibleCount();
@@ -156,8 +155,7 @@ MythGenericTree* MythGenericTree::findLeaf()
     return this;
 }
 
-MythGenericTree* MythGenericTree::findNode(QList<int> route_of_branches,
-                                           int depth)
+MythGenericTree* MythGenericTree::findNode(QList<int> route_of_branches)
 {
     // Starting from *this* node (which will often be root) find a set of
     // branches that have id's that match the collection passed in
@@ -166,7 +164,7 @@ MythGenericTree* MythGenericTree::findNode(QList<int> route_of_branches,
     // In practical terms, mythmusic will use this to force the playback
     // screen's ManagedTreeList to move to a given track in a given playlist
 
-    MythGenericTree *node = NULL;
+    MythGenericTree *node = nullptr;
     for (int i = 0; i < route_of_branches.count(); i++)
     {
         if (!node)
@@ -179,7 +177,7 @@ MythGenericTree* MythGenericTree::findNode(QList<int> route_of_branches,
         if (!children)
             break;
 
-        MythGenericTree *child = NULL;
+        MythGenericTree *child = nullptr;
 
         for (it = children->begin(); it != children->end(); ++it)
         {
@@ -198,7 +196,7 @@ MythGenericTree* MythGenericTree::findNode(QList<int> route_of_branches,
             break;
     }
 
-    return NULL;
+    return nullptr;
 }
 
 int MythGenericTree::getChildPosition(MythGenericTree *child) const
@@ -285,7 +283,7 @@ QList<MythGenericTree*> *MythGenericTree::getAllChildren() const
 MythGenericTree* MythGenericTree::getChildAt(uint reference) const
 {
     if (reference >= (uint)m_subnodes->count())
-        return NULL;
+        return nullptr;
 
     return m_subnodes->at(reference);
 }
@@ -293,14 +291,13 @@ MythGenericTree* MythGenericTree::getChildAt(uint reference) const
 MythGenericTree* MythGenericTree::getVisibleChildAt(uint reference) const
 {
     if (reference >= (uint)m_subnodes->count())
-        return NULL;
+        return nullptr;
 
     QList<MythGenericTree*> *list = m_subnodes;
 
     uint n = 0;
-    for (int i = 0; i < list->size(); ++i)
+    foreach (auto child, *list)
     {
-        MythGenericTree *child = list->at(i);
         if (child->IsVisible())
         {
             if (n == reference)
@@ -309,12 +306,12 @@ MythGenericTree* MythGenericTree::getVisibleChildAt(uint reference) const
         }
     }
 
-    return NULL;
+    return nullptr;
 }
 
 MythGenericTree* MythGenericTree::getSelectedChild(bool onlyVisible) const
 {
-    MythGenericTree *selectedChild = NULL;
+    MythGenericTree *selectedChild = nullptr;
 
     if (m_selectedSubnode)
         selectedChild = m_selectedSubnode;
@@ -339,7 +336,7 @@ MythGenericTree* MythGenericTree::prevSibling(int number_up)
     if (!m_parent)
     {
         // I'm root = no siblings
-        return NULL;
+        return nullptr;
     }
 
     int position = m_parent->getChildPosition(this);
@@ -347,7 +344,7 @@ MythGenericTree* MythGenericTree::prevSibling(int number_up)
     if (position < number_up)
     {
         // not enough siblings "above" me
-        return NULL;
+        return nullptr;
     }
 
     return m_parent->getChildAt(position - number_up);
@@ -358,7 +355,7 @@ MythGenericTree* MythGenericTree::nextSibling(int number_down)
     if (!m_parent)
     {
         // I'm root = no siblings
-        return NULL;
+        return nullptr;
     }
 
     int position = m_parent->getChildPosition(this);
@@ -366,7 +363,7 @@ MythGenericTree* MythGenericTree::nextSibling(int number_down)
     if (position + number_down >= m_parent->childCount())
     {
         // not enough siblings "below" me
-        return NULL;
+        return nullptr;
     }
 
     return m_parent->getChildAt(position + number_down);
@@ -376,7 +373,7 @@ MythGenericTree* MythGenericTree::getParent() const
 {
     if (m_parent)
         return m_parent;
-    return NULL;
+    return nullptr;
 }
 
 MythGenericTree* MythGenericTree::getChildByName(const QString &a_name) const
@@ -385,7 +382,7 @@ MythGenericTree* MythGenericTree::getChildByName(const QString &a_name) const
     if (children && children->count() > 0)
     {
         SortableMythGenericTreeList::Iterator it;
-        MythGenericTree *child = NULL;
+        MythGenericTree *child = nullptr;
 
         for (it = children->begin(); it != children->end(); ++it)
         {
@@ -397,7 +394,7 @@ MythGenericTree* MythGenericTree::getChildByName(const QString &a_name) const
         }
     }
 
-    return NULL;
+    return nullptr;
 }
 
 MythGenericTree* MythGenericTree::getChildById(int an_int) const
@@ -406,7 +403,7 @@ MythGenericTree* MythGenericTree::getChildById(int an_int) const
     if (children && children->count() > 0)
     {
         SortableMythGenericTreeList::Iterator it;
-        MythGenericTree *child = NULL;
+        MythGenericTree *child = nullptr;
 
         for (it = children->begin(); it != children->end(); ++it)
         {
@@ -418,7 +415,7 @@ MythGenericTree* MythGenericTree::getChildById(int an_int) const
         }
     }
 
-    return NULL;
+    return nullptr;
 }
 
 void MythGenericTree::sortByString()
@@ -429,7 +426,7 @@ void MythGenericTree::sortByString()
     if (children && children->count() > 0)
     {
         SortableMythGenericTreeList::Iterator it;
-        MythGenericTree *child = NULL;
+        MythGenericTree *child = nullptr;
 
         for (it = children->begin(); it != children->end(); ++it)
         {
@@ -447,8 +444,8 @@ void MythGenericTree::sortBySelectable()
 
     QList<MythGenericTree*>::iterator it;
     it = m_subnodes->begin();
-    MythGenericTree *child;
-    while ((child = *it) != 0)
+    MythGenericTree *child = nullptr;
+    while ((child = *it) != nullptr)
     {
         child->sortBySelectable();
         ++it;
@@ -457,13 +454,12 @@ void MythGenericTree::sortBySelectable()
 
 void MythGenericTree::deleteAllChildren()
 {
-    m_selectedSubnode = NULL;
-    MythGenericTree *child;
+    m_selectedSubnode = nullptr;
     while (!m_subnodes->isEmpty())
     {
-        child = m_subnodes->takeFirst();
+        MythGenericTree *child = m_subnodes->takeFirst();
         delete child;
-        child = NULL;
+        child = nullptr;
     }
     m_subnodes->clear();
 }
@@ -505,8 +501,8 @@ void MythGenericTree::SetVisible(bool visible)
 
 MythUIButtonListItem *MythGenericTree::CreateListButton(MythUIButtonList *list)
 {
-    MythUIButtonListItem *item = new MythUIButtonListItem(list, GetText());
-    item->SetData(qVariantFromValue(this));
+    auto *item = new MythUIButtonListItem(list, GetText());
+    item->SetData(QVariant::fromValue(this));
     item->SetTextFromMap(m_strings);
     item->SetImageFromMap(m_imageFilenames);
     item->SetStatesFromMap(m_states);
@@ -530,7 +526,8 @@ void MythGenericTree::SetText(const QString &text, const QString &name,
     else
     {
         m_text = text;
-        m_sortText = text;
+        m_sortText = nullptr;
+        ensureSortFields();
     }
 }
 
@@ -552,10 +549,9 @@ QString MythGenericTree::GetText(const QString &name) const
 {
     if (name.isEmpty())
         return m_text;
-    else if (m_strings.contains(name))
+    if (m_strings.contains(name))
         return m_strings[name].text;
-    else
-        return QString();
+    return QString();
 }
 
 void MythGenericTree::SetImage(const QString &filename, const QString &name)

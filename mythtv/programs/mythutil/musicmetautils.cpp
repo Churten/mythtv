@@ -4,6 +4,7 @@
 #include <QDomDocument>
 
 // libmyth* headers
+#include "mythconfig.h"
 #include "exitcodes.h"
 #include "mythlogging.h"
 #include "storagegroup.h"
@@ -128,7 +129,7 @@ static int ExtractImage(const MythUtilCommandLineParser &cmdline)
     }
 
 
-    if (!image->embedded || !tagger->supportsEmbeddedImages())
+    if (!image->m_embedded || !tagger->supportsEmbeddedImages())
     {
         LOG(VB_GENERAL, LOG_ERR, QString("Either the image isn't embedded or the tagger doesn't support embedded images"));
         return GENERIC_EXIT_NOT_OK;
@@ -142,7 +143,7 @@ static int ExtractImage(const MythUtilCommandLineParser &cmdline)
     QString path;
     StorageGroup artGroup("MusicArt", gCoreContext->GetHostName(), false);
     QStringList dirList = artGroup.GetDirList();
-    if (dirList.size())
+    if (!dirList.empty())
         path = artGroup.FindNextDirMostFree();
 
     if (!QDir(path).exists())
@@ -154,7 +155,7 @@ static int ExtractImage(const MythUtilCommandLineParser &cmdline)
     path += "/AlbumArt/";
     QDir dir(path);
 
-    QString filename = QString("%1-%2.jpg").arg(mdata->ID()).arg(AlbumArtImages::getTypeFilename(image->imageType));
+    QString filename = QString("%1-%2.jpg").arg(mdata->ID()).arg(AlbumArtImages::getTypeFilename(image->m_imageType));
 
     if (QFile::exists(path + filename))
         QFile::remove(path + filename);
@@ -162,7 +163,7 @@ static int ExtractImage(const MythUtilCommandLineParser &cmdline)
     if (!dir.exists())
         dir.mkpath(path);
 
-    QImage *saveImage = tagger->getAlbumArt(trackFilename, image->imageType);
+    QImage *saveImage = tagger->getAlbumArt(trackFilename, image->m_imageType);
     if (saveImage)
     {
         saveImage->save(path + filename, "JPEG");
@@ -177,9 +178,9 @@ static int ExtractImage(const MythUtilCommandLineParser &cmdline)
     return GENERIC_EXIT_OK;
 }
 
-static int ScanMusic(const MythUtilCommandLineParser &cmdline)
+static int ScanMusic(const MythUtilCommandLineParser &/*cmdline*/)
 {
-    MusicFileScanner *fscan = new MusicFileScanner();
+    auto *fscan = new MusicFileScanner();
     QStringList dirList;
 
     if (!StorageGroup::FindDirs("Music", gCoreContext->GetHostName(), &dirList))
@@ -195,7 +196,7 @@ static int ScanMusic(const MythUtilCommandLineParser &cmdline)
     return GENERIC_EXIT_OK;
 }
 
-static int UpdateRadioStreams(const MythUtilCommandLineParser &cmdline)
+static int UpdateRadioStreams(const MythUtilCommandLineParser &/*cmdline*/)
 {
     // check we have the correct Music Schema Version (maybe the FE hasn't been run yet)
     if (gCoreContext->GetNumSetting("MusicDBSchemaVer", 0) < 1024)
@@ -235,10 +236,8 @@ static int CalcTrackLength(const MythUtilCommandLineParser &cmdline)
         return GENERIC_EXIT_NOT_OK;
     }
 
-    av_register_all();
-
-    AVFormatContext *inputFC = NULL;
-    AVInputFormat *fmt = NULL;
+    AVFormatContext *inputFC = nullptr;
+    AVInputFormat *fmt = nullptr;
 
     // Open track
     LOG(VB_GENERAL, LOG_DEBUG, QString("CalcTrackLength: Opening '%1'")
@@ -246,7 +245,7 @@ static int CalcTrackLength(const MythUtilCommandLineParser &cmdline)
 
     QByteArray inFileBA = musicFile.toLocal8Bit();
 
-    int ret = avformat_open_input(&inputFC, inFileBA.constData(), fmt, NULL);
+    int ret = avformat_open_input(&inputFC, inFileBA.constData(), fmt, nullptr);
 
     if (ret)
     {
@@ -256,14 +255,14 @@ static int CalcTrackLength(const MythUtilCommandLineParser &cmdline)
     }
 
     // Getting stream information
-    ret = avformat_find_stream_info(inputFC, NULL);
+    ret = avformat_find_stream_info(inputFC, nullptr);
 
     if (ret < 0)
     {
         LOG(VB_GENERAL, LOG_ERR,
             QString("CalcTrackLength: Couldn't get stream info, error #%1").arg(ret));
         avformat_close_input(&inputFC);
-        inputFC = NULL;
+        inputFC = nullptr;
         return GENERIC_EXIT_NOT_OK;;
     }
 
@@ -275,9 +274,20 @@ static int CalcTrackLength(const MythUtilCommandLineParser &cmdline)
         AVStream *st = inputFC->streams[i];
         char buf[256];
 
-        avcodec_string(buf, sizeof(buf), st->codec, false);
+        const AVCodec *pCodec = avcodec_find_decoder(st->codecpar->codec_id);
+        if (!pCodec)
+        {
+            LOG(VB_GENERAL, LOG_WARNING,
+                QString("avcodec_find_decoder fail for %1").arg(st->codecpar->codec_id));
+            continue;
+        }
+        AVCodecContext *avctx = avcodec_alloc_context3(pCodec);
+        avcodec_parameters_to_context(avctx, st->codecpar);
+        av_codec_set_pkt_timebase(avctx, st->time_base);
 
-        switch (inputFC->streams[i]->codec->codec_type)
+        avcodec_string(buf, sizeof(buf), avctx, static_cast<int>(false));
+
+        switch (inputFC->streams[i]->codecpar->codec_type)
         {
             case AVMEDIA_TYPE_AUDIO:
             {
@@ -299,14 +309,15 @@ static int CalcTrackLength(const MythUtilCommandLineParser &cmdline)
             default:
                 LOG(VB_GENERAL, LOG_ERR,
                     QString("Skipping unsupported codec %1 on stream %2")
-                        .arg(inputFC->streams[i]->codec->codec_type).arg(i));
+                        .arg(inputFC->streams[i]->codecpar->codec_type).arg(i));
                 break;
         }
+        avcodec_free_context(&avctx);
     }
 
     // Close input file
     avformat_close_input(&inputFC);
-    inputFC = NULL;
+    inputFC = nullptr;
 
     if (mdata->Length() / 1000 != duration)
     {
@@ -329,12 +340,13 @@ static int CalcTrackLength(const MythUtilCommandLineParser &cmdline)
     return GENERIC_EXIT_OK;
 }
 
-typedef struct
+class LyricsGrabber
 {
-    QString name;
-    QString filename;
-    int priority;
-} LyricsGrabber;
+public:
+    QString m_name;
+    QString m_filename;
+    int     m_priority {99};
+};
 
 static int FindLyrics(const MythUtilCommandLineParser &cmdline)
 {
@@ -465,11 +477,10 @@ static int FindLyrics(const MythUtilCommandLineParser &cmdline)
 
     QStringList scripts;
     QFileInfoList::const_iterator it = list.begin();
-    const QFileInfo *fi;
 
     while (it != list.end())
     {
-        fi = &(*it);
+        const QFileInfo *fi = &(*it);
         ++it;
         LOG(VB_GENERAL, LOG_NOTICE, QString("Found lyric script at: %1").arg(fi->filePath()));
         scripts.append(fi->filePath());
@@ -481,13 +492,14 @@ static int FindLyrics(const MythUtilCommandLineParser &cmdline)
     for (int x = 0; x < scripts.count(); x++)
     {
         QProcess p;
-        p.start(QString("python %1 -v").arg(scripts.at(x)));
+        p.start(QString("%1 %2 -v").arg(PYTHON_EXE).arg(scripts.at(x)));
         p.waitForFinished(-1);
         QString result = p.readAllStandardOutput();
 
         QDomDocument domDoc;
         QString errorMsg;
-        int errorLine, errorColumn;
+        int errorLine = 0;
+        int errorColumn = 0;
 
         if (!domDoc.setContent(result, false, &errorMsg, &errorLine, &errorColumn))
         {
@@ -501,11 +513,11 @@ static int FindLyrics(const MythUtilCommandLineParser &cmdline)
         QDomNode itemNode = itemList.item(0);
 
         LyricsGrabber grabber;
-        grabber.name = itemNode.namedItem(QString("name")).toElement().text();
-        grabber.priority = itemNode.namedItem(QString("priority")).toElement().text().toInt();
-        grabber.filename = scripts.at(x);
+        grabber.m_name = itemNode.namedItem(QString("name")).toElement().text();
+        grabber.m_priority = itemNode.namedItem(QString("priority")).toElement().text().toInt();
+        grabber.m_filename = scripts.at(x);
 
-        grabberMap.insert(grabber.priority, grabber);
+        grabberMap.insert(grabber.m_priority, grabber);
     }
 
     // try each grabber in turn until we find a match
@@ -516,24 +528,24 @@ static int FindLyrics(const MythUtilCommandLineParser &cmdline)
 
         ++i;
 
-        if (grabberName != "ALL" && grabberName != grabber.name)
+        if (grabberName != "ALL" && grabberName != grabber.m_name)
             continue;
 
-        LOG(VB_GENERAL, LOG_NOTICE, QString("Trying grabber: %1, Priority: %2").arg(grabber.name).arg(grabber.priority));
-        QString statusMessage = QObject::tr("Searching '%1' for lyrics...").arg(grabber.name);
+        LOG(VB_GENERAL, LOG_NOTICE, QString("Trying grabber: %1, Priority: %2").arg(grabber.m_name).arg(grabber.m_priority));
+        QString statusMessage = QObject::tr("Searching '%1' for lyrics...").arg(grabber.m_name);
         gCoreContext->SendMessage(QString("MUSIC_LYRICS_STATUS %1 %2").arg(songID).arg(statusMessage));
 
         QProcess p;
-        p.start(QString("python %1 --artist=\"%2\" --album=\"%3\" --title=\"%4\" --filename=\"%5\"")
-                        .arg(grabber.filename).arg(artist).arg(album).arg(title).arg(filename));
+        p.start(QString("%1 %2 --artist=\"%3\" --album=\"%4\" --title=\"%5\" --filename=\"%6\"")
+                        .arg(PYTHON_EXE).arg(grabber.m_filename).arg(artist).arg(album).arg(title).arg(filename));
         p.waitForFinished(-1);
         QString result = p.readAllStandardOutput();
 
-        LOG(VB_GENERAL, LOG_DEBUG, QString("Grabber: %1, Exited with code: %2").arg(grabber.name).arg(p.exitCode()));
+        LOG(VB_GENERAL, LOG_DEBUG, QString("Grabber: %1, Exited with code: %2").arg(grabber.m_name).arg(p.exitCode()));
 
         if (p.exitCode() == 0)
         {
-            LOG(VB_GENERAL, LOG_NOTICE, QString("Lyrics Found using: %1").arg(grabber.name));
+            LOG(VB_GENERAL, LOG_NOTICE, QString("Lyrics Found using: %1").arg(grabber.m_name));
 
             // save these lyrics to speed up future lookups if it is a DB track
             if (ID_TO_REPO(songID) == RT_Database)

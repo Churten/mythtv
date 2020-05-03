@@ -6,13 +6,14 @@
 #include <QBrush>
 #include <QPoint>
 #include <QMap>
+#include <QMutex>
 
 #include "xmlparsebase.h"
 
 class MUI_PUBLIC MythFontProperties: public XMLParseBase
 {
   public:
-    MythFontProperties();
+    MythFontProperties(void);
 
     QFont* GetFace(void) { return &m_face; }
 
@@ -21,7 +22,7 @@ class MUI_PUBLIC MythFontProperties: public XMLParseBase
     void SetShadow(bool on, const QPoint &offset, const QColor &color, int alpha);
     void SetOutline(bool on, const QColor &color, int size, int alpha);
 
-    QFont face(void) const { return m_face; }
+    QFont face(void) const;
     QColor color(void) const { return m_brush.color(); }
     QBrush GetBrush(void) const { return m_brush; }
 
@@ -35,16 +36,19 @@ class MUI_PUBLIC MythFontProperties: public XMLParseBase
 
     static MythFontProperties *ParseFromXml(
         const QString &filename, const QDomElement &element,
-        MythUIType *parent = NULL, bool addToGlobal = false,
+        MythUIType *parent = nullptr, bool addToGlobal = false,
         bool showWarnings = true);
 
     void SetRelativeSize(float rSize) { m_relativeSize = rSize; }
     float GetRelativeSize(void) const { return m_relativeSize; }
     void SetPixelSize(float size);
-    void SetPointSize(uint size);
+    void SetPointSize(uint points);
     void Rescale(void);
     void Rescale(int height);
     void AdjustStretch(int stretch);
+
+    static void Zoom(void);
+    static void SetZoom(uint zoom_percent);
 
   private:
     void Freeze(void); // no hash updates
@@ -53,25 +57,28 @@ class MUI_PUBLIC MythFontProperties: public XMLParseBase
     void CalcHash(void);
 
     QFont   m_face;
-    QBrush  m_brush;
+    QBrush  m_brush         {Qt::white};
 
-    bool    m_hasShadow;
+    bool    m_hasShadow     {false};
     QPoint  m_shadowOffset;
     QColor  m_shadowColor;
-    int     m_shadowAlpha;
+    int     m_shadowAlpha   {255};
 
-    bool    m_hasOutline;
+    bool    m_hasOutline    {false};
     QColor  m_outlineColor;
-    int     m_outlineSize;
-    int     m_outlineAlpha;
+    int     m_outlineSize   {0};
+    int     m_outlineAlpha  {255};
 
-    float   m_relativeSize;
+    float   m_relativeSize  {0.5F};
 
     QString m_hash;
 
-    bool    m_bFreeze;
+    bool    m_bFreeze       {false};
 
-    int     m_stretch;
+    int     m_stretch       {100};
+
+    static QMutex s_zoomLock;
+    static uint   s_zoomPercent;
 
     friend class FontMap;
 };
@@ -79,7 +86,7 @@ class MUI_PUBLIC MythFontProperties: public XMLParseBase
 class MUI_PUBLIC FontMap
 {
   public:
-    FontMap() {}
+    FontMap() = default;
 
     MythFontProperties *GetFont(const QString &text);
     bool AddFont(const QString &text, MythFontProperties *fontProp);
@@ -91,7 +98,7 @@ class MUI_PUBLIC FontMap
     static FontMap *GetGlobalFontMap(void);
 
   private:
-    QMap<QString, MythFontProperties> m_FontMap;
+    QMap<QString, MythFontProperties> m_fontMap;
 };
 
 MUI_PUBLIC FontMap *GetGlobalFontMap(void);

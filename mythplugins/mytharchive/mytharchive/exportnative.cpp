@@ -1,8 +1,7 @@
-#include <unistd.h>
-#include <stdlib.h>
-
-#include <iostream>
 #include <cstdlib>
+#include <cstdlib>
+#include <iostream>
+#include <unistd.h>
 
 // qt
 #include <QFile>
@@ -33,37 +32,6 @@
 #include "videoselector.h"
 #include "logviewer.h"
 
-ExportNative::ExportNative(
-    MythScreenStack *parent, MythScreenType *previousScreen,
-    ArchiveDestination archiveDestination, QString name) :
-    MythScreenType(parent, name),
-    m_previousScreen(previousScreen),
-    m_archiveDestination(archiveDestination),
-    m_usedSpace(0),
-    m_bCreateISO(false),
-    m_bDoBurn(false),
-    m_bEraseDvdRw(false),
-    m_saveFilename(),
-    m_archiveButtonList(NULL),
-    m_nextButton(NULL),
-    m_prevButton(NULL),
-    m_cancelButton(NULL),
-    m_addrecordingButton(NULL),
-    m_addvideoButton(NULL),
-    m_freespaceText(NULL),
-    m_titleText(NULL),
-    m_datetimeText(NULL),
-    m_descriptionText(NULL),
-    m_filesizeText(NULL),
-    m_nofilesText(NULL),
-    m_maxsizeText(NULL),
-    m_minsizeText(NULL),
-    m_currsizeText(NULL),
-    m_currsizeErrText(NULL),
-    m_sizeBar(NULL)
-{
-}
-
 ExportNative::~ExportNative(void)
 {
     saveConfiguration();
@@ -75,11 +43,8 @@ ExportNative::~ExportNative(void)
 
 bool ExportNative::Create(void)
 {
-    bool foundtheme = false;
-
     // Load the theme for this screen
-    foundtheme = LoadWindowFromXML("mythnative-ui.xml", "exportnative", this);
-
+    bool foundtheme = LoadWindowFromXML("mythnative-ui.xml", "exportnative", this);
     if (!foundtheme)
         return false;
 
@@ -135,9 +100,8 @@ bool ExportNative::keyPressEvent(QKeyEvent *event)
     if (GetFocusWidget()->keyPressEvent(event))
         return true;
 
-    bool handled = false;
     QStringList actions;
-    handled = GetMythMainWindow()->TranslateKeyPress("Archive", event, actions);
+    bool handled = GetMythMainWindow()->TranslateKeyPress("Archive", event, actions);
 
     for (int i = 0; i < actions.size() && !handled; i++)
     {
@@ -146,7 +110,7 @@ bool ExportNative::keyPressEvent(QKeyEvent *event)
 
         if (action == "MENU")
         {
-            showMenu();
+            ShowMenu();
         }
         else if (action == "DELETE")
         {
@@ -166,13 +130,9 @@ bool ExportNative::keyPressEvent(QKeyEvent *event)
 void ExportNative::updateSizeBar()
 {
     int64_t size = 0;
-    ArchiveItem *a;
 
-    for (int x = 0; x < m_archiveList.size(); x++)
-    {
-        a = m_archiveList.at(x);
+    foreach (auto a, m_archiveList)
         size += a->size;
-    }
 
     m_usedSpace = size / 1024 / 1024;
     uint freeSpace = m_archiveDestination.freeSpace / 1024;
@@ -218,10 +178,7 @@ void ExportNative::updateSizeBar()
 
 void ExportNative::titleChanged(MythUIButtonListItem *item)
 {
-    ArchiveItem *a;
-
-    a = item->GetData().value<ArchiveItem *>();
-
+    auto *a = item->GetData().value<ArchiveItem *>();
     if (!a)
         return;
 
@@ -237,7 +194,7 @@ void ExportNative::titleChanged(MythUIButtonListItem *item)
 
 void ExportNative::handleNextPage()
 {
-    if (m_archiveList.size() == 0)
+    if (m_archiveList.empty())
     {
         ShowOkPopup(tr("You need to add at least one item to archive!"));
         return;
@@ -264,7 +221,7 @@ void ExportNative::updateArchiveList(void)
 {
     m_archiveButtonList->Reset();
 
-    if (m_archiveList.size() == 0)
+    if (m_archiveList.empty())
     {
         m_titleText->Reset();
         m_datetimeText->Reset();
@@ -274,13 +231,10 @@ void ExportNative::updateArchiveList(void)
     }
     else
     {
-        ArchiveItem *a;
-        for (int x = 0;  x < m_archiveList.size(); x++)
+        foreach (auto a, m_archiveList)
         {
-            a = m_archiveList.at(x);
-
-            MythUIButtonListItem* item = new MythUIButtonListItem(m_archiveButtonList, a->title);
-            item->SetData(qVariantFromValue(a));
+            auto* item = new MythUIButtonListItem(m_archiveButtonList, a->title);
+            item->SetData(QVariant::fromValue(a));
         }
 
         m_archiveButtonList->SetItemCurrent(m_archiveButtonList->GetItemFirst());
@@ -307,7 +261,7 @@ void ExportNative::getArchiveListFromDB(void)
     {
         while (query.next())
         {
-            ArchiveItem *item = new ArchiveItem;
+            auto *item = new ArchiveItem;
 
             item->id = query.value(0).toInt();
             item->type = query.value(1).toString();
@@ -351,7 +305,6 @@ void ExportNative::saveConfiguration(void)
                         "deleting archiveitems", query);
 
     // save new list of archive items to DB
-    ArchiveItem *a;
     query.prepare("INSERT INTO archiveitems (type, title, subtitle, "
                     "description, startdate, starttime, size, filename, hascutlist, "
                     "duration, cutduration, videowidth, videoheight, filecodec,"
@@ -360,10 +313,8 @@ void ExportNative::saveConfiguration(void)
                     ":STARTTIME, :SIZE, :FILENAME, :HASCUTLIST, :DURATION, "
                     ":CUTDURATION, :VIDEOWIDTH, :VIDEOHEIGHT, :FILECODEC, "
                     ":VIDEOCODEC, :ENCODERPROFILE);");
-    for (int x = 0; x < m_archiveList.size(); x++)
+    foreach (auto a, m_archiveList)
     {
-        a = m_archiveList.at(x);
-
         query.bindValue(":TYPE", a->type);
         query.bindValue(":TITLE", a->title);
         query.bindValue(":SUBTITLE", a->subtitle);
@@ -386,11 +337,11 @@ void ExportNative::saveConfiguration(void)
     }
 }
 
-void ExportNative::showMenu()
+void ExportNative::ShowMenu()
 {
     MythScreenStack *popupStack = GetMythMainWindow()->GetStack("popup stack");
 
-    MythDialogBox *menuPopup = new MythDialogBox(tr("Menu"), popupStack, "actionmenu");
+    auto *menuPopup = new MythDialogBox(tr("Menu"), popupStack, "actionmenu");
 
     if (menuPopup->Create())
         popupStack->AddScreen(menuPopup);
@@ -403,7 +354,7 @@ void ExportNative::showMenu()
 void ExportNative::removeItem()
 {
     MythUIButtonListItem *item = m_archiveButtonList->GetItemCurrent();
-    ArchiveItem *curItem = item->GetData().value<ArchiveItem *>();
+    auto *curItem = item->GetData().value<ArchiveItem *>();
 
     if (!curItem)
         return;
@@ -431,11 +382,8 @@ void ExportNative::createConfigFile(const QString &filename)
     job.appendChild(media);
 
     // now loop though selected archive items and add them to the xml file
-    ArchiveItem *a;
-    for (int x = 0; x < m_archiveList.size(); x++)
+    foreach (auto a, m_archiveList)
     {
-        a = m_archiveList.at(x);
-
         QDomElement file = doc.createElement("file");
         file.setAttribute("type", a->type.toLower() );
         file.setAttribute("title", a->title);
@@ -446,11 +394,11 @@ void ExportNative::createConfigFile(const QString &filename)
 
     // add the options to the xml file
     QDomElement options = doc.createElement("options");
-    options.setAttribute("createiso", m_bCreateISO);
-    options.setAttribute("doburn", m_bDoBurn);
+    options.setAttribute("createiso", static_cast<int>(m_bCreateISO));
+    options.setAttribute("doburn", static_cast<int>(m_bDoBurn));
     options.setAttribute("mediatype", m_archiveDestination.type);
     options.setAttribute("dvdrsize", (qint64)m_archiveDestination.freeSpace);
-    options.setAttribute("erasedvdrw", m_bEraseDvdRw);
+    options.setAttribute("erasedvdrw", static_cast<int>(m_bEraseDvdRw));
     options.setAttribute("savedirectory", m_saveFilename);
     job.appendChild(options);
 
@@ -504,7 +452,7 @@ void ExportNative::handleAddRecording()
 {
     MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
 
-    RecordingSelector *selector = new RecordingSelector(mainStack, &m_archiveList);
+    auto *selector = new RecordingSelector(mainStack, &m_archiveList);
 
     connect(selector, SIGNAL(haveResult(bool)),
             this, SLOT(selectorClosed(bool)));
@@ -534,7 +482,7 @@ void ExportNative::handleAddVideo()
 
     MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
 
-    VideoSelector *selector = new VideoSelector(mainStack, &m_archiveList);
+    auto *selector = new VideoSelector(mainStack, &m_archiveList);
 
     connect(selector, SIGNAL(haveResult(bool)),
             this, SLOT(selectorClosed(bool)));

@@ -1,5 +1,7 @@
-#include <stdint.h>
 #include "screensaver-dbus.h"
+
+#include <cstdint>
+
 #include <QDBusConnection>
 #include <QDBusInterface>
 #include <QDBusReply>
@@ -43,12 +45,10 @@ class ScreenSaverDBusPrivate
     friend class    ScreenSaverDBus;
 
   public:
-    ScreenSaverDBusPrivate(QString dbusService, QString dbusPath, QString dbusInterface, QDBusConnection *bus) :
-        m_inhibited(false),
-        m_cookie(0),
+    ScreenSaverDBusPrivate(const QString &dbusService, const QString &dbusPath,
+                           const QString &dbusInterface, QDBusConnection *bus) :
         m_bus(bus),
         m_interface(new QDBusInterface(dbusService, dbusPath , dbusInterface, *m_bus)),
-        m_unInhibit(""),
         m_serviceUsed(dbusService)
     {
         if (!m_interface->isValid())
@@ -103,26 +103,27 @@ class ScreenSaverDBusPrivate
             }
         }
     }
-    void SetUnInhibit(QString method) { m_unInhibit = method; }
+    void SetUnInhibit(const QString &method) { m_unInhibit = method; }
 
   protected:
-    bool            m_inhibited;
-    uint32_t        m_cookie;
-    QDBusConnection *m_bus;
-    QDBusInterface  *m_interface;
+    bool            m_inhibited  {false};
+    uint32_t        m_cookie     {0};
+    QDBusConnection *m_bus       {nullptr};
+    QDBusInterface  *m_interface {nullptr};
   private:
+    // Disable copying and assignment
+    Q_DISABLE_COPY(ScreenSaverDBusPrivate)
     QString         m_unInhibit;
     QString         m_serviceUsed;
 };
 
 ScreenSaverDBus::ScreenSaverDBus() :
     m_bus(QDBusConnection::sessionBus()),
-    d(NULL),
     m_dbusPrivateInterfaces(QList<ScreenSaverDBusPrivate *>())
 {
     // service, path, interface, bus - note that interface = service, hence it is used twice
     for (uint i=0; i < NUM_DBUS_METHODS; i++) {
-        ScreenSaverDBusPrivate *ssdbp =
+        auto *ssdbp =
             new ScreenSaverDBusPrivate(m_dbusService[i], m_dbusPath[i], m_dbusService[i], &m_bus);
         ssdbp->SetUnInhibit(m_dbusUnInhibit[i]);
         m_dbusPrivateInterfaces.push_back(ssdbp);

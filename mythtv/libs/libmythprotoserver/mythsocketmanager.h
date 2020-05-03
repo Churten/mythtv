@@ -22,13 +22,13 @@ class MythServer : public ServerPool
 {
     Q_OBJECT
   public:
-    MythServer(QObject *parent=0);
+    explicit MythServer(QObject *parent=nullptr);
 
   signals:
     void newConnection(qt_socket_fd_t socket);
 
   protected slots:
-    virtual void newTcpConnection(qt_socket_fd_t socket);
+    void newTcpConnection(qt_socket_fd_t socket) override; // ServerPool
 };
 
 class PROTOSERVER_PUBLIC MythSocketManager : public QObject, public MythSocketCBs
@@ -36,12 +36,14 @@ class PROTOSERVER_PUBLIC MythSocketManager : public QObject, public MythSocketCB
     Q_OBJECT
   public:
     MythSocketManager();
-   ~MythSocketManager();
+   ~MythSocketManager() override;
 
-    void readyRead(MythSocket *socket);
-    void connectionClosed(MythSocket *socket);
-    void connectionFailed(MythSocket *socket) { (void)socket; }
-    void connected(MythSocket *socket) { (void)socket; }
+    void readyRead(MythSocket *socket) override; // MythSocketCBs
+    void connectionClosed(MythSocket *socket) override; // MythSocketCBs
+    void connectionFailed(MythSocket *socket) override // MythSocketCBs
+        { (void)socket; }
+    void connected(MythSocket *socket) override // MythSocketCBs
+        { (void)socket; }
 
     void SetThreadCount(uint count);
 
@@ -58,8 +60,8 @@ class PROTOSERVER_PUBLIC MythSocketManager : public QObject, public MythSocketCB
 
   private:
     void ProcessRequestWork(MythSocket *socket);
-    void HandleVersion(MythSocket *socket, const QStringList &slist);
-    void HandleDone(MythSocket *socket);
+    static void HandleVersion(MythSocket *socket, const QStringList &slist);
+    static void HandleDone(MythSocket *socket);
 
     QMap<MythSocket*, SocketHandler*>   m_socketMap;
     QReadWriteLock                      m_socketLock;
@@ -67,7 +69,7 @@ class PROTOSERVER_PUBLIC MythSocketManager : public QObject, public MythSocketCB
     QMap<QString, SocketRequestHandler*>    m_handlerMap;
     QReadWriteLock                          m_handlerLock;
 
-    MythServer     *m_server;
+    MythServer     *m_server     { nullptr };
     MThreadPool     m_threadPool;
 
     QMutex m_socketListLock;

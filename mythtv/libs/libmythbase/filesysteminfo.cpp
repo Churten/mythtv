@@ -21,14 +21,14 @@ using namespace std;
 #include <QList>
 #include <QString>
 #include <QStringList>
+#include <utility>
 
 #include "filesysteminfo.h"
 #include "mythcoreutil.h"
 
 // for serialization
-#define INT_TO_LIST(x)       do { list << QString::number(x); } while (0)
-#define DATETIME_TO_LIST(x)  INT_TO_LIST((x).toTime_t())
-#define STR_TO_LIST(x)       do { list << (x); } while (0)
+#define INT_TO_LIST(x)       do { list << QString::number(x); } while (false)
+#define STR_TO_LIST(x)       do { list << (x); } while (false)
 
 // for deserialization
 #define NEXT_STR()        do { if (it == listend)                    \
@@ -37,36 +37,27 @@ using namespace std;
                                    clear();                          \
                                    return false;                     \
                                }                                     \
-                               ts = *it++; } while (0)
-#define INT_FROM_LIST(x)     do { NEXT_STR(); (x) = ts.toLongLong(); } while (0)
-#define ENUM_FROM_LIST(x, y) do { NEXT_STR(); (x) = ((y)ts.toInt()); } while (0)
-#define DATETIME_FROM_LIST(x) \
-    do { NEXT_STR(); x = fromTime_t(ts.toUInt()); } while (0)
-#define STR_FROM_LIST(x)     do { NEXT_STR(); (x) = ts; } while (0)
+                               ts = *it++; } while (false)
+#define INT_FROM_LIST(x)     do { NEXT_STR(); (x) = ts.toLongLong(); } while (false)
+#define ENUM_FROM_LIST(x, y) do { NEXT_STR(); (x) = ((y)ts.toInt()); } while (false)
+#define STR_FROM_LIST(x)     do { NEXT_STR(); (x) = ts; } while (false)
 
 #define LOC QString("FileSystemInfo: ")
 
-FileSystemInfo::FileSystemInfo(void) :
-    m_hostname(""), m_path(""), m_local(false), m_fsid(-1),
-    m_grpid(-1), m_blksize(4096), m_total(0), m_used(0), m_weight(0)
-{
-}
-
 FileSystemInfo::FileSystemInfo(const FileSystemInfo &other)
 {
-    clone(other);
+    FileSystemInfo::clone(other);
 }
 
 FileSystemInfo::FileSystemInfo(QString hostname, QString path, bool local,
         int fsid, int groupid, int blksize, int64_t total, int64_t used) :
-    m_hostname(hostname), m_path(path), m_local(local), m_fsid(fsid),
-    m_grpid(groupid), m_blksize(blksize), m_total(total), m_used(used),
-    m_weight(0)
+    m_hostname(std::move(hostname)), m_path(std::move(path)), m_local(local), m_fsid(fsid),
+    m_grpid(groupid), m_blksize(blksize), m_total(total), m_used(used)
 {
 }
 
 FileSystemInfo::FileSystemInfo(QStringList::const_iterator &it,
-                   QStringList::const_iterator end)
+                   const QStringList::const_iterator& end)
 {
     FromStringList(it, end);
 }
@@ -91,6 +82,9 @@ void FileSystemInfo::clone(const FileSystemInfo &other)
 
 FileSystemInfo &FileSystemInfo::operator=(const FileSystemInfo &other)
 {
+    if (this == &other)
+        return *this;
+
     clone(other);
     return *this;
 }
@@ -129,7 +123,7 @@ bool FileSystemInfo::FromStringList(const QStringList &slist)
 }
 
 bool FileSystemInfo::FromStringList(QStringList::const_iterator &it,
-                             QStringList::const_iterator listend)
+                             const QStringList::const_iterator& listend)
 {
     QString listerror = LOC + "FromStringList, not enough items in list.";
     QString ts;
@@ -148,13 +142,13 @@ bool FileSystemInfo::FromStringList(QStringList::const_iterator &it,
     return true;
 }
 
-const QList<FileSystemInfo> FileSystemInfo::RemoteGetInfo(MythSocket *sock)
+QList<FileSystemInfo> FileSystemInfo::RemoteGetInfo(MythSocket *sock)
 {
     FileSystemInfo fsInfo;
     QList<FileSystemInfo> fsInfos;
     QStringList strlist(QString("QUERY_FREE_SPACE_LIST"));
 
-    bool sent;
+    bool sent = false;
 
     if (sock)
         sent = sock->SendReceiveStringList(strlist);
@@ -181,8 +175,7 @@ void FileSystemInfo::Consolidate(QList<FileSystemInfo> &disks,
 {
     int newid = 0;
 
-    QList<FileSystemInfo>::iterator it1, it2;
-    for (it1 = disks.begin(); it1 != disks.end(); ++it1)
+    for (auto it1 = disks.begin(); it1 != disks.end(); ++it1)
     {
         if (it1->getFSysID() == -1)
         {
@@ -192,7 +185,7 @@ void FileSystemInfo::Consolidate(QList<FileSystemInfo> &disks,
                                 + ":" + it1->getPath());
         }
 
-        for (it2 = it1+1; it2 != disks.end(); ++it2)
+        for (auto it2 = it1+1; it2 != disks.end(); ++it2)
         {
             if (it2->getFSysID() != -1) // disk has already been matched
                 continue;
@@ -229,7 +222,8 @@ void FileSystemInfo::Consolidate(QList<FileSystemInfo> &disks,
 
 void FileSystemInfo::PopulateDiskSpace(void)
 {
-    int64_t total = -1, used = -1;
+    int64_t total = -1;
+    int64_t used = -1;
     getDiskSpace(getPath().toLatin1().constData(), total, used);
     setTotalSpace(total);
     setUsedSpace(used);
@@ -237,10 +231,9 @@ void FileSystemInfo::PopulateDiskSpace(void)
 
 void FileSystemInfo::PopulateFSProp(void)
 {
-    struct statfs statbuf;
-    memset(&statbuf, 0, sizeof(statbuf));
+    struct statfs statbuf {};
 
-    if (!statfs(getPath().toLocal8Bit().constData(), &statbuf))
+    if (statfs(getPath().toLocal8Bit().constData(), &statbuf) == 0)
     {
 #if CONFIG_DARWIN
         char *fstypename = statbuf.f_fstypename;

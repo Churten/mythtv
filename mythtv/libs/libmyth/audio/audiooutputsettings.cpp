@@ -22,15 +22,14 @@ extern "C" {
 #define LOC QString("AOS: ")
 
 AudioOutputSettings::AudioOutputSettings(bool invalid) :
-    m_passthrough(-1),  m_features(FEATURE_NONE),
-    m_invalid(invalid), m_has_eld(false), m_eld(ELD())
+    m_invalid(invalid), m_eld(ELD())
 {
     m_sr.assign(srs,  srs  +
                 sizeof(srs)  / sizeof(int));
     m_sf.assign(fmts, fmts +
                 sizeof(fmts) / sizeof(AudioFormat));
-    m_sr_it = m_sr.begin();
-    m_sf_it = m_sf.begin();
+    m_srIt = m_sr.begin();
+    m_sfIt = m_sf.begin();
 }
 
 AudioOutputSettings::~AudioOutputSettings()
@@ -55,22 +54,22 @@ AudioOutputSettings& AudioOutputSettings::operator=(
     m_passthrough   = rhs.m_passthrough;
     m_features      = rhs.m_features;
     m_invalid       = rhs.m_invalid;
-    m_has_eld       = rhs.m_has_eld;
+    m_hasEld        = rhs.m_hasEld;
     m_eld           = rhs.m_eld;
-    m_sr_it         = m_sr.begin() + (rhs.m_sr_it - rhs.m_sr.begin());
-    m_sf_it         = m_sf.begin() + (rhs.m_sf_it - rhs.m_sf.begin());
+    m_srIt          = m_sr.begin() + (rhs.m_srIt - rhs.m_sr.begin());
+    m_sfIt          = m_sf.begin() + (rhs.m_sfIt - rhs.m_sf.begin());
     return *this;
 }
 
 int AudioOutputSettings::GetNextRate()
 {
-    if (m_sr_it == m_sr.end())
+    if (m_srIt == m_sr.end())
     {
-        m_sr_it = m_sr.begin();
+        m_srIt = m_sr.begin();
         return 0;
     }
 
-    return *m_sr_it++;
+    return *m_srIt++;
 }
 
 void AudioOutputSettings::AddSupportedRate(int rate)
@@ -120,13 +119,13 @@ int AudioOutputSettings::NearestSupportedRate(int rate)
 
 AudioFormat AudioOutputSettings::GetNextFormat()
 {
-    if (m_sf_it == m_sf.end())
+    if (m_sfIt == m_sf.end())
     {
-        m_sf_it = m_sf.begin();
+        m_sfIt = m_sf.begin();
         return FORMAT_NONE;
     }
 
-    return *m_sf_it++;
+    return *m_sfIt++;
 }
 
 void AudioOutputSettings::AddSupportedFormat(AudioFormat format)
@@ -319,15 +318,13 @@ void AudioOutputSettings::setFeature(bool val, DigitalFeature arg)
  */
 AudioOutputSettings* AudioOutputSettings::GetCleaned(bool newcopy)
 {
-    AudioOutputSettings* aosettings;
+    AudioOutputSettings* aosettings = this;
 
     if (newcopy)
     {
         aosettings = new AudioOutputSettings;
         *aosettings = *this;
     }
-    else
-        aosettings = this;
 
     if (m_invalid)
         return aosettings;
@@ -378,12 +375,10 @@ AudioOutputSettings* AudioOutputSettings::GetCleaned(bool newcopy)
  */
 AudioOutputSettings* AudioOutputSettings::GetUsers(bool newcopy)
 {
-    AudioOutputSettings* aosettings;
+    AudioOutputSettings* aosettings = this;
 
     if (newcopy)
         aosettings = GetCleaned(newcopy);
-    else
-        aosettings = this;
 
     if (aosettings->m_invalid)
         return aosettings;
@@ -392,27 +387,27 @@ AudioOutputSettings* AudioOutputSettings::GetUsers(bool newcopy)
     int max_channels = aosettings->BestSupportedChannels();
 
     bool bAC3  = aosettings->canFeature(FEATURE_AC3) &&
-        gCoreContext->GetNumSetting("AC3PassThru", false);
+        gCoreContext->GetBoolSetting("AC3PassThru", false);
 
     bool bDTS  = aosettings->canFeature(FEATURE_DTS) &&
-        gCoreContext->GetNumSetting("DTSPassThru", false);
+        gCoreContext->GetBoolSetting("DTSPassThru", false);
 
     bool bLPCM = aosettings->canFeature(FEATURE_LPCM) &&
-        !gCoreContext->GetNumSetting("StereoPCM", false);
+        !gCoreContext->GetBoolSetting("StereoPCM", false);
 
     bool bEAC3 = aosettings->canFeature(FEATURE_EAC3) &&
-        gCoreContext->GetNumSetting("EAC3PassThru", false) &&
-        !gCoreContext->GetNumSetting("Audio48kOverride", false);
+        gCoreContext->GetBoolSetting("EAC3PassThru", false) &&
+        !gCoreContext->GetBoolSetting("Audio48kOverride", false);
 
         // TrueHD requires HBR support.
     bool bTRUEHD = aosettings->canFeature(FEATURE_TRUEHD) &&
-        gCoreContext->GetNumSetting("TrueHDPassThru", false) &&
-        !gCoreContext->GetNumSetting("Audio48kOverride", false) &&
-        gCoreContext->GetNumSetting("HBRPassthru", true);
+        gCoreContext->GetBoolSetting("TrueHDPassThru", false) &&
+        !gCoreContext->GetBoolSetting("Audio48kOverride", false) &&
+        gCoreContext->GetBoolSetting("HBRPassthru", true);
 
     bool bDTSHD = aosettings->canFeature(FEATURE_DTSHD) &&
-        gCoreContext->GetNumSetting("DTSHDPassThru", false) &&
-        !gCoreContext->GetNumSetting("Audio48kOverride", false);
+        gCoreContext->GetBoolSetting("DTSHDPassThru", false) &&
+        !gCoreContext->GetBoolSetting("Audio48kOverride", false);
 
     if (max_channels > 2 && !bLPCM)
         max_channels = 2;
@@ -439,7 +434,7 @@ int AudioOutputSettings::GetMaxHDRate()
         return 0;
 
         // If no HBR or no LPCM, limit bitrate to 6.144Mbit/s
-    if (!gCoreContext->GetNumSetting("HBRPassthru", true) ||
+    if (!gCoreContext->GetBoolSetting("HBRPassthru", true) ||
         !canFeature(FEATURE_LPCM))
     {
         return 192000;  // E-AC3/DTS-HD High Res: 192k, 16 bits, 2 ch
@@ -470,7 +465,7 @@ QString AudioOutputSettings::FeaturesToString(DigitalFeature arg)
         "TRUEHD",
         "DTSHD",
         "AAC",
-        NULL
+        nullptr
     };
 
     for (unsigned int i = 0; feature[i] != (DigitalFeature)-1; i++)
@@ -558,17 +553,17 @@ QString AudioOutputSettings::GetPassthroughParams(int codec, int codec_profile,
 
 bool AudioOutputSettings::hasValidELD()
 {
-    return m_has_eld && m_eld.isValid();
+    return m_hasEld && m_eld.isValid();
 };
 
 bool AudioOutputSettings::hasELD()
 {
-    return m_has_eld;
+    return m_hasEld;
 };
 
 void AudioOutputSettings::setELD(QByteArray *ba)
 {
-    m_has_eld = true;
+    m_hasEld = true;
     m_eld = ELD(ba->constData(), ba->size());
     m_eld.show();
 }

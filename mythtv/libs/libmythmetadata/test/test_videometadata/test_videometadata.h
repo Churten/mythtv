@@ -25,19 +25,13 @@
 #include <recordinginfo.h>
 #include <metadatafactory.h>
 
-#if QT_VERSION < QT_VERSION_CHECK(5, 0, 0)
-#define MSKIP(MSG) QSKIP(MSG, SkipSingle)
-#else
-#define MSKIP(MSG) QSKIP(MSG)
-#endif
-
 class Testvideometadata: public QObject
 {
     Q_OBJECT
 
   private slots:
 
-    void NonTVFilenameNoSubtitle(void)
+    static void NonTVFilenameNoSubtitle(void)
     {
         // With Spaces as separator
         TestMetadata(QString("A Movie Title.mpg"),
@@ -46,7 +40,7 @@ class Testvideometadata: public QObject
                      0,
                      0);
     }
-    void NonTVFilenameNoSubtitleDotSeparator(void)
+    static void NonTVFilenameNoSubtitleDotSeparator(void)
     {
         // With Dots as separator
         TestMetadata(QString("A.Movie.Title.mpg"),
@@ -55,7 +49,7 @@ class Testvideometadata: public QObject
                      0,
                      0);
     }
-    void NonTVFilenameWithYear(void)
+    static void NonTVFilenameWithYear(void)
     {
         // With Spaces as separator
         TestMetadata(QString("A Movie Title 1984.mpg"),
@@ -64,7 +58,7 @@ class Testvideometadata: public QObject
                      0,
                      0);
     }
-    void NonTVFilenameWithYearInBrackets(void)
+    static void NonTVFilenameWithYearInBrackets(void)
     {
         // With Spaces as separator
         TestMetadata(QString("A Movie Title (1984).mpg"),
@@ -73,7 +67,7 @@ class Testvideometadata: public QObject
                      0,
                      0);
     }
-    void TVFilenameSESyntaxLower(void)
+    static void TVFilenameSESyntaxLower(void)
     {
         TestMetadata(QString("Title s01e02 subtitle.mpg"),
                      QString("Title"),
@@ -81,7 +75,7 @@ class Testvideometadata: public QObject
                      1,
                      2);
     }
-    void TVFilenameSESyntaxLowerDotSeparator(void)
+    static void TVFilenameSESyntaxLowerDotSeparator(void)
     {
         TestMetadata(QString("Title.s01e02.subtitle.mpg"),
                      QString("Title"),
@@ -89,7 +83,7 @@ class Testvideometadata: public QObject
                      1,
                      2);
     }
-    void TVFilenameSESyntaxUpper(void)
+    static void TVFilenameSESyntaxUpper(void)
     {
         TestMetadata(QString("Title S01E02 subtitle.mpg"),
                      QString("Title"),
@@ -97,7 +91,7 @@ class Testvideometadata: public QObject
                      1,
                      2);
     }
-    void TVFilenameXSyntax(void)
+    static void TVFilenameXSyntax(void)
     {
         TestMetadata(QString("Title 1x2 subtitle.mpg"),
                      QString("Title"),
@@ -105,7 +99,7 @@ class Testvideometadata: public QObject
                      1,
                      2);
     }
-    void TVFilenameXSyntaxUpper(void)
+    static void TVFilenameXSyntaxUpper(void)
     {
         TestMetadata(QString("Title 1X2 subtitle.mpg"),
                      QString("Title"),
@@ -114,7 +108,7 @@ class Testvideometadata: public QObject
                      2);
     }
 
-    void TVFilenameXSyntaxUpperDoubleZeroPadded(void)
+    static void TVFilenameXSyntaxUpperDoubleZeroPadded(void)
     {
         TestMetadata(QString("Title 001X002 subtitle.mpg"),
                      QString("Title"),
@@ -122,7 +116,7 @@ class Testvideometadata: public QObject
                      1,
                      2);
     }
-    void TVFilenameSeasonEpisodeSyntax(void)
+    static void TVFilenameSeasonEpisodeSyntax(void)
     {
         TestMetadata(QString("Title Season 1 Episode 2 subtitle.mpg"),
                      QString("Title"),
@@ -130,7 +124,7 @@ class Testvideometadata: public QObject
                      1,
                      2);
     }
-    void TVFilenameSeasonEpisodeSyntaxUpper(void)
+    static void TVFilenameSeasonEpisodeSyntaxUpper(void)
     {
         TestMetadata(QString("Title SEASON 1 EPISODE 2 subtitle.mpg"),
                      QString("Title"),
@@ -139,7 +133,7 @@ class Testvideometadata: public QObject
                      2);
     }
 
-    void TVFilenameSeasonEpisodeNoSpaceSyntaxUpper(void)
+    static void TVFilenameSeasonEpisodeNoSpaceSyntaxUpper(void)
     {
         TestMetadata(QString("Title SEASON1EPISODE2 subtitle.mpg"),
                      QString("Title"),
@@ -148,7 +142,7 @@ class Testvideometadata: public QObject
                      2);
     }
 
-    void TVFullPath(void)
+    static void TVFullPath(void)
     {
         TestMetadata(QString("Title/Season 1/02 Subtitle.mpg"),
                      QString("Title"),
@@ -157,7 +151,7 @@ class Testvideometadata: public QObject
                      2);
     }
 
-    void TVFullPathSESyntax(void)
+    static void TVFullPathSESyntax(void)
     {
         TestMetadata(QString("Title/Season 2/S02E03 Subtitle.mpg"),
                      QString("Title"),
@@ -166,7 +160,7 @@ class Testvideometadata: public QObject
                      3);
     }
 
-    void TVFullPathXSyntax(void)
+    static void TVFullPathXSyntax(void)
     {
         TestMetadata(QString("Title/Season 2/2x03 Subtitle.mpg"),
                      QString("Title"),
@@ -174,7 +168,7 @@ class Testvideometadata: public QObject
                      2,
                      3);
     }
-    void TVFullPathXSyntaxNoSubtitle(void)
+    static void TVFullPathXSyntaxNoSubtitle(void)
     {
         TestMetadata(QString("Title/Season 2/2x03.mpg"),
                      QString("Title"),
@@ -183,7 +177,7 @@ class Testvideometadata: public QObject
                      3);
     }
 
-    void TVFullPathSeasonEpisodeSyntax(void)
+    static void TVFullPathSeasonEpisodeSyntax(void)
     {
         TestMetadata(QString("Title/Season 1/Season 2 episode 3.mpg"),
                      QString("Title"),
@@ -192,7 +186,7 @@ class Testvideometadata: public QObject
                      3);
     }
 
-    void TVFullPathWithSeasonXSyntax(void)
+    static void TVFullPathWithSeasonXSyntax(void)
     {
         TestMetadata(QString("Title Season 2/2x03.mpg"),
                      QString("Title"),
@@ -201,7 +195,7 @@ class Testvideometadata: public QObject
                      3);
     }
 
-    void TVFullPathWithSeasonAndTitleXSyntax(void)
+    static void TVFullPathWithSeasonAndTitleXSyntax(void)
     {
         TestMetadata(QString("Title Season 2/Title Overide 2x03.mpg"),
                      QString("Title Overide"),
@@ -210,9 +204,9 @@ class Testvideometadata: public QObject
                      3);
     }
 
-    void MovieWithMinus ()
+    static void MovieWithMinus ()
     {
-        MSKIP ("Minus is handled between parts of the title, but not as part of the title itself.");
+        QSKIP ("Minus is handled between parts of the title, but not as part of the title itself.");
         TestMetadata (QString ("A-Movie-Title.ts"),
                       QString ("A Movie Title"),
                       QString (""),
@@ -235,7 +229,7 @@ class Testvideometadata: public QObject
                       0);
     }
 
-    void MovieWithUnderscore ()
+    static void MovieWithUnderscore ()
     {
         TestMetadata (QString ("A_Movie_Title.ts"),
                       QString ("A Movie Title"),
@@ -259,7 +253,7 @@ class Testvideometadata: public QObject
                       0);
     }
 
-    void MovieWithPeriod ()
+    static void MovieWithPeriod ()
     {
         TestMetadata (QString ("A.Movie.Title.ts"),
                       QString ("A Movie Title"),
@@ -288,7 +282,7 @@ class Testvideometadata: public QObject
                       0);
     }
 
-    void MovieWithAMix ()
+    static void MovieWithAMix ()
     {
         TestMetadata (QString ("A_Movie.Title.ts"),
                       QString ("A Movie Title"),
@@ -312,7 +306,7 @@ class Testvideometadata: public QObject
                       0);
     }
 
-    void SeriesWithAMix ()
+    static void SeriesWithAMix ()
     {
         TestMetadata (QString ("Series Title/Season 1/Season Title 02x03 Episode Title.mp4"),
                       QString ("Season Title"),
@@ -342,20 +336,42 @@ class Testvideometadata: public QObject
     }
 
     /* TODO move into own test folder */
-    void ProgramWithInetref ()
+    static void ProgramWithInetref ()
     {
-        MSKIP ("Might connect to the database or call the installed metadata grabbers.");
-        ProgramInfo proginfo = ProgramInfo ("", "", "Test Movie", "", "", 0, 0, "tmdb3.py_1234", 0, 0, "");
-        RecordingInfo recinfo = proginfo;
+        QSKIP ("Might connect to the database or call the installed metadata grabbers.");
+        ProgramInfo proginfo = ProgramInfo ("", "", "Test Movie", "", "", "",
+                                            "", 0, 0, "tmdb3.py_1234", 0, 0, "");
+        RecordingInfo recinfo(proginfo);
         QCOMPARE (recinfo.GetInetRef(), QString("tmdb3.py_1234"));
         QCOMPARE (GuessLookupType (&recinfo), kProbableMovie);
 
-        proginfo = ProgramInfo ("", "", "Test Series", "Test Episode", "", 1, 15, "ttvdb.py_1234", 0, 0, "");
+        proginfo = ProgramInfo ("", "", "Test Series", "", "Test Episode", "",
+                                "", 1, 15, "ttvdb.py_1234", 0, 0, "");
         recinfo = proginfo;
         QCOMPARE (recinfo.GetInetRef(), QString("ttvdb.py_1234"));
         QCOMPARE (GuessLookupType (&recinfo), kProbableTelevision);
 
         //QCOMPARE (GuessLookupType (QString ("tmdb3.py_1234")), kProbableMovie);
         //QCOMPARE (GuessLookupType (QString ("ttvdb.py_1234")), kProbableTelevision);
+    }
+
+    static void testEmbeddedFilnameToMetadata ()
+    {
+        QSKIP ("Tries to connect to the database.");
+        VideoMetadata obj = VideoMetadata(QString ("Series Title/Season 1/02x03 Episode Title.mp4"));
+        QCOMPARE (obj.GetTitle(), QString ("Series Title"));
+        QCOMPARE (obj.GetSortTitle(), QString ("series title"));
+        QCOMPARE (obj.GetSubtitle(), QString ("Episode Title"));
+        QCOMPARE (obj.GetSortSubtitle(), QString ("episode title"));
+        QCOMPARE (obj.GetSeason(), 2);
+        QCOMPARE (obj.GetEpisode(), 3);
+
+        obj = VideoMetadata(QString ("The Series Title/Season 1/02x03 The Episode Title.mp4"));
+        QCOMPARE (obj.GetTitle(), QString ("The Series Title"));
+        QCOMPARE (obj.GetSortTitle(), QString ("series title"));
+        QCOMPARE (obj.GetSubtitle(), QString ("The Episode Title"));
+        QCOMPARE (obj.GetSortSubtitle(), QString ("episode title"));
+        QCOMPARE (obj.GetSeason(), 2);
+        QCOMPARE (obj.GetEpisode(), 3);
     }
 };

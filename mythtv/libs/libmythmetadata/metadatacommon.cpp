@@ -1,7 +1,8 @@
 // Qt headers
-#include <QLocale>
 #include <QCoreApplication>
+#include <QLocale>
 #include <QMetaType>
+#include <utility>
 
 #include "rssparse.h"
 #include "programinfo.h"
@@ -12,78 +13,6 @@
 #include "mythmiscutil.h"
 
 static int x0 = qRegisterMetaType< RefCountHandler<MetadataLookup> >();
-
-// null constructor
-MetadataLookup::MetadataLookup(void) :
-    ReferenceCounter("MetadataLookup"),
-
-    m_type(kMetadataVideo),
-    m_subtype(kUnknownVideo),
-    m_data(),
-    m_step(kLookupSearch),
-    m_automatic(false),
-    m_handleimages(false),
-    m_allowoverwrites(false),
-    m_allowgeneric(false),
-    m_dvdorder(false),
-    m_host(),
-    m_filename(),
-    m_title(),
-    m_network(),
-    m_status(),
-    m_categories(),
-    m_userrating(0),
-    m_ratingcount(0),
-    m_language(),
-    m_subtitle(),
-    m_tagline(),
-    m_description(),
-    m_season(0),
-    m_episode(0),
-    m_chanid(0),
-    m_channum(),
-    m_chansign(),
-    m_channame(),
-    m_chanplaybackfilters(),
-    m_recgroup(),
-    m_playgroup(),
-    m_seriesid(),
-    m_programid(),
-    m_storagegroup(),
-    m_startts(),
-    m_endts(),
-    m_recstartts(),
-    m_recendts(),
-    m_programflags(0),
-    m_audioproperties(0),
-    m_videoproperties(0),
-    m_subtitletype(0),
-    m_certification(),
-    m_countries(),
-    m_popularity(0),
-    m_budget(0),
-    m_revenue(0),
-    m_album(),
-    m_tracknum(0),
-    m_system(),
-    m_year(0),
-    m_releasedate(),
-    m_lastupdated(),
-    m_runtime(0),
-    m_runtimesecs(0),
-    m_inetref(),
-    m_collectionref(),
-    m_tmsref(),
-    m_imdb(),
-    m_iscollection(false),
-    m_people(),
-    m_studios(),
-    m_homepage(),
-    m_trailerURL(),
-    m_artwork(),
-    m_downloads()
-{
-}
 
 // full constructor
 MetadataLookup::MetadataLookup(
@@ -96,129 +25,131 @@ MetadataLookup::MetadataLookup(
     bool allowoverwrites,
     bool allowgeneric,
     bool preferdvdorder,
-    const QString &host,
-    const QString &filename,
+    QString host,
+    QString filename,
     const QString &title,
-    const QString &network,
-    const QString &status,
-    const QStringList &categories,
+    QString network,
+    QString status,
+    QStringList categories,
     const float userrating,
     uint ratingcount,
-    const QString &language,
-    const QString &subtitle,
-    const QString &tagline,
-    const QString &description,
+    QString language,
+    QString subtitle,
+    QString tagline,
+    QString description,
     uint season,
     uint episode,
     uint chanid,
-    const QString &channum,
-    const QString &chansign,
-    const QString &channame,
-    const QString &chanplaybackfilters,
-    const QString &recgroup,
-    const QString &playgroup,
-    const QString &seriesid,
-    const QString &programid,
-    const QString &storagegroup,
-    const QDateTime &startts,
-    const QDateTime &endts,
-    const QDateTime &recstartts,
-    const QDateTime &recendts,
+    QString channum,
+    QString chansign,
+    QString channame,
+    QString chanplaybackfilters,
+    QString recgroup,
+    QString playgroup,
+    QString seriesid,
+    QString programid,
+    QString storagegroup,
+    QDateTime startts,
+    QDateTime endts,
+    QDateTime recstartts,
+    QDateTime recendts,
     uint programflags,
     uint audioproperties,
     uint videoproperties,
     uint subtitletype,
-    const QString &certification,
-    const QStringList &countries,
-    const uint popularity,
+    QString certification,
+    QStringList countries,
+    const float popularity,
     const uint budget,
     const uint revenue,
-    const QString &album,
+    QString album,
     uint tracknum,
-    const QString &system,
+    QString system,
     const uint year,
     const QDate &releasedate,
-    const QDateTime &lastupdated,
+    QDateTime lastupdated,
     const uint runtime,
     const uint runtimesecs,
-    const QString &inetref,
-    const QString &collectionref,
-    const QString &tmsref,
-    const QString &imdb,
-    const PeopleMap people,
-    const QStringList &studios,
-    const QString &homepage,
-    const QString &trailerURL,
-    const ArtworkMap artwork,
+    QString inetref,
+    QString collectionref,
+    QString tmsref,
+    QString imdb,
+    PeopleMap people,
+    QStringList studios,
+    QString homepage,
+    QString trailerURL,
+    ArtworkMap artwork,
     DownloadMap downloads) :
     ReferenceCounter("MetadataLookup"),
 
     m_type(type),
     m_subtype(subtype),
-    m_data(data),
+    m_data(std::move(data)),
     m_step(step),
     m_automatic(automatic),
-    m_handleimages(handleimages),
-    m_allowoverwrites(allowoverwrites),
-    m_allowgeneric(allowgeneric),
-    m_dvdorder(preferdvdorder),
-    m_host(host),
-    m_filename(filename),
+    m_handleImages(handleimages),
+    m_allowOverwrites(allowoverwrites),
+    m_allowGeneric(allowgeneric),
+    m_dvdOrder(preferdvdorder),
+    m_host(std::move(host)),
+    m_filename(std::move(filename)),
     m_title(title),
-    m_network(network),
-    m_status(status),
-    m_categories(categories),
-    m_userrating(userrating),
-    m_ratingcount(ratingcount),
-    m_language(language),
-    m_subtitle(subtitle),
-    m_tagline(tagline),
-    m_description(description),
+    m_network(std::move(network)),
+    m_status(std::move(status)),
+    m_categories(std::move(categories)),
+    m_userRating(userrating),
+    m_ratingCount(ratingcount),
+    m_language(std::move(language)),
+    m_subtitle(std::move(subtitle)),
+    m_tagline(std::move(tagline)),
+    m_description(std::move(description)),
     m_season(season),
     m_episode(episode),
-    m_chanid(chanid),
-    m_channum(channum),
-    m_chansign(chansign),
-    m_channame(channame),
-    m_chanplaybackfilters(chanplaybackfilters),
-    m_recgroup(recgroup),
-    m_playgroup(playgroup),
-    m_seriesid(seriesid),
-    m_programid(programid),
-    m_storagegroup(storagegroup),
-    m_startts(startts),
-    m_endts(endts),
-    m_recstartts(recstartts),
-    m_recendts(recendts),
-    m_programflags(programflags),
-    m_audioproperties(audioproperties),
-    m_videoproperties(videoproperties),
-    m_subtitletype(subtitletype),
-    m_certification(certification),
-    m_countries(countries),
+    m_chanId(chanid),
+    m_chanNum(std::move(channum)),
+    m_chanSign(std::move(chansign)),
+    m_chanName(std::move(channame)),
+    m_chanPlaybackFilters(std::move(chanplaybackfilters)),
+    m_recGroup(std::move(recgroup)),
+    m_playGroup(std::move(playgroup)),
+    m_seriesId(std::move(seriesid)),
+    m_programid(std::move(programid)),
+    m_storageGroup(std::move(storagegroup)),
+    m_startTs(std::move(startts)),
+    m_endTs(std::move(endts)),
+    m_recStartTs(std::move(recstartts)),
+    m_recEndTs(std::move(recendts)),
+    m_programFlags(programflags),
+    m_audioProperties(audioproperties),
+    m_videoProperties(videoproperties),
+    m_subtitleType(subtitletype),
+    m_certification(std::move(certification)),
+    m_countries(std::move(countries)),
     m_popularity(popularity),
     m_budget(budget),
     m_revenue(revenue),
-    m_album(album),
-    m_tracknum(tracknum),
-    m_system(system),
+    m_album(std::move(album)),
+    m_trackNum(tracknum),
+    m_system(std::move(system)),
     m_year(year),
-    m_releasedate(releasedate),
-    m_lastupdated(lastupdated),
+    m_releaseDate(releasedate),
+    m_lastUpdated(std::move(lastupdated)),
     m_runtime(runtime),
-    m_runtimesecs(runtimesecs),
-    m_inetref(inetref),
-    m_collectionref(collectionref),
-    m_tmsref(tmsref),
-    m_imdb(imdb),
-    m_iscollection(false),
-    m_people(people),
-    m_studios(studios),
-    m_homepage(homepage),
-    m_trailerURL(trailerURL),
-    m_artwork(artwork),
-    m_downloads(downloads)
+    m_runtimeSecs(runtimesecs),
+    m_inetRef(std::move(inetref)),
+    m_collectionRef(std::move(collectionref)),
+    m_tmsRef(std::move(tmsref)),
+    m_imdb(std::move(imdb)),
+    m_people(std::move(people)),
+    m_studios(std::move(studios)),
+    m_homepage(std::move(homepage)),
+    m_trailerURL(std::move(trailerURL)),
+    m_artwork(std::move(artwork)),
+    m_downloads(std::move(downloads))
 {
+    QString manRecSuffix = QString(" (%1)").arg(QObject::tr("Manual Record"));
+    m_baseTitle = title;
+    m_baseTitle.replace(manRecSuffix,"");
 }
 
 // ProgramInfo-style constructor
@@ -232,86 +163,84 @@ MetadataLookup::MetadataLookup(
     bool allowoverwrites,
     bool allowgeneric,
     bool preferdvdorder,
-    const QString &host,
-    const QString &filename,
+    QString host,
+    QString filename,
     const QString &title,
-    const QStringList &categories,
+    QStringList categories,
     const float userrating,
-    const QString &subtitle,
-    const QString &description,
+    QString subtitle,
+    QString description,
     uint chanid,
-    const QString &channum,
-    const QString &chansign,
-    const QString &channame,
-    const QString &chanplaybackfilters,
-    const QString &recgroup,
-    const QString &playgroup,
-    const QString &seriesid,
-    const QString &programid,
-    const QString &storagegroup,
-    const QDateTime &startts,
-    const QDateTime &endts,
-    const QDateTime &recstartts,
-    const QDateTime &recendts,
+    QString channum,
+    QString chansign,
+    QString channame,
+    QString chanplaybackfilters,
+    QString recgroup,
+    QString playgroup,
+    QString seriesid,
+    QString programid,
+    QString storagegroup,
+    QDateTime startts,
+    QDateTime endts,
+    QDateTime recstartts,
+    QDateTime recendts,
     uint programflags,
     uint audioproperties,
     uint videoproperties,
     uint subtitletype,
     const uint year,
     const QDate &releasedate,
-    const QDateTime &lastupdated,
+    QDateTime lastupdated,
     const uint runtime,
     const uint runtimesecs) :
     ReferenceCounter("MetadataLookup"),
 
     m_type(type),
     m_subtype(subtype),
-    m_data(data),
+    m_data(std::move(data)),
     m_step(step),
     m_automatic(automatic),
-    m_handleimages(handleimages),
-    m_allowoverwrites(allowoverwrites),
-    m_allowgeneric(allowgeneric),
-    m_dvdorder(preferdvdorder),
-    m_host(host),
-    m_filename(filename),
+    m_handleImages(handleimages),
+    m_allowOverwrites(allowoverwrites),
+    m_allowGeneric(allowgeneric),
+    m_dvdOrder(preferdvdorder),
+    m_host(std::move(host)),
+    m_filename(std::move(filename)),
     m_title(title),
-    m_categories(categories),
-    m_userrating(userrating),
-    m_ratingcount(0),
-    m_subtitle(subtitle),
-    m_description(description),
+    m_categories(std::move(categories)),
+    m_userRating(userrating),
+    m_ratingCount(0),
+    m_subtitle(std::move(subtitle)),
+    m_description(std::move(description)),
     m_season(0),
     m_episode(0),
-    m_chanid(chanid),
-    m_channum(channum),
-    m_chansign(chansign),
-    m_channame(channame),
-    m_chanplaybackfilters(chanplaybackfilters),
-    m_recgroup(recgroup),
-    m_playgroup(playgroup),
-    m_seriesid(seriesid),
-    m_programid(programid),
-    m_storagegroup(storagegroup),
-    m_startts(startts),
-    m_endts(endts),
-    m_recstartts(recstartts),
-    m_recendts(recendts),
-    m_programflags(programflags),
-    m_audioproperties(audioproperties),
-    m_videoproperties(videoproperties),
-    m_subtitletype(subtitletype),
+    m_chanId(chanid),
+    m_chanNum(std::move(channum)),
+    m_chanSign(std::move(chansign)),
+    m_chanName(std::move(channame)),
+    m_chanPlaybackFilters(std::move(chanplaybackfilters)),
+    m_recGroup(std::move(recgroup)),
+    m_playGroup(std::move(playgroup)),
+    m_seriesId(std::move(seriesid)),
+    m_programid(std::move(programid)),
+    m_storageGroup(std::move(storagegroup)),
+    m_startTs(std::move(startts)),
+    m_endTs(std::move(endts)),
+    m_recStartTs(std::move(recstartts)),
+    m_recEndTs(std::move(recendts)),
+    m_programFlags(programflags),
+    m_audioProperties(audioproperties),
+    m_videoProperties(videoproperties),
+    m_subtitleType(subtitletype),
     m_year(year),
-    m_releasedate(releasedate),
-    m_lastupdated(lastupdated),
+    m_releaseDate(releasedate),
+    m_lastUpdated(std::move(lastupdated)),
     m_runtime(runtime),
-    m_runtimesecs(runtimesecs),
-    m_iscollection(false)
+    m_runtimeSecs(runtimesecs)
 {
-    m_tracknum = 0;
-    m_popularity = 0;
-    m_budget = 0;
-    m_revenue = 0;
+    QString manRecSuffix = QString(" (%1)").arg(QObject::tr("Manual Record"));
+    m_baseTitle = title;
+    m_baseTitle.replace(manRecSuffix,"");
 }
 
 // XBMC NFO-style constructor
@@ -325,73 +254,61 @@ MetadataLookup::MetadataLookup(
     bool allowoverwrites,
     bool allowgeneric,
     bool preferdvdorder,
-    const QString &host,
-    const QString &filename,
+    QString host,
+    QString filename,
     const QString &title,
-    const QStringList &categories,
+    QStringList categories,
     const float userrating,
-    const QString &subtitle,
-    const QString &tagline,
-    const QString &description,
+    QString subtitle,
+    QString tagline,
+    QString description,
     uint season,
     uint episode,
-    const QString &certification,
+    QString certification,
     const uint year,
     const QDate releasedate,
     const uint runtime,
     const uint runtimesecs,
-    const QString &inetref,
-    const PeopleMap people,
-    const QString &trailerURL,
-    const ArtworkMap artwork,
+    QString inetref,
+    PeopleMap people,
+    QString trailerURL,
+    ArtworkMap artwork,
     DownloadMap downloads) :
     ReferenceCounter("MetadataLookup"),
 
     m_type(type),
     m_subtype(subtype),
-    m_data(data),
+    m_data(std::move(data)),
     m_step(step),
     m_automatic(automatic),
-    m_handleimages(handleimages),
-    m_allowoverwrites(allowoverwrites),
-    m_allowgeneric(allowgeneric),
-    m_dvdorder(preferdvdorder),
-    m_host(host),
-    m_filename(filename),
+    m_handleImages(handleimages),
+    m_allowOverwrites(allowoverwrites),
+    m_allowGeneric(allowgeneric),
+    m_dvdOrder(preferdvdorder),
+    m_host(std::move(host)),
+    m_filename(std::move(filename)),
     m_title(title),
-    m_categories(categories),
-    m_userrating(userrating),
-    m_ratingcount(0),
-    m_subtitle(subtitle),
-    m_tagline(tagline),
-    m_description(description),
+    m_categories(std::move(categories)),
+    m_userRating(userrating),
+    m_subtitle(std::move(subtitle)),
+    m_tagline(std::move(tagline)),
+    m_description(std::move(description)),
     m_season(season),
     m_episode(episode),
-    m_chanid(0),
-    m_programflags(0),
-    m_audioproperties(0),
-    m_videoproperties(0),
-    m_subtitletype(0),
-    m_certification(certification),
-    m_popularity(0),
-    m_budget(0),
-    m_revenue(0),
-    m_tracknum(0),
+    m_certification(std::move(certification)),
     m_year(year),
-    m_releasedate(releasedate),
+    m_releaseDate(releasedate),
     m_runtime(runtime),
-    m_runtimesecs(runtimesecs),
-    m_inetref(inetref),
-    m_iscollection(false),
-    m_people(people),
-    m_trailerURL(trailerURL),
-    m_artwork(artwork),
-    m_downloads(downloads)
+    m_runtimeSecs(runtimesecs),
+    m_inetRef(std::move(inetref)),
+    m_people(std::move(people)),
+    m_trailerURL(std::move(trailerURL)),
+    m_artwork(std::move(artwork)),
+    m_downloads(std::move(downloads))
 {
-}
-
-MetadataLookup::~MetadataLookup()
-{
+    QString manRecSuffix = QString(" (%1)").arg(QObject::tr("Manual Record"));
+    m_baseTitle = title;
+    m_baseTitle.replace(manRecSuffix,"");
 }
 
 QList<PersonInfo> MetadataLookup::GetPeople(PeopleType type) const
@@ -434,56 +351,42 @@ void MetadataLookup::toMap(InfoMap &metadataMap)
     metadataMap["network"] = m_network;
     metadataMap["status"] = m_status;
     metadataMap["category"] = m_categories.join(", ");
-    metadataMap["userrating"] = QString::number(m_userrating);
-    metadataMap["ratingcount"] = QString::number(m_ratingcount);
+    metadataMap["userrating"] = QString::number(m_userRating);
+    metadataMap["ratingcount"] = QString::number(m_ratingCount);
     metadataMap["language"] = m_language;
     metadataMap["subtitle"] = m_subtitle;
     metadataMap["tagline"] = m_tagline;
-    metadataMap["description"] = m_description;
+    metadataMap["description0"] = metadataMap["description"] = m_description;
     metadataMap["season"] = QString::number(m_season);
     metadataMap["episode"] = QString::number(m_episode);
-    metadataMap["chanid"] = QString::number(m_chanid);
-    metadataMap["channum"] = m_channum;
-    metadataMap["callsign"] = m_chansign;
-    metadataMap["channame"] = m_channame;
-    metadataMap["playbackfilters"] = m_chanplaybackfilters;
-    metadataMap["recgroup"] = m_recgroup;
-    metadataMap["playgroup"] = m_playgroup;
-    metadataMap["seriesid"] = m_seriesid;
+    metadataMap["chanid"] = QString::number(m_chanId);
+    metadataMap["channum"] = m_chanNum;
+    metadataMap["callsign"] = m_chanSign;
+    metadataMap["channame"] = m_chanName;
+    metadataMap["playbackfilters"] = m_chanPlaybackFilters;
+    metadataMap["recgroup"] = m_recGroup;
+    metadataMap["playgroup"] = m_playGroup;
+    metadataMap["seriesid"] = m_seriesId;
     metadataMap["programid"] = m_programid;
-    metadataMap["storagegroup"] = m_storagegroup;
-    metadataMap["startts"] = MythDate::toString(m_startts, MythDate::kDateFull);
-    metadataMap["endts"] = MythDate::toString(m_endts, MythDate::kDateFull);
-    metadataMap["recstartts"] = MythDate::toString(m_recstartts, MythDate::kDateFull);
-    metadataMap["recendts"] = MythDate::toString(m_recendts, MythDate::kDateFull);
+    metadataMap["storagegroup"] = m_storageGroup;
+    metadataMap["startts"] = MythDate::toString(m_startTs, MythDate::kDateFull);
+    metadataMap["endts"] = MythDate::toString(m_endTs, MythDate::kDateFull);
+    metadataMap["recstartts"] = MythDate::toString(m_recStartTs, MythDate::kDateFull);
+    metadataMap["recendts"] = MythDate::toString(m_recEndTs, MythDate::kDateFull);
     metadataMap["certification"] = m_certification;
     metadataMap["countries"] = m_countries.join(", ");
     metadataMap["popularity"] = QString::number(m_popularity);
     metadataMap["budget"] = QString::number(m_budget);
     metadataMap["revenue"] = QString::number(m_revenue);
     metadataMap["album"] = m_album;
-    metadataMap["tracknum"] = QString::number(m_tracknum);
+    metadataMap["tracknum"] = QString::number(m_trackNum);
     metadataMap["system"] = m_system;
     metadataMap["year"] = QString::number(m_year);
 
     metadataMap["releasedate"] = MythDate::toString(
-        m_releasedate, MythDate::kDateFull);
-    metadataMap["lastupdated"] = MythDate::toString(m_lastupdated, MythDate::kDateFull);
+        m_releaseDate, MythDate::kDateFull);
+    metadataMap["lastupdated"] = MythDate::toString(m_lastUpdated, MythDate::kDateFull);
 
-#if QT_VERSION < 0x050000
-    metadataMap["runtime"] = QCoreApplication::translate("(Common)",
-                                                         "%n minute(s)",
-                                                         "",
-                                                         QCoreApplication::UnicodeUTF8,
-                                                         m_runtime);
-
-
-    metadataMap["runtimesecs"] = QCoreApplication::translate("(Common)",
-                                                             "%n second(s)",
-                                                             "",
-                                                             QCoreApplication::UnicodeUTF8,
-                                                             m_runtimesecs);
-#else
     metadataMap["runtime"] = QCoreApplication::translate("(Common)",
                                                          "%n minute(s)",
                                                          "",
@@ -493,11 +396,10 @@ void MetadataLookup::toMap(InfoMap &metadataMap)
     metadataMap["runtimesecs"] = QCoreApplication::translate("(Common)",
                                                              "%n second(s)",
                                                              "",
-                                                             m_runtimesecs);
-#endif
-    metadataMap["inetref"] = m_inetref;
-    metadataMap["collectionref"] = m_collectionref;
-    metadataMap["tmsref"] = m_tmsref;
+                                                             m_runtimeSecs);
+    metadataMap["inetref"] = m_inetRef;
+    metadataMap["collectionref"] = m_collectionRef;
+    metadataMap["tmsref"] = m_tmsRef;
     metadataMap["imdb"] = m_imdb;
     metadataMap["studios"] = m_studios.join(", ");
     metadataMap["homepage"] = m_homepage;
@@ -510,8 +412,8 @@ MetadataLookup* LookupFromProgramInfo(ProgramInfo *pginfo)
                            .secsTo(pginfo->GetRecordingEndTime());
     uint runtime = (runtimesecs/60);
 
-    MetadataLookup *ret = new MetadataLookup(kMetadataRecording, kUnknownVideo,
-        qVariantFromValue(pginfo), kLookupData, false, false, false, false, false,
+    auto *ret = new MetadataLookup(kMetadataRecording, kUnknownVideo,
+        QVariant::fromValue(pginfo), kLookupData, false, false, false, false, false,
         pginfo->GetHostname(),pginfo->GetBasename(),pginfo->GetTitle(),
         QStringList() << pginfo->GetCategory(), pginfo->GetStars() * 10,
         pginfo->GetSubtitle(), pginfo->GetDescription(), pginfo->GetChanID(),
@@ -570,7 +472,7 @@ QDomDocument CreateMetadataXML(ProgramInfo *pginfo)
         doc = CreateMetadataXML(lookup);
 
     lookup->DecrRef();
-    lookup = NULL;
+    lookup = nullptr;
 
     return doc;
 }
@@ -917,13 +819,13 @@ void CreateMetadataXMLItem(MetadataLookup *lookup,
                        lookup->GetRuntimeSeconds())));
     }
 
-    if (lookup->GetCertification().size())
+    if (!lookup->GetCertification().isEmpty())
         AddCertifications(lookup, item, docroot);
-    if (lookup->GetCategories().size())
+    if (!lookup->GetCategories().empty())
         AddCategories(lookup, item, docroot);
-    if (lookup->GetStudios().size())
+    if (!lookup->GetStudios().empty())
         AddStudios(lookup, item, docroot);
-    if (lookup->GetCountries().size())
+    if (!lookup->GetCountries().empty())
         AddCountries(lookup, item, docroot);
 }
 
@@ -1000,18 +902,56 @@ MetadataLookup* ParseMetadataItem(const QDomElement& item,
     if (!lookup)
         return new MetadataLookup();
 
-    uint season = 0, episode = 0, chanid = 0, programflags = 0,
-         audioproperties = 0, videoproperties = 0, subtitletype = 0,
-         tracknum = 0, popularity = 0, budget = 0, revenue = 0,
-         year = 0, runtime = 0, runtimesecs = 0, ratingcount = 0;
-    QString title, network, status, subtitle, tagline, description, certification,
-        channum, chansign, channame, chanplaybackfilters, recgroup,
-        playgroup, seriesid, programid, storagegroup, album, system,
-        inetref, collectionref, tmsref, imdb, homepage, trailerURL, language;
-    QStringList categories, countries, studios;
+    uint season = 0;
+    uint episode = 0;
+    uint chanid = 0;
+    uint programflags = 0;
+    uint audioproperties = 0;
+    uint videoproperties = 0;
+    uint subtitletype = 0;
+    uint tracknum = 0;
+    uint budget = 0;
+    uint revenue = 0;
+    uint year = 0;
+    uint runtime = 0;
+    uint runtimesecs = 0;
+    uint ratingcount = 0;
+    QString title;
+    QString network;
+    QString status;
+    QString subtitle;
+    QString tagline;
+    QString description;
+    QString certification;
+    QString channum;
+    QString chansign;
+    QString channame;
+    QString chanplaybackfilters;
+    QString recgroup;
+    QString playgroup;
+    QString seriesid;
+    QString programid;
+    QString storagegroup;
+    QString album;
+    QString system;
+    QString inetref;
+    QString collectionref;
+    QString tmsref;
+    QString imdb;
+    QString homepage;
+    QString trailerURL;
+    QString language;
+    QStringList categories;
+    QStringList countries;
+    QStringList studios;
     float userrating = 0;
+    float popularity = 0;
     QDate releasedate;
-    QDateTime lastupdated, startts, endts, recstartts, recendts;
+    QDateTime lastupdated;
+    QDateTime startts;
+    QDateTime endts;
+    QDateTime recstartts;
+    QDateTime recendts;
     PeopleMap people;
     ArtworkMap artwork;
 
@@ -1064,7 +1004,7 @@ MetadataLookup* ParseMetadataItem(const QDomElement& item,
     userrating = item.firstChildElement("userrating").text().toFloat();
     ratingcount = item.firstChildElement("ratingcount").text().toUInt();
     tracknum = item.firstChildElement("tracknum").text().toUInt();
-    popularity = item.firstChildElement("popularity").text().toUInt();
+    popularity = item.firstChildElement("popularity").text().toFloat();
     budget = item.firstChildElement("budget").text().toUInt();
     revenue = item.firstChildElement("revenue").text().toUInt();
     year = item.firstChildElement("year").text().toUInt();
@@ -1222,10 +1162,18 @@ MetadataLookup* ParseMetadataMovieNFO(const QDomElement& item,
     if (!lookup)
         return new MetadataLookup();
 
-    uint year = 0, runtime = 0, runtimesecs = 0,
-         season = 0, episode = 0;
-    QString title, subtitle, tagline, description,
-        inetref, trailer, certification;
+    uint year = 0;
+    uint runtime = 0;
+    uint runtimesecs = 0;
+    uint season = 0;
+    uint episode = 0;
+    QString title;
+    QString subtitle;
+    QString tagline;
+    QString description;
+    QString inetref;
+    QString trailer;
+    QString certification;
     float userrating = 0;
     QDate releasedate;
     QStringList categories;
@@ -1293,7 +1241,7 @@ MetadataLookup* ParseMetadataMovieNFO(const QDomElement& item,
         inetref, people, trailer, artwork, DownloadMap());
 }
 
-PeopleMap ParsePeople(QDomElement people)
+PeopleMap ParsePeople(const QDomElement& people)
 {
     PeopleMap ret;
 
@@ -1305,9 +1253,9 @@ PeopleMap ParsePeople(QDomElement people)
             if (person.hasAttribute("job"))
             {
                 QString jobstring = person.attribute("job");
-                PeopleType type;
+                PeopleType type = kPersonActor;
                 if (jobstring.toLower() == "actor")
-                    type = kPersonActor;
+                    type = kPersonActor; // NOLINT(bugprone-branch-clone)
                 else if (jobstring.toLower() == "author")
                     type = kPersonAuthor;
                 else if (jobstring.toLower() == "producer")
@@ -1351,7 +1299,7 @@ PeopleMap ParsePeople(QDomElement people)
     return ret;
 }
 
-ArtworkMap ParseArtwork(QDomElement artwork)
+ArtworkMap ParseArtwork(const QDomElement& artwork)
 {
     ArtworkMap ret;
 
@@ -1363,9 +1311,9 @@ ArtworkMap ParseArtwork(QDomElement artwork)
             if (image.hasAttribute("type"))
             {
                 QString typestring = image.attribute("type");
-                VideoArtworkType type;
+                VideoArtworkType type = kArtworkCoverart;
                 if (typestring.toLower() == "coverart")
-                    type = kArtworkCoverart;
+                    type = kArtworkCoverart; // NOLINT(bugprone-branch-clone)
                 else if (typestring.toLower() == "fanart")
                     type = kArtworkFanart;
                 else if (typestring.toLower() == "banner")
@@ -1408,20 +1356,17 @@ ArtworkMap ParseArtwork(QDomElement artwork)
 int editDistance( const QString& s, const QString& t )
 {
 #define D( i, j ) d[(i) * n + (j)]
-    int i;
-    int j;
     int m = s.length() + 1;
     int n = t.length() + 1;
     int *d = new int[m * n];
-    int result;
 
-    for ( i = 0; i < m; i++ )
+    for ( int i = 0; i < m; i++ )
       D( i, 0 ) = i;
-    for ( j = 0; j < n; j++ )
+    for ( int j = 0; j < n; j++ )
       D( 0, j ) = j;
-    for ( i = 1; i < m; i++ )
+    for ( int i = 1; i < m; i++ )
     {
-        for ( j = 1; j < n; j++ )
+        for ( int j = 1; j < n; j++ )
         {
             if ( s[i - 1] == t[j - 1] )
                 D( i, j ) = D( i - 1, j - 1 );
@@ -1434,7 +1379,7 @@ int editDistance( const QString& s, const QString& t )
             }
         }
     }
-    result = D( m - 1, n - 1 );
+    int result = D( m - 1, n - 1 );
     delete[] d;
     return result;
 #undef D
@@ -1468,8 +1413,7 @@ QString nearestName(const QString& actual, const QStringList& candidates)
     if ( numBest == 1 && deltaBest <= tolerance &&
        actual.length() + best.length() >= 5 )
         return best;
-    else
-        return QString();
+    return QString();
 }
 
 QDateTime RFC822TimeToQDateTime(const QString& t)
@@ -1480,7 +1424,8 @@ QDateTime RFC822TimeToQDateTime(const QString& t)
         return QDateTime();
 
     QString time = t.simplified();
-    short int hoursShift = 0, minutesShift = 0;
+    short int hoursShift = 0;
+    short int minutesShift = 0;
 
     QStringList tmp = time.split(' ');
     if (tmp.isEmpty())
@@ -1489,11 +1434,11 @@ QDateTime RFC822TimeToQDateTime(const QString& t)
         tmp.removeFirst();
     if (tmp.size() != 5)
         return QDateTime();
-    QString timezone = tmp.takeAt(tmp.size() -1);
-    if (timezone.size() == 5)
+    QString ltimezone = tmp.takeAt(tmp.size() -1);
+    if (ltimezone.size() == 5)
     {
-        bool ok;
-        int tz = timezone.toInt(&ok);
+        bool ok = false;
+        int tz = ltimezone.toInt(&ok);
         if(ok)
         {
             hoursShift = tz / 100;
@@ -1501,7 +1446,7 @@ QDateTime RFC822TimeToQDateTime(const QString& t)
         }
     }
     else
-        hoursShift = TimezoneOffsets.value(timezone, 0);
+        hoursShift = TimezoneOffsets.value(ltimezone, 0);
 
     if (tmp.at(0).size() == 1)
         tmp[0].prepend("0");
@@ -1520,5 +1465,3 @@ QDateTime RFC822TimeToQDateTime(const QString& t)
     result.setTimeSpec(Qt::UTC);
     return result;
 }
-
-

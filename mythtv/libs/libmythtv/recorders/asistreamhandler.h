@@ -18,15 +18,15 @@ class DTVSignalMonitor;
 class ASIChannel;
 class DeviceReadBuffer;
 
-typedef enum ASIClockSource
+enum ASIClockSource
 {
     kASIInternalClock         = 0,
     kASIExternalClock         = 1,
     kASIRecoveredReceiveClock = 2,
     kASIExternalClock2        = 1,
-} ASIClockSource;
+};
 
-typedef enum ASIRXMode
+enum ASIRXMode
 {
     kASIRXRawMode                  = 0,
     kASIRXSyncOn188                = 1,
@@ -34,7 +34,7 @@ typedef enum ASIRXMode
     kASIRXSyncOnActualSize         = 3,
     kASIRXSyncOnActualConvertTo188 = 4,
     kASIRXSyncOn204ConvertTo188    = 5,
-} ASIRXMode;
+};
 
 
 //#define RETUNE_TIMEOUT 5000
@@ -44,47 +44,46 @@ typedef enum ASIRXMode
 class ASIStreamHandler : public StreamHandler
 {
   public:
-    static ASIStreamHandler *Get(const QString &devicename,
-                                 int recorder_id = -1);
-    static void Return(ASIStreamHandler * & ref, int recorder_id = -1);
+    static ASIStreamHandler *Get(const QString &devname, int inputid);
+    static void Return(ASIStreamHandler * & ref, int inputid);
 
-    virtual void AddListener(MPEGStreamData *data,
-                             bool allow_section_reader = false,
-                             bool needs_drb            = false,
-                             QString output_file       = QString())
+    void AddListener(MPEGStreamData *data,
+                     bool /*allow_section_reader*/ = false,
+                     bool /*needs_drb*/            = false,
+                     QString output_file       = QString()) override // StreamHandler
     {
         StreamHandler::AddListener(data, false, true, output_file);
-    } // StreamHandler
+    }
 
     void SetClockSource(ASIClockSource cs);
     void SetRXMode(ASIRXMode m);
 
   private:
-    explicit ASIStreamHandler(const QString &);
+    explicit ASIStreamHandler(const QString &device, int inputid);
 
     bool Open(void);
     void Close(void);
 
-    virtual void run(void); // MThread
+    void run(void) override; // MThread
 
-    virtual void PriorityEvent(int fd); // DeviceReaderCB
+    void PriorityEvent(int fd) override; // DeviceReaderCB
 
-    virtual void SetRunningDesired(bool desired); // StreamHandler
+    void SetRunningDesired(bool desired) override; // StreamHandler
 
   private:
-    int                                     _device_num;
-    int                                     _buf_size;
-    int                                     _num_buffers;
-    int                                     _fd;
-    uint                                    _packet_size;
-    ASIClockSource                          _clock_source;
-    ASIRXMode                               _rx_mode;
-    DeviceReadBuffer                       *_drb;
+    int               m_deviceNum    {-1};
+    int               m_bufSize      {-1};
+    int               m_numBuffers   {-1};
+    int               m_fd           {-1};
+    uint              m_packetSize   {TSPacket::kSize};
+    ASIClockSource    m_clockSource  {kASIInternalClock};
+    ASIRXMode         m_rxMode       {kASIRXSyncOnActualConvertTo188};
+    DeviceReadBuffer *m_drb          {nullptr};
 
     // for implementing Get & Return
-    static QMutex                           _handlers_lock;
-    static QMap<QString, ASIStreamHandler*> _handlers;
-    static QMap<QString, uint>              _handlers_refcnt;
+    static QMutex                           s_handlersLock;
+    static QMap<QString, ASIStreamHandler*> s_handlers;
+    static QMap<QString, uint>              s_handlersRefCnt;
 };
 
 #endif // _ASISTREAMHANDLER_H_

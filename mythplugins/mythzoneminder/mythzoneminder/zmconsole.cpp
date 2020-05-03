@@ -33,13 +33,6 @@
 const int STATUS_UPDATE_TIME = 1000 * 10; // update the status every 10 seconds
 const int TIME_UPDATE_TIME = 1000 * 1;    // update the time every 1 second
 
-FunctionDialog::FunctionDialog(MythScreenStack *parent, Monitor *monitor) :
-    MythScreenType(parent, "functionpopup"), m_monitor(monitor),
-    m_captionText(NULL), m_functionList(NULL),
-    m_enabledCheck(NULL), m_notificationCheck(NULL), m_okButton(NULL)
-{
-}
-
 bool FunctionDialog::Create()
 {
     if (!LoadWindowFromXML("zoneminder-ui.xml", "functionpopup", this))
@@ -124,9 +117,6 @@ void FunctionDialog::setMonitorFunction(void)
 
 ZMConsole::ZMConsole(MythScreenStack *parent)
           :MythScreenType(parent, "zmconsole"),
-           m_monitor_list(NULL), m_running_text(NULL), m_status_text(NULL),
-           m_time_text(NULL), m_date_text(NULL), m_load_text(NULL),
-           m_disk_text(NULL), m_functionDialog(NULL),
            m_popupStack(GetMythMainWindow()->GetStack("popup stack")),
            m_timeTimer(new QTimer(this)), m_updateTimer(new QTimer(this))
 {
@@ -146,21 +136,18 @@ ZMConsole::~ZMConsole()
 
 bool ZMConsole::Create(void)
 {
-    bool foundtheme = false;
-
     // Load the theme for this screen
-    foundtheme = LoadWindowFromXML("zoneminder-ui.xml", "zmconsole", this);
-
+    bool foundtheme = LoadWindowFromXML("zoneminder-ui.xml", "zmconsole", this);
     if (!foundtheme)
         return false;
 
     bool err = false;
-    UIUtilE::Assign(this, m_monitor_list, "monitor_list", &err);
-    UIUtilE::Assign(this, m_status_text,  "status_text", &err);
-    UIUtilE::Assign(this, m_time_text,    "time_text", &err);
-    UIUtilE::Assign(this, m_date_text,    "date_text", &err);
-    UIUtilE::Assign(this, m_load_text,    "load_text", &err);
-    UIUtilE::Assign(this, m_disk_text,    "disk_text", &err);
+    UIUtilE::Assign(this, m_monitorList, "monitor_list", &err);
+    UIUtilE::Assign(this, m_statusText,  "status_text", &err);
+    UIUtilE::Assign(this, m_timeText,    "time_text", &err);
+    UIUtilE::Assign(this, m_dateText,    "date_text", &err);
+    UIUtilE::Assign(this, m_loadText,    "load_text", &err);
+    UIUtilE::Assign(this, m_diskText,    "disk_text", &err);
 
     if (err)
     {
@@ -170,7 +157,7 @@ bool ZMConsole::Create(void)
 
     BuildFocusList();
 
-    SetFocusWidget(m_monitor_list);
+    SetFocusWidget(m_monitorList);
 
     m_timeTimer->start(TIME_UPDATE_TIME);
     m_updateTimer->start(100);
@@ -184,13 +171,13 @@ void ZMConsole::updateTime(void)
 {
     QString s = MythDate::current().toLocalTime().toString(m_timeFormat);
 
-    if (s != m_time_text->GetText())
-        m_time_text->SetText(s);
+    if (s != m_timeText->GetText())
+        m_timeText->SetText(s);
 
     s = MythDate::current().toLocalTime().toString("dddd\ndd MMM yyyy");
 
-    if (s != m_date_text->GetText())
-        m_date_text->SetText(s);
+    if (s != m_dateText->GetText())
+        m_dateText->SetText(s);
 }
 
 void ZMConsole::updateStatus()
@@ -207,17 +194,17 @@ void ZMConsole::getDaemonStatus(void)
 
     if (m_daemonStatus.left(7) == "running")
     {
-        m_status_text->SetFontState("running");
-        m_status_text->SetText(tr("Running"));
+        m_statusText->SetFontState("running");
+        m_statusText->SetText(tr("Running"));
     }
     else
     {
-        m_status_text->SetFontState("stopped");
-        m_status_text->SetText(tr("Stopped"));
+        m_statusText->SetFontState("stopped");
+        m_statusText->SetText(tr("Stopped"));
     }
 
-    m_load_text->SetText("Load: " + m_cpuStat);
-    m_disk_text->SetText("Disk: " + m_diskStat);
+    m_loadText->SetText("Load: " + m_cpuStat);
+    m_diskText->SetText("Disk: " + m_diskStat);
 }
 
 void ZMConsole::getMonitorStatus(void)
@@ -230,9 +217,8 @@ bool ZMConsole::keyPressEvent(QKeyEvent *event)
     if (GetFocusWidget()->keyPressEvent(event))
         return true;
 
-    bool handled = false;
     QStringList actions;
-    handled = GetMythMainWindow()->TranslateKeyPress("Global", event, actions);
+    bool handled = GetMythMainWindow()->TranslateKeyPress("Global", event, actions);
 
     for (int i = 0; i < actions.size() && !handled; i++)
     {
@@ -255,10 +241,7 @@ bool ZMConsole::keyPressEvent(QKeyEvent *event)
 
 void ZMConsole::showEditFunctionPopup()
 {
-    Monitor *currentMonitor = NULL;
-
-    currentMonitor = m_monitor_list->GetItemCurrent()->GetData().value<Monitor*>();
-
+    auto *currentMonitor = m_monitorList->GetItemCurrent()->GetData().value<Monitor*>();
     if (!currentMonitor)
         return;
 
@@ -276,8 +259,8 @@ void ZMConsole::updateMonitorList()
 {
     ZMClient::get()->updateMonitorStatus();
 
-    int pos = m_monitor_list->GetCurrentPos();
-    m_monitor_list->Reset();
+    int pos = m_monitorList->GetCurrentPos();
+    m_monitorList->Reset();
 
     for (int x = 0; x < ZMClient::get()->getMonitorCount(); x++)
     {
@@ -285,9 +268,9 @@ void ZMConsole::updateMonitorList()
 
         if (monitor)
         {
-            MythUIButtonListItem *item = new MythUIButtonListItem(m_monitor_list,
-                "", NULL, true, MythUIButtonListItem::NotChecked);
-            item->SetData(qVariantFromValue(monitor));
+            auto *item = new MythUIButtonListItem(m_monitorList,
+                "", nullptr, true, MythUIButtonListItem::NotChecked);
+            item->SetData(QVariant::fromValue(monitor));
             item->SetText(monitor->name, "name");
             item->SetText(monitor->zmcStatus, "zmcstatus");
             item->SetText(monitor->zmaStatus, "zmastatus");
@@ -295,7 +278,7 @@ void ZMConsole::updateMonitorList()
         }
     }
 
-    m_monitor_list->SetItemCurrent(pos);
+    m_monitorList->SetItemCurrent(pos);
 }
 
 void ZMConsole::functionChanged(bool changed)

@@ -18,9 +18,7 @@ extern "C" {
 class RemoteAVFormatContext
 {
   public:
-    explicit RemoteAVFormatContext(const QString &filename = "") :
-        m_inputFC(NULL), m_inputIsRemote(false), m_isOpen(false),
-        m_rf(NULL), m_byteIOContext(NULL), m_buffer(NULL)
+    explicit RemoteAVFormatContext(const QString &filename = "")
     { if (!filename.isEmpty()) Open(filename); }
 
     ~RemoteAVFormatContext()
@@ -42,8 +40,7 @@ class RemoteAVFormatContext
             avformat_free_context(m_inputFC);
         m_inputFC = avformat_alloc_context();
 
-        if (m_rf)
-            delete m_rf;
+        delete m_rf;
 
         m_inputIsRemote = filename.startsWith("myth://");
         if (m_inputIsRemote)
@@ -56,7 +53,7 @@ class RemoteAVFormatContext
             const int BUFFER_SIZE = 0x20000;
             if (!m_buffer)
             {
-                m_buffer = (unsigned char*)av_malloc(BUFFER_SIZE + FF_INPUT_BUFFER_PADDING_SIZE);
+                m_buffer = (unsigned char*)av_malloc(BUFFER_SIZE + AV_INPUT_BUFFER_PADDING_SIZE);
                 if (!m_buffer)
                     return false;
             }
@@ -78,16 +75,13 @@ class RemoteAVFormatContext
                 LOG(VB_GENERAL, LOG_ERR,  QString("RemoteAVFormatContext::Open: Failed to probe file: %1").arg(filename));
                 return false;
             }
-            else
-            {
-                LOG(VB_PLAYBACK, LOG_INFO,  QString("RemoteAVFormatContext::Open: probed file as %1").arg(fmt->name));
-            }
+            LOG(VB_PLAYBACK, LOG_INFO,  QString("RemoteAVFormatContext::Open: probed file as %1").arg(fmt->name));
 
             m_rf->Seek(0, SEEK_SET);
 
             m_inputFC->pb = m_byteIOContext;
 
-            int ret = avformat_open_input(&m_inputFC, "stream", fmt, NULL);
+            int ret = avformat_open_input(&m_inputFC, "stream", fmt, nullptr);
             if (ret)
             {
                 LOG(VB_GENERAL, LOG_ERR,  QString("RemoteAVFormatContext::Open: Failed to open input: %1").arg(filename));
@@ -97,12 +91,12 @@ class RemoteAVFormatContext
         else
         {
             // if this is a ice/shoutcast stream setup grabbing the inline metadata
-            AVDictionary *options = NULL;
+            AVDictionary *options = nullptr;
 
             if (filename.startsWith("http://"))
                 av_dict_set(&options, "icy", "1", 0);
 
-            int ret = avformat_open_input(&m_inputFC,  qPrintable(filename), NULL, &options);
+            int ret = avformat_open_input(&m_inputFC,  qPrintable(filename), nullptr, &options);
             if (ret)
             {
                 LOG(VB_GENERAL, LOG_ERR,  QString("RemoteAVFormatContext::Open: Failed to open input: %1").arg(filename));
@@ -119,14 +113,11 @@ class RemoteAVFormatContext
         if (m_inputFC)
         {
             avformat_close_input(&m_inputFC);
-            m_inputFC = NULL;
+            m_inputFC = nullptr;
         }
 
-        if (m_rf)
-        {
-            delete m_rf;
-            m_rf = NULL;
-        }
+        delete m_rf;
+        m_rf = nullptr;
 
         m_isOpen = false;
     }
@@ -140,15 +131,16 @@ class RemoteAVFormatContext
   private:
     static int ReadFunc(void *opaque, uint8_t *buf, int buf_size)
     {
-        RemoteFile *rf = reinterpret_cast< RemoteFile* >(opaque);
+        auto *rf = reinterpret_cast< RemoteFile* >(opaque);
         return rf->Read(buf, buf_size);
     }
 
-    static int WriteFunc(void *, uint8_t *, int) {  return -1; }
+    static int WriteFunc(void */*opaque*/, uint8_t */*buf*/, int/*buf_size*/)
+    {  return -1; }
 
     static int64_t SeekFunc(void *opaque, int64_t offset, int whence)
     {
-        RemoteFile *rf = reinterpret_cast< RemoteFile* >(opaque);
+        auto *rf = reinterpret_cast< RemoteFile* >(opaque);
         if (whence == AVSEEK_SIZE)
             return rf->GetFileSize();
 
@@ -156,11 +148,11 @@ class RemoteAVFormatContext
     }
 
   private:
-    AVFormatContext *m_inputFC;
-    bool m_inputIsRemote;
-    bool m_isOpen;
-    RemoteFile *m_rf;
-    AVIOContext *m_byteIOContext;
-    unsigned char *m_buffer;
+    AVFormatContext *m_inputFC       { nullptr };
+    bool             m_inputIsRemote {   false };
+    bool             m_isOpen        {   false };
+    RemoteFile      *m_rf            { nullptr };
+    AVIOContext     *m_byteIOContext { nullptr };
+    unsigned char   *m_buffer        { nullptr };
 };
 #endif // REMOTEAVFORMATCONTEXT_H

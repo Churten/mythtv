@@ -1,12 +1,12 @@
 
 #include "recordingprofile.h"
+
 #include "cardutil.h"
 #include "mythcorecontext.h"
 #include "mythdb.h"
 #include "mythlogging.h"
-#include "mythwizard.h"
-#include "mythwidgets.h" // for MythLineEdit
 #include "v4l2util.h"
+#include <utility>
 
 QString RecordingProfileStorage::GetWhereClause(MSqlBindings &bindings) const
 {
@@ -23,18 +23,18 @@ class CodecParamStorage : public SimpleDBStorage
   protected:
     CodecParamStorage(StandardSetting *_setting,
                       const RecordingProfile &parentProfile,
-                      QString name) :
+                      const QString& name) :
         SimpleDBStorage(_setting, "codecparams", "value"),
-        m_parent(parentProfile), codecname(name)
+        m_parent(parentProfile), m_codecName(name)
     {
         _setting->setName(name);
     }
 
-    virtual QString GetSetClause(MSqlBindings &bindings) const;
-    virtual QString GetWhereClause(MSqlBindings &bindings) const;
+    QString GetSetClause(MSqlBindings &bindings) const override; // SimpleDBStorage
+    QString GetWhereClause(MSqlBindings &bindings) const override; // SimpleDBStorage
 
     const RecordingProfile &m_parent;
-    QString codecname;
+    QString m_codecName;
 };
 
 QString CodecParamStorage::GetSetClause(MSqlBindings &bindings) const
@@ -47,8 +47,8 @@ QString CodecParamStorage::GetSetClause(MSqlBindings &bindings) const
             + ", value = " + valueTag);
 
     bindings.insert(profileTag, m_parent.getProfileNum());
-    bindings.insert(nameTag, codecname);
-    bindings.insert(valueTag, user->GetDBValue());
+    bindings.insert(nameTag, m_codecName);
+    bindings.insert(valueTag, m_user->GetDBValue());
 
     return query;
 }
@@ -61,7 +61,7 @@ QString CodecParamStorage::GetWhereClause(MSqlBindings &bindings) const
     QString query("profile = " + profileTag + " AND name = " + nameTag);
 
     bindings.insert(profileTag, m_parent.getProfileNum());
-    bindings.insert(nameTag, codecname);
+    bindings.insert(nameTag, m_codecName);
 
     return query;
 }
@@ -109,7 +109,7 @@ class BTTVVolume : public MythUISpinBoxSetting, public CodecParamStorage
 class SampleRate : public MythUIComboBoxSetting, public CodecParamStorage
 {
   public:
-    SampleRate(const RecordingProfile &parent, bool analog = true) :
+    explicit SampleRate(const RecordingProfile &parent, bool analog = true) :
         MythUIComboBoxSetting(this), CodecParamStorage(this, parent, "samplerate")
     {
         setLabel(QObject::tr("Sampling rate"));
@@ -117,42 +117,42 @@ class SampleRate : public MythUIComboBoxSetting, public CodecParamStorage
                     "Ensure that you choose a sampling rate appropriate "
                     "for your device.  btaudio may only allow 32000."));
 
-        rates.push_back(32000);
-        rates.push_back(44100);
-        rates.push_back(48000);
+        m_rates.push_back(32000);
+        m_rates.push_back(44100);
+        m_rates.push_back(48000);
 
-        allowed_rate[48000] = true;
-        for (uint i = 0; analog && (i < rates.size()); i++)
-            allowed_rate[rates[i]] = true;
+        m_allowedRate[48000] = true;
+        for (uint i = 0; analog && (i < m_rates.size()); i++)
+            m_allowedRate[m_rates[i]] = true;
 
     };
 
-    void Load(void)
+    void Load(void) override // StandardSetting
     {
         CodecParamStorage::Load();
         QString val = getValue();
 
         clearSelections();
-        for (uint i = 0; i < rates.size(); i++)
+        for (uint rate : m_rates)
         {
-            if (allowed_rate[rates[i]])
-                addSelection(QString::number(rates[i]));
+            if (m_allowedRate[rate])
+                addSelection(QString::number(rate));
         }
 
         int which = getValueIndex(val);
         setValue(max(which,0));
 
-        if (allowed_rate.size() <= 1)
+        if (m_allowedRate.size() <= 1)
             setEnabled(false);
     }
 
     void addSelection(const QString &label,
-                      QString        value  = QString::null,
+                      const QString& value  = QString(),
                       bool           select = false)
     {
         QString val = value.isEmpty() ? label : value;
         uint rate = val.toUInt();
-        if (allowed_rate[rate])
+        if (m_allowedRate[rate])
         {
             MythUIComboBoxSetting::addSelection(label, value, select);
         }
@@ -164,8 +164,8 @@ class SampleRate : public MythUIComboBoxSetting, public CodecParamStorage
         }
     }
 
-    vector<uint>    rates;
-    QMap<uint,bool> allowed_rate;
+    vector<uint>    m_rates;
+    QMap<uint,bool> m_allowedRate;
 };
 
 class MPEG2audType : public MythUIComboBoxSetting, public CodecParamStorage
@@ -174,21 +174,21 @@ class MPEG2audType : public MythUIComboBoxSetting, public CodecParamStorage
     MPEG2audType(const RecordingProfile &parent,
                  bool layer1, bool layer2, bool layer3) :
         MythUIComboBoxSetting(this), CodecParamStorage(this, parent, "mpeg2audtype"),
-        allow_layer1(layer1), allow_layer2(layer2), allow_layer3(layer3)
+        m_allowLayer1(layer1), m_allowLayer2(layer2), m_allowLayer3(layer3)
     {
         setLabel(QObject::tr("Type"));
 
-        if (allow_layer1)
+        if (m_allowLayer1)
             addSelection("Layer I");
-        if (allow_layer2)
+        if (m_allowLayer2)
             addSelection("Layer II");
-        if (allow_layer3)
+        if (m_allowLayer3)
             addSelection("Layer III");
 
         uint allowed_cnt = 0;
-        allowed_cnt += ((allow_layer1) ? 1 : 0);
-        allowed_cnt += ((allow_layer2) ? 1 : 0);
-        allowed_cnt += ((allow_layer3) ? 1 : 0);
+        allowed_cnt += ((m_allowLayer1) ? 1 : 0);
+        allowed_cnt += ((m_allowLayer2) ? 1 : 0);
+        allowed_cnt += ((m_allowLayer3) ? 1 : 0);
 
         if (1 == allowed_cnt)
             setEnabled(false);
@@ -196,27 +196,27 @@ class MPEG2audType : public MythUIComboBoxSetting, public CodecParamStorage
         setHelpText(QObject::tr("Sets the audio type"));
     }
 
-    void Load(void)
+    void Load(void) override // StandardSetting
     {
         CodecParamStorage::Load();
         QString val = getValue();
 
-        if ((val == "Layer I") && !allow_layer1)
+        if ((val == "Layer I") && !m_allowLayer1)
         {
-            val = (allow_layer2) ? "Layer II" :
-                ((allow_layer3) ? "Layer III" : val);
+            val = (m_allowLayer2) ? "Layer II" :
+                ((m_allowLayer3) ? "Layer III" : val);
         }
 
-        if ((val == "Layer II") && !allow_layer2)
+        if ((val == "Layer II") && !m_allowLayer2)
         {
-            val = (allow_layer3) ? "Layer III" :
-                ((allow_layer1) ? "Layer I" : val);
+            val = (m_allowLayer3) ? "Layer III" :
+                ((m_allowLayer1) ? "Layer I" : val);
         }
 
-        if ((val == "Layer III") && !allow_layer3)
+        if ((val == "Layer III") && !m_allowLayer3)
         {
-            val = (allow_layer2) ? "Layer II" :
-                ((allow_layer1) ? "Layer I" : val);
+            val = (m_allowLayer2) ? "Layer II" :
+                ((m_allowLayer1) ? "Layer I" : val);
         }
 
         if (getValue() != val)
@@ -228,9 +228,9 @@ class MPEG2audType : public MythUIComboBoxSetting, public CodecParamStorage
     }
 
   private:
-    bool allow_layer1;
-    bool allow_layer2;
-    bool allow_layer3;
+    bool m_allowLayer1;
+    bool m_allowLayer2;
+    bool m_allowLayer3;
 };
 
 class MPEG2audBitrateL1 : public MythUIComboBoxSetting, public CodecParamStorage
@@ -342,8 +342,7 @@ class MPEG2AudioBitrateSettings : public GroupSetting
 
         setLabel(QObject::tr("Bitrate Settings"));
 
-        MPEG2audType *audType = new MPEG2audType(
-            parent, layer1, layer2, layer3);
+        auto *audType = new MPEG2audType(parent, layer1, layer2, layer3);
 
         addChild(audType);
 
@@ -382,8 +381,8 @@ class MPEG2Language : public MythUIComboBoxSetting, public CodecParamStorage
 class BitrateMode : public MythUIComboBoxSetting, public CodecParamStorage
 {
   public:
-    BitrateMode(const RecordingProfile& parent,
-                QString setting = "mpeg2bitratemode") :
+    explicit BitrateMode(const RecordingProfile& parent,
+                const QString& setting = "mpeg2bitratemode") :
         MythUIComboBoxSetting(this),
         CodecParamStorage(this, parent, setting)
     {
@@ -409,25 +408,27 @@ class AudioCompressionSettings : public GroupSetting
         addChild(m_codecName);
 
         QString label("MP3");
-        addTargetedChild(label, new SampleRate(m_parent));
-        addTargetedChild(label, new MP3Quality(m_parent));
-        addTargetedChild(label, new BTTVVolume(m_parent));
+        m_codecName->addTargetedChild(label, new SampleRate(m_parent));
+        m_codecName->addTargetedChild(label, new MP3Quality(m_parent));
+        m_codecName->addTargetedChild(label, new BTTVVolume(m_parent));
 
         label = "MPEG-2 Hardware Encoder";
-        addTargetedChild(label, new SampleRate(m_parent, false));
-        addTargetedChild(label,
-                         new MPEG2AudioBitrateSettings(
-                             m_parent, false, true, false, 2));
-        addTargetedChild(label, new MPEG2Language(m_parent));
-        addTargetedChild(label, new MPEG2audVolume(m_parent));
+        m_codecName->addTargetedChild(label, new SampleRate(m_parent, false));
+        m_codecName->addTargetedChild(label,
+                                      new MPEG2AudioBitrateSettings
+                                      (m_parent, false, true, false, 2));
+        m_codecName->addTargetedChild(label, new MPEG2Language(m_parent));
+        m_codecName->addTargetedChild(label, new MPEG2audVolume(m_parent));
 
         label = "Uncompressed";
-        addTargetedChild(label, new SampleRate(m_parent));
-        addTargetedChild(label, new BTTVVolume(m_parent));
+        m_codecName->addTargetedChild(label, new SampleRate(m_parent));
+        m_codecName->addTargetedChild(label, new BTTVVolume(m_parent));
 
-        addTargetedChild("AC3 Hardware Encoder", new GroupSetting());
+        m_codecName->addTargetedChild("AC3 Hardware Encoder",
+                                      new GroupSetting());
 
-        addTargetedChild("AAC Hardware Encoder", new GroupSetting());
+        m_codecName->addTargetedChild("AAC Hardware Encoder",
+                                      new GroupSetting());
 
 #ifdef USING_V4L2
         if (v4l2)
@@ -439,68 +440,79 @@ class AudioCompressionSettings : public GroupSetting
 
             if (v4l2->GetOptions(options))
             {
-                GroupSetting* grp =
-                    new GroupSetting();
+                /* StandardSetting cannot handle multiple 'targets' pointing
+                 * to the same setting configuration, so we need to do
+                 * this in two passes. */
 
-                DriverOption::Options::iterator Iopt = options.begin();
-                for ( ; Iopt != options.end(); ++Iopt)
+                foreach (auto & option, options)
                 {
-                    if ((*Iopt).category == DriverOption::AUDIO_BITRATE_MODE)
+                    if (option.m_category == DriverOption::AUDIO_ENCODING)
                     {
-                        grp->addChild(new BitrateMode
-                                      (m_parent, "audbitratemode"));
-                    }
-                    else if ((*Iopt).category == DriverOption::AUDIO_SAMPLERATE)
-                    {
-                        grp->addChild(new SampleRate(m_parent, false));
-                    }
-                    else if ((*Iopt).category == DriverOption::AUDIO_ENCODING)
-                    {
-                        DriverOption::menu_t::iterator Imenu =
-                            (*Iopt).menu.begin();
-                        for ( ; Imenu != (*Iopt).menu.end(); ++Imenu)
+                        foreach (const auto & Imenu, option.m_menu)
                         {
-                            if (!(*Imenu).isEmpty())
-                                m_v4l2codecs << "V4L2:" + *Imenu;
+                            if (!Imenu.isEmpty())
+                                m_v4l2codecs << "V4L2:" + Imenu;
                         }
-                    }
-                    else if ((*Iopt).category == DriverOption::AUDIO_LANGUAGE)
-                    {
-                        grp->addChild(new MPEG2Language(m_parent));
-                    }
-                    else if ((*Iopt).category == DriverOption::AUDIO_BITRATE)
-                    {
-                        bool layer1, layer2, layer3;
-                        layer1 = layer2 = layer3 = false;
-
-                        DriverOption::menu_t::iterator Imenu =
-                            (*Iopt).menu.begin();
-                        for ( ; Imenu != (*Iopt).menu.end(); ++Imenu)
-                        {
-                            if ((*Imenu).indexOf("Layer III") >= 0)
-                                layer3 = true;
-                            else if ((*Imenu).indexOf("Layer II") >= 0)
-                                layer2 = true;
-                            else if ((*Imenu).indexOf("Layer I") >= 0)
-                                layer1 = true;
-                        }
-
-                        if (layer1 || layer2 || layer3)
-                            grp->addChild(new MPEG2AudioBitrateSettings
-                                          (m_parent, layer1, layer2,
-                                           layer3, 2));
-                    }
-                    else if ((*Iopt).category == DriverOption::VOLUME)
-                    {
-                        grp->addChild(new MPEG2audVolume(m_parent));
                     }
                 }
 
-                QStringList::iterator Icodec = m_v4l2codecs.begin();
-                for ( ; Icodec < m_v4l2codecs.end(); ++Icodec)
-                    addTargetedChild(*Icodec, grp);
+                for (auto Icodec = m_v4l2codecs.begin(); Icodec < m_v4l2codecs.end(); ++Icodec)
+                {
+                    foreach (auto & option, options)
+                    {
+                        if (option.m_category == DriverOption::AUDIO_BITRATE_MODE)
+                        {
+                            m_codecName->addTargetedChild(*Icodec,
+                                 new BitrateMode(m_parent, "audbitratemode"));
+                        }
+                        else if (option.m_category ==
+                                 DriverOption::AUDIO_SAMPLERATE)
+                        {
+                            m_codecName->addTargetedChild(*Icodec,
+                                             new SampleRate(m_parent, false));
+                        }
+                        else if (option.m_category ==
+                                 DriverOption::AUDIO_LANGUAGE)
+                        {
+                            m_codecName->addTargetedChild(*Icodec,
+                                             new MPEG2Language(m_parent));
+                        }
+                        else if (option.m_category == DriverOption::AUDIO_BITRATE)
+                        {
+                            bool layer1 = false;
+                            bool layer2 = false;
+                            bool layer3 = false;
+
+                            foreach (const auto & Imenu, option.m_menu)
+                            {
+                                if (Imenu.indexOf("Layer III") >= 0)
+                                    layer3 = true;
+                                else if (Imenu.indexOf("Layer II") >= 0)
+                                    layer2 = true;
+                                else if (Imenu.indexOf("Layer I") >= 0)
+                                    layer1 = true;
+                            }
+
+                            if (layer1 || layer2 || layer3)
+                            {
+                                m_codecName->addTargetedChild(*Icodec,
+                                       new MPEG2AudioBitrateSettings(m_parent,
+                                                                     layer1,
+                                                                     layer2,
+                                                                     layer3, 2));
+                            }
+                        }
+                        else if (option.m_category == DriverOption::VOLUME)
+                        {
+                            m_codecName->addTargetedChild(*Icodec,
+                                                new MPEG2audVolume(m_parent));
+                        }
+                    }
+                }
             }
         }
+#else
+	Q_UNUSED(v4l2);
 #endif //  USING_V4L2
     }
 
@@ -517,9 +529,8 @@ class AudioCompressionSettings : public GroupSetting
             }
             else if (groupType.startsWith("V4L2:"))
             {
-                QStringList::iterator Icodec = m_v4l2codecs.begin();
-                for ( ; Icodec != m_v4l2codecs.end(); ++Icodec)
-                    m_codecName->addSelection(*Icodec);
+                foreach (auto & codec, m_v4l2codecs)
+                    m_codecName->addSelection(codec);
             }
             else
             {
@@ -749,11 +760,11 @@ class EncodingThreadCount : public MythUISpinBoxSetting, public CodecParamStorag
 class AverageBitrate : public MythUISpinBoxSetting, public CodecParamStorage
 {
   public:
-    AverageBitrate(const RecordingProfile &parent,
-                   QString setting = "mpeg2bitrate",
+    explicit AverageBitrate(const RecordingProfile &parent,
+                   const QString& setting = "mpeg2bitrate",
                    uint min_br = 1000, uint max_br = 16000,
                    uint default_br = 4500, uint increment = 100,
-                   QString label = QString::null) :
+                   QString label = QString()) :
         MythUISpinBoxSetting(this, min_br, max_br, increment),
         CodecParamStorage(this, parent, setting)
     {
@@ -770,11 +781,11 @@ class AverageBitrate : public MythUISpinBoxSetting, public CodecParamStorage
 class PeakBitrate : public MythUISpinBoxSetting, public CodecParamStorage
 {
   public:
-    PeakBitrate(const RecordingProfile &parent,
-                QString setting = "mpeg2maxbitrate",
+    explicit PeakBitrate(const RecordingProfile &parent,
+                const QString& setting = "mpeg2maxbitrate",
                 uint min_br = 1000, uint max_br = 16000,
                 uint default_br = 6000, uint increment = 100,
-                QString label = QString::null) :
+                QString label = QString()) :
         MythUISpinBoxSetting(this, min_br, max_br, increment),
         CodecParamStorage(this, parent, setting)
     {
@@ -790,7 +801,7 @@ class PeakBitrate : public MythUISpinBoxSetting, public CodecParamStorage
 class MPEG2streamType : public MythUIComboBoxSetting, public CodecParamStorage
 {
   public:
-    MPEG2streamType(const RecordingProfile &parent,
+    explicit MPEG2streamType(const RecordingProfile &parent,
                     uint minopt = 0, uint maxopt = 8, uint defopt = 0) :
         MythUIComboBoxSetting(this),
         CodecParamStorage(this, parent, "mpeg2streamtype")
@@ -816,7 +827,7 @@ class MPEG2streamType : public MythUIComboBoxSetting, public CodecParamStorage
 class MPEG2aspectRatio : public MythUIComboBoxSetting, public CodecParamStorage
 {
   public:
-    MPEG2aspectRatio(const RecordingProfile &parent,
+    explicit MPEG2aspectRatio(const RecordingProfile &parent,
                      uint minopt = 0, uint maxopt = 8, uint defopt = 0) :
         MythUIComboBoxSetting(this),
         CodecParamStorage(this, parent, "mpeg2aspectratio")
@@ -937,7 +948,7 @@ class VideoCompressionSettings : public GroupSetting
         m_codecName->addTargetedChild(label, new PeakBitrate(m_parent));
 
         label = "MPEG-4 AVC Hardware Encoder";
-        GroupSetting *h0 = new GroupSetting();
+        auto *h0 = new GroupSetting();
         h0->setLabel(QObject::tr("Low Resolution"));
         h0->addChild(new AverageBitrate(m_parent, "low_mpeg4avgbitrate",
                                         1000, 13500, 4500, 500));
@@ -945,7 +956,7 @@ class VideoCompressionSettings : public GroupSetting
                                      1100, 20200, 6000, 500));
         m_codecName->addTargetedChild(label, h0);
 
-        GroupSetting *h1 = new GroupSetting();
+        auto *h1 = new GroupSetting();
         h1->setLabel(QObject::tr("Medium Resolution"));
         h1->addChild(new AverageBitrate(m_parent, "medium_mpeg4avgbitrate",
                                         1000, 13500, 9000, 500));
@@ -953,7 +964,7 @@ class VideoCompressionSettings : public GroupSetting
                                      1100, 20200, 11000, 500));
         m_codecName->addTargetedChild(label, h1);
 
-        GroupSetting *h2 = new GroupSetting();
+        auto *h2 = new GroupSetting();
         h2->setLabel(QObject::tr("High Resolution"));
         h2->addChild(new AverageBitrate(m_parent, "high_mpeg4avgbitrate",
                                             1000, 13500, 13500, 500));
@@ -968,151 +979,154 @@ class VideoCompressionSettings : public GroupSetting
 
             if (v4l2->GetOptions(options))
             {
-                GroupSetting* grp =
-                    new GroupSetting();
+                /* StandardSetting cannot handle multiple 'targets' pointing
+                 * to the same setting configuration, so we need to do
+                 * this in two passes. */
 
-                GroupSetting* bit_low =
-                    new GroupSetting();
-                GroupSetting* bit_medium =
-                    new GroupSetting();
-                GroupSetting* bit_high =
-                    new GroupSetting();
-                bool dynamic_res = !v4l2->UserAdjustableResolution();
-
-                DriverOption::Options::iterator Iopt = options.begin();
-                for ( ; Iopt != options.end(); ++Iopt)
+                foreach (auto & option, options)
                 {
-                    if ((*Iopt).category == DriverOption::STREAM_TYPE)
+                    if (option.m_category == DriverOption::VIDEO_ENCODING)
                     {
-                        grp->addChild
-                            (new MPEG2streamType(m_parent,
-                                                 (*Iopt).minimum,
-                                                 (*Iopt).maximum,
-                                                 (*Iopt).default_value));
-                    }
-                    else if ((*Iopt).category ==
-                             DriverOption::VIDEO_ENCODING)
-                    {
-                        DriverOption::menu_t::iterator Imenu =
-                            (*Iopt).menu.begin();
-                        for ( ; Imenu != (*Iopt).menu.end(); ++Imenu)
+                        foreach (const auto & Imenu, option.m_menu)
                         {
-                            if (!(*Imenu).isEmpty())
-                                m_v4l2codecs << "V4L2:" + *Imenu;
+                            if (!Imenu.isEmpty())
+                                m_v4l2codecs << "V4L2:" + Imenu;
                         }
-                    }
-                    else if ((*Iopt).category ==
-                             DriverOption::VIDEO_ASPECT)
-                    {
-                        grp->addChild(new MPEG2aspectRatio(m_parent,
-                                                           (*Iopt).minimum,
-                                                           (*Iopt).maximum,
-                                                           (*Iopt).default_value));
-                    }
-                    else if ((*Iopt).category ==
-                             DriverOption::VIDEO_BITRATE_MODE)
-                    {
-                        if (dynamic_res)
-                        {
-                            bit_low->addChild(new BitrateMode(m_parent,
-                                                      "low_mpegbitratemode"));
-                            bit_medium->addChild(new BitrateMode(m_parent,
-                                                   "medium_mpegbitratemode"));
-                            bit_high->addChild(new BitrateMode(m_parent,
-                                                   "medium_mpegbitratemode"));
-                        }
-                        else
-                            bit_low->addChild(new BitrateMode(m_parent));
-                    }
-                    else if ((*Iopt).category == DriverOption::VIDEO_BITRATE)
-                    {
-                        if (dynamic_res)
-                        {
-                            bit_low->setLabel(QObject::tr("Low Resolution"));
-                            bit_low->addChild(new AverageBitrate(m_parent,
-                                                        "low_mpegavgbitrate",
-                                                         (*Iopt).minimum / 1000,
-                                                         (*Iopt).maximum / 1000,
-                                                   (*Iopt).default_value / 1000,
-                                                         (*Iopt).step / 1000));
-
-                            bit_medium->setLabel(QObject::tr("Medium Resolution"));
-                            bit_medium->addChild(new AverageBitrate(m_parent,
-                                                        "medium_mpegavgbitrate",
-                                                         (*Iopt).minimum / 1000,
-                                                         (*Iopt).maximum / 1000,
-                                                   (*Iopt).default_value / 1000,
-                                                         (*Iopt).step / 1000));
-
-                            bit_high->setLabel(QObject::tr("High Resolution"));
-                            bit_high->addChild(new AverageBitrate(m_parent,
-                                                        "high_mpegavgbitrate",
-                                                         (*Iopt).minimum / 1000,
-                                                         (*Iopt).maximum / 1000,
-                                                   (*Iopt).default_value / 1000,
-                                                         (*Iopt).step / 1000));
-                        }
-                        else
-                        {
-                            bit_low->setLabel(QObject::tr("Bitrate"));
-                            bit_low->addChild(new AverageBitrate(m_parent,
-                                                        "mpeg2bitrate",
-                                                         (*Iopt).minimum / 1000,
-                                                         (*Iopt).maximum / 1000,
-                                                   (*Iopt).default_value / 1000,
-                                                         (*Iopt).step / 1000));
-                        }
-                    }
-                    else if ((*Iopt).category ==
-                             DriverOption::VIDEO_BITRATE_PEAK)
-                    {
-                        if (dynamic_res)
-                        {
-                            bit_low->addChild(new PeakBitrate(m_parent,
-                                                      "low_mpegpeakbitrate",
-                                                         (*Iopt).minimum / 1000,
-                                                         (*Iopt).maximum / 1000,
-                                                   (*Iopt).default_value / 1000,
-                                                         (*Iopt).step / 1000));
-                            bit_medium->addChild(new PeakBitrate(m_parent,
-                                                      "medium_mpegpeakbitrate",
-                                                         (*Iopt).minimum / 1000,
-                                                         (*Iopt).maximum / 1000,
-                                                   (*Iopt).default_value / 1000,
-                                                         (*Iopt).step / 1000));
-                            bit_high->addChild(new PeakBitrate(m_parent,
-                                                      "high_mpegpeakbitrate",
-                                                         (*Iopt).minimum / 1000,
-                                                         (*Iopt).maximum / 1000,
-                                                   (*Iopt).default_value / 1000,
-                                                         (*Iopt).step / 1000));
-                        }
-                        else
-                            bit_low->addChild(new PeakBitrate(m_parent,
-                                                      "mpeg2maxbitrate",
-                                                         (*Iopt).minimum / 1000,
-                                                         (*Iopt).maximum / 1000,
-                                                   (*Iopt).default_value / 1000,
-                                                         (*Iopt).step / 1000));
                     }
                 }
 
-                grp->addChild(bit_low);
-                if (dynamic_res)
+                for (auto Icodec = m_v4l2codecs.begin(); Icodec < m_v4l2codecs.end(); ++Icodec)
                 {
-                    grp->addChild(bit_medium);
-                    grp->addChild(bit_high);
-                }
+                    auto* bit_low    = new GroupSetting();
+                    auto* bit_medium = new GroupSetting();
+                    auto* bit_high   = new GroupSetting();
+                    bool dynamic_res = !v4l2->UserAdjustableResolution();
 
-                QStringList::iterator Icodec = m_v4l2codecs.begin();
-                for ( ; Icodec < m_v4l2codecs.end(); ++Icodec)
-                    addTargetedChild(*Icodec, grp);
+                    for (auto & option : options)
+                    {
+                        if (option.m_category == DriverOption::STREAM_TYPE)
+                        {
+                            m_codecName->addTargetedChild(*Icodec,
+                                             new MPEG2streamType(m_parent,
+                                                     option.m_minimum,
+                                                     option.m_maximum,
+                                                     option.m_defaultValue));
+                        }
+                        else if (option.m_category == DriverOption::VIDEO_ASPECT)
+                        {
+                            m_codecName->addTargetedChild(*Icodec,
+                                             new MPEG2aspectRatio(m_parent,
+                                             option.m_minimum,
+                                             option.m_maximum,
+                                             option.m_defaultValue));
+                        }
+                        else if (option.m_category ==
+                                 DriverOption::VIDEO_BITRATE_MODE)
+                        {
+                            if (dynamic_res)
+                            {
+                                bit_low->addChild(new BitrateMode(m_parent,
+                                             "low_mpegbitratemode"));
+                                bit_medium->addChild(new BitrateMode(m_parent,
+                                             "medium_mpegbitratemode"));
+                                bit_high->addChild(new BitrateMode(m_parent,
+                                             "medium_mpegbitratemode"));
+                            }
+                            else
+                                bit_low->addChild(new BitrateMode(m_parent));
+                        }
+                        else if (option.m_category == DriverOption::VIDEO_BITRATE)
+                        {
+                            if (dynamic_res)
+                            {
+                                bit_low->setLabel(QObject::tr("Low Resolution"));
+                                bit_low->addChild(new AverageBitrate(m_parent,
+                                             "low_mpegavgbitrate",
+                                             option.m_minimum / 1000,
+                                             option.m_maximum / 1000,
+                                             option.m_defaultValue / 1000,
+                                             option.m_step / 1000));
+
+                                bit_medium->setLabel(QObject::
+                                                     tr("Medium Resolution"));
+                                bit_medium->addChild(new AverageBitrate(m_parent,
+                                             "medium_mpegavgbitrate",
+                                             option.m_minimum / 1000,
+                                             option.m_maximum / 1000,
+                                             option.m_defaultValue / 1000,
+                                             option.m_step / 1000));
+
+                                bit_high->setLabel(QObject::
+                                                   tr("High Resolution"));
+                                bit_high->addChild(new AverageBitrate(m_parent,
+                                             "high_mpegavgbitrate",
+                                             option.m_minimum / 1000,
+                                             option.m_maximum / 1000,
+                                             option.m_defaultValue / 1000,
+                                             option.m_step / 1000));
+                            }
+                            else
+                            {
+                                bit_low->setLabel(QObject::tr("Bitrate"));
+                                bit_low->addChild(new AverageBitrate(m_parent,
+                                             "mpeg2bitrate",
+                                             option.m_minimum / 1000,
+                                             option.m_maximum / 1000,
+                                             option.m_defaultValue / 1000,
+                                             option.m_step / 1000));
+                            }
+                        }
+                        else if (option.m_category ==
+                                 DriverOption::VIDEO_BITRATE_PEAK)
+                        {
+                            if (dynamic_res)
+                            {
+                                bit_low->addChild(new PeakBitrate(m_parent,
+                                             "low_mpegpeakbitrate",
+                                             option.m_minimum / 1000,
+                                             option.m_maximum / 1000,
+                                             option.m_defaultValue / 1000,
+                                             option.m_step / 1000));
+                                bit_medium->addChild(new PeakBitrate(m_parent,
+                                             "medium_mpegpeakbitrate",
+                                             option.m_minimum / 1000,
+                                             option.m_maximum / 1000,
+                                             option.m_defaultValue / 1000,
+                                             option.m_step / 1000));
+                                bit_high->addChild(new PeakBitrate(m_parent,
+                                             "high_mpegpeakbitrate",
+                                             option.m_minimum / 1000,
+                                             option.m_maximum / 1000,
+                                             option.m_defaultValue / 1000,
+                                             option.m_step / 1000));
+                            }
+                            else
+                            {
+                                bit_low->addChild(new PeakBitrate(m_parent,
+                                             "mpeg2maxbitrate",
+                                             option.m_minimum / 1000,
+                                             option.m_maximum / 1000,
+                                             option.m_defaultValue / 1000,
+                                             option.m_step / 1000));
+                            }
+                        }
+                    }
+
+                    m_codecName->addTargetedChild(*Icodec, bit_low);
+                    if (dynamic_res)
+                    {
+                        m_codecName->addTargetedChild(*Icodec, bit_medium);
+                        m_codecName->addTargetedChild(*Icodec, bit_high);
+                    }
+                }
             }
         }
+#else
+	Q_UNUSED(v4l2);
 #endif // USING_V4L2
     }
 
-    void selectCodecs(QString groupType)
+    void selectCodecs(const QString& groupType)
     {
         if (!groupType.isNull())
         {
@@ -1120,9 +1134,8 @@ class VideoCompressionSettings : public GroupSetting
                m_codecName->addSelection("MPEG-4 AVC Hardware Encoder");
             else if (groupType.startsWith("V4L2:"))
             {
-                QStringList::iterator Icodec = m_v4l2codecs.begin();
-                for ( ; Icodec != m_v4l2codecs.end(); ++Icodec)
-                    m_codecName->addSelection(*Icodec);
+                foreach (auto & codec, m_v4l2codecs)
+                    m_codecName->addSelection(codec);
             }
             else if (groupType == "MPEG")
                m_codecName->addSelection("MPEG-2 Hardware Encoder");
@@ -1271,7 +1284,7 @@ class ImageSize : public GroupSetting
               uint defaultwidth, uint maxwidth,
               bool transcoding = false) :
             MythUISpinBoxSetting(this, transcoding ? 0 : 160,
-                           maxwidth, 16, false,
+                           maxwidth, 16, 0,
                            transcoding ? QObject::tr("Auto") : QString()),
             CodecParamStorage(this, parent, "width")
         {
@@ -1298,7 +1311,7 @@ class ImageSize : public GroupSetting
                uint defaultheight, uint maxheight,
                bool transcoding = false):
             MythUISpinBoxSetting(this, transcoding ? 0 : 160,
-                           maxheight, 16, false,
+                           maxheight, 16, 0,
                            transcoding ? QObject::tr("Auto") : QString()),
             CodecParamStorage(this, parent, "height")
         {
@@ -1319,11 +1332,12 @@ class ImageSize : public GroupSetting
     };
 
     ImageSize(const RecordingProfile &parent,
-              QString tvFormat, QString profName)
+              const QString& tvFormat, const QString& profName)
     {
         setLabel(QObject::tr("Image size"));
 
-        QSize defaultsize(768, 576), maxsize(768, 576);
+        QSize defaultsize(768, 576);
+        QSize maxsize(768, 576);
         bool transcoding = profName.startsWith("Transcoders");
         bool ivtv = profName.startsWith("IVTV MPEG-2 Encoders");
 
@@ -1359,44 +1373,43 @@ class ImageSize : public GroupSetting
 };
 
 // id and name will be deleted by ConfigurationGroup's destructor
-RecordingProfile::RecordingProfile(QString profName)
-    : id(new ID()),        name(new Name(*this)),
-      imageSize(NULL),     videoSettings(NULL),
-      audioSettings(NULL), profileName(profName),
-      isEncoder(true),     v4l2util(NULL)
+RecordingProfile::RecordingProfile(const QString& profName)
+    : m_id(new ID()),
+      m_name(new Name(*this)),
+      m_profileName(profName)
 {
     // This must be first because it is needed to load/save the other settings
-    addChild(id);
+    addChild(m_id);
 
     setLabel(profName);
-    addChild(name);
+    addChild(m_name);
 
-    tr_filters = NULL;
-    tr_lossless = NULL;
-    tr_resize = NULL;
+    m_trFilters  = nullptr;
+    m_trLossless = nullptr;
+    m_trResize   = nullptr;
 
     if (!profName.isEmpty())
     {
         if (profName.startsWith("Transcoders"))
         {
-            tr_filters = new TranscodeFilters(*this);
-            tr_lossless = new TranscodeLossless(*this);
-            tr_resize = new TranscodeResize(*this);
-            addChild(tr_filters);
-            addChild(tr_lossless);
-            addChild(tr_resize);
+            m_trFilters  = new TranscodeFilters(*this);
+            m_trLossless = new TranscodeLossless(*this);
+            m_trResize   = new TranscodeResize(*this);
+            addChild(m_trFilters);
+            addChild(m_trLossless);
+            addChild(m_trResize);
         }
         else
             addChild(new AutoTranscode(*this));
     }
     else
     {
-        tr_filters = new TranscodeFilters(*this);
-        tr_lossless = new TranscodeLossless(*this);
-        tr_resize = new TranscodeResize(*this);
-        addChild(tr_filters);
-        addChild(tr_lossless);
-        addChild(tr_resize);
+        m_trFilters  = new TranscodeFilters(*this);
+        m_trLossless = new TranscodeLossless(*this);
+        m_trResize   = new TranscodeResize(*this);
+        addChild(m_trFilters);
+        addChild(m_trLossless);
+        addChild(m_trResize);
         addChild(new AutoTranscode(*this));
     }
 };
@@ -1404,27 +1417,27 @@ RecordingProfile::RecordingProfile(QString profName)
 RecordingProfile::~RecordingProfile(void)
 {
 #ifdef USING_V4L2
-    delete v4l2util;
-    v4l2util = nullptr;
+    delete m_v4l2util;
+    m_v4l2util = nullptr;
 #endif
 }
 
-void RecordingProfile::ResizeTranscode(const QString &)
+void RecordingProfile::ResizeTranscode(const QString & /*val*/)
 {
-    if (imageSize)
-        imageSize->setEnabled(tr_resize->boolValue());
+    if (m_imageSize)
+        m_imageSize->setEnabled(m_trResize->boolValue());
 }
 
-void RecordingProfile::SetLosslessTranscode(const QString &)
+void RecordingProfile::SetLosslessTranscode(const QString & /*val*/)
 {
-    bool lossless = tr_lossless->boolValue();
-    bool show_size = (lossless) ? false : tr_resize->boolValue();
-    if (imageSize)
-        imageSize->setEnabled(show_size);
-    videoSettings->setEnabled(! lossless);
-    audioSettings->setEnabled(! lossless);
-    tr_resize->setEnabled(! lossless);
-    tr_filters->setEnabled(! lossless);
+    bool lossless = m_trLossless->boolValue();
+    bool show_size = (lossless) ? false : m_trResize->boolValue();
+    if (m_imageSize)
+        m_imageSize->setEnabled(show_size);
+    m_videoSettings->setEnabled(! lossless);
+    m_audioSettings->setEnabled(! lossless);
+    m_trResize->setEnabled(! lossless);
+    m_trFilters->setEnabled(! lossless);
 }
 
 void RecordingProfile::loadByID(int profileId)
@@ -1457,12 +1470,12 @@ void RecordingProfile::FiltersChanged(const QString &val)
     // If there are filters, we cannot do lossless transcoding
     if (!val.trimmed().isEmpty())
     {
-       tr_lossless->setValue(false);
-       tr_lossless->setEnabled(false);
+       m_trLossless->setValue(false);
+       m_trLossless->setEnabled(false);
     }
     else
     {
-       tr_lossless->setEnabled(true);
+       m_trLossless->setEnabled(true);
     }
 }
 
@@ -1476,10 +1489,12 @@ bool RecordingProfile::loadByType(const QString &name, const QString &card,
 #ifdef USING_V4L2
     if (cardtype == "V4L2ENC")
     {
-        v4l2util = new V4L2util(videodev);
-        if (v4l2util->IsOpen())
-            cardtype = v4l2util->ProfileName();
+        m_v4l2util = new V4L2util(videodev);
+        if (m_v4l2util->IsOpen())
+            cardtype = m_v4l2util->ProfileName();
     }
+#else
+    Q_UNUSED(videodev);
 #endif
 
     MSqlQuery result(MSqlQuery::InitCon());
@@ -1554,12 +1569,12 @@ bool RecordingProfile::loadByGroup(const QString &name, const QString &group)
 void RecordingProfile::CompleteLoad(int profileId, const QString &type,
                                     const QString &name)
 {
-    if (profileName.isEmpty())
-        profileName = name;
+    if (m_profileName.isEmpty())
+        m_profileName = name;
 
-    isEncoder = CardUtil::IsEncoder(type);
+    m_isEncoder = CardUtil::IsEncoder(type);
 
-    if (isEncoder)
+    if (m_isEncoder)
     {
 #ifdef USING_V4L2
         if (type.startsWith("V4L2:"))
@@ -1567,17 +1582,15 @@ void RecordingProfile::CompleteLoad(int profileId, const QString &type,
             QStringList devices = CardUtil::GetVideoDevices("V4L2ENC");
             if (!devices.isEmpty())
             {
-                QStringList::iterator Idev = devices.begin();
-                for ( ; Idev != devices.end(); ++Idev)
+                foreach (auto & device, devices)
                 {
-                    if (v4l2util)
-                        delete v4l2util;
-                    v4l2util = new V4L2util(*Idev);
-                    if (v4l2util->IsOpen() &&
-                        v4l2util->DriverName() == type.mid(5))
+                    delete m_v4l2util;
+                    m_v4l2util = new V4L2util(device);
+                    if (m_v4l2util->IsOpen() &&
+                        m_v4l2util->DriverName() == type.mid(5))
                         break;
-                    delete v4l2util;
-                    v4l2util = nullptr;
+                    delete m_v4l2util;
+                    m_v4l2util = nullptr;
                 }
             }
         }
@@ -1586,30 +1599,30 @@ void RecordingProfile::CompleteLoad(int profileId, const QString &type,
         QString tvFormat = gCoreContext->GetSetting("TVFormat");
         // TODO: When mpegrecorder is removed, don't check for "HDPVR' anymore...
         if (type != "HDPVR" &&
-            (!v4l2util
+            (!m_v4l2util
 #ifdef USING_V4L2
-             || v4l2util->UserAdjustableResolution()
+             || m_v4l2util->UserAdjustableResolution()
 #endif
             ))
         {
-            addChild(new ImageSize(*this, tvFormat, profileName));
+            addChild(new ImageSize(*this, tvFormat, m_profileName));
         }
-        videoSettings = new VideoCompressionSettings(*this,
-                                                     v4l2util);
-        addChild(videoSettings);
+        m_videoSettings = new VideoCompressionSettings(*this,
+                                                       m_v4l2util);
+        addChild(m_videoSettings);
 
-        audioSettings = new AudioCompressionSettings(*this,
-                                                     v4l2util);
-        addChild(audioSettings);
+        m_audioSettings = new AudioCompressionSettings(*this,
+                                                       m_v4l2util);
+        addChild(m_audioSettings);
 
-        if (!profileName.isEmpty() && profileName.startsWith("Transcoders"))
+        if (!m_profileName.isEmpty() && m_profileName.startsWith("Transcoders"))
         {
-            connect(tr_resize,   SIGNAL(valueChanged   (const QString &)),
-                    this,        SLOT(  ResizeTranscode(const QString &)));
-            connect(tr_lossless, SIGNAL(valueChanged        (const QString &)),
-                    this,        SLOT(  SetLosslessTranscode(const QString &)));
-            connect(tr_filters,  SIGNAL(valueChanged(const QString&)),
-                    this,        SLOT(FiltersChanged(const QString&)));
+            connect(m_trResize,   SIGNAL(valueChanged   (const QString &)),
+                    this,         SLOT(  ResizeTranscode(const QString &)));
+            connect(m_trLossless, SIGNAL(valueChanged        (const QString &)),
+                    this,         SLOT(  SetLosslessTranscode(const QString &)));
+            connect(m_trFilters,  SIGNAL(valueChanged(const QString&)),
+                    this,         SLOT(FiltersChanged(const QString&)));
         }
     }
     else if (type.toUpper() == "DVB")
@@ -1622,41 +1635,39 @@ void RecordingProfile::CompleteLoad(int profileId, const QString &type,
         addChild(new RecordFullTSStream(*this));
     }
 
-    id->setValue(profileId);
+    m_id->setValue(profileId);
     Load();
 }
 
 void RecordingProfile::setCodecTypes()
 {
-    if (videoSettings)
-        videoSettings->selectCodecs(groupType());
-    if (audioSettings)
-        audioSettings->selectCodecs(groupType());
+    if (m_videoSettings)
+        m_videoSettings->selectCodecs(groupType());
+    if (m_audioSettings)
+        m_audioSettings->selectCodecs(groupType());
 }
 
 RecordingProfileEditor::RecordingProfileEditor(int id, QString profName) :
-    group(id), labelName(profName)
+    m_group(id), m_labelName(std::move(profName))
 {
-    if (!labelName.isEmpty())
-        setLabel(labelName);
+    if (!m_labelName.isEmpty())
+        setLabel(m_labelName);
 }
 
 void RecordingProfileEditor::Load(void)
 {
     clearSettings();
-    ButtonStandardSetting *newProfile =
-        new ButtonStandardSetting(tr("(Create new profile)"));
+    auto *newProfile = new ButtonStandardSetting(tr("(Create new profile)"));
     connect(newProfile, SIGNAL(clicked()), SLOT(ShowNewProfileDialog()));
     addChild(newProfile);
-    RecordingProfile::fillSelections(this, group);
+    RecordingProfile::fillSelections(this, m_group);
     StandardSetting::Load();
 }
 
 void RecordingProfileEditor::ShowNewProfileDialog()
 {
     MythScreenStack *popupStack = GetMythMainWindow()->GetStack("popup stack");
-    MythTextInputDialog *settingdialog =
-        new MythTextInputDialog(popupStack,
+    auto *settingdialog = new MythTextInputDialog(popupStack,
                                 tr("Enter the name of the new profile"));
 
     if (settingdialog->Create())
@@ -1671,7 +1682,7 @@ void RecordingProfileEditor::ShowNewProfileDialog()
     }
 }
 
-void RecordingProfileEditor::CreateNewProfile(QString profName)
+void RecordingProfileEditor::CreateNewProfile(const QString& profName)
 {
    MSqlQuery query(MSqlQuery::InitCon());
    query.prepare(
@@ -1682,7 +1693,7 @@ void RecordingProfileEditor::CreateNewProfile(QString profName)
    query.bindValue(":NAME", profName);
    query.bindValue(":VIDEOCODEC", "MPEG-4");
    query.bindValue(":AUDIOCODEC", "MP3");
-   query.bindValue(":PROFILEGROUP", group);
+   query.bindValue(":PROFILEGROUP", m_group);
    if (!query.exec())
    {
        MythDB::DBError("RecordingProfileEditor::open", query);
@@ -1694,7 +1705,7 @@ void RecordingProfileEditor::CreateNewProfile(QString profName)
              "FROM recordingprofiles "
              "WHERE name = :NAME AND profilegroup = :PROFILEGROUP;");
        query.bindValue(":NAME", profName);
-       query.bindValue(":PROFILEGROUP", group);
+       query.bindValue(":PROFILEGROUP", m_group);
        if (!query.exec())
        {
            MythDB::DBError("RecordingProfileEditor::open", query);
@@ -1703,7 +1714,7 @@ void RecordingProfileEditor::CreateNewProfile(QString profName)
        {
            if (query.next())
            {
-               RecordingProfile* profile = new RecordingProfile(profName);
+               auto* profile = new RecordingProfile(profName);
 
                profile->loadByID(query.value(0).toInt());
                profile->setCodecTypes();
@@ -1721,7 +1732,7 @@ void RecordingProfile::fillSelections(GroupSetting *setting, int group,
     {
        for (uint i = 0; !availProfiles[i].isEmpty(); i++)
        {
-           GroupSetting *profile = new GroupSetting();
+           auto *profile = new GroupSetting();
            profile->setLabel(availProfiles[i]);
            setting->addChild(profile);
        }
@@ -1741,15 +1752,15 @@ void RecordingProfile::fillSelections(GroupSetting *setting, int group,
         MythDB::DBError("RecordingProfile::fillSelections 1", result);
         return;
     }
-    else if (!result.next())
+    if (!result.next())
     {
         return;
     }
 
     if (group == RecordingProfile::TranscoderGroup && foldautodetect)
     {
-        QString id = QString::number(RecordingProfile::TranscoderAutodetect);
-        GroupSetting *profile = new GroupSetting();
+        QString id = QString::number(RecordingProfile::kTranscoderAutodetect);
+        auto *profile = new GroupSetting();
         profile->setLabel(QObject::tr("Autodetect"));
         setting->addChild(profile);
     }
@@ -1765,7 +1776,7 @@ void RecordingProfile::fillSelections(GroupSetting *setting, int group,
             {
                 if (!foldautodetect)
                 {
-                    RecordingProfile *profile =
+                    auto *profile =
                         new RecordingProfile(QObject::tr("Autodetect from %1")
                                              .arg(name));
                     profile->loadByID(id.toInt());
@@ -1775,7 +1786,7 @@ void RecordingProfile::fillSelections(GroupSetting *setting, int group,
             }
             else
             {
-                RecordingProfile *profile = new RecordingProfile(name);
+                auto *profile = new RecordingProfile(name);
                 profile->loadByID(id.toInt());
                 profile->setCodecTypes();
                 setting->addChild(profile);
@@ -1783,7 +1794,7 @@ void RecordingProfile::fillSelections(GroupSetting *setting, int group,
             continue;
         }
 
-        RecordingProfile *profile = new RecordingProfile(name);
+        auto *profile = new RecordingProfile(name);
         profile->loadByID(id.toInt());
         profile->setCodecTypes();
         setting->addChild(profile);
@@ -1815,7 +1826,7 @@ QMap< int, QString > RecordingProfile::GetProfiles(RecProfileGroup group)
         MythDB::DBError("RecordingProfile::GetProfileMap()", query);
         return profiles;
     }
-    else if (!query.next())
+    if (!query.next())
     {
         LOG(VB_GENERAL, LOG_WARNING,
             "RecordingProfile::fillselections, Warning: "
@@ -1825,7 +1836,7 @@ QMap< int, QString > RecordingProfile::GetProfiles(RecProfileGroup group)
 
     if (group == RecordingProfile::TranscoderGroup)
     {
-        int id = RecordingProfile::TranscoderAutodetect;
+        int id = RecordingProfile::kTranscoderAutodetect;
         profiles[id] = QObject::tr("Transcode using Autodetect");
     }
 
@@ -1872,7 +1883,7 @@ QString RecordingProfile::groupType(void) const
     else if (result.next())
         return result.value(0).toString();
 
-    return QString::null;
+    return QString();
 }
 
 QString RecordingProfile::getName(int id)
@@ -1890,7 +1901,7 @@ QString RecordingProfile::getName(int id)
     else if (result.next())
         return result.value(0).toString();
 
-    return QString::null;
+    return QString();
 }
 
 bool RecordingProfile::canDelete(void)
@@ -1906,7 +1917,7 @@ void RecordingProfile::deleteEntry(void)
         "FROM recordingprofiles "
         "WHERE id = :ID");
 
-    result.bindValue(":ID", id->getValue());
+    result.bindValue(":ID", m_id->getValue());
 
     if (!result.exec())
         MythDB::DBError("RecordingProfile::deleteEntry", result);

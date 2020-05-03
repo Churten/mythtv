@@ -1,8 +1,8 @@
 #ifndef FILETRANSFER_H_
 #define FILETRANSFER_H_
 
-// ANSI C headers
-#include <stdint.h>
+// C++ headers
+#include <cstdint>
 
 using namespace std;
 
@@ -28,7 +28,7 @@ class FileTransfer : public SocketHandler
                  MythSocketManager *parent, bool write);
 
     bool isOpen(void);
-    bool ReOpen(QString newFilename = "");
+    bool ReOpen(const QString& newFilename = "");
 
     void Stop(void);
 
@@ -45,21 +45,21 @@ class FileTransfer : public SocketHandler
     void SetTimeout(bool fast);
 
   private:
-   ~FileTransfer();
+   ~FileTransfer() override;
 
-    volatile bool  readthreadlive;
-    bool           readsLocked;
-    QWaitCondition readsUnlockedCond;
+    volatile bool  m_readthreadlive {true};
+    bool           m_readsLocked {false};
+    QWaitCondition m_readsUnlockedCond;
 
-    ProgramInfo *pginfo;
-    RingBuffer *rbuffer;
-    bool ateof;
+    ProgramInfo *m_pginfo {nullptr};
+    RingBuffer  *m_rbuffer {nullptr};
+    bool m_ateof {false};
 
-    vector<char> requestBuffer;
+    vector<char> m_requestBuffer;
 
-    QMutex lock;
+    QMutex m_lock {QMutex::NonRecursive};
 
-    bool writemode;
+    bool m_writemode {false};
 };
 
 #endif

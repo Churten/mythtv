@@ -16,18 +16,11 @@ struct ThemedButton
     QString type;
     QStringList action;
     QString text;
+    QString alttext;
     QString description;
-    MythImage *icon;
-    bool active;
+    MythImage *icon     {nullptr};
+    bool    active      {false};
     QString password;
-};
-
-struct ButtonIcon
-{
-    QString name;
-    MythImage *icon;
-    MythImage *activeicon;
-    QPoint offset;
 };
 
 
@@ -38,24 +31,25 @@ struct ButtonIcon
 class MUI_PUBLIC MythThemedMenuState : public MythScreenType
 {
   public:
-    MythThemedMenuState(MythScreenStack *parent, const QString &name);
-   ~MythThemedMenuState();
+    MythThemedMenuState(MythScreenStack *parent, const QString &name)
+        : MythScreenType(parent, name) {}
+   ~MythThemedMenuState() override = default;
 
-    bool Create(void);
+    bool Create(void) override; // MythScreenType
 
-    void (*m_callback)(void *, QString &);
-    void *m_callbackdata;
+    void (*m_callback)(void *, QString &) {nullptr};
+    void *m_callbackdata {nullptr};
 
-    bool m_killable;
+    bool              m_killable        {false};
 
-    bool m_loaded;
-    MythUIStateType *m_titleState;
-    MythUIStateType *m_watermarkState;
-    MythUIButtonList *m_buttonList;
-    MythUIText *m_descriptionText;
+    bool              m_loaded          {false};
+    MythUIStateType  *m_titleState      {nullptr};
+    MythUIStateType  *m_watermarkState  {nullptr};
+    MythUIButtonList *m_buttonList      {nullptr};
+    MythUIText       *m_descriptionText {nullptr};
 
   protected:
-    void CopyFrom(MythUIType*);
+    void CopyFrom(MythUIType *base) override; // MythScreenType
 };
 
 /// \brief Themed menu class, used for main menus in %MythTV frontend
@@ -65,8 +59,8 @@ class MUI_PUBLIC MythThemedMenu : public MythThemedMenuState
   public:
     MythThemedMenu(const QString &cdir, const QString &menufile,
                     MythScreenStack *parent, const QString &name,
-                    bool allowreorder = false, MythThemedMenuState *state = NULL);
-   ~MythThemedMenu();
+                    bool allowreorder = false, MythThemedMenuState *state = nullptr);
+   ~MythThemedMenu() override;
 
     bool foundTheme(void);
 
@@ -76,15 +70,15 @@ class MUI_PUBLIC MythThemedMenu : public MythThemedMenuState
 
     QString getSelection(void);
 
-    virtual void aboutToShow(void);
+    void aboutToShow(void) override; // MythScreenType
 
-    void ShowMenu();
+    void ShowMenu() override; // MythScreenType
     void aboutScreen();
-    void customEvent(QEvent *event);
-    void mediaEvent(MythMediaEvent *event);
+    void customEvent(QEvent *event) override; // MythUIType
+    void mediaEvent(MythMediaEvent *event) override; // MythUIType
     
   protected:
-    virtual bool keyPressEvent(QKeyEvent *e);
+    bool keyPressEvent(QKeyEvent *e) override; // MythScreenType
 
   private slots:
     void setButtonActive(MythUIButtonListItem* item);
@@ -101,27 +95,25 @@ class MUI_PUBLIC MythThemedMenu : public MythThemedMenuState
                    const QString &description, const QString &password);
 
     bool handleAction(const QString &action, const QString &password = QString());
-    bool findDepends(const QString &fileList);
-    bool findDependsExec(const QString &filename);
-    QString findMenuFile(const QString &menuname);
+    static bool findDepends(const QString &fileList);
+    static bool findDependsExec(const QString &filename);
+    static QString findMenuFile(const QString &menuname);
 
     bool checkPinCode(const QString &password_setting);
 
-    MythThemedMenu *m_parent;
+    MythThemedMenu *m_parent     {nullptr};
 
-    MythThemedMenuState *m_state;
-    bool m_allocedstate;
+    MythThemedMenuState *m_state {nullptr};
+    bool m_allocedstate          {false};
 
     QString m_selection;
-    bool m_foundtheme;
-
-    bool m_ignorekeys;
-
-    bool m_wantpop;
+    bool m_foundtheme            {false};
+    bool m_ignorekeys            {false};
+    bool m_wantpop               {false};
 
     QString m_menumode;
 
-    MythDialogBox* m_menuPopup;
+    MythDialogBox* m_menuPopup   {nullptr};
 };
 
 Q_DECLARE_METATYPE(ThemedButton)

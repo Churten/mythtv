@@ -19,7 +19,6 @@
 #include <cmath>
 
 // POSIX headers
-#include <compat.h>
 #ifndef _WIN32
 #include <sys/utsname.h> 
 #endif
@@ -115,8 +114,8 @@ QString  HttpServer::s_platform;
 /////////////////////////////////////////////////////////////////////////////
 
 HttpServer::HttpServer() :
-    ServerPool(), m_sSharePath(GetShareDir()),
-    m_threadPool("HttpServerPool"), m_running(true),
+    m_sSharePath(GetShareDir()),
+    m_threadPool("HttpServerPool"),
     m_privateToken(QUuid::createUuid().toString()) // Cryptographically random and sufficiently long enough to act as a secure token
 {
     // Number of connections processed concurrently
@@ -139,7 +138,7 @@ HttpServer::HttpServer() :
             .arg(LOBYTE(LOWORD(GetVersion())))
             .arg(HIBYTE(LOWORD(GetVersion())));
 #else
-        struct utsname uname_info;
+        struct utsname uname_info {};
         uname( &uname_info );
         s_platform = QString("%1/%2")
             .arg(uname_info.sysname).arg(uname_info.release);
@@ -187,15 +186,11 @@ void HttpServer::LoadSSLConfig()
 #ifndef QT_NO_OPENSSL
     m_sslConfig = QSslConfiguration::defaultConfiguration();
 
-#if QT_VERSION >= QT_VERSION_CHECK(5,0,0)
     m_sslConfig.setProtocol(QSsl::SecureProtocols); // Includes SSLv3 which is insecure, but can't be helped
-#else
-    m_sslConfig.setProtocol(QSsl::TlsV1); // SSL v1, v2, v3 are insecure
-#endif
     m_sslConfig.setSslOption(QSsl::SslOptionDisableLegacyRenegotiation, true); // Potential DoS multiplier
     m_sslConfig.setSslOption(QSsl::SslOptionDisableCompression, true); // CRIME attack
 
-    QList<QSslCipher> availableCiphers = QSslSocket::supportedCiphers();
+    QList<QSslCipher> availableCiphers = QSslConfiguration::supportedCiphers();
     QList<QSslCipher> secureCiphers;
     QList<QSslCipher>::iterator it;
     for (it = availableCiphers.begin(); it != availableCiphers.end(); ++it)
@@ -306,7 +301,7 @@ QString HttpServer::GetServerVersion(void)
 void HttpServer::newTcpConnection(qt_socket_fd_t socket)
 {
     PoolServerType type = kTCPServer;
-    PrivTcpServer *server = dynamic_cast<PrivTcpServer *>(QObject::sender());
+    auto *server = dynamic_cast<PrivTcpServer *>(QObject::sender());
     if (server)
         type = server->GetServerType();
 
@@ -325,7 +320,7 @@ void HttpServer::newTcpConnection(qt_socket_fd_t socket)
 
 void HttpServer::RegisterExtension( HttpServerExtension *pExtension )
 {
-    if (pExtension != NULL )
+    if (pExtension != nullptr )
     {
         LOG(VB_HTTP, LOG_INFO, QString("HttpServer: Registering %1 extension").arg(pExtension->m_sName));
         m_rwlock.lockForWrite();
@@ -348,7 +343,7 @@ void HttpServer::RegisterExtension( HttpServerExtension *pExtension )
 
 void HttpServer::UnregisterExtension( HttpServerExtension *pExtension )
 {
-    if (pExtension != NULL )
+    if (pExtension != nullptr )
     {
         m_rwlock.lockForWrite();
 
@@ -453,7 +448,7 @@ uint HttpServer::GetSocketTimeout(HTTPRequest* pRequest) const
 HttpWorker::HttpWorker(HttpServer &httpServer, qt_socket_fd_t sock,
                        PoolServerType type
 #ifndef QT_NO_OPENSSL
-                       , QSslConfiguration sslConfig
+                       , const QSslConfiguration& sslConfig
 #endif
 )
            : m_httpServer(httpServer), m_socket(sock),
@@ -479,15 +474,15 @@ void HttpWorker::run(void)
 
     bool                    bTimeout   = false;
     bool                    bKeepAlive = true;
-    HTTPRequest            *pRequest   = NULL;
-    QTcpSocket             *pSocket;
+    HTTPRequest            *pRequest   = nullptr;
+    QTcpSocket             *pSocket    = nullptr;
     bool                    bEncrypted = false;
 
     if (m_connectionType == kSSLServer)
     {
 
 #ifndef QT_NO_OPENSSL
-        QSslSocket *pSslSocket = new QSslSocket();
+        auto *pSslSocket = new QSslSocket();
         if (pSslSocket->setSocketDescriptor(m_socket)
            && gCoreContext->CheckSubnet(pSslSocket))
         {
@@ -503,13 +498,13 @@ void HttpWorker::run(void)
             {
                 LOG(VB_HTTP, LOG_WARNING, "SSL Handshake FAILED, connection terminated");
                 delete pSslSocket;
-                pSslSocket = NULL;
+                pSslSocket = nullptr;
             }
         }
         else
         {
             delete pSslSocket;
-            pSslSocket = NULL;
+            pSslSocket = nullptr;
         }
 
         if (pSslSocket)
@@ -527,7 +522,7 @@ void HttpWorker::run(void)
         if (!gCoreContext->CheckSubnet(pSocket))
         {
             delete pSocket;
-            pSocket = 0;
+            pSocket = nullptr;
             return;
         }
 
@@ -561,7 +556,7 @@ void HttpWorker::run(void)
                 // ----------------------------------------------------------
 
                 pRequest = new BufferedSocketDeviceRequest( pSocket );
-                if (pRequest != NULL)
+                if (pRequest != nullptr)
                 {
                     pRequest->m_bEncrypted = bEncrypted;
                     if ( pRequest->ParseRequest() )
@@ -609,11 +604,11 @@ void HttpWorker::run(void)
                     // -------------------------------------------------------
                     // Check to see if a PostProcess was registered
                     // -------------------------------------------------------
-                    if ( pRequest->m_pPostProcess != NULL )
+                    if ( pRequest->m_pPostProcess != nullptr )
                         pRequest->m_pPostProcess->ExecutePostProcess();
 
                     delete pRequest;
-                    pRequest = NULL;
+                    pRequest = nullptr;
                 }
                 else
                 {
@@ -694,7 +689,7 @@ void HttpWorker::run(void)
 
     pSocket->close();
     delete pSocket;
-    pSocket = NULL;
+    pSocket = nullptr;
 
 #if 0
     LOG(VB_HTTP, LOG_DEBUG, "HttpWorkerThread::run() -- end");

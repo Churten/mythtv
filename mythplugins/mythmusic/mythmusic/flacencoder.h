@@ -1,7 +1,7 @@
 #ifndef FLACENCODER_H_
 #define FLACENCODER_H_
 
-#include <stdint.h>
+#include <cstdint>
 
 #include <FLAC/export.h>
 #if !defined(FLAC_API_VERSION_CURRENT) || FLAC_API_VERSION_CURRENT <= 7
@@ -73,7 +73,7 @@
 
 #include "encoder.h"
 
-#define MAX_SAMPLES 588 * 4
+#define MAX_SAMPLES (588 * 4)
 #define NUM_CHANNELS 2
 
 class MusicMetadata;
@@ -83,14 +83,14 @@ class FlacEncoder : public Encoder
 {
   public:
     FlacEncoder(const QString &outfile, int qualitylevel, MusicMetadata *metadata);
-   ~FlacEncoder();
-    int addSamples(int16_t *bytes, unsigned int len);
+   ~FlacEncoder() override;
+    int addSamples(int16_t *bytes, unsigned int len) override; // Encoder
 
   private:
-    FLAC_ENCODER *encoder;
-    unsigned int sampleindex;
-    FLAC__int32 inputin[NUM_CHANNELS][MAX_SAMPLES];
-    FLAC__int32 *input[NUM_CHANNELS];
+    FLAC_ENCODER *m_encoder    {nullptr};
+    unsigned int  m_sampleIndex {0};
+    FLAC__int32   m_inputIn[NUM_CHANNELS][MAX_SAMPLES] {};
+    FLAC__int32  *m_input[NUM_CHANNELS] {};
 };
 
 #endif

@@ -19,7 +19,7 @@ class ProgramMapTable;
 class EITSource
 {
   protected:
-    virtual ~EITSource() {}
+    virtual ~EITSource() = default;
   public:
     virtual void SetEITHelper(EITHelper*) = 0;
     virtual void SetEITRate(float rate) = 0;
@@ -31,46 +31,46 @@ class EITScanner : public QRunnable
 {
   public:
     explicit EITScanner(uint cardnum);
-    ~EITScanner() { TeardownAll(); }
+    ~EITScanner() override { TeardownAll(); }
 
-    void StartPassiveScan(ChannelBase*, EITSource*);
+    void StartPassiveScan(ChannelBase *channel, EITSource *eitSource);
     void StopPassiveScan(void);
 
-    void StartActiveScan(TVRec*, uint max_seconds_per_source);
+    void StartActiveScan(TVRec *_rec, uint max_seconds_per_source);
 
     void StopActiveScan(void);
 
   protected:
-    void run(void);
+    void run(void) override; // QRunnable
 
   private:
     void TeardownAll(void);
     static void *SpawnEventLoop(void*);
            void  RescheduleRecordings(void);
 
-    QMutex           lock;
-    ChannelBase     *channel;
-    EITSource       *eitSource;
+    QMutex                m_lock;
+    ChannelBase          *m_channel                 {nullptr};
+    EITSource            *m_eitSource               {nullptr};
 
-    EITHelper       *eitHelper;
-    MThread         *eventThread;
-    volatile bool    exitThread;
-    QWaitCondition   exitThreadCond; // protected by lock
+    EITHelper            *m_eitHelper               {nullptr};
+    MThread              *m_eventThread             {nullptr};
+    volatile bool         m_exitThread              {false};
+    QWaitCondition        m_exitThreadCond; // protected by lock
 
-    TVRec           *rec;
-    volatile bool    activeScan;
-    volatile bool    activeScanStopped; // protected by lock
-    QWaitCondition   activeScanCond; // protected by lock
-    QDateTime        activeScanNextTrig;
-    uint             activeScanTrigTime;
-    QStringList      activeScanChannels;
-    QStringList::iterator activeScanNextChan;
-    uint             activeScanNextChanIndex;
+    TVRec                *m_rec                     {nullptr};
+    volatile bool         m_activeScan              {false};
+    volatile bool         m_activeScanStopped       {true}; // protected by lock
+    QWaitCondition        m_activeScanCond; // protected by lock
+    QDateTime             m_activeScanNextTrig;
+    uint                  m_activeScanTrigTime      {0};
+    QStringList           m_activeScanChannels;
+    QStringList::iterator m_activeScanNextChan;
+    uint                  m_activeScanNextChanIndex {(uint)random()};
 
-    uint             cardnum;
+    uint                  m_cardnum;
 
-    static QMutex    resched_lock;
-    static QDateTime resched_next_time;
+    static QMutex         s_resched_lock;
+    static QDateTime      s_resched_next_time;
 
     /// Minumum number of seconds between reschedules.
     static const uint kMinRescheduleInterval;

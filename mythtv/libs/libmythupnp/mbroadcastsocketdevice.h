@@ -25,7 +25,7 @@
 class MBroadcastSocketDevice : public MSocketDevice
 {
   public:
-    MBroadcastSocketDevice(QString sAddress, quint16 nPort) :
+    MBroadcastSocketDevice(const QString& sAddress, quint16 nPort) :
         MSocketDevice(MSocketDevice::Datagram),
         m_address(sAddress), m_port(nPort)
     {
@@ -48,7 +48,7 @@ class MBroadcastSocketDevice : public MSocketDevice
         bind(m_address, m_port);
     }
 
-    virtual ~MBroadcastSocketDevice()
+    ~MBroadcastSocketDevice() override
     {
         int zero = 0;
         if (setsockopt(socket(), SOL_SOCKET, SO_BROADCAST, (const char *)&zero,
@@ -58,8 +58,10 @@ class MBroadcastSocketDevice : public MSocketDevice
         }
     }
 
-    virtual QHostAddress address() const { return m_address; }
-    virtual quint16 port() const { return m_port; }
+    QHostAddress address() const override // MSocketDevice
+        { return m_address; }
+    quint16 port() const override // MSocketDevice
+        { return m_port; }
 
   private:
     QHostAddress    m_address;

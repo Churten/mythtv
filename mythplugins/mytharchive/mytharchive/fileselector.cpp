@@ -24,24 +24,6 @@
 
 ////////////////////////////////////////////////////////////////
 
-FileSelector::FileSelector(
-    MythScreenStack *parent, QList<ArchiveItem *> *archiveList,
-    FSTYPE type, const QString &startDir, const QString &filemask) :
-    MythScreenType(parent, "FileSelector"),
-    m_selectorType(type),
-    m_filemask(filemask),
-    m_curDirectory(startDir),
-    m_archiveList(archiveList),
-    m_titleText(NULL),
-    m_fileButtonList(NULL),
-    m_locationEdit(NULL),
-    m_okButton(NULL),
-    m_cancelButton(NULL),
-    m_backButton(NULL),
-    m_homeButton(NULL)
-{
-}
-
 FileSelector::~FileSelector()
 {
     while (!m_fileData.isEmpty())
@@ -50,11 +32,8 @@ FileSelector::~FileSelector()
 
 bool FileSelector::Create(void)
 {
-    bool foundtheme = false;
-
     // Load the theme for this screen
-    foundtheme = LoadWindowFromXML("mytharchive-ui.xml", "file_selector", this);
-
+    bool foundtheme = LoadWindowFromXML("mytharchive-ui.xml", "file_selector", this);
     if (!foundtheme)
         return false;
 
@@ -117,9 +96,8 @@ bool FileSelector::keyPressEvent(QKeyEvent *event)
     if (GetFocusWidget()->keyPressEvent(event))
         return true;
 
-    bool handled = false;
     QStringList actions;
-    handled = GetMythMainWindow()->TranslateKeyPress("Global", event, actions);
+    bool handled = GetMythMainWindow()->TranslateKeyPress("Global", event, actions);
 
     for (int i = 0; i < actions.size() && !handled; i++)
     {
@@ -145,7 +123,7 @@ void FileSelector::itemClicked(MythUIButtonListItem *item)
     if (!item)
         return;
 
-    FileData *fileData = item->GetData().value<FileData*>();
+    auto *fileData = item->GetData().value<FileData*>();
 
     if (fileData->directory)
     {
@@ -227,13 +205,11 @@ void FileSelector::OKPressed()
     {
         // loop though selected files and add them to the list
         QString f;
-        ArchiveItem *a;
 
         // remove any items that have been removed from the list
         QList<ArchiveItem *> tempAList;
-        for (int x = 0; x < m_archiveList->size(); x++)
+        foreach (auto a, *m_archiveList)
         {
-            a = m_archiveList->at(x);
             bool found = false;
 
             for (int y = 0; y < m_selectedList.size(); y++)
@@ -250,8 +226,8 @@ void FileSelector::OKPressed()
                 tempAList.append(a);
         }
 
-        for (int x = 0; x < tempAList.size(); x++)
-            m_archiveList->removeAll(tempAList.at(x));
+        foreach (auto x, tempAList)
+            m_archiveList->removeAll(x);
 
         // remove any items that are already in the list
         QStringList tempSList;
@@ -259,9 +235,8 @@ void FileSelector::OKPressed()
         {
             f = m_selectedList.at(x);
 
-            for (int y = 0; y < m_archiveList->size(); y++)
+            foreach (auto a, *m_archiveList)
             {
-                a = m_archiveList->at(y);
                 if (a->filename == f)
                 {
                     tempSList.append(f);
@@ -286,7 +261,7 @@ void FileSelector::OKPressed()
                 if (pos > 0)
                     title = f.mid(pos + 1);
 
-                a = new ArchiveItem;
+                auto *a = new ArchiveItem;
                 a->type = "File";
                 a->title = title;
                 a->subtitle = "";
@@ -303,7 +278,7 @@ void FileSelector::OKPressed()
                 a->videoHeight = 0;
                 a->fileCodec = "";
                 a->videoCodec = "";
-                a->encoderProfile = NULL;
+                a->encoderProfile = nullptr;
                 a->editedDetails = false;
                 m_archiveList->append(a);
             }
@@ -312,7 +287,7 @@ void FileSelector::OKPressed()
     else
     {
         MythUIButtonListItem *item = m_fileButtonList->GetItemCurrent();
-        FileData *fileData = item->GetData().value<FileData*>();
+        auto *fileData = item->GetData().value<FileData*>();
 
         if (m_selectorType == FSTYPE_DIRECTORY)
         {
@@ -370,14 +345,10 @@ void FileSelector::updateSelectedList()
         m_selectedList.takeFirst();
     m_selectedList.clear();
 
-    FileData *f;
-    ArchiveItem *a;
-    for (int x = 0; x < m_archiveList->size(); x++)
+    foreach (auto a, *m_archiveList)
     {
-        a = m_archiveList->at(x);
-        for (int y = 0; y < m_fileData.size(); y++)
+        foreach (auto f, m_fileData)
         {
-            f = m_fileData.at(y);
             if (f->filename == a->filename)
             {
                 if (m_selectedList.indexOf(f->filename) == -1)
@@ -407,14 +378,12 @@ void FileSelector::updateFileList()
         QStringList filters;
         filters << "*";
         QFileInfoList list = d.entryInfoList(filters, QDir::Dirs, QDir::Name);
-        QFileInfo fi;
 
-        for (int x = 0; x < list.size(); x++)
+        foreach (const auto & fi, list)
         {
-            fi = list.at(x);
             if (fi.fileName() != ".")
             {
-                FileData  *data = new FileData;
+                auto  *data = new FileData;
                 data->selected = false;
                 data->directory = true;
                 data->filename = fi.fileName();
@@ -422,11 +391,11 @@ void FileSelector::updateFileList()
                 m_fileData.append(data);
 
                 // add a row to the MythUIButtonList
-                MythUIButtonListItem* item = new
+                auto* item = new
                         MythUIButtonListItem(m_fileButtonList, data->filename);
                 item->setCheckable(false);
                 item->SetImage("ma_folder.png");
-                item->SetData(qVariantFromValue(data));
+                item->SetData(QVariant::fromValue(data));
             }
         }
 
@@ -436,10 +405,9 @@ void FileSelector::updateFileList()
             filters.clear();
             filters = m_filemask.split(" ", QString::SkipEmptyParts);
             list = d.entryInfoList(filters, QDir::Files, QDir::Name);
-            for (int x = 0; x < list.size(); x++)
+            foreach (const auto & fi, list)
             {
-                fi = list.at(x);
-                FileData  *data = new FileData;
+                auto  *data = new FileData;
                 data->selected = false;
                 data->directory = false;
                 data->filename = fi.fileName();
@@ -447,7 +415,7 @@ void FileSelector::updateFileList()
                 m_fileData.append(data);
 
                 // add a row to the UIListBtnArea
-                MythUIButtonListItem* item = 
+                auto* item = 
                      new MythUIButtonListItem(m_fileButtonList, data->filename);
                 item->SetText(formatSize(data->size / 1024, 2), "size");
 
@@ -472,7 +440,7 @@ void FileSelector::updateFileList()
                 else
                     item->setCheckable(false);
 
-                item->SetData(qVariantFromValue(data));
+                item->SetData(QVariant::fromValue(data));
             }
         }
         m_locationEdit->SetText(m_curDirectory);

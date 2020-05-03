@@ -6,15 +6,10 @@
 #include <QString>
 #include "lircevent.h"
 
-AppleRemoteListener::AppleRemoteListener(QObject* mainWindow_)
-                   : mainWindow(mainWindow_)
-{
-}
-
 void AppleRemoteListener::appleRemoteButton(AppleRemote::Event button,
                                             bool pressedDown)
 {
-    QString code = 0;
+    QString code = nullptr;
     bool separateRelease = false;
 
     switch (button)
@@ -60,10 +55,9 @@ void AppleRemoteListener::appleRemoteButton(AppleRemote::Event button,
             break;
     }
     QKeySequence a(code);
-    int keycode = 0;
-    for (unsigned int i = 0; i < a.count(); i++)
+    for (int i = 0; i < a.count(); i++)
     {
-        keycode = a[i];
+        int keycode = a[i];
 
         if (pressedDown)
             QCoreApplication::postEvent(mainWindow, new LircKeycodeEvent(

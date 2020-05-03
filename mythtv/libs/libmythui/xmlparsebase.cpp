@@ -65,7 +65,7 @@ QString XMLParseBase::getFirstText(QDomElement &element)
 bool XMLParseBase::parseBool(const QString &text)
 {
     QString s = text.toLower();
-    return (s == "yes" || s == "true" || s.toInt());
+    return (s == "yes" || s == "true" || (s.toInt() != 0));
 }
 
 bool XMLParseBase::parseBool(QDomElement &element)
@@ -93,11 +93,13 @@ MythPoint XMLParseBase::parsePoint(QDomElement &element, bool normalize)
 
 QSize XMLParseBase::parseSize(const QString &text, bool normalize)
 {
-    int x, y;
+    int x = 0;
+    int y = 0;
     QSize retval;
 
     QStringList tmp = text.split(",");
-    bool x_ok = false, y_ok = false;
+    bool x_ok = false;
+    bool y_ok = false;
     if (tmp.size() >= 2)
     {
         x = tmp[0].toInt(&x_ok);
@@ -134,6 +136,9 @@ MythRect XMLParseBase::parseRect(const QString &text, bool normalize)
     QStringList values = text.split(',', QString::SkipEmptyParts);
     if (values.size() == 4)
         retval = MythRect(values[0], values[1], values[2], values[3]);
+    if (values.size() == 5)
+        retval = MythRect(values[0], values[1], values[2], values[3],
+            values[4]);
 
      if (normalize)
          retval.NormRect();
@@ -166,7 +171,7 @@ int XMLParseBase::parseAlignment(const QString &text)
             alignment |= Qt::AlignCenter;
             break;
         }
-        else if (align == "justify")
+        if (align == "justify")
         {
             alignment &= ~Qt::AlignHorizontal_Mask;
             alignment |= Qt::AlignJustify;
@@ -259,7 +264,9 @@ QBrush XMLParseBase::parseGradient(const QDomElement &element)
     {
         QRadialGradient gradient;
         gradient.setCoordinateMode(QGradient::ObjectBoundingMode);
-        float x1 = 0.5, y1 = 0.5, radius = 0.5;
+        float x1 = 0.5;
+        float y1 = 0.5;
+        float radius = 0.5;
         gradient.setCenter(x1,y1);
         gradient.setFocalPoint(x1,y1);
         gradient.setRadius(radius);
@@ -270,7 +277,10 @@ QBrush XMLParseBase::parseGradient(const QDomElement &element)
     {
         QLinearGradient gradient;
         gradient.setCoordinateMode(QGradient::ObjectBoundingMode);
-        float x1 = 0.0, y1 = 0.0, x2 = 0.0, y2 = 0.0;
+        float x1 = 0.0;
+        float y1 = 0.0;
+        float x2 = 0.0;
+        float y2 = 0.0;
         if (direction == "vertical")
         {
             x1 = 0.5;
@@ -327,20 +337,20 @@ QString XMLParseBase::parseText(QDomElement &element)
     return text;
 }
 
-static MythUIType *globalObjectStore = NULL;
+static MythUIType *globalObjectStore = nullptr;
 static QStringList loadedBaseFiles;
 
 MythUIType *XMLParseBase::GetGlobalObjectStore(void)
 {
     if (!globalObjectStore)
-        globalObjectStore = new MythUIType(NULL, "global store");
+        globalObjectStore = new MythUIType(nullptr, "global store");
     return globalObjectStore;
 }
 
 void XMLParseBase::ClearGlobalObjectStore(void)
 {
     delete globalObjectStore;
-    globalObjectStore = NULL;
+    globalObjectStore = nullptr;
     GetGlobalObjectStore();
 
     // clear any loaded base xml files which will force a reload the next time they are used
@@ -366,10 +376,7 @@ void XMLParseBase::ParseChildren(const QString &filename,
         if (!info.isNull())
         {
             QString type = info.tagName();
-            if (parent->ParseElement(filename, info, showWarnings))
-            {
-            }
-            else if (type == "font" || type == "fontdef")
+            if (type == "fontdef")
             {
                 bool global = (GetGlobalObjectStore() == parent);
                 MythFontProperties *font = MythFontProperties::ParseFromXml(
@@ -403,12 +410,12 @@ void XMLParseBase::ParseChildren(const QString &filename,
                      type == "editbar" ||
                      type == "video")
             {
-                ParseUIType(filename, info, type, parent, NULL, showWarnings, dependsMap);
+                ParseUIType(filename, info, type, parent, nullptr, showWarnings, dependsMap);
             }
             else
             {
-                VERBOSE_XML(VB_GENERAL, LOG_ERR, filename, info,
-                            "Unknown widget type");
+                // This will print an error if there is no match.
+                parent->ParseElement(filename, info, showWarnings);
             }
         }
     }
@@ -430,10 +437,10 @@ MythUIType *XMLParseBase::ParseUIType(
     {
         VERBOSE_XML(VB_GENERAL, LOG_ERR, filename, element,
                     "This element requires a name");
-        return NULL;
+        return nullptr;
     }
 
-    MythUIType *olduitype = NULL;
+    MythUIType *olduitype = nullptr;
 
     // check for name in immediate parent as siblings cannot share names
     if (parent && parent->GetChild(name))
@@ -441,14 +448,14 @@ MythUIType *XMLParseBase::ParseUIType(
         // if we're the global object store, assume it's just a theme overriding
         // the defaults..
         if (parent == GetGlobalObjectStore())
-            return NULL;
+            return nullptr;
 
         // Reuse the existing child and reparse
         olduitype = parent->GetChild(name);
     }
 
-    MythUIType *uitype = NULL;
-    MythUIType *base = NULL;
+    MythUIType *uitype = nullptr;
+    MythUIType *base = nullptr;
 
     QString inherits = element.attribute("from", "");
     if (!inherits.isEmpty())
@@ -468,7 +475,7 @@ MythUIType *XMLParseBase::ParseUIType(
             VERBOSE_XML(VB_GENERAL, LOG_ERR, filename, element,
                        QString("Couldn't find object '%1' to inherit '%2' from")
                         .arg(inherits).arg(name));
-            return NULL;
+            return nullptr;
         }
     }
 
@@ -496,34 +503,33 @@ MythUIType *XMLParseBase::ParseUIType(
         uitype = new MythUIClock(parent, name);
     else if (type == "progressbar")
         uitype = new MythUIProgressBar(parent, name);
-    else if (type == "scrollbar")
+    else if (type == "scrollbar") {
         uitype = new MythUIScrollBar(parent, name);
 #if CONFIG_QTWEBKIT
-    else if (type == "webbrowser")
+    } else if (type == "webbrowser") {
         uitype = new MythUIWebBrowser(parent, name);
 #endif
-    else if (type == "guidegrid")
+    } else if (type == "guidegrid") {
         uitype = new MythUIGuideGrid(parent, name);
-    else if (type == "shape")
+    } else if (type == "shape") {
         uitype = new MythUIShape(parent, name);
-    else if (type == "editbar")
+    } else if (type == "editbar") {
         uitype = new MythUIEditBar(parent, name);
-    else if (type == "video")
+    } else if (type == "video") {
         uitype = new MythUIVideo(parent, name);
-    else if (type == "window" && parent == GetGlobalObjectStore())
+    } else if (type == "window" && parent == GetGlobalObjectStore()) {
         uitype = new MythScreenType(parent, name);
-    else
-    {
+    } else {
         VERBOSE_XML(VB_GENERAL, LOG_ERR, filename, element,
                     "Unknown widget type.");
-        return NULL;
+        return nullptr;
     }
 
     if (!uitype)
     {
         VERBOSE_XML(VB_GENERAL, LOG_ERR, filename, element,
                     "Failed to instantiate widget type.");
-        return NULL;
+        return nullptr;
     }
 
     if (olduitype && parent)
@@ -551,10 +557,9 @@ MythUIType *XMLParseBase::ParseUIType(
                         .arg(name).arg(inherits));
             if (parent)
                 parent->DeleteChild(uitype);
-            return NULL;
+            return nullptr;
         }
-        else
-            uitype->CopyFrom(base);
+        uitype->CopyFrom(base);
 
     }
 
@@ -575,10 +580,7 @@ MythUIType *XMLParseBase::ParseUIType(
         QDomElement info = child.toElement();
         if (!info.isNull())
         {
-            if (uitype->ParseElement(filename, info, showWarnings))
-            {
-            }
-            else if (info.tagName() == "font" || info.tagName() == "fontdef")
+            if (info.tagName() == "fontdef")
             {
                 bool global = (GetGlobalObjectStore() == parent);
                 MythFontProperties *font = MythFontProperties::ParseFromXml(
@@ -586,8 +588,8 @@ MythUIType *XMLParseBase::ParseUIType(
 
                 if (!global && font)
                 {
-                    QString name = info.attribute("name");
-                    uitype->AddFont(name, font);
+                    QString name2 = info.attribute("name");
+                    uitype->AddFont(name2, font);
                 }
 
                 delete font;
@@ -617,8 +619,8 @@ MythUIType *XMLParseBase::ParseUIType(
             }
             else
             {
-                VERBOSE_XML(VB_GENERAL, LOG_ERR, filename, info,
-                            "Unknown widget type.");
+                // This will print an error if there is no match.
+                uitype->ParseElement(filename, info, showWarnings);
             }
         }
     }
@@ -632,10 +634,9 @@ bool XMLParseBase::WindowExists(const QString &xmlfile,
                                 const QString &windowname)
 {
     const QStringList searchpath = GetMythUI()->GetThemeSearchPath();
-    QStringList::const_iterator it = searchpath.begin();
-    for (; it != searchpath.end(); ++it)
+    foreach (const auto & dir, searchpath)
     {
-        QString themefile = *it + xmlfile;
+        QString themefile = dir + xmlfile;
         QFile f(themefile);
 
         if (!f.open(QIODevice::ReadOnly))
@@ -688,20 +689,16 @@ bool XMLParseBase::LoadWindowFromXML(const QString &xmlfile,
     bool showWarnings = true;
 
     const QStringList searchpath = GetMythUI()->GetThemeSearchPath();
-    QStringList::const_iterator it = searchpath.begin();
-    for (; it != searchpath.end(); ++it)
+    foreach (const auto & dir, searchpath)
     {
-        QString themefile = *it + xmlfile;
+        QString themefile = dir + xmlfile;
         LOG(VB_GUI, LOG_INFO, LOC + QString("Loading window %1 from %2").arg(windowname).arg(themefile));
         if (doLoad(windowname, parent, themefile,
                    onlyLoadWindows, showWarnings))
         {
             return true;
         }
-        else
-        {
-            LOG(VB_FILE, LOG_ERR, LOC + "No theme file " + themefile);
-        }
+        LOG(VB_FILE, LOG_ERR, LOC + "No theme file " + themefile);
     }
 
     LOG(VB_GENERAL, LOG_ERR, LOC +
@@ -714,7 +711,7 @@ bool XMLParseBase::LoadWindowFromXML(const QString &xmlfile,
 bool XMLParseBase::doLoad(const QString &windowname,
                           MythUIType *parent,
                           const QString &filename,
-                          bool onlywindows,
+                          bool onlyLoadWindows,
                           bool showWarnings)
 {
     QDomDocument doc;
@@ -755,7 +752,7 @@ bool XMLParseBase::doLoad(const QString &windowname,
                      LoadBaseTheme(include);
             }
 
-            if (onlywindows && e.tagName() == "window")
+            if (onlyLoadWindows && e.tagName() == "window")
             {
                 QString name = e.attribute("name", "");
                 QString include = e.attribute("include", "");
@@ -776,7 +773,7 @@ bool XMLParseBase::doLoad(const QString &windowname,
                 }
             }
 
-            if (!onlywindows)
+            if (!onlyLoadWindows)
             {
                 QString type = e.tagName();
                 if (type == "font" || type == "fontdef")
@@ -817,9 +814,9 @@ bool XMLParseBase::doLoad(const QString &windowname,
                     // We don't want widgets in base.xml
                     // depending on each other so ignore dependsMap
                     QMap<QString, QString> dependsMap;
-                    MythUIType *uitype = NULL;
+                    MythUIType *uitype = nullptr;
                     uitype = ParseUIType(filename, e, type, parent,
-                                         NULL, showWarnings, dependsMap);
+                                         nullptr, showWarnings, dependsMap);
                     if (uitype)
                         uitype->ConnectDependants(true);
                 }
@@ -832,9 +829,7 @@ bool XMLParseBase::doLoad(const QString &windowname,
         }
         n = n.nextSibling();
     }
-    if (onlywindows)
-        return false;
-    return true;
+    return !onlyLoadWindows;
 }
 
 bool XMLParseBase::LoadBaseTheme(void)
@@ -845,10 +840,9 @@ bool XMLParseBase::LoadBaseTheme(void)
 
     const QStringList searchpath = GetMythUI()->GetThemeSearchPath();
     QMap<QString, QString> dependsMap;
-    QStringList::const_iterator it = searchpath.begin();
-    for (; it != searchpath.end(); ++it)
+    foreach (const auto & dir, searchpath)
     {
-        QString themefile = *it + "base.xml";
+        QString themefile = dir + "base.xml";
         if (doLoad(QString(), GetGlobalObjectStore(), themefile,
                    loadOnlyWindows, showWarnings))
         {
@@ -886,11 +880,9 @@ bool XMLParseBase::LoadBaseTheme(const QString &baseTheme)
     bool showWarnings = true;
 
     const QStringList searchpath = GetMythUI()->GetThemeSearchPath();
-
-    QStringList::const_iterator it = searchpath.begin();
-    for (; it != searchpath.end(); ++it)
+    foreach (const auto & dir, searchpath)
     {
-        QString themefile = *it + baseTheme;
+        QString themefile = dir + baseTheme;
         if (doLoad(QString(), GetGlobalObjectStore(), themefile,
                    loadOnlyWindows, showWarnings))
         {
@@ -925,7 +917,7 @@ bool XMLParseBase::CopyWindowFromBase(const QString &windowname,
         return false;
     }
 
-    MythScreenType *st = dynamic_cast<MythScreenType *>(ui);
+    auto *st = dynamic_cast<MythScreenType *>(ui);
     if (!st)
     {
         LOG(VB_GENERAL, LOG_ERR, LOC +

@@ -5,10 +5,10 @@
 #include <QSocketNotifier>
 #include <QMutex>
 #include <QQueue>
-#include <QTime>
+#include <QElapsedTimer>
 
-#include <stdint.h>
-#include <time.h>
+#include <cstdint>
+#include <ctime>
 #include <unistd.h>
 
 #include "mythconfig.h"
@@ -17,26 +17,11 @@
 #include "mythsignalingtimer.h"
 #include "mthread.h"
 
-#undef NOLOGSERVER
-#if !CONFIG_MYTHLOGSERVER
-#define NOLOGSERVER
-#endif
-
-// ZMQ forward declarations
-namespace nzmqt {
-    class ZMQSocket;
-    class ZMQContext;
-}
-
 #define LOGLINE_MAX (2048-120)
 
 class QString;
 class MSqlQuery;
 class LoggingItem;
-
-MBASE_PUBLIC bool logServerStart(void);
-MBASE_PUBLIC void logServerStop(void);
-void logServerWait(void);
 
 /// \brief Base class for the various logging mechanisms
 class LoggerBase : public QObject
@@ -47,7 +32,7 @@ class LoggerBase : public QObject
     /// \brief LoggerBase Constructor
     explicit LoggerBase(const char *string);
     /// \brief LoggerBase Deconstructor
-    virtual ~LoggerBase();
+    ~LoggerBase() override;
     /// \brief Process a log message for the logger instance
     /// \param item LoggingItem containing the log message to process
     virtual bool logmsg(LoggingItem *item) = 0;
@@ -56,8 +41,7 @@ class LoggerBase : public QObject
     /// \brief Stop logging to the database
     virtual void stopDatabaseAccess(void) { }
   protected:
-    virtual bool setupZMQSocket(void) = 0;
-    char *m_handle; ///< semi-opaque handle for identifying instance
+    char *m_handle {nullptr}; ///< semi-opaque handle for identifying instance
 };
 
 /// \brief File-based logger - used for logfiles and console
@@ -67,18 +51,13 @@ class FileLogger : public LoggerBase
 
   public:
     explicit FileLogger(const char *filename);
-    ~FileLogger();
-    bool logmsg(LoggingItem *item);
-    void reopen(void);
-    static FileLogger *create(QString filename, QMutex *mutex);
-  protected:
-    bool setupZMQSocket(void);
+    ~FileLogger() override;
+    bool logmsg(LoggingItem *item) override; // LoggerBase
+    void reopen(void) override; // LoggerBase
+    static FileLogger *create(const QString& filename, QMutex *mutex);
   private:
-    bool m_opened;      ///< true when the logfile is opened
-    int  m_fd;          ///< contains the file descriptor for the logfile
-    nzmqt::ZMQSocket *m_zmqSock;  ///< ZeroMQ feeding socket
-  protected slots:
-    void receivedMessage(const QList<QByteArray>&);
+    bool m_opened {false}; ///< true when the logfile is opened
+    int  m_fd     {-1};    ///< contains the file descriptor for the logfile
 };
 
 /// \brief Syslog-based logger (not available in Windows)
@@ -89,19 +68,29 @@ class SyslogLogger : public LoggerBase
   public:
     SyslogLogger();
     explicit SyslogLogger(bool open);
-    ~SyslogLogger();
-    bool logmsg(LoggingItem *item);
+    ~SyslogLogger() override;
+    bool logmsg(LoggingItem *item) override; // LoggerBase
     /// \brief Unused for this logger.
-    void reopen(void) { };
+    void reopen(void) override { }; // LoggerBase
     static SyslogLogger *create(QMutex *mutex, bool open = true);
-  protected:
-    bool setupZMQSocket(void);
   private:
-    bool m_opened;          ///< true when syslog channel open.
-    nzmqt::ZMQSocket *m_zmqSock;  ///< ZeroMQ feeding socket
-  protected slots:
-    void receivedMessage(const QList<QByteArray>&);
+    bool m_opened {false};  ///< true when syslog channel open.
 };
+
+#if CONFIG_SYSTEMD_JOURNAL
+class JournalLogger : public LoggerBase
+{
+    Q_OBJECT
+
+  public:
+    JournalLogger();
+    ~JournalLogger() override;
+    bool logmsg(LoggingItem *item) override; // LoggerBase
+    /// \brief Unused for this logger.
+    void reopen(void) override { }; // LoggerBase
+    static JournalLogger *create(QMutex *mutex);
+};
+#endif
 
 class DBLoggerThread;
 
@@ -113,69 +102,30 @@ class DatabaseLogger : public LoggerBase
     friend class DBLoggerThread;
   public:
     explicit DatabaseLogger(const char *table);
-    ~DatabaseLogger();
-    bool logmsg(LoggingItem *item);
-    void reopen(void) { };
-    virtual void stopDatabaseAccess(void);
-    static DatabaseLogger *create(QString table, QMutex *mutex);
-  protected:
-    bool setupZMQSocket(void);
+    ~DatabaseLogger() override;
+    bool logmsg(LoggingItem *item) override; // LoggerBase
+    void reopen(void) override { }; // LoggerBase
+    void stopDatabaseAccess(void) override; // LoggerBase
+    static DatabaseLogger *create(const QString& table, QMutex *mutex);
   protected:
     bool logqmsg(MSqlQuery &query, LoggingItem *item);
     void prepare(MSqlQuery &query);
   private:
     bool isDatabaseReady(void);
-    bool tableExists(const QString &table);
+    static bool tableExists(const QString &table);
 
     DBLoggerThread *m_thread;   ///< The database queue handling thread
     QString m_query;            ///< The database query to insert log messages
-    bool m_opened;              ///< The database is opened
-    bool m_loggingTableExists;  ///< The desired logging table exists
-    bool m_disabled;            ///< DB logging is temporarily disabled
-    QTime m_disabledTime;       ///< Time when the DB logging was disabled
-    QTime m_errorLoggingTime;   ///< Time when DB error logging was last done
+    bool m_opened             {true};  ///< The database is opened
+    bool m_loggingTableExists {false}; ///< The desired logging table exists
+    QElapsedTimer m_disabledTime;       ///< Elapsed time since the DB logging was disabled
+    QElapsedTimer m_errorLoggingTime;   ///< Elapsed time since DB error logging was last done
     static const int kMinDisabledTime; ///< Minimum time to disable DB logging
                                        ///  (in ms)
-    nzmqt::ZMQSocket *m_zmqSock;  ///< ZeroMQ feeding socket
-  protected slots:
-    void receivedMessage(const QList<QByteArray>&);
 };
 
-typedef QList<QByteArray> LogMessage;
-typedef QList<LogMessage *> LogMessageList;
-
-/// \brief The logging thread that received the messages from the clients via
-///        ZeroMQ and dispatches each LoggingItem to each logger instance via
-///        ZeroMQ.
-class LogServerThread : public QObject, public MThread
-{
-    Q_OBJECT
-    friend class LogForwardThread;
-    friend class FileLogger;
-    friend class SyslogLogger;
-    friend class DatabaseLogger;
-
-  public:
-    LogServerThread();
-    ~LogServerThread();
-    void run(void);
-    void stop(void);
-    nzmqt::ZMQContext *getZMQContext(void) { return m_zmqContext; };
-
-  public slots:
-    void receivedMessage(const QList<QByteArray>&);
-
-  private:
-    nzmqt::ZMQContext *m_zmqContext; ///< ZeroMQ context
-    nzmqt::ZMQSocket *m_zmqInSock;   ///< ZeroMQ feeding socket
-
-    MythSignalingTimer *m_heartbeatTimer; ///< 1s repeating timer for client
-                                          ///  heartbeats
-
-  protected slots:
-    void checkHeartBeats(void);
-    void pingClient(QString clientId);
-};
+using LogMessage = QList<QByteArray>;
+using LogMessageList = QList<LogMessage *>;
 
 /// \brief The logging thread that forwards received messages to the consuming
 ///        loggers via ZeroMQ
@@ -186,29 +136,22 @@ class LogForwardThread : public QObject, public MThread
     friend void logSigHup(void);
   public:
     LogForwardThread();
-    ~LogForwardThread();
-    void run(void);
+    ~LogForwardThread() override;
+    void run(void) override; // MThread
     void stop(void);
-    nzmqt::ZMQContext *getZMQContext(void) { return m_zmqContext; };
   private:
-    bool m_aborted;                  ///< Flag to abort the thread.
-    nzmqt::ZMQContext *m_zmqContext; ///< ZeroMQ context
-    nzmqt::ZMQSocket *m_zmqPubSock;  ///< ZeroMQ publishing socket
+    bool m_aborted {false};          ///< Flag to abort the thread.
 
-    MythSignalingTimer *m_shutdownTimer;    ///< 5 min timer to shut down if no
-                                            /// clients
-
-    void forwardMessage(LogMessage *msg);
-    void expireClients(void);
+    static void forwardMessage(LogMessage *msg);
   signals:
     void incomingSigHup(void);
   protected slots:
-    void handleSigHup(void);
-    void shutdownTimerExpired(void);
-
-  signals:
-    void pingClient(QString);
+    static void handleSigHup(void);
 };
+
+MBASE_PUBLIC bool logForwardStart(void);
+MBASE_PUBLIC void logForwardStop(void);
+MBASE_PUBLIC void logForwardMessage(const QList<QByteArray> &msg);
 
 
 class QWaitCondition;
@@ -223,8 +166,11 @@ class DBLoggerThread : public MThread
 {
   public:
     explicit DBLoggerThread(DatabaseLogger *logger);
-    ~DBLoggerThread();
-    void run(void);
+    ~DBLoggerThread() override;
+    DBLoggerThread(const DBLoggerThread &) = delete;            // not copyable
+    DBLoggerThread &operator=(const DBLoggerThread &) = delete; // not copyable
+
+    void run(void) override; // MThread
     void stop(void);
     /// \brief Enqueues a LoggingItem onto the queue for the thread to
     ///        consume.
@@ -238,18 +184,16 @@ class DBLoggerThread : public MThread
         return (m_queue->size() >= MAX_QUEUE_LEN);
     }
   private:
-    DatabaseLogger *m_logger;       ///< The associated logger instance
-    QMutex m_queueMutex;            ///< Mutex for protecting the queue
-    QQueue<LoggingItem *> *m_queue; ///< Queue of LoggingItems to insert
-    QWaitCondition *m_wait;         ///< Wait condition used for waiting
-                                    ///  for the queue to not be full.
-                                    ///  Protected by m_queueMutex
-    volatile bool m_aborted;        ///< Used during shutdown to indicate
-                                    ///  that the thread should stop ASAP.
-                                    ///  Protected by m_queueMutex
+    DatabaseLogger *m_logger {nullptr};///< The associated logger instance
+    QMutex m_queueMutex;               ///< Mutex for protecting the queue
+    QQueue<LoggingItem *> *m_queue {nullptr}; ///< Queue of LoggingItems to insert
+    QWaitCondition *m_wait {nullptr};  ///< Wait condition used for waiting
+                                       ///  for the queue to not be full.
+                                       ///  Protected by m_queueMutex
+    volatile bool m_aborted {false};   ///< Used during shutdown to indicate
+                                       ///  that the thread should stop ASAP.
+                                       ///  Protected by m_queueMutex
 };
-
-extern LogServerThread *logServerThread;
 
 #ifndef _WIN32
 MBASE_PUBLIC void logSigHup(void);

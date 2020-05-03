@@ -89,15 +89,17 @@ class MUI_PUBLIC MythGestureEvent : public QEvent
 
     /**
      * \brief Create a MythGesture
-     * \param type The gesture type, as per the Type enumeration.
-     * \sa Type
+     * \param gesture What type of gesture was performed.
+     * \param button The button (if any) that was pressed during the gesture.
      */
-    MythGestureEvent(Gesture gesture, Button button = LeftButton) :
+    explicit MythGestureEvent(Gesture gesture, Button button = LeftButton) :
         QEvent(kEventType), m_gesture(Unknown)
     {
         m_button = button;
         (gesture >= MaxGesture) ? m_gesture = MaxGesture : m_gesture = gesture;
     }
+
+    ~MythGestureEvent() override;
 
     /**
      * \brief Get the gesture type.
@@ -110,7 +112,7 @@ class MUI_PUBLIC MythGestureEvent : public QEvent
      * \brief Get the symbolic name of the gesture.
      * \return A string containing the symbolic name of the gesture.
      */
-    operator QString() const;
+    explicit operator QString() const;
 
     void SetPosition(QPoint position) { m_position = position; }
     QPoint GetPosition() const { return m_position; }
@@ -179,7 +181,7 @@ class MythGesture
 
     /**
      * \brief Complete the gesture event of the last completed stroke.
-     * \return A new gesture event, or NULL on error.
+     * \return A new gesture event, or nullptr on error.
      */
     MythGestureEvent *gesture(void) const;
 
@@ -194,7 +196,8 @@ class MythGesture
      * \brief Determine if the stroke has the minimum required points.
      * \return true if the gesture can be translated, otherwise, false.
      */
-    bool hasMinimumPoints(void) const { return (uint)points.size() >= min_points; }
+    bool hasMinimumPoints(void) const
+        { return (uint)m_points.size() >= m_minPoints; }
 
   protected:
 
@@ -215,20 +218,20 @@ class MythGesture
 
   private:
 
-    bool m_recording;
-    int min_x;
-    int max_x;
-    int min_y;
-    int max_y;
-    size_t max_points;
-    size_t min_points;
-    size_t max_sequence;
-    int scale_ratio;
-    float bin_percent;
-    MythGestureEvent::Gesture last_gesture;
-    QList <QPoint> points;
+    bool   m_recording    {false};
+    int    m_minX         {10000};
+    int    m_maxX         {-1};
+    int    m_minY         {10000};
+    int    m_maxY         {-1};
+    size_t m_maxPoints    {10000};
+    size_t m_minPoints    {50};
+    size_t m_maxSequence  {20};
+    int    m_scaleRatio   {4};
+    float  m_binPercent   {0.07F};
+    MythGestureEvent::Gesture m_lastGesture {MythGestureEvent::MaxGesture};
+    QList <QPoint> m_points;
 
-    MythGesturePrivate *p;
+    MythGesturePrivate *p {nullptr}; // NOLINT(readability-identifier-naming)
 };
 
 #endif /* MYTHGESTURE_H */

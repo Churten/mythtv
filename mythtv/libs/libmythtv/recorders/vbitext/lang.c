@@ -10,89 +10,89 @@ static unsigned char lang_char[256];
      !"#$%&'()*+,-./0123456789:;<=>?
     @ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_
     `abcdefghijklmnopqrstuvwxyz{|}~
-     ¡¢£¤¥¦§¨©ª«¬­®¯°±²³´µ¶·¸¹º»¼½¾¿
-    ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏĞÑÒÓÔÕÖ×ØÙÚÛÜİŞß
-    àáâãäåæçèéêëìíîïğñòóôõö÷øùúûüışÿ
+     Â¡Â¢Â£Â¤Â¥Â¦Â§Â¨Â©ÂªÂ«Â¬Â­Â®Â¯Â°Â±Â²Â³Â´ÂµÂ¶Â·Â¸Â¹ÂºÂ»Â¼Â½Â¾Â¿
+    Ã€ÃÃ‚ÃƒÃ„Ã…Ã†Ã‡ÃˆÃ‰ÃŠÃ‹ÃŒÃÃÃÃÃ‘Ã’Ã“Ã”Ã•Ã–Ã—Ã˜Ã™ÃšÃ›ÃœÃÃÃŸ
+    Ã Ã¡Ã¢Ã£Ã¤Ã¥Ã¦Ã§Ã¨Ã©ÃªÃ«Ã¬Ã­Ã®Ã¯Ã°Ã±Ã²Ã³Ã´ÃµÃ¶Ã·Ã¸Ã¹ÃºÃ»Ã¼Ã½Ã¾Ã¿
 */
 
 
 
-static struct mark { const char *g0, *latin1, *latin2; } marks[16] =
+static struct mark { const char *m_g0, *m_latin1, *m_latin2; } marks[16] =
 {
     /* none */         { "#",
-                         "¤",
+                         "\xA4", /* Â¤ */
                          "$"                                   },
-    /* grave - ` */    { " aeiouAEIOU",
-                         "`àèìòùÀÈÌÒÙ",
+    /* grave - ` */    { " aeiouAEIOU", /* `Ã Ã¨Ã¬Ã²Ã¹Ã€ÃˆÃŒÃ’Ã™ */
+                         "`\xE0\xE8\xEC\xF2\xF9\xC0\xC8\xCC\xD2\xD9",
                          "`aeiouAEIOU"                         },
     /* acute - ' */    { " aceilnorsuyzACEILNORSUYZ",
-                         "'ácéílnórsúızÁCÉÍLNÓRSÚİZ",
-                         "'áæéíåñóà¶úı¼ÁÆÉÍÅÑÓÀ¦Úİ¬"           },
+                         "'\xE1\x63\xE9\xEDln\xF3rs\xFA\xFDz\xC1\x43\xC9\xCDLN\xD3RS\xDA\xDDZ", /* 'Ã¡cÃ©Ã­lnÃ³rsÃºÃ½zÃCÃ‰ÃLNÃ“RSÃšÃZ */
+                         "'\xE1\xE6\xE9\xED\xE5\xF1\xF3\xE0\xB6\xFA\xFD\xBC\xC1\xC6\xC9\xCD\xC5\xD1\xD3\xC0\xA6\xDAİ¬"  /* 'Ã¡Ã¦Ã©Ã­Ã¥Ã±Ã³Ã Â¶ÃºÃ½Â¼ÃÃ†Ã‰ÃÃ…Ã‘Ã“Ã€Â¦ÃšÃÂ¬ */ },
     /* cirumflex - ^ */        { " aeiouAEIOU",
-                         "^âêîôûÂÊÎÔÛ",
-                         "^âeîôuÂEÎÔU"                         },
+                         "^\xE2\xEA\xEE\xF4\xFB\xC2\xCA\xCE\xD4\xDB", /* ^Ã¢ÃªÃ®Ã´Ã»Ã‚ÃŠÃÃ”Ã› */
+                         "^\xE2\x65\xEE\xF4\x75\xC2\x45\xCE\xD4\x55" }, /* ^Ã¢eÃ®Ã´uÃ‚EÃÃ”U */
     /* tilde - ~ */    { " anoANO",
-                         "~ãñõÃÑÕ",
+                         "~\xE3\xF1\xF5\xC3\xD1\xD5", /* ~Ã£Ã±ÃµÃƒÃ‘Ã• */
                          "~anoANO"                             },
-    /* ??? - ¯ */      { "",
+    /* ??? - <AF> */   { "",
                          "",
                          ""                                    },
     /* breve - u */    { "aA",
                          "aA",
-                         "ãÃ"                                  },
-    /* abovedot - · */ { "zZ",
+                         "\xE3\xC3" /* Ã£Ãƒ */                   },
+    /* abovedot - Â· */ { "zZ",
                          "zZ",
-                         "¿¯"                                  },
-    /* diaeresis ¨ */  { "aeiouAEIOU",
-                         "äëïöüÄËÏÖÜ",
-                         "äëiöüÄËIÖÜ"                          },
+                         "\xBF\xAF" /* Â¿Â¯ */                   },
+    /* diaeresis Â¨ */  { "aeiouAEIOU",
+                         "\xE4\xEB\xEF\xF6\xFC\xC4\xCB\xCF\xD6\xDC", /* Ã¤Ã«Ã¯Ã¶Ã¼Ã„Ã‹ÃÃ–Ãœ */
+                         "\xE4\xEB\x69\xF6\xFC\xC4\xCB\x49\xD6\xDC"  /* Ã¤Ã«iÃ¶Ã¼Ã„Ã‹IÃ–Ãœ */},
     /* ??? - . */      { "",
                          "",
                          ""                                    },
-    /* ringabove - ° */        { " auAU",
-                         "°åuÅU",
-                         "°aùAÙ"                               },
-    /* cedilla - ¸ */  { "cstCST",
-                         "çstÇST",
-                         "çºşÇªŞ"                              },
+    /* ringabove - Â° */        { " auAU",
+                         "\xB0\xE5\x75\xC5\x55", /* Â°Ã¥uÃ…U */
+                         "\xB0\x61\xF9\x41\xD9"  /* Â°aÃ¹AÃ™ */   },
+    /* cedilla - Â¸ */  { "cstCST",
+                         "\xE7\x73\x74\xC7\x53\x54", /* Ã§stÃ‡ST */
+                         "\xE7\xBA\xFE\xC7\xAA\xDE"  /* Ã§ÂºÃ¾Ã‡ÂªÃ */ },
     /* ??? - _ */      { " ",
                          "_",
                          "_"                                   },
     /* dbl acute - " */        { " ouOU",
                          "\"ouOU",
-                         "\"õûÕÛ"                              },
+                         "\x22\xF5\xFB\xD5\xDB"   /* \"ÃµÃ»Ã•Ã› */ },
     /* ogonek - \, */  { "aeAE",
                          "aeAE",
-                         "±ê¡Ê"                                },
+                         "\xB1\xEA\xA1\xCA" /* Â±ÃªÂ¡ÃŠ */ },
     /* caron - v */    { "cdelnrstzCDELNRSTZ",
                          "cdelnrstzCDELNRSTZ",
-                         "èïìµòø¹»¾ÈÏÌ¥ÒØ©«®"                  },
+                         "\xE8\xEF\xEC\xB5\xF2\xF8\xB9\xBB\xBE\xC8\xCFÌ¥\xD2Ø©\xAB\xAE" /* Ã¨Ã¯Ã¬ÂµÃ²Ã¸Â¹Â»Â¾ÃˆÃÃŒÂ¥Ã’Ã˜Â©Â«Â® */ },
 };
 
 static unsigned char g2map_latin1[] =
    /*0123456789abcdef*/
-    " ¡¢£$¥#§¤'\"«    "
-    "°±²³×µ¶·÷'\"»¼½¾¿"
-    " `´^~   ¨.°¸_\"  "
-    "_¹®©            "
-    " ÆĞªH ILLØ ºŞTNn"
-    "Kædğhiillø ßştn\x7f";
+    "\x20\xA1\xA2\xA3\x24\xA5\x23\xA7\xA4\x27\x22\xAB\x20\x20\x20\x20"  /*  Â¡Â¢Â£$Â¥#Â§Â¤'\"Â«     */
+    "\xB0\xB1\xB2\xB3\xD7\xB5\xB6\xB7\xF7\x27\x22\xBB\xBC\xBD\xBE\xBF"  /* Â°Â±Â²Â³Ã—ÂµÂ¶Â·Ã·'\"Â»Â¼Â½Â¾Â¿ */
+    "\x20\x60\xB4\x5E\x7E\x20\x20\x20\xA8\x2e\xB0\xB8\x5F\x22\x20\x20"  /*  `Â´^~   Â¨.Â°Â¸_\"   */
+    "\x5F\xB9\xAE\xA9\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20"  /* _Â¹Â®Â©             */
+    "\x20\xC6\xD0\xAA\x48\x20\x49\x4C\x4C\xD8\x20\xBA\xDE\x54\x4E\x6E"  /*  Ã†ÃÂªH ILLÃ˜ ÂºÃTNn */
+    "\x4B\xE6\x64\xF0\x68\x69\x69\x6C\x6C\xF8\x20\xDF\xFE\x74\x6E\x7f"; /* KÃ¦dÃ°hiillÃ¸ ÃŸÃ¾tn\x7f" */
 
 static unsigned char g2map_latin2[] =
    /*0123456789abcdef*/
-    " icL$Y#§¤'\"<    "
-    "°   ×u  ÷'\">    "
-    " `´^~ ¢ÿ¨.°¸_½²·"
-    "- RC            "
-    "  ĞaH iL£O opTNn"
-    "K ğdhiil³o ßptn\x7f";
+    "\x20\x69\x63\x4C\x24\x59\x23\xA7\xA4\x27\x22\x3C\x20\x20\x20\x20"  /*  icL$Y#Â§Â¤'\"<     */
+    "\xB0\x20\x20\x20\xD7\x75\x20\x20\xF7\x27\x22\x3E\x20\x20\x20\x20"  /* Â°   Ã—u  Ã·'\">     */
+    "\x20\x60\xB4\x5E\x7E\x20\xA2\xFF\xA8\x2E\xB0\xB8\x5F\xBD\xB2\xB7"  /*  `Â´^~ Â¢Ã¿Â¨.Â°Â¸_Â½Â²Â· */
+    "\x2D\x20\x52\x43\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20"  /* - RC             */
+    "\x20\x20\xD0\x61\x48\x20\x69\x4C\xA3\x4F\x20\x6F\x70\x54\x4E\x6e"  /*   ÃaH iLÂ£O opTNn */
+    "\x4B\x20\xF0\x64\x68\x69\x69\x6C\xB3\x6F\x20\xDF\x70\x74\x6e\x7f"; /* K Ã°dhiilÂ³o ÃŸptn\x7f" */
 
 
 
 void
 lang_init(void)
 {
-    int i;
+    int i = 0;
 
     memset(lang_char, 0, sizeof(lang_char));
     for (i = 1; i <= 13; i++)
@@ -103,10 +103,11 @@ lang_init(void)
 void
 conv2latin(unsigned char *p, int n, int lang)
 {
-    int c, gfx = 0;
+    int gfx = 0;
 
     while (n--)
     {
+       int c = 0;
        if (lang_char[c = *p])
        {
            if (! gfx || (c & 0xa0) != 0x20)
@@ -127,11 +128,11 @@ init_enhance(struct enhance *eh)
 }
 
 void
-add_enhance(struct enhance *eh, int dcode, unsigned int *t)
+add_enhance(struct enhance *eh, int dcode, unsigned int *data)
 {
     if (dcode == eh->next_des)
     {
-       memcpy(eh->trip + dcode * 13, t, 13 * sizeof(*t));
+       memcpy(eh->trip + dcode * 13, data, 13 * sizeof(*data));
        eh->next_des++;
     }
     else
@@ -139,15 +140,15 @@ add_enhance(struct enhance *eh, int dcode, unsigned int *t)
 }
 
 void
-enhance(struct enhance *eh, struct vt_page *vtp)
+do_enhancements(struct enhance *eh, struct vt_page *vtp)
 {
     int row = 0;
-    unsigned int *p, *e;
 
     if (eh->next_des < 1)
        return;
 
-    for (p = eh->trip, e = p + eh->next_des * 13; p < e; p++)
+    for (unsigned int *p = eh->trip, *e = p + eh->next_des * 13; p < e; p++)
+    {
        if (*p % 2048 != 2047)
        {
            int adr = *p % 64;
@@ -173,14 +174,14 @@ enhance(struct enhance *eh, struct vt_page *vtp)
                        if (adr < VT_WIDTH && row < VT_HEIGHT)
                        {
                            struct mark *mark = marks + (mode - 16);
-                           char *x;
+                           char *x = NULL;
 
-                           if ((x = strchr(mark->g0, data)))
+                           if ((x = strchr(mark->m_g0, data)))
                            {
                                if (latin1)
-                                   data = mark->latin1[x - mark->g0];
+                                   data = mark->m_latin1[x - mark->m_g0];
                                else
-                                   data = mark->latin2[x - mark->g0];
+                                   data = mark->m_latin2[x - mark->m_g0];
                            }
                            vtp->data[row][adr] = data;
                        }
@@ -196,8 +197,6 @@ enhance(struct enhance *eh, struct vt_page *vtp)
                switch (mode)
                {
                    case 1: // full row color
-                       row = adr;
-                       break;
                    case 4: // set active position
                        row = adr;
                        break;
@@ -208,6 +207,7 @@ enhance(struct enhance *eh, struct vt_page *vtp)
                }
            }
        }
+    }
     //printf("\n");
 }
 

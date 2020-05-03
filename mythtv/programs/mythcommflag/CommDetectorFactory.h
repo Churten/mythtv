@@ -11,10 +11,10 @@ class QDateTime;
 class CommDetectorFactory
 {
   public:
-    CommDetectorFactory() {}
-    ~CommDetectorFactory() {}
+    CommDetectorFactory() = default;
+    ~CommDetectorFactory() = default;
 
-    CommDetectorBase* makeCommDetector(
+    static CommDetectorBase* makeCommDetector(
         SkipType commDetectMethod,
         bool showProgress,
         bool fullSpeed, MythPlayer* player,

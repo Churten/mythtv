@@ -71,11 +71,12 @@ void Serializer::Serialize( const QVariant &vValue, const QString &_sName )
     if ((sName.length() > 0) && sName.at(0) == 'Q')
         sName = sName.mid( 1 );
 
-    m_hash.reset();
+    if ( !vValue.isNull() )
+        m_hash.addData( vValue.toString().toUtf8() );
 
     BeginSerialize( sName );
 
-    AddProperty( sName, vValue, NULL, NULL );
+    AddProperty( sName, vValue, nullptr, nullptr );
 
     EndSerialize();
 }
@@ -101,7 +102,7 @@ void Serializer::SerializeObject( const QObject *pObject, const QString &sName )
 
 void Serializer::SerializeObjectProperties( const QObject *pObject )
 {
-    if (pObject != NULL)
+    if (pObject != nullptr)
     {
         const QMetaObject *pMetaObject = pObject->metaObject();
 
@@ -122,7 +123,7 @@ void Serializer::SerializeObjectProperties( const QObject *pObject )
                 bool bHash = false;
 
                 if (ReadPropertyMetadata( pObject, 
-                                          sPropName, 
+                                          sPropName,
                                           "transient").toLower() != "true" )
                 {
                     bHash = true;
@@ -147,8 +148,8 @@ void Serializer::SerializeObjectProperties( const QObject *pObject )
 /////////////////////////////////////////////////////////////////////////////
 
 QString Serializer::ReadPropertyMetadata( const QObject *pObject, 
-                                                QString  sPropName, 
-                                                QString  sKey )
+                                                const QString&  sPropName,
+                                                const QString&  sKey )
 {
     const QMetaObject *pMeta = pObject->metaObject();
 
@@ -164,7 +165,7 @@ QString Serializer::ReadPropertyMetadata( const QObject *pObject,
 
         QString     sFullKey  = sKey + "=";
 
-        for (int nIdx = 0; nIdx < sOptions.size(); ++nIdx)
+        for (nIdx = 0; nIdx < sOptions.size(); ++nIdx)
         {
             if (sOptions.at( nIdx ).startsWith( sFullKey ))
                 return sOptions.at( nIdx ).mid( sFullKey.length() );

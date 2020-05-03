@@ -143,7 +143,7 @@ bool ActionSet::Replace(const ActionID &id,
 bool ActionSet::SetModifiedFlag(const ActionID &id, bool modified)
 {
     if (!modified)
-        return m_modified.removeAll(id);
+        return m_modified.removeAll(id) != 0;
 
     if (!IsModified(id))
     {
@@ -164,8 +164,6 @@ QStringList ActionSet::GetContextStrings(void) const
     ContextMap::const_iterator it = m_contexts.begin();
     for (; it != m_contexts.end(); ++it)
         context_strings.append(it.key());
-
-    context_strings.detach();
     return context_strings;
 }
 
@@ -183,8 +181,6 @@ QStringList ActionSet::GetActionStrings(const QString &context_name) const
     Context::const_iterator it = (*cit).begin();
     for (; it != (*cit).end(); ++it)
         action_strings.append(it.key());
-
-    action_strings.detach();
     return action_strings;
 }
 
@@ -209,13 +205,12 @@ bool ActionSet::AddAction(const ActionID &id,
     else if ((*cit).find(id.GetAction()) != (*cit).end())
         return false;
 
-    Action *a = new Action(description, keys);
+    auto *a = new Action(description, keys);
     (*cit).insert(id.GetAction(), a);
 
     const QStringList keylist = a->GetKeys();
-    QStringList::const_iterator it = keylist.begin();
-    for (; it != keylist.end(); ++it)
-        m_keyToActionMap[*it].push_back(id);
+    foreach (const auto & key, keylist)
+        m_keyToActionMap[key].push_back(id);
 
     return true;
 }
@@ -251,8 +246,6 @@ QStringList ActionSet::GetKeys(const ActionID &id) const
     Context::const_iterator it = (*cit).find(id.GetAction());
     if (it != (*cit).end())
         keys = (*it)->GetKeys();
-
-    keys.detach();
     return keys;
 }
 
@@ -263,12 +256,9 @@ QStringList ActionSet::GetContextKeys(const QString &context_name) const
     if (cit == m_contexts.end())
         return keys;
 
-    Context::const_iterator it = (*cit).begin();
-    for (; it != (*cit).end(); ++it)
-        keys += (*it)->GetKeys();
+    foreach (auto ctx, (*cit))
+        keys += ctx->GetKeys();
     keys.sort();
-
-    keys.detach();
     return keys;
 }
 
@@ -302,27 +292,6 @@ QString ActionSet::GetDescription(const ActionID &id) const
     return QString();
 }
 
-/** \fn ActionSet::GetActions(const QString &key) const
- *  \brief Returns the actions bound to the specified key.
- */
-ActionList ActionSet::GetActions(const QString &key) const
-{
-    ActionList list = m_keyToActionMap[key];
-    list.detach();
-    return list;
-}
-
-/** \fn ActionSet::GetModified(void) const
- *  \brief Returns the appropriate container of modified actions
- *         based on current context.
- */
-ActionList ActionSet::GetModified(void) const
-{
-    ActionList list = m_modified;
-    list.detach();
-    return list;
-}
-
 /** \fn ActionSet::GetAction(const ActionID&)
  *  \brief Returns a pointer to an action by its identifier.
  *         (note: result not thread-safe)
@@ -336,7 +305,7 @@ Action *ActionSet::GetAction(const ActionID &id)
             QString("GetAction: Did not find context '%1'")
                 .arg(id.GetContext()));
 
-        return NULL;
+        return nullptr;
     }
 
     Context::iterator it = (*cit).find(id.GetAction());
@@ -346,7 +315,7 @@ Action *ActionSet::GetAction(const ActionID &id)
         LOG(VB_GENERAL, LOG_ERR,
             QString("GetAction: Did not find action '%1' in context '%1'")
                 .arg(id.GetAction()).arg(id.GetContext()));
-        return NULL;
+        return nullptr;
     }
 
     return *it;

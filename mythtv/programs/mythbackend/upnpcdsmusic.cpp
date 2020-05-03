@@ -61,9 +61,9 @@ UPnpCDSMusic::UPnpCDSMusic()
 {
     QString sServerIp   = gCoreContext->GetBackendServerIP();
     int sPort           = gCoreContext->GetBackendStatusPort();
-    m_URIBase.setScheme("http");
-    m_URIBase.setHost(sServerIp);
-    m_URIBase.setPort(sPort);
+    m_uriBase.setScheme("http");
+    m_uriBase.setHost(sServerIp);
+    m_uriBase.setPort(sPort);
 
     // ShortCuts
     m_shortcuts.insert(UPnPShortcutFeature::MUSIC, "Music");
@@ -86,25 +86,24 @@ void UPnpCDSMusic::CreateRoot()
                                          m_sName,
                                          "0");
 
-    CDSObject* pContainer;
     QString containerId = m_sExtensionId + "/%1";
 
     // HACK: I'm not entirely happy with this solution, but it's at least
     // tidier than passing through half a dozen extra args to Load[Foo]
     // or having yet more methods just to load the counts
-    UPnpCDSRequest *pRequest = new UPnpCDSRequest();
+    auto *pRequest = new UPnpCDSRequest();
     pRequest->m_nRequestedCount = 0; // We don't want to load any results, we just want the TotalCount
-    UPnpCDSExtensionResults *pResult = new UPnpCDSExtensionResults();
+    auto *pResult = new UPnpCDSExtensionResults();
     IDTokenMap tokens;
     // END HACK
 
     // -----------------------------------------------------------------------
     // All Tracks
     // -----------------------------------------------------------------------
-    pContainer = CDSObject::CreateContainer ( containerId.arg("Track"),
+    CDSObject* pContainer = CDSObject::CreateContainer ( containerId.arg("Track"),
                                               QObject::tr("All Tracks"),
                                               m_sExtensionId, // Parent Id
-                                              NULL );
+                                              nullptr );
     // HACK
     LoadTracks(pRequest, pResult, tokens);
     pContainer->SetChildCount(pResult->m_nTotalMatches);
@@ -118,7 +117,7 @@ void UPnpCDSMusic::CreateRoot()
     pContainer = CDSObject::CreateContainer ( containerId.arg("Artist"),
                                               QObject::tr("Artist"),
                                               m_sExtensionId, // Parent Id
-                                              NULL );
+                                              nullptr );
     // HACK
     LoadArtists(pRequest, pResult, tokens);
     pContainer->SetChildCount(pResult->m_nTotalMatches);
@@ -132,7 +131,7 @@ void UPnpCDSMusic::CreateRoot()
     pContainer = CDSObject::CreateContainer ( containerId.arg("Album"),
                                               QObject::tr("Album"),
                                               m_sExtensionId, // Parent Id
-                                              NULL );
+                                              nullptr );
     // HACK
     LoadAlbums(pRequest, pResult, tokens);
     pContainer->SetChildCount(pResult->m_nTotalMatches);
@@ -146,7 +145,7 @@ void UPnpCDSMusic::CreateRoot()
     pContainer = CDSObject::CreateContainer ( containerId.arg("Genre"),
                                               QObject::tr("Genre"),
                                               m_sExtensionId, // Parent Id
-                                              NULL );
+                                              nullptr );
     // HACK
     LoadGenres(pRequest, pResult, tokens);
     pContainer->SetChildCount(pResult->m_nTotalMatches);
@@ -160,7 +159,7 @@ void UPnpCDSMusic::CreateRoot()
 //     pContainer = CDSObject::CreateStorageSystem ( containerId.arg("Directory"),
 //                                                   QObject::tr("Directory"),
 //                                                   m_sExtensionId, // Parent Id
-//                                                   NULL );
+//                                                   nullptr );
 //     // HACK
 //     LoadDirectories(pRequest, pResult, tokens);
 //     pContainer->SetChildCount(pResult->m_nTotalMatches);
@@ -260,7 +259,7 @@ bool UPnpCDSMusic::IsSearchRequestForUs( UPnpCDSRequest *pRequest )
 
 bool UPnpCDSMusic::LoadMetadata(const UPnpCDSRequest* pRequest,
                                  UPnpCDSExtensionResults* pResults,
-                                 IDTokenMap tokens, QString currentToken)
+                                 const IDTokenMap& tokens, const QString& currentToken)
 {
     if (currentToken.isEmpty())
     {
@@ -273,7 +272,7 @@ bool UPnpCDSMusic::LoadMetadata(const UPnpCDSRequest* pRequest,
     // Root or Root + 1
     if (tokens[currentToken].isEmpty())
     {
-        CDSObject *container = NULL;
+        CDSObject *container = nullptr;
 
         if (pRequest->m_sObjectId == m_sExtensionId)
             container = GetRoot();
@@ -286,35 +285,35 @@ bool UPnpCDSMusic::LoadMetadata(const UPnpCDSRequest* pRequest,
             pResults->m_nTotalMatches = 1;
             return true;
         }
-        else
-            LOG(VB_GENERAL, LOG_ERR, QString("UPnpCDSMusic::LoadMetadata: Requested "
-                                             "object cannot be found: %1")
-                                               .arg(pRequest->m_sObjectId));
+
+        LOG(VB_GENERAL, LOG_ERR, QString("UPnpCDSMusic::LoadMetadata: Requested "
+                                         "object cannot be found: %1")
+                                           .arg(pRequest->m_sObjectId));
+        return false;
     }
-    else if (currentToken == "genre")
+    if (currentToken == "genre")
     {
         // Genre is presently a top tier node, since it doesn't appear
         // below Artist/Album/etc we don't need to pass through
         // the ids for filtering
         return LoadGenres(pRequest, pResults, tokens);
     }
-    else if (currentToken == "artist")
+    if (currentToken == "artist")
     {
         return LoadArtists(pRequest, pResults, tokens);
     }
-    else if (currentToken == "album")
+    if (currentToken == "album")
     {
         return LoadAlbums(pRequest, pResults, tokens);
     }
-    else if (currentToken == "track")
+    if (currentToken == "track")
     {
         return LoadTracks(pRequest, pResults, tokens);
     }
-    else
-        LOG(VB_GENERAL, LOG_ERR,
-            QString("UPnpCDSMusic::LoadMetadata(): "
-                    "Unhandled metadata request for '%1'.").arg(currentToken));
 
+    LOG(VB_GENERAL, LOG_ERR,
+        QString("UPnpCDSMusic::LoadMetadata(): "
+                "Unhandled metadata request for '%1'.").arg(currentToken));
     return false;
 }
 
@@ -324,7 +323,7 @@ bool UPnpCDSMusic::LoadMetadata(const UPnpCDSRequest* pRequest,
 
 bool UPnpCDSMusic::LoadChildren(const UPnpCDSRequest* pRequest,
                                  UPnpCDSExtensionResults* pResults,
-                                 IDTokenMap tokens, QString currentToken)
+                                 const IDTokenMap& tokens, const QString& currentToken)
 {
     if (currentToken.isEmpty() || currentToken == m_sExtensionId.toLower())
     {
@@ -333,35 +332,31 @@ bool UPnpCDSMusic::LoadChildren(const UPnpCDSRequest* pRequest,
         pResults->m_nTotalMatches = GetRoot()->GetChildCount();
         return true;
     }
-    else if (currentToken == "track")
+    if (currentToken == "track")
     {
         return LoadTracks(pRequest, pResults, tokens);
     }
-    else if (currentToken == "genre")
+    if (currentToken == "genre")
     {
         if (tokens["genre"].toInt() > 0)
             return LoadArtists(pRequest, pResults, tokens);
-        else
-            return LoadGenres(pRequest, pResults, tokens);
+        return LoadGenres(pRequest, pResults, tokens);
     }
-    else if (currentToken == "artist")
+    if (currentToken == "artist")
     {
         if (tokens["artist"].toInt() > 0)
             return LoadAlbums(pRequest, pResults, tokens);
-        else
-            return LoadArtists(pRequest, pResults, tokens);
+        return LoadArtists(pRequest, pResults, tokens);
     }
-    else if (currentToken == "album")
+    if (currentToken == "album")
     {
         if (tokens["album"].toInt() > 0)
             return LoadTracks(pRequest, pResults, tokens);
-        else
-            return LoadAlbums(pRequest, pResults, tokens);
+        return LoadAlbums(pRequest, pResults, tokens);
     }
-    else
-        LOG(VB_GENERAL, LOG_ERR,
-            QString("UPnpCDSMusic::LoadChildren(): "
-                    "Unhandled metadata request for '%1'.").arg(currentToken));
+    LOG(VB_GENERAL, LOG_ERR,
+        QString("UPnpCDSMusic::LoadChildren(): "
+                "Unhandled metadata request for '%1'.").arg(currentToken));
 
     return false;
 }
@@ -372,7 +367,7 @@ bool UPnpCDSMusic::LoadChildren(const UPnpCDSRequest* pRequest,
 
 void UPnpCDSMusic::PopulateArtworkURIS(CDSObject* pItem, int nSongID)
 {
-    QUrl artURI = m_URIBase;
+    QUrl artURI = m_uriBase;
     artURI.setPath("/Content/GetAlbumArt");
     QUrlQuery artQuery;
     artQuery.addQueryItem("Id", QString::number(nSongID));
@@ -448,11 +443,13 @@ void UPnpCDSMusic::PopulateArtworkURIS(CDSObject* pItem, int nSongID)
         }
     }
     else
+    {
         LOG(VB_GENERAL, LOG_ERR, QString("Unable to designate album artwork "
                                          "for '%1' with class '%2' and id '%3'")
                                             .arg(pItem->m_sId)
                                             .arg(pItem->m_sClass)
                                             .arg(nSongID));
+    }
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -461,7 +458,7 @@ void UPnpCDSMusic::PopulateArtworkURIS(CDSObject* pItem, int nSongID)
 
 bool UPnpCDSMusic::LoadAlbums(const UPnpCDSRequest *pRequest,
                               UPnpCDSExtensionResults *pResults,
-                              IDTokenMap tokens)
+                              const IDTokenMap& tokens)
 {
     QString sRequestId = pRequest->m_sObjectId;
 
@@ -514,7 +511,7 @@ bool UPnpCDSMusic::LoadAlbums(const UPnpCDSRequest *pRequest,
         CDSObject* pContainer = CDSObject::CreateMusicAlbum( CreateIDString(sRequestId, "Album", nAlbumID),
                                                              sAlbumName,
                                                              pRequest->m_sParentId,
-                                                             NULL );
+                                                             nullptr );
         pContainer->SetPropValue("artist", sArtist);
         pContainer->SetPropValue("date", sYear);
         pContainer->SetPropValue("genre", sGenre);
@@ -553,7 +550,7 @@ bool UPnpCDSMusic::LoadAlbums(const UPnpCDSRequest *pRequest,
 
 bool UPnpCDSMusic::LoadArtists(const UPnpCDSRequest *pRequest,
                                UPnpCDSExtensionResults *pResults,
-                               IDTokenMap tokens)
+                               const IDTokenMap& tokens)
 {
     QString sRequestId = pRequest->m_sObjectId;
 
@@ -600,7 +597,7 @@ bool UPnpCDSMusic::LoadArtists(const UPnpCDSRequest *pRequest,
         CDSObject* pContainer = CDSObject::CreateMusicArtist( CreateIDString(sRequestId, "Artist", nArtistId),
                                                               sArtistName,
                                                               pRequest->m_sParentId,
-                                                              NULL );
+                                                              nullptr );
 // TODO: Add SetPropValues option for multi-value properties
 //         QStringList::Iterator it;
 //         for (it = sGenres.begin(); it != sGenres.end(); ++it)
@@ -636,7 +633,7 @@ bool UPnpCDSMusic::LoadArtists(const UPnpCDSRequest *pRequest,
 
 bool UPnpCDSMusic::LoadGenres(const UPnpCDSRequest *pRequest,
                               UPnpCDSExtensionResults *pResults,
-                              IDTokenMap tokens )
+                              const IDTokenMap& tokens )
 {
     QString sRequestId = pRequest->m_sObjectId;
 
@@ -679,7 +676,7 @@ bool UPnpCDSMusic::LoadGenres(const UPnpCDSRequest *pRequest,
         CDSObject* pContainer = CDSObject::CreateMusicGenre( CreateIDString(sRequestId, "Genre", nGenreId),
                                                              sGenreName,
                                                              pRequest->m_sParentId,
-                                                             NULL );
+                                                             nullptr );
         pContainer->SetPropValue("description", sGenreName);
 
         pContainer->SetChildCount(nArtistCount);
@@ -708,7 +705,7 @@ bool UPnpCDSMusic::LoadGenres(const UPnpCDSRequest *pRequest,
 
 bool UPnpCDSMusic::LoadTracks(const UPnpCDSRequest *pRequest,
                               UPnpCDSExtensionResults *pResults,
-                              IDTokenMap tokens)
+                              const IDTokenMap& tokens)
 {
     QString sRequestId = pRequest->m_sObjectId;
 
@@ -759,7 +756,7 @@ bool UPnpCDSMusic::LoadTracks(const UPnpCDSRequest *pRequest,
         QString        sDescription = query.value( 7).toString();
         QString        sFileName    = query.value( 8).toString();
         uint32_t       nLengthMS    = query.value( 9).toUInt();
-        uint64_t       nFileSize    = (quint64)query.value(10).toULongLong();
+        uint64_t       nFileSize    = query.value(10).toULongLong();
 
         int            nPlaybackCount = query.value(11).toInt();
         QDateTime      lastPlayedTime = query.value(12).toDateTime();
@@ -768,7 +765,7 @@ bool UPnpCDSMusic::LoadTracks(const UPnpCDSRequest *pRequest,
         CDSObject* pItem = CDSObject::CreateMusicTrack( CreateIDString(sRequestId, "Track", nId),
                                                         sTitle,
                                                         pRequest->m_sParentId,
-                                                        NULL );
+                                                        nullptr );
 
         // Only add the reference ID for items which are not in the
         // 'All Tracks' container
@@ -806,7 +803,7 @@ bool UPnpCDSMusic::LoadTracks(const UPnpCDSRequest *pRequest,
 
         QFileInfo fInfo( sFileName );
 
-        QUrl    resURI    = m_URIBase;
+        QUrl    resURI    = m_uriBase;
         QUrlQuery resQuery;
         resURI.setPath("/Content/GetMusic");
         resQuery.addQueryItem("Id", QString::number(nId));

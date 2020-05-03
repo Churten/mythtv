@@ -10,8 +10,8 @@
 class META_PUBLIC VideoMetadataListManager
 {
   public:
-    typedef simple_ref_ptr<VideoMetadata> VideoMetadataPtr;
-    typedef std::list<VideoMetadataPtr> metadata_list;
+    using VideoMetadataPtr = simple_ref_ptr<VideoMetadata>;
+    using metadata_list = std::list<VideoMetadataPtr>;
 
   public:
     static VideoMetadataPtr loadOneFromDatabase(uint id);
@@ -32,15 +32,15 @@ class META_PUBLIC VideoMetadataListManager
     bool purgeByID(unsigned int db_id);
 
   private:
-    class VideoMetadataListManagerImp *m_imp;
+    class VideoMetadataListManagerImp *m_imp {nullptr};
 };
 
 class META_PUBLIC meta_node
 {
   public:
     meta_node(meta_node *parent, bool is_path_root = false) :
-            m_parent(parent), m_path_root(is_path_root) {}
-    virtual ~meta_node() {}
+            m_parent(parent), m_pathRoot(is_path_root) {}
+    virtual ~meta_node() = default;
 
     virtual const QString &getName() const = 0;
     virtual const QString &getPath() const;
@@ -49,60 +49,62 @@ class META_PUBLIC meta_node
     void setPathRoot(bool is_root = true);
 
   protected:
-    meta_node *m_parent;
+    meta_node *m_parent {nullptr};
 
   private:
-    QString m_fq_path;
-    bool m_path_root;
-    static const QString m_empty_path;
+    QString m_fqPath;
+    bool m_pathRoot;
+    static const QString kEmptyPath;
 };
 
 class META_PUBLIC meta_data_node : public meta_node
 {
   public:
-    meta_data_node(VideoMetadata *data, meta_node *parent = NULL) :
+    meta_data_node(VideoMetadata *data, meta_node *parent = nullptr) :
                    meta_node(parent), m_data(data) {}
-    const QString &getName() const;
+    const QString &getName() const override; // meta_node
     const VideoMetadata *getData() const;
     VideoMetadata *getData();
 
   private:
-    VideoMetadata *m_data;
-    static const QString m_meta_bug;
+    VideoMetadata *m_data {nullptr};
+    static const QString kMetaBug;
 };
 
 class meta_dir_node;
 
-typedef simple_ref_ptr<meta_dir_node> smart_dir_node;
-typedef simple_ref_ptr<meta_data_node> smart_meta_node;
+using smart_dir_node = simple_ref_ptr<meta_dir_node>;
+using smart_meta_node = simple_ref_ptr<meta_data_node>;
 
-typedef std::list<smart_dir_node> meta_dir_list;
-typedef std::list<smart_meta_node> meta_data_list;
+using meta_dir_list = std::list<smart_dir_node>;
+using meta_data_list = std::list<smart_meta_node>;
 
 class META_PUBLIC meta_dir_node : public meta_node
 {
   public:
-    typedef meta_dir_list::iterator dir_iterator;
-    typedef meta_dir_list::const_iterator const_dir_iterator;
+    using dir_iterator = meta_dir_list::iterator;
+    using const_dir_iterator = meta_dir_list::const_iterator;
 
-    typedef meta_data_list::iterator entry_iterator;
-    typedef meta_data_list::const_iterator const_entry_iterator;
+    using entry_iterator = meta_data_list::iterator;
+    using const_entry_iterator = meta_data_list::const_iterator;
 
   public:
     meta_dir_node(const QString &path, const QString &name = "",
-                  meta_dir_node *parent = NULL, bool is_path_root = false,
-                  const QString &host = "", const QString &prefix = "",
-                  const QVariant &data = QVariant());
-    meta_dir_node() : meta_node(NULL) { }
+                  meta_dir_node *parent = nullptr, bool is_path_root = false,
+                  QString host = "", QString prefix = "",
+                  QVariant data = QVariant());
+    meta_dir_node() : meta_node(nullptr) { }
 
+    void ensureSortFields();
     void setName(const QString &name);
-    const QString &getName() const;
+    const QString &getName() const override; // meta_node
     void SetHost(const QString &host);
     const QString &GetHost() const;
     void SetPrefix(const QString &prefix);
     const QString &GetPrefix() const;
-    const QString &getPath() const;
-    void setPath(const QString &path);
+    const QString &getPath() const override; // meta_node
+    const QString &getSortPath() const;
+    void setPath(const QString &path, const QString &sortPath = nullptr);
     void SetData(const QVariant &data);
     const QVariant &GetData() const;
     bool DataIsValid(void) const;
@@ -128,10 +130,9 @@ class META_PUBLIC meta_dir_node : public meta_node
         m_subdirs.sort(dir_sort);
         m_entries.sort(entry_sort);
 
-        for (meta_dir_list::iterator p = m_subdirs.begin();
-        p != m_subdirs.end(); ++p)
+        for (auto & subdir : m_subdirs)
         {
-            (*p)->sort(dir_sort, entry_sort);
+            subdir->sort(dir_sort, entry_sort);
         }
     }
     dir_iterator dirs_begin();
@@ -146,6 +147,7 @@ class META_PUBLIC meta_dir_node : public meta_node
 
   private:
     QString m_path;
+    QString m_sortPath;
     QString m_name;
     QString m_host;
     QString m_prefix;

@@ -15,7 +15,7 @@ using namespace std;
 #include "mythdirs.h"
 #include "mythcorecontext.h"
 
-static MythDB *mythdb = NULL;
+static MythDB *mythdb = nullptr;
 static QMutex dbLock;
 
 // For thread safety reasons this is not a QString
@@ -39,7 +39,7 @@ void MythDB::destroyMythDB(void)
 {
     dbLock.lock();
     delete mythdb;
-    mythdb = NULL;
+    mythdb = nullptr;
     dbLock.unlock();
 }
 
@@ -55,12 +55,12 @@ void DestroyMythDB(void)
 
 struct SingleSetting
 {
-    QString key;
-    QString value;
-    QString host;
+    QString m_key;
+    QString m_value;
+    QString m_host;
 };
 
-typedef QHash<QString,QString> SettingsMap;
+using SettingsMap = QHash<QString,QString>;
 
 class MythDBPrivate
 {
@@ -68,35 +68,33 @@ class MythDBPrivate
     MythDBPrivate();
    ~MythDBPrivate();
 
-    DatabaseParams  m_DBparams;  ///< Current database host & WOL details
+    DatabaseParams  m_dbParams;  ///< Current database host & WOL details
     QString m_localhostname;
     MDBManager m_dbmanager;
 
-    bool ignoreDatabase;
-    bool suppressDBMessages;
+    bool m_ignoreDatabase {false};
+    bool m_suppressDBMessages {true};
 
-    QReadWriteLock settingsCacheLock;
-    volatile bool useSettingsCache;
+    QReadWriteLock m_settingsCacheLock;
+    volatile bool m_useSettingsCache {false};
     /// Permanent settings in the DB and overridden settings
-    SettingsMap settingsCache;
+    SettingsMap m_settingsCache;
     /// Overridden this session only
-    SettingsMap overriddenSettings;
+    SettingsMap m_overriddenSettings;
     /// Settings which should be written to the database as soon as it becomes
     /// available
-    QList<SingleSetting> delayedSettings;
+    QList<SingleSetting> m_delayedSettings;
 
-    bool haveDBConnection;
-    bool haveSchema;
+    bool m_haveDBConnection {false};
+    bool m_haveSchema {false};
 };
 
 static const int settings_reserve = 61;
 
-MythDBPrivate::MythDBPrivate() :
-    ignoreDatabase(false), suppressDBMessages(true), useSettingsCache(false),
-    haveDBConnection(false), haveSchema(false)
+MythDBPrivate::MythDBPrivate()
 {
     m_localhostname.clear();
-    settingsCache.reserve(settings_reserve);
+    m_settingsCache.reserve(settings_reserve);
 }
 
 MythDBPrivate::~MythDBPrivate()
@@ -193,19 +191,19 @@ QString MythDB::DBErrorMessage(const QSqlError& err)
                    "Database error was:\n"
                    "%4\n")
         .arg(err.type())
-        .arg(err.number())
+        .arg(err.nativeErrorCode())
         .arg(err.driverText())
         .arg(err.databaseText());
 }
 
 DatabaseParams MythDB::GetDatabaseParams(void) const
 {
-    return d->m_DBparams;
+    return d->m_dbParams;
 }
 
 void MythDB::SetDatabaseParams(const DatabaseParams &params)
 {
-    d->m_DBparams = params;
+    d->m_dbParams = params;
 }
 
 void MythDB::SetLocalHostname(const QString &name)
@@ -224,22 +222,22 @@ QString MythDB::GetHostName(void) const
 
 void MythDB::IgnoreDatabase(bool bIgnore)
 {
-    d->ignoreDatabase = bIgnore;
+    d->m_ignoreDatabase = bIgnore;
 }
 
 bool MythDB::IsDatabaseIgnored(void) const
 {
-    return d->ignoreDatabase;
+    return d->m_ignoreDatabase;
 }
 
 void MythDB::SetSuppressDBMessages(bool bUpgraded)
 {
-    d->suppressDBMessages = bUpgraded;
+    d->m_suppressDBMessages = bUpgraded;
 }
 
 bool MythDB::SuppressDBMessages(void) const
 {
-    return d->suppressDBMessages;
+    return d->m_suppressDBMessages;
 }
 
 void MythDB::SaveSetting(const QString &key, int newValue)
@@ -266,7 +264,7 @@ bool MythDB::SaveSettingOnHost(const QString &key,
 
     QString newValue = (newValueRaw.isNull()) ? "" : newValueRaw;
 
-    if (d->ignoreDatabase)
+    if (d->m_ignoreDatabase)
     {
         if (host.toLower() == d->m_localhostname)
         {
@@ -282,13 +280,13 @@ bool MythDB::SaveSettingOnHost(const QString &key,
     {
         if (host.toLower() == d->m_localhostname)
             OverrideSettingForSession(key, newValue);
-        if (!d->suppressDBMessages)
+        if (!d->m_suppressDBMessages)
             LOG(VB_GENERAL, LOG_ERR, loc + "- No database yet");
         SingleSetting setting;
-        setting.host = host;
-        setting.key = key;
-        setting.value = newValue;
-        d->delayedSettings.append(setting);
+        setting.m_host = host;
+        setting.m_key = key;
+        setting.m_value = newValue;
+        d->m_delayedSettings.append(setting);
         return false;
     }
 
@@ -299,11 +297,15 @@ bool MythDB::SaveSettingOnHost(const QString &key,
     {
 
         if (!host.isEmpty())
+        {
             query.prepare("DELETE FROM settings WHERE value = :KEY "
                           "AND hostname = :HOSTNAME ;");
+        }
         else
+        {
             query.prepare("DELETE FROM settings WHERE value = :KEY "
                           "AND hostname is NULL;");
+        }
 
         query.bindValue(":KEY", key);
         if (!host.isEmpty())
@@ -323,11 +325,15 @@ bool MythDB::SaveSettingOnHost(const QString &key,
     if (success && (newValue != kClearSettingValue))
     {
         if (!host.isEmpty())
+        {
             query.prepare("INSERT INTO settings (value,data,hostname) "
                           "VALUES ( :VALUE, :DATA, :HOSTNAME );");
+        }
         else
+        {
             query.prepare("INSERT INTO settings (value,data ) "
                           "VALUES ( :VALUE, :DATA );");
+        }
 
         query.bindValue(":VALUE", key);
         query.bindValue(":DATA", newValue);
@@ -366,27 +372,27 @@ QString MythDB::GetSetting(const QString &_key, const QString &defaultval)
     QString key = _key.toLower();
     QString value = defaultval;
 
-    d->settingsCacheLock.lockForRead();
-    if (d->useSettingsCache)
+    d->m_settingsCacheLock.lockForRead();
+    if (d->m_useSettingsCache)
     {
-        SettingsMap::const_iterator it = d->settingsCache.find(key);
-        if (it != d->settingsCache.end())
+        SettingsMap::const_iterator it = d->m_settingsCache.find(key);
+        if (it != d->m_settingsCache.end())
         {
             value = *it;
-            d->settingsCacheLock.unlock();
+            d->m_settingsCacheLock.unlock();
             return value;
         }
     }
-    SettingsMap::const_iterator it = d->overriddenSettings.find(key);
-    if (it != d->overriddenSettings.end())
+    SettingsMap::const_iterator it = d->m_overriddenSettings.find(key);
+    if (it != d->m_overriddenSettings.end())
     {
         value = *it;
-        d->settingsCacheLock.unlock();
+        d->m_settingsCacheLock.unlock();
         return value;
     }
-    d->settingsCacheLock.unlock();
+    d->m_settingsCacheLock.unlock();
 
-    if (d->ignoreDatabase || !HaveValidDatabase())
+    if (d->m_ignoreDatabase || !HaveValidDatabase())
         return value;
 
     MSqlQuery query(MSqlQuery::InitCon());
@@ -418,16 +424,16 @@ QString MythDB::GetSetting(const QString &_key, const QString &defaultval)
         }
     }
 
-    if (d->useSettingsCache && value != kSentinelValue)
+    if (d->m_useSettingsCache && value != kSentinelValue)
     {
         key.squeeze();
         value.squeeze();
-        d->settingsCacheLock.lockForWrite();
+        d->m_settingsCacheLock.lockForWrite();
         // another thread may have inserted a value into the cache
         // while we did not have the lock, check first then save
-        if (d->settingsCache.find(key) == d->settingsCache.end())
-            d->settingsCache[key] = value;
-        d->settingsCacheLock.unlock();
+        if (d->m_settingsCache.find(key) == d->m_settingsCache.end())
+            d->m_settingsCache[key] = value;
+        d->m_settingsCacheLock.unlock();
     }
 
     return value;
@@ -436,7 +442,7 @@ QString MythDB::GetSetting(const QString &_key, const QString &defaultval)
 bool MythDB::GetSettings(QMap<QString,QString> &_key_value_pairs)
 {
     QMap<QString,bool> done;
-    typedef QMap<QString,QString>::iterator KVIt;
+    using KVIt = QMap<QString,QString>::iterator;
     KVIt kvit = _key_value_pairs.begin();
     for (; kvit != _key_value_pairs.end(); ++kvit)
         done[kvit.key().toLower()] = false;
@@ -446,13 +452,13 @@ bool MythDB::GetSettings(QMap<QString,QString> &_key_value_pairs)
 
     {
         uint done_cnt = 0;
-        d->settingsCacheLock.lockForRead();
-        if (d->useSettingsCache)
+        d->m_settingsCacheLock.lockForRead();
+        if (d->m_useSettingsCache)
         {
             for (; kvit != _key_value_pairs.end(); ++dit, ++kvit)
             {
-                SettingsMap::const_iterator it = d->settingsCache.find(dit.key());
-                if (it != d->settingsCache.end())
+                SettingsMap::const_iterator it = d->m_settingsCache.find(dit.key());
+                if (it != d->m_settingsCache.end())
                 {
                     *kvit = *it;
                     *dit = true;
@@ -463,19 +469,19 @@ bool MythDB::GetSettings(QMap<QString,QString> &_key_value_pairs)
         for (; kvit != _key_value_pairs.end(); ++dit, ++kvit)
         {
             SettingsMap::const_iterator it =
-                d->overriddenSettings.find(dit.key());
-            if (it != d->overriddenSettings.end())
+                d->m_overriddenSettings.find(dit.key());
+            if (it != d->m_overriddenSettings.end())
             {
                 *kvit = *it;
                 *dit = true;
                 done_cnt++;
             }
         }
-        d->settingsCacheLock.unlock();
+        d->m_settingsCacheLock.unlock();
 
         // Avoid extra work if everything was in the caches and
-        // also don't try to access the DB if ignoreDatabase is set
-        if (((uint)done.size()) == done_cnt || d->ignoreDatabase)
+        // also don't try to access the DB if m_ignoreDatabase is set
+        if (((uint)done.size()) == done_cnt || d->m_ignoreDatabase)
             return true;
     }
 
@@ -489,7 +495,7 @@ bool MythDB::GetSettings(QMap<QString,QString> &_key_value_pairs)
         if (*dit)
             continue;
 
-        QString key = dit.key();
+        const QString& key = dit.key();
         if (!key.contains("'"))
         {
             keylist += QString("'%1',").arg(key);
@@ -517,7 +523,7 @@ bool MythDB::GetSettings(QMap<QString,QString> &_key_value_pairs)
                 "ORDER BY hostname DESC")
             .arg(d->m_localhostname).arg(keylist)))
     {
-        if (!d->suppressDBMessages)
+        if (!d->m_suppressDBMessages)
             DBError("GetSettings", query);
         return false;
     }
@@ -530,29 +536,38 @@ bool MythDB::GetSettings(QMap<QString,QString> &_key_value_pairs)
             **it = query.value(1).toString();
     }
 
-    if (d->useSettingsCache)
+    if (d->m_useSettingsCache)
     {
-        d->settingsCacheLock.lockForWrite();
+        d->m_settingsCacheLock.lockForWrite();
         QMap<QString,KVIt>::const_iterator it = keymap.begin();
         for (; it != keymap.end(); ++it)
         {
-            QString key = it.key(), value = **it;
+            QString key = it.key();
+            QString value = **it;
 
             // another thread may have inserted a value into the cache
             // while we did not have the lock, check first then save
-            if (d->settingsCache.find(key) == d->settingsCache.end())
+            if (d->m_settingsCache.find(key) == d->m_settingsCache.end())
             {
                 key.squeeze();
                 value.squeeze();
-                d->settingsCache[key] = value;
+                d->m_settingsCache[key] = value;
             }
         }
-        d->settingsCacheLock.unlock();
+        d->m_settingsCacheLock.unlock();
     }
 
     return true;
 }
 
+
+bool MythDB::GetBoolSetting(const QString &key, bool defaultval)
+{
+    QString val = QString::number(defaultval);
+    QString retval = GetSetting(key, val);
+
+    return retval.toInt() > 0;
+}
 
 int MythDB::GetNumSetting(const QString &key, int defaultval)
 {
@@ -577,6 +592,15 @@ QString MythDB::GetSetting(const QString &key)
     return (retval == sentinel) ? "" : retval;
 }
 
+bool MythDB::GetBoolSetting(const QString &key)
+{
+    QString sentinel = QString(kSentinelValue);
+    QString retval = GetSetting(key, sentinel);
+    if (retval == sentinel)
+        return false;
+    return retval.toInt() > 0;
+}
+
 int MythDB::GetNumSetting(const QString &key)
 {
     QString sentinel = QString(kSentinelValue);
@@ -599,36 +623,38 @@ QString MythDB::GetSettingOnHost(const QString &_key, const QString &_host,
     QString value = defaultval;
     QString myKey = host + ' ' + key;
 
-    d->settingsCacheLock.lockForRead();
-    if (d->useSettingsCache)
+    d->m_settingsCacheLock.lockForRead();
+    if (d->m_useSettingsCache)
     {
-        SettingsMap::const_iterator it = d->settingsCache.find(myKey);
-        if (it != d->settingsCache.end())
+        SettingsMap::const_iterator it = d->m_settingsCache.find(myKey);
+        if (it != d->m_settingsCache.end())
         {
             value = *it;
-            d->settingsCacheLock.unlock();
+            d->m_settingsCacheLock.unlock();
             return value;
         }
     }
-    SettingsMap::const_iterator it = d->overriddenSettings.find(myKey);
-    if (it != d->overriddenSettings.end())
+    SettingsMap::const_iterator it = d->m_overriddenSettings.find(myKey);
+    if (it != d->m_overriddenSettings.end())
     {
         value = *it;
-        d->settingsCacheLock.unlock();
+        d->m_settingsCacheLock.unlock();
         return value;
     }
-    d->settingsCacheLock.unlock();
+    d->m_settingsCacheLock.unlock();
 
-    if (d->ignoreDatabase)
+    if (d->m_ignoreDatabase)
         return value;
 
     MSqlQuery query(MSqlQuery::InitCon());
     if (!query.isConnected())
     {
-        if (!d->suppressDBMessages)
+        if (!d->m_suppressDBMessages)
+        {
             LOG(VB_GENERAL, LOG_ERR,
                 QString("Database not open while trying to "
                         "load setting: %1").arg(key));
+        }
         return value;
     }
 
@@ -644,14 +670,14 @@ QString MythDB::GetSettingOnHost(const QString &_key, const QString &_host,
         value = query.value(0).toString();
     }
 
-    if (d->useSettingsCache && value != kSentinelValue)
+    if (d->m_useSettingsCache && value != kSentinelValue)
     {
         myKey.squeeze();
         value.squeeze();
-        d->settingsCacheLock.lockForWrite();
-        if (d->settingsCache.find(myKey) == d->settingsCache.end())
-            d->settingsCache[myKey] = value;
-        d->settingsCacheLock.unlock();
+        d->m_settingsCacheLock.lockForWrite();
+        if (d->m_settingsCache.find(myKey) == d->m_settingsCache.end())
+            d->m_settingsCache[myKey] = value;
+        d->m_settingsCacheLock.unlock();
     }
 
     return value;
@@ -702,7 +728,9 @@ void MythDB::GetResolutionSetting(const QString &type,
                                        double &refresh_rate,
                                        int index)
 {
-    bool ok = false, ok0 = false, ok1 = false;
+    bool ok = false;
+    bool ok0 = false;
+    bool ok1 = false;
     QString sRes =    QString("%1Resolution").arg(type);
     QString sRR =     QString("%1RefreshRate").arg(type);
     QString sAspect = QString("%1ForceAspect").arg(type);
@@ -722,13 +750,14 @@ void MythDB::GetResolutionSetting(const QString &type,
     if (!res.isEmpty())
     {
         QStringList slist = res.split(QString("x"));
-        int w = width, h = height;
+        int w = width;
+        int h = height;
         if (2 == slist.size())
         {
             w = slist[0].toInt(&ok0);
             h = slist[1].toInt(&ok1);
         }
-        bool ok = ok0 && ok1;
+        ok = ok0 && ok1;
         if (ok)
         {
             width = w;
@@ -737,7 +766,6 @@ void MythDB::GetResolutionSetting(const QString &type,
             forced_aspect = GetFloatSetting(sAspect);
         }
     }
-    else
 
     if (!ok)
     {
@@ -772,7 +800,9 @@ void MythDB::GetResolutionSetting(const QString &t, int &w, int &h, int i)
 void MythDB::OverrideSettingForSession(
     const QString &key, const QString &value)
 {
-    QString mk = key.toLower(), mk2 = d->m_localhostname + ' ' + mk, mv = value;
+    QString mk = key.toLower();
+    QString mk2 = d->m_localhostname + ' ' + mk;
+    QString mv = value;
     if ("dbschemaver" == mk)
     {
         LOG(VB_GENERAL, LOG_ERR,
@@ -783,11 +813,11 @@ void MythDB::OverrideSettingForSession(
     mk2.squeeze();
     mv.squeeze();
 
-    d->settingsCacheLock.lockForWrite();
-    d->overriddenSettings[mk] = mv;
-    d->settingsCache[mk]      = mv;
-    d->settingsCache[mk2]     = mv;
-    d->settingsCacheLock.unlock();
+    d->m_settingsCacheLock.lockForWrite();
+    d->m_overriddenSettings[mk] = mv;
+    d->m_settingsCache[mk]      = mv;
+    d->m_settingsCache[mk2]     = mv;
+    d->m_settingsCacheLock.unlock();
 }
 
 /// \brief Clears session Overrides for the given setting.
@@ -796,21 +826,21 @@ void MythDB::ClearOverrideSettingForSession(const QString &key)
     QString mk = key.toLower();
     QString mk2 = d->m_localhostname + ' ' + mk;
 
-    d->settingsCacheLock.lockForWrite();
+    d->m_settingsCacheLock.lockForWrite();
 
-    SettingsMap::iterator oit = d->overriddenSettings.find(mk);
-    if (oit != d->overriddenSettings.end())
-        d->overriddenSettings.erase(oit);
+    SettingsMap::iterator oit = d->m_overriddenSettings.find(mk);
+    if (oit != d->m_overriddenSettings.end())
+        d->m_overriddenSettings.erase(oit);
 
-    SettingsMap::iterator sit = d->settingsCache.find(mk);
-    if (sit != d->settingsCache.end())
-        d->settingsCache.erase(sit);
+    SettingsMap::iterator sit = d->m_settingsCache.find(mk);
+    if (sit != d->m_settingsCache.end())
+        d->m_settingsCache.erase(sit);
 
-    sit = d->settingsCache.find(mk2);
-    if (sit != d->settingsCache.end())
-        d->settingsCache.erase(sit);
+    sit = d->m_settingsCache.find(mk2);
+    if (sit != d->m_settingsCache.end())
+        d->m_settingsCache.erase(sit);
 
-    d->settingsCacheLock.unlock();
+    d->m_settingsCacheLock.unlock();
 }
 
 static void clear(
@@ -838,36 +868,36 @@ static void clear(
 
 void MythDB::ClearSettingsCache(const QString &_key)
 {
-    d->settingsCacheLock.lockForWrite();
+    d->m_settingsCacheLock.lockForWrite();
 
     if (_key.isEmpty())
     {
         LOG(VB_DATABASE, LOG_INFO, "Clearing Settings Cache.");
-        d->settingsCache.clear();
-        d->settingsCache.reserve(settings_reserve);
+        d->m_settingsCache.clear();
+        d->m_settingsCache.reserve(settings_reserve);
 
-        SettingsMap::const_iterator it = d->overriddenSettings.begin();
-        for (; it != d->overriddenSettings.end(); ++it)
+        SettingsMap::const_iterator it = d->m_overriddenSettings.begin();
+        for (; it != d->m_overriddenSettings.end(); ++it)
         {
             QString mk2 = d->m_localhostname + ' ' + it.key();
             mk2.squeeze();
 
-            d->settingsCache[it.key()] = *it;
-            d->settingsCache[mk2] = *it;
+            d->m_settingsCache[it.key()] = *it;
+            d->m_settingsCache[mk2] = *it;
         }
     }
     else
     {
         QString myKey = _key.toLower();
-        clear(d->settingsCache, d->overriddenSettings, myKey);
+        clear(d->m_settingsCache, d->m_overriddenSettings, myKey);
 
         // To be safe always clear any local[ized] version too
         QString mkl = myKey.section(QChar(' '), 1);
         if (!mkl.isEmpty())
-            clear(d->settingsCache, d->overriddenSettings, mkl);
+            clear(d->m_settingsCache, d->m_overriddenSettings, mkl);
     }
 
-    d->settingsCacheLock.unlock();
+    d->m_settingsCacheLock.unlock();
 }
 
 void MythDB::ActivateSettingsCache(bool activate)
@@ -877,7 +907,7 @@ void MythDB::ActivateSettingsCache(bool activate)
     else
         LOG(VB_DATABASE, LOG_INFO, "Disabling Settings Cache.");
 
-    d->useSettingsCache = activate;
+    d->m_useSettingsCache = activate;
     ClearSettingsCache();
 }
 
@@ -889,10 +919,10 @@ void MythDB::WriteDelayedSettings(void)
     if (!gCoreContext->IsUIThread())
         return;
 
-    while (!d->delayedSettings.isEmpty())
+    while (!d->m_delayedSettings.isEmpty())
     {
-        SingleSetting setting = d->delayedSettings.takeFirst();
-        SaveSettingOnHost(setting.key, setting.value, setting.host);
+        SingleSetting setting = d->m_delayedSettings.takeFirst();
+        SaveSettingOnHost(setting.m_key, setting.m_value, setting.m_host);
     }
 }
 
@@ -901,7 +931,7 @@ void MythDB::WriteDelayedSettings(void)
  */
 void MythDB::SetHaveDBConnection(bool connected)
 {
-    d->haveDBConnection = connected;
+    d->m_haveDBConnection = connected;
 }
 
 /**
@@ -910,7 +940,7 @@ void MythDB::SetHaveDBConnection(bool connected)
  */
 void MythDB::SetHaveSchema(bool schema)
 {
-    d->haveSchema = schema;
+    d->m_haveSchema = schema;
 }
 
 /**
@@ -922,7 +952,7 @@ void MythDB::SetHaveSchema(bool schema)
  */
 bool MythDB::HaveSchema(void) const
 {
-    return d->haveSchema;
+    return d->m_haveSchema;
 }
 
 /**
@@ -934,5 +964,5 @@ bool MythDB::HaveSchema(void) const
  */
 bool MythDB::HaveValidDatabase(void) const
 {
-    return (d->haveDBConnection && d->haveSchema);
+    return (d->m_haveDBConnection && d->m_haveSchema);
 }

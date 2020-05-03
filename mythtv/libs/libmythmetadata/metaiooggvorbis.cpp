@@ -7,15 +7,6 @@
 // Libmyth
 #include <mythcontext.h>
 
-MetaIOOggVorbis::MetaIOOggVorbis(void)
-    : MetaIOTagLib()
-{
-}
-
-MetaIOOggVorbis::~MetaIOOggVorbis(void)
-{
-}
-
 /*!
 * \brief Open the file to read the tag
 *
@@ -25,13 +16,12 @@ MetaIOOggVorbis::~MetaIOOggVorbis(void)
 TagLib::Ogg::Vorbis::File *MetaIOOggVorbis::OpenFile(const QString &filename)
 {
     QByteArray fname = filename.toLocal8Bit();
-    TagLib::Ogg::Vorbis::File *oggfile =
-                            new TagLib::Ogg::Vorbis::File(fname.constData());
+    auto *oggfile = new TagLib::Ogg::Vorbis::File(fname.constData());
 
     if (!oggfile->isOpen())
     {
         delete oggfile;
-        oggfile = NULL;
+        oggfile = nullptr;
     }
 
     return oggfile;
@@ -90,8 +80,7 @@ bool MetaIOOggVorbis::write(const QString &filename, MusicMetadata* mdata)
     bool result = oggfile->save();
     restoreTimeStamps();
 
-    if (oggfile)
-        delete oggfile;
+    delete oggfile;
 
     return (result);
 }
@@ -104,17 +93,17 @@ MusicMetadata* MetaIOOggVorbis::read(const QString &filename)
     TagLib::Ogg::Vorbis::File *oggfile = OpenFile(filename);
 
     if (!oggfile)
-        return NULL;
+        return nullptr;
 
     TagLib::Ogg::XiphComment *tag = oggfile->tag();
 
     if (!tag)
     {
         delete oggfile;
-        return NULL;
+        return nullptr;
     }
 
-    MusicMetadata *metadata = new MusicMetadata(filename);
+    auto *metadata = new MusicMetadata(filename);
 
     ReadGenericMetadata(tag, metadata);
 

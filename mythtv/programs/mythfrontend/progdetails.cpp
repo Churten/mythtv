@@ -17,19 +17,10 @@
 
 #define LASTPAGE 2
 
-ProgDetails::ProgDetails(MythScreenStack *parent, const ProgramInfo *progInfo) :
-    MythScreenType (parent, "progdetails"),
-    m_progInfo(*progInfo), m_infoList(*this)
-{
-}
-
 bool ProgDetails::Create(void)
 {
-    bool foundtheme = false;
-
     // Load the theme for this screen
-    foundtheme = LoadWindowFromXML("schedule-ui.xml", "programdetails", this);
-
+    bool foundtheme = LoadWindowFromXML("schedule-ui.xml", "programdetails", this);
     if (!foundtheme)
         return false;
 
@@ -45,11 +36,11 @@ bool ProgDetails::Create(void)
     return true;
 }
 
-QString ProgDetails::getRatings(bool recorded, uint chanid, QDateTime startts)
+QString ProgDetails::getRatings(bool recorded, uint chanid, const QDateTime& startts)
 {
     QString table = (recorded) ? "recordedrating" : "programrating";
     QString sel = QString(
-        "SELECT system, rating FROM %1 "
+        "SELECT `system`, rating FROM %1 "
         "WHERE chanid  = :CHANID "
         "AND starttime = :STARTTIME").arg(table);
 
@@ -128,16 +119,15 @@ void ProgDetails::addItem(const QString &title, const QString &value,
 
 bool ProgDetails::keyPressEvent(QKeyEvent *event)
 {
-    bool handled;
     QStringList actions;
-    handled = GetMythMainWindow()->TranslateKeyPress("Global", event, actions);
+    bool handled = GetMythMainWindow()->TranslateKeyPress("Global", event, actions);
 
     for (int i = 0; i < actions.size() && !handled; i++)
     {
         QString action = actions[i];
         handled = true;
 
-        if (action == "INFO")
+        if (action == "INFO" || action == "SELECT")
         {
             m_infoList.Toggle();
             updatePage();
@@ -160,17 +150,195 @@ bool ProgDetails::keyPressEvent(QKeyEvent *event)
     return handled;
 }
 
+void ProgDetails::PowerPriorities(const QString & ptable)
+{
+    int      recordid = m_progInfo.GetRecordingRuleID();
+
+    // If not a scheduled recording, abort .... ?
+    if (!recordid)
+        return;
+
+    using string_pair = QPair<QString, QString>;
+    QList<string_pair > tests;
+    QList<string_pair >::iterator Itest;
+    QString  recmatch;
+    QString  pwrpri;
+    QString  desc;
+    QString  adjustmsg;
+    int      total = 0;
+
+    MSqlQuery query(MSqlQuery::InitCon());
+
+    int prefinputpri    = gCoreContext->GetNumSetting("PrefInputPriority", 2);
+    int hdtvpriority    = gCoreContext->GetNumSetting("HDTVRecPriority", 0);
+    int wspriority      = gCoreContext->GetNumSetting("WSRecPriority", 0);
+    int slpriority      = gCoreContext->GetNumSetting("SignLangRecPriority", 0);
+    int onscrpriority   = gCoreContext->GetNumSetting("OnScrSubRecPriority", 0);
+    int ccpriority      = gCoreContext->GetNumSetting("CCRecPriority", 0);
+    int hhpriority      = gCoreContext->GetNumSetting("HardHearRecPriority", 0);
+    int adpriority      = gCoreContext->GetNumSetting("AudioDescRecPriority", 0);
+
+    tests.append(qMakePair(QString("channel.recpriority"),
+                           QString("channel.recpriority")));
+    tests.append(qMakePair(QString("capturecard.recpriority"),
+                           QString("capturecard.recpriority")));
+
+    if (recordid && prefinputpri)
+    {
+        pwrpri = QString("(capturecard.cardid = record.prefinput) * %1")
+              .arg(prefinputpri);
+        tests.append(qMakePair(pwrpri, pwrpri));
+    }
+    if (hdtvpriority)
+    {
+        pwrpri = QString("(program.hdtv > 0 OR "
+                      "FIND_IN_SET('HDTV', program.videoprop) > 0) * %1")
+              .arg(hdtvpriority);
+        tests.append(qMakePair(pwrpri, pwrpri));
+    }
+    if (wspriority)
+    {
+        pwrpri = QString
+                 ("(FIND_IN_SET('WIDESCREEN', program.videoprop) > 0) * %1")
+                 .arg(wspriority);
+        tests.append(qMakePair(pwrpri, pwrpri));
+    }
+    if (slpriority)
+    {
+        pwrpri = QString
+                 ("(FIND_IN_SET('SIGNED', program.subtitletypes) > 0) * %1")
+                 .arg(slpriority);
+        tests.append(qMakePair(pwrpri, pwrpri));
+    }
+    if (onscrpriority)
+    {
+        pwrpri = QString
+              ("(FIND_IN_SET('ONSCREEN', program.subtitletypes) > 0) * %1")
+              .arg(onscrpriority);
+        tests.append(qMakePair(pwrpri, pwrpri));
+    }
+    if (ccpriority)
+    {
+        pwrpri = QString
+              ("(FIND_IN_SET('NORMAL', program.subtitletypes) > 0 OR "
+               "program.closecaptioned > 0 OR program.subtitled > 0) * %1")
+              .arg(ccpriority);
+        tests.append(qMakePair(pwrpri, pwrpri));
+    }
+    if (hhpriority)
+    {
+        pwrpri = QString
+                 ("(FIND_IN_SET('HARDHEAR', program.subtitletypes) > 0 OR "
+                  "FIND_IN_SET('HARDHEAR', program.audioprop) > 0) * %1")
+                 .arg(hhpriority);
+        tests.append(qMakePair(pwrpri, pwrpri));
+    }
+    if (adpriority)
+    {
+        pwrpri = QString
+              ("(FIND_IN_SET('VISUALIMPAIR', program.audioprop) > 0) * %1")
+              .arg(adpriority);
+        tests.append(qMakePair(pwrpri, pwrpri));
+    }
+
+    query.prepare("SELECT recpriority, selectclause FROM powerpriority;");
+
+    if (!query.exec())
+    {
+        MythDB::DBError("Power Priority", query);
+        return;
+    }
+
+    while (query.next())
+    {
+        int adj = query.value(0).toInt();
+        if (adj)
+        {
+            QString sclause = query.value(1).toString();
+            sclause.remove(QRegExp("^\\s*AND\\s+", Qt::CaseInsensitive));
+            sclause.remove(';');
+            pwrpri = QString("(%1) * %2").arg(sclause)
+                                            .arg(query.value(0).toInt());
+            if (!recordid && pwrpri.indexOf("RECTABLE") != -1)
+                continue;
+            pwrpri.replace("RECTABLE", "record");
+
+            desc = pwrpri;
+            pwrpri += QString(" AS powerpriority ");
+
+            tests.append(qMakePair(desc, pwrpri));
+        }
+    }
+
+    if (recordid)
+    {
+        recmatch = QString("INNER JOIN record "
+                           "      ON ( record.recordid = %1 ) ")
+                   .arg(recordid);
+    }
+
+    for (Itest = tests.begin(); Itest != tests.end(); ++Itest)
+    {
+        query.prepare("SELECT " + (*Itest).second.replace("program.", "p.")
+                      + QString
+                      (" FROM %1 as p "
+                       "INNER JOIN channel "
+                       "      ON ( channel.chanid = p.chanid ) "
+                       "INNER JOIN capturecard "
+                       "      ON ( channel.sourceid = capturecard.sourceid AND "
+                       "           ( capturecard.schedorder <> 0 OR "
+                       "             capturecard.parentid = 0 ) ) ").arg(ptable)
+                       + recmatch +
+                       "WHERE  p.chanid = :CHANID AND"
+                       " p.starttime = :STARTTIME ;");
+
+        query.bindValue(":CHANID",    m_progInfo.GetChanID());
+        query.bindValue(":STARTTIME", m_progInfo.GetScheduledStartTime());
+
+        adjustmsg = QString("%1 : ").arg((*Itest).first);
+        if (query.exec() && query.next())
+        {
+            int adj = query.value(0).toInt();
+            if (adj)
+            {
+                adjustmsg += tr(" MATCHED, adding %1").arg(adj);
+                total += adj;
+            }
+            else
+                adjustmsg += tr(" not matched");
+        }
+        else
+            adjustmsg += tr(" Query FAILED");
+
+        addItem(tr("Recording Priority Adjustment"), adjustmsg,
+                ProgInfoList::kLevel2);
+    }
+
+    if (!tests.isEmpty())
+        addItem(tr("Priority Adjustment Total"), QString::number(total),
+                ProgInfoList::kLevel2);
+}
+
 void ProgDetails::loadPage(void)
 {
     MSqlQuery query(MSqlQuery::InitCon());
-    QString category_type, showtype, year, syndicatedEpisodeNum;
-    QString rating, colorcode, title_pronounce;
+    QString category_type;
+    QString showtype;
+    QString year;
+    QString syndicatedEpisodeNum;
+    QString rating;
+    QString colorcode;
+    QString title_pronounce;
     float stars = 0.0;
-    int partnumber = 0, parttotal = 0;
-    int audioprop = 0, videoprop = 0, subtype = 0, generic = 0;
+    int partnumber = 0;
+    int parttotal = 0;
+    int audioprop = 0;
+    int videoprop = 0;
+    int subtype = 0;
+    int generic = 0;
     bool recorded = false;
 
-    RecordingRule* record = NULL;
+    RecordingRule* record = nullptr;
     if (m_progInfo.GetRecordingRuleID())
     {
         record = new RecordingRule();
@@ -180,12 +348,10 @@ void ProgDetails::loadPage(void)
     if (m_progInfo.GetFilesize())
         recorded = true;
 
+    QString ptable = recorded ? "recordedprogram" : "program";
+
     if (m_progInfo.GetScheduledEndTime() != m_progInfo.GetScheduledStartTime())
     {
-        QString ptable = "program";
-        if (recorded)
-            ptable = "recordedprogram";
-
         query.prepare(QString("SELECT category_type, airdate, stars,"
                       " partnumber, parttotal, audioprop+0, videoprop+0,"
                       " subtitletypes+0, syndicatedepisodenumber, generic,"
@@ -257,8 +423,8 @@ void ProgDetails::loadPage(void)
     /* see #7810, was hardcoded to 4 star system, when every theme
      * uses 10 stars / 5 stars with half stars
      */
-        if (stars > 0.0)
-            attr += tr("%n star(s)", "", roundf(stars * 10.0)) + ", ";
+        if (stars > 0.0F)
+            attr += tr("%n star(s)", "", roundf(stars * 10.0F)) + ", ";
     }
     if (!colorcode.isEmpty())
         attr += colorcode + ", ";
@@ -286,6 +452,8 @@ void ProgDetails::loadPage(void)
         attr += tr("720p Resolution") + ", ";
     if  (videoprop & VID_1080)
         attr += tr("1080i/p Resolution") + ", ";
+    if  (videoprop & VID_DAMAGED)
+        attr += tr("Damaged") + ", ";
 
     if (subtype & SUB_HARDHEAR)
         attr += tr("CC","Closed Captioned") + ", ";
@@ -309,32 +477,46 @@ void ProgDetails::loadPage(void)
 
     addItem(tr("Description"), s, ProgInfoList::kLevel1);
 
-    QString actors, directors, producers, execProducers;
-    QString writers, guestStars, hosts, adapters;
-    QString presenters, commentators, guests;
+    QString actors;
+    QString directors;
+    QString producers;
+    QString execProducers;
+    QString writers;
+    QString guestStars;
+    QString hosts;
+    QString adapters;
+    QString presenters;
+    QString commentators;
+    QString guests;
 
     if (m_progInfo.GetScheduledEndTime() != m_progInfo.GetScheduledStartTime())
     {
         if (recorded)
+        {
             query.prepare("SELECT role,people.name FROM recordedcredits"
                           " AS credits"
                           " LEFT JOIN people ON credits.person = people.person"
                           " WHERE credits.chanid = :CHANID"
                           " AND credits.starttime = :STARTTIME"
                           " ORDER BY role;");
+        }
         else
+        {
             query.prepare("SELECT role,people.name FROM credits"
                           " LEFT JOIN people ON credits.person = people.person"
                           " WHERE credits.chanid = :CHANID"
                           " AND credits.starttime = :STARTTIME"
                           " ORDER BY role;");
+        }
         query.bindValue(":CHANID",    m_progInfo.GetChanID());
         query.bindValue(":STARTTIME", m_progInfo.GetScheduledStartTime());
 
         if (query.exec() && query.size() > 0)
         {
             QStringList plist;
-            QString rstr, role, pname;
+            QString rstr;
+            QString role;
+            QString pname;
 
             while(query.next())
             {
@@ -464,11 +646,14 @@ void ProgDetails::loadPage(void)
     if (m_progInfo.GetEpisode() > 0)
     {
         if (m_progInfo.GetEpisodeTotal() > 0)
+        {
             s = tr("%1 of %2").arg(m_progInfo.GetEpisode())
                               .arg(m_progInfo.GetEpisodeTotal());
+        }
         else
+        {
             s = QString::number(m_progInfo.GetEpisode());
-
+        }
     }
     addItem(tr("Episode"), s, ProgInfoList::kLevel1);
 
@@ -575,13 +760,17 @@ void ProgDetails::loadPage(void)
         if (query.exec() && query.next())
         {
             if (query.value(0).toDateTime().isValid())
+            {
                 lastRecorded = MythDate::toString(
                     MythDate::as_utc(query.value(0).toDateTime()),
                     MythDate::kDateFull | MythDate::kAddYear);
+            }
             if (query.value(1).toDateTime().isValid())
+            {
                 nextRecording = MythDate::toString(
                     MythDate::as_utc(query.value(1).toDateTime()),
                     MythDate::kDateFull | MythDate::kAddYear);
+            }
             if (query.value(2).toInt() > 0)
                 averageTimeShift = tr("%n hour(s)", "",
                                                 query.value(2).toInt());
@@ -662,15 +851,15 @@ void ProgDetails::loadPage(void)
 
         if (query.exec() && query.next())
         {
-            recordingProfile = m_progInfo.i18n(query.value(0).toString());
+            recordingProfile = ProgramInfo::i18n(query.value(0).toString());
         }
-        recordingGroup = m_progInfo.i18n(m_progInfo.GetRecordingGroup());
-        storageGroup   = m_progInfo.i18n(m_progInfo.GetStorageGroup());
-        playbackGroup  = m_progInfo.i18n(m_progInfo.GetPlaybackGroup());
+        recordingGroup = ProgramInfo::i18n(m_progInfo.GetRecordingGroup());
+        storageGroup   = ProgramInfo::i18n(m_progInfo.GetStorageGroup());
+        playbackGroup  = ProgramInfo::i18n(m_progInfo.GetPlaybackGroup());
     }
     else if (m_progInfo.GetRecordingRuleID())
     {
-        recordingProfile =  record->m_recProfile;
+        recordingProfile = record ? record->m_recProfile : tr("Unknown");
     }
     addItem(tr("Recording Host"), recordingHost, ProgInfoList::kLevel2);
     addItem(tr("Recording Input"), recordingInput, ProgInfoList::kLevel2);
@@ -680,6 +869,8 @@ void ProgDetails::loadPage(void)
     addItem(tr("Recording Group"), recordingGroup, ProgInfoList::kLevel1);
     addItem(tr("Storage Group"), storageGroup, ProgInfoList::kLevel2);
     addItem(tr("Playback Group"),  playbackGroup, ProgInfoList::kLevel2);
+
+    PowerPriorities(ptable);
 
     delete record;
 }

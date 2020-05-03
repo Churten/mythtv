@@ -11,17 +11,14 @@ using namespace std;
 class NewsArticle
 {
   public:
-    typedef vector<NewsArticle> List;
+    using List = vector<NewsArticle>;
 
-    NewsArticle(const QString &title,
-                const QString &desc, const QString &artURL,
-                const QString &thumbnail, const QString &mediaURL,
-                const QString &enclosure);
-    NewsArticle(const QString &title,
-                const QString &desc, const QString &artURL);
-    explicit NewsArticle(const QString &title);
+    NewsArticle(QString title, QString desc, QString articleURL,
+                QString thumbnail, QString mediaURL, QString enclosure);
+    NewsArticle(QString title, QString desc, QString articleURL);
+    explicit NewsArticle(QString title);
 
-    NewsArticle();
+    NewsArticle() = default;
 
     QString title(void)       const { return m_title;      }
     QString description(void) const { return m_desc;       }

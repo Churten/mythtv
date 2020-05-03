@@ -3,8 +3,8 @@
  */
 #include "dvdstream.h"
 
-#include <stdio.h>
 #include <algorithm>
+#include <cstdio>
 
 #include <QMutexLocker>
 #include <QtGlobal>
@@ -22,17 +22,18 @@ extern "C" {
 // A range of block numbers
 class DVDStream::BlockRange
 {
-    uint32_t start, end;
-    int title;
+    uint32_t m_start;
+    uint32_t m_end;
+    int m_title;
 
 public:
-    BlockRange(uint32_t b, uint32_t n, int t) : start(b), end(b+n), title(t) { }
+    BlockRange(uint32_t b, uint32_t n, int t) : m_start(b), m_end(b+n), m_title(t) { }
 
-    bool operator < (const BlockRange& rhs) const { return end <= rhs.start; }
+    bool operator < (const BlockRange& rhs) const { return m_end <= rhs.m_start; }
 
-    uint32_t Start() const { return start; }
-    uint32_t End() const { return end; }
-    int Title() const { return title; }
+    uint32_t Start() const { return m_start; }
+    uint32_t End() const { return m_end; }
+    int Title() const { return m_title; }
 };
 
 
@@ -49,26 +50,34 @@ inline uint32_t Len2Blocks(uint32_t len)
 }
 
 DVDStream::DVDStream(const QString& filename)
-: RingBuffer(kRingBuffer_File), m_reader(0), m_start(0), m_pos(0), m_title(-1)
+    : RingBuffer(kRingBuffer_File)
 {
-    OpenFile(filename);
+    DVDStream::OpenFile(filename);
 }
 
 DVDStream::~DVDStream()
 {
     KillReadAheadThread();
 
-    rwlock.lockForWrite();
+    m_rwLock.lockForWrite();
 
     if (m_reader)
         DVDClose(m_reader);
 
-    rwlock.unlock();
+    m_rwLock.unlock();
 }
 
+/** \fn DVDStream::OpenFile(const QString &, uint)
+ *  \brief Opens a dvd device for streaming.
+ *
+ *  \param lfilename   Path of the dvd device to read.
+ *  \param retry_ms    Ignored. This value is part of the API
+ *                     inherited from the parent class.
+ *  \return Returns true if the dvd was opened.
+ */
 bool DVDStream::OpenFile(const QString &filename, uint /*retry_ms*/)
 {
-    rwlock.lockForWrite();
+    m_rwLock.lockForWrite();
 
     const QString root = filename.section("/VIDEO_TS/", 0, 0);
     const QString path = filename.section(root, 1);
@@ -80,37 +89,34 @@ bool DVDStream::OpenFile(const QString &filename, uint /*retry_ms*/)
     if (!m_reader)
     {
         LOG(VB_GENERAL, LOG_ERR, QString("DVDStream DVDOpen(%1) failed").arg(filename));
-        rwlock.unlock();
+        m_rwLock.unlock();
         return false;
     }
 
     if (!path.isEmpty())
     {
         // Locate the start block of the requested title
-        uint32_t len;
-        m_start = UDFFindFile(m_reader, const_cast<char*>(qPrintable(path)), &len);
+        uint32_t len = 0;
+        m_start = UDFFindFile(m_reader, qPrintable(path), &len);
         if (m_start == 0)
         {
             LOG(VB_GENERAL, LOG_ERR, QString("DVDStream(%1) UDFFindFile(%2) failed").
                 arg(root).arg(path));
             DVDClose(m_reader);
-            m_reader = 0;
-            rwlock.unlock();
+            m_reader = nullptr;
+            m_rwLock.unlock();
             return false;
         }
-        else
-        {
-            m_list.append(BlockRange(0, Len2Blocks(len), 0));
-        }
+        m_list.append(BlockRange(0, Len2Blocks(len), 0));
     }
     else
     {
         // Create a list of the possibly encrypted files
-        uint32_t len, start;
+        uint32_t len = 0;
 
         // Root menu
         char name[64] = "VIDEO_TS/VIDEO_TS.VOB";
-        start = UDFFindFile(m_reader, name, &len);
+        uint32_t start = UDFFindFile(m_reader, name, &len);
         if( start != 0 && len != 0 )
             m_list.append(BlockRange(start, Len2Blocks(len), 0));
 
@@ -143,16 +149,16 @@ bool DVDStream::OpenFile(const QString &filename, uint /*retry_ms*/)
             LOG(VB_GENERAL, LOG_ERR, "DVDStream DVDOpenFile(VOBS_1) failed");
     }
 
-    rwlock.unlock();
+    m_rwLock.unlock();
     return true;
 }
 
 //virtual
 bool DVDStream::IsOpen(void) const
 {
-    rwlock.lockForRead();
-    bool ret = m_reader != 0;
-    rwlock.unlock();
+    m_rwLock.lockForRead();
+    bool ret = m_reader != nullptr;
+    m_rwLock.unlock();
     return ret;
 }
 
@@ -172,7 +178,8 @@ int DVDStream::safe_read(void *data, uint size)
     int ret = 0;
 
     // Are any blocks in the range encrypted?
-    list_t::const_iterator it = qBinaryFind(m_list, BlockRange(m_pos, lb, -1)); // FIXME: qBinaryFind is deprecated
+    list_t::const_iterator it;
+    it = std::lower_bound(m_list.begin(), m_list.end(), BlockRange(m_pos, lb, -1));
     uint32_t b = it == m_list.end() ? lb : m_pos < it->Start() ? it->Start() - m_pos : 0;
     if (b)
     {
@@ -254,13 +261,13 @@ long long DVDStream::SeekInternal(long long pos, int whence)
         return -1;
     }
 
-    poslock.lockForWrite();
+    m_posLock.lockForWrite();
 
     m_pos = lb;
 
-    poslock.unlock();
+    m_posLock.unlock();
 
-    generalWait.wakeAll();
+    m_generalWait.wakeAll();
 
     return pos;
 }
@@ -268,9 +275,9 @@ long long DVDStream::SeekInternal(long long pos, int whence)
 //virtual
 long long DVDStream::GetReadPosition(void)  const
 {
-    poslock.lockForRead();
+    m_posLock.lockForRead();
     long long ret = (long long)m_pos * DVD_VIDEO_LB_LEN;
-    poslock.unlock();
+    m_posLock.unlock();
     return ret;
 }
 

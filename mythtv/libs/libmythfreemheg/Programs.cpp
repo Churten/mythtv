@@ -31,16 +31,14 @@
 
 #include <QStringList>
 #include <QUrl>
-#if QT_VERSION >= QT_VERSION_CHECK(5,0,0)
 #include <QUrlQuery>
-#endif
 #if HAVE_GETTIMEOFDAY == 0
 #include <sys/timeb.h>
 #endif
 #ifdef __FreeBSD__
 #include <sys/time.h>
 #else
-#include <time.h>
+#include <ctime>
 #endif
 
 #include "config.h"
@@ -52,12 +50,6 @@
  * As with many of the more abstruse aspects of MHEG they are not all used in any
  * applications I've seen so I haven't implemented them.
  */
-
-
-MHProgram::MHProgram()
-{
-    m_fInitiallyAvailable = true; // Default true
-}
 
 void MHProgram::Initialise(MHParseNode *p, MHEngine *engine)
 {
@@ -184,8 +176,8 @@ void MHResidentProgram::CallProgram(bool fIsFork, const MHObjectRef &success, co
                 time_t epochSeconds = 0;
                 short int timeZone = 0;
 #if HAVE_GETTIMEOFDAY
-                struct timeval   time;
-                struct timezone  zone;
+                struct timeval   time {};
+                struct timezone  zone {};
 
                 if (gettimeofday(&time, &zone) == -1)
                 {
@@ -497,7 +489,8 @@ void MHResidentProgram::CallProgram(bool fIsFork, const MHObjectRef &success, co
             if (args.Size() == 4)
             {
                 // Find a substring within a string and return an index to the position.
-                MHOctetString string, searchString;
+                MHOctetString string;
+                MHOctetString searchString;
                 GetString(args.GetAt(0), string, engine);
                 int nStart = GetInt(args.GetAt(1), engine);
 
@@ -508,11 +501,11 @@ void MHResidentProgram::CallProgram(bool fIsFork, const MHObjectRef &success, co
 
                 GetString(args.GetAt(2), searchString, engine);
                 // Strings are indexed from one.
-                int nPos;
+                int nPos = 0;
 
                 for (nPos = nStart - 1; nPos <= string.Size() - searchString.Size(); nPos++)
                 {
-                    int i;
+                    int i = 0;
 
                     for (i = 0; i < searchString.Size(); i++)
                     {
@@ -554,7 +547,8 @@ void MHResidentProgram::CallProgram(bool fIsFork, const MHObjectRef &success, co
             {
                 // Find a substring within a string and return an index to the position
                 // and the prefix to the substring.
-                MHOctetString string, searchString;
+                MHOctetString string;
+                MHOctetString searchString;
                 GetString(args.GetAt(0), string, engine);
                 int nStart = GetInt(args.GetAt(1), engine);
 
@@ -565,11 +559,11 @@ void MHResidentProgram::CallProgram(bool fIsFork, const MHObjectRef &success, co
 
                 GetString(args.GetAt(2), searchString, engine);
                 // Strings are indexed from one.
-                int nPos;
+                int nPos = 0;
 
                 for (nPos = nStart - 1; nPos <= string.Size() - searchString.Size(); nPos++)
                 {
-                    int i;
+                    int i = 0;
 
                     for (i = 0; i < searchString.Size(); i++)
                     {
@@ -669,7 +663,10 @@ void MHResidentProgram::CallProgram(bool fIsFork, const MHObjectRef &success, co
             if (args.Size() == 5)
             {
                 int channelId = GetInt(args.GetAt(0), engine);
-                int netId, origNetId, transportId, serviceId;
+                int netId = 0;
+                int origNetId = 0;
+                int transportId = 0;
+                int serviceId = 0;
                 // Look the information up in the database.
                 bool res = engine->GetContext()->GetServiceInfo(channelId, netId, origNetId,
                                                                 transportId, serviceId);
@@ -814,19 +811,19 @@ void MHResidentProgram::CallProgram(bool fIsFork, const MHObjectRef &success, co
                     case MHUnion::U_Int:
                         message.append(QString("%1").arg(un.m_nIntVal));
                         break;
-                    case MHParameter::P_Bool:
+                    case MHUnion::U_Bool:
                         message.append(un.m_fBoolVal ? "True" : "False");
                         break;
-                    case MHParameter::P_String:
+                    case MHUnion::U_String:
                         message.append(QString::fromUtf8((const char *)un.m_StrVal.Bytes(), un.m_StrVal.Size()));
                         break;
-                    case MHParameter::P_ObjRef:
+                    case MHUnion::U_ObjRef:
                         message.append(un.m_ObjRefVal.Printable());
                         break;
-                    case MHParameter::P_ContentRef:
+                    case MHUnion::U_ContentRef:
                         message.append(un.m_ContentRefVal.Printable());
                         break;
-                    case MHParameter::P_Null:
+                    case MHUnion::U_None:
                         break;
                 }
             }
@@ -871,24 +868,16 @@ void MHResidentProgram::CallProgram(bool fIsFork, const MHObjectRef &success, co
 
                 // Variable name/value pairs
                 int i = 1;
-#if QT_VERSION >= QT_VERSION_CHECK(5,0,0)
                 QUrlQuery q;
-#endif
                 for (; i + 2 < args.Size(); i += 2)
                 {
                     GetString(args.GetAt(i), string, engine);
                     QString name = QString::fromUtf8((const char *)string.Bytes(), string.Size());
                     MHUnion un;
                     un.GetValueFrom(*(args.GetAt(i+1)), engine);
-#if QT_VERSION >= QT_VERSION_CHECK(5,0,0)
                     q.addQueryItem(name, un.Printable());
-#else
-                    url.addQueryItem(name, un.Printable());
-#endif
                 }
-#if QT_VERSION >= QT_VERSION_CHECK(5,0,0)
                 url.setQuery(q);
-#endif
 
                 MHLOG(MHLogNotifications, QString("NOTE ReturnData %1")
                     .arg(url.toEncoded().constData()) );
@@ -984,15 +973,8 @@ void MHResidentProgram::CallProgram(bool fIsFork, const MHObjectRef &success, co
             else SetSuccessFlag(success, false, engine);
 
         }
-        else if (m_Name.Equal("GAP")) { // GetAudioDescPref
-            if (args.Size() == 1)
-            {
-                engine->FindObject(*(args.GetAt(1)->GetReference()))->SetVariableValue(false);
-                SetSuccessFlag(success, true, engine);
-            }
-            else SetSuccessFlag(success, false, engine);
-        }
-        else if (m_Name.Equal("GSP")) { // GetSubtitlePref
+        else if (m_Name.Equal("GAP") || // GetAudioDescPref
+                 m_Name.Equal("GSP")) { // GetSubtitlePref
             if (args.Size() == 1)
             {
                 engine->FindObject(*(args.GetAt(1)->GetReference()))->SetVariableValue(false);
@@ -1027,7 +1009,7 @@ void MHResidentProgram::CallProgram(bool fIsFork, const MHObjectRef &success, co
             MHERROR(QString("Unknown ResidentProgram %1").arg(m_Name.Printable()));
         }
     }
-    catch (char const *)
+    catch (...)
     {
         QStringList params;
         for (int i = 0; i < args.Size(); ++i)
@@ -1052,16 +1034,6 @@ void MHResidentProgram::CallProgram(bool fIsFork, const MHObjectRef &success, co
     }
 }
 
-MHRemoteProgram::MHRemoteProgram()
-{
-
-}
-
-MHRemoteProgram::~MHRemoteProgram()
-{
-
-}
-
 void MHRemoteProgram::Initialise(MHParseNode *p, MHEngine *engine)
 {
     MHProgram::Initialise(p, engine);
@@ -1076,16 +1048,6 @@ void MHRemoteProgram::PrintMe(FILE *fd, int nTabs) const
     fprintf(fd, "****TODO\n");
     PrintTabs(fd, nTabs);
     fprintf(fd, "}\n");
-}
-
-MHInterChgProgram::MHInterChgProgram()
-{
-
-}
-
-MHInterChgProgram::~MHInterChgProgram()
-{
-
 }
 
 void MHInterChgProgram::Initialise(MHParseNode *p, MHEngine *engine)
@@ -1114,7 +1076,7 @@ void MHCall::Initialise(MHParseNode *p, MHEngine *engine)
 
     for (int i = 0; i < args->GetSeqCount(); i++)
     {
-        MHParameter *pParm = new MHParameter;
+        auto *pParm = new MHParameter;
         m_Parameters.Append(pParm);
         pParm->Initialise(args->GetSeqN(i), engine);
     }

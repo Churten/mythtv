@@ -18,10 +18,7 @@
 
 NetBase::NetBase(MythScreenStack *parent, const char *name)
     : MythScreenType(parent, name),
-      m_thumbImage(NULL),
-      m_downloadable(NULL),
       m_popupStack(GetMythMainWindow()->GetStack("popup stack")),
-      m_progressDialog(NULL),
       m_imageDownload(new MetadataImageDownload(this))
 {
     gCoreContext->addListener(this);
@@ -37,7 +34,7 @@ NetBase::~NetBase()
     cleanThumbnailCacheDir();
 
     delete m_imageDownload;
-    m_imageDownload = NULL;
+    m_imageDownload = nullptr;
 
     gCoreContext->removeListener(this);
 }
@@ -64,7 +61,7 @@ void NetBase::InitProgressDialog()
     else
     {
         delete m_progressDialog;
-        m_progressDialog = NULL;
+        m_progressDialog = nullptr;
     }
 }
 
@@ -115,18 +112,17 @@ void NetBase::ShowWebVideo()
 
     if (!item->GetPlayer().isEmpty())
     {
-        QString cmd = item->GetPlayer();
+        const QString& cmd = item->GetPlayer();
         QStringList args = item->GetPlayerArguments();
-        if (!args.size())
+        if (args.empty())
         {
             args += item->GetMediaURL();
-            if (!args.size())
+            if (args.empty())
                 args += item->GetURL();
         }
         else
         {
-            args.replaceInStrings("%DIR%",
-                                  QString(GetConfDir() + "/MythNetvision"));
+            args.replaceInStrings("%DIR%", GetConfDir() + "/MythNetvision");
             args.replaceInStrings("%MEDIAURL%", item->GetMediaURL());
             args.replaceInStrings("%URL%", item->GetURL());
             args.replaceInStrings("%TITLE%", item->GetTitle());
@@ -176,20 +172,19 @@ void NetBase::ShowWebVideo()
 void NetBase::RunCmdWithoutScreensaver(const QString &cmd)
 {
     GetMythMainWindow()->PauseIdleTimer(true);
-    GetMythUI()->DisableScreensaver();
+    MythUIHelper::DisableScreensaver();
     GetMythMainWindow()->AllowInput(false);
     myth_system(cmd, kMSDontDisableDrawing);
     GetMythMainWindow()->AllowInput(true);
     GetMythMainWindow()->PauseIdleTimer(false);
-    GetMythUI()->RestoreScreensaver();
+    MythUIHelper::RestoreScreensaver();
 }
 
 void NetBase::SlotDeleteVideo()
 {
     QString message = tr("Are you sure you want to delete this file?");
 
-    MythConfirmationDialog *confirmdialog =
-        new MythConfirmationDialog(m_popupStack, message);
+    auto *confirmdialog = new MythConfirmationDialog(m_popupStack, message);
 
     if (confirmdialog->Create())
     {
@@ -225,9 +220,11 @@ void NetBase::DoDeleteVideo(bool remove)
 
 void NetBase::customEvent(QEvent *event)
 {
-    if ((MythEvent::Type)(event->type()) == MythEvent::MythEventMessage)
+    if (event->type() == MythEvent::MythEventMessage)
     {
-        MythEvent *me = static_cast<MythEvent *>(event);
+        auto *me = dynamic_cast<MythEvent *>(event);
+        if (me == nullptr)
+            return;
         QStringList tokens = me->Message().split(" ", QString::SkipEmptyParts);
 
         if (tokens.isEmpty())
@@ -260,7 +257,7 @@ void NetBase::customEvent(QEvent *event)
                 if (m_progressDialog)
                 {
                     m_progressDialog->Close();
-                    m_progressDialog = NULL;
+                    m_progressDialog = nullptr;
                 }
 
                 if ((m_downloadFile.startsWith("myth://")))
@@ -304,8 +301,7 @@ void NetBase::DoDownloadAndPlay()
         DoPlayVideo(finalFilename);
         return;
     }
-    else
-        DownloadVideo(item->GetMediaURL(), baseFilename);
+    DownloadVideo(item->GetMediaURL(), baseFilename);
 }
 
 void NetBase::DoPlayVideo(const QString &filename)

@@ -3,10 +3,10 @@
 #ifndef _EXTERNAL_CHANNEL_H_
 #define _EXTERNAL_CHANNEL_H_
 
+#include <cstdint>
+#include <utility>
 #include <vector>
 using namespace std;
-
-#include <stdint.h>
 
 // Qt headers
 #include <QString>
@@ -18,33 +18,48 @@ using namespace std;
 class ExternalChannel : public DTVChannel
 {
   public:
-    ExternalChannel(TVRec *parent, const QString & device);
-    ~ExternalChannel(void);
+    ExternalChannel(TVRec *parent, QString  device)
+        : DTVChannel(parent), m_device(std::move(device)),
+          m_loc(ExternalChannel::GetDevice()) {}
+    ~ExternalChannel(void) override;
 
     // Commands
-    virtual bool Open(void);
-    virtual void Close(void);
+    bool Open(void) override; // ChannelBase
+    void Close(void) override; // ChannelBase
 
     // ATSC/DVB scanning/tuning stuff
     using DTVChannel::Tune;
-    virtual bool Tune(const DTVMultiplex&) { return true; }
-    virtual bool Tune(const QString &channum);
-    virtual bool Tune(const QString &freqid, int /*finetune*/);
+    bool Tune(const DTVMultiplex &/*tuning*/) override // DTVChannel
+        { return true; }
+    bool Tune(const QString &channum) override; // DTVChannel
+    bool Tune(const QString &freqid, int /*finetune*/) override; // DTVChannel
 
-    virtual bool EnterPowerSavingMode(void);
+    bool EnterPowerSavingMode(void) override; // DTVChannel
 
     // Gets
-    virtual bool IsOpen(void) const { return m_stream_handler; }
-    virtual QString GetDevice(void) const { return m_device; }
-    virtual bool IsPIDTuningSupported(void) const { return true; }
+    bool IsOpen(void) const override // ChannelBase
+        { return m_streamHandler; }
+    QString GetDevice(void) const override // ChannelBase
+        { return m_device; }
+    bool IsPIDTuningSupported(void) const override // DTVChannel
+        { return true; }
+
+    QString UpdateDescription(void);
+    QString GetDescription(void);
+    bool IsBackgroundTuning(void) const { return m_backgroundTuning; }
+    uint GetTuneStatus(void);
 
   protected:
-    virtual bool IsExternalChannelChangeSupported(void) { return true; }
+    bool IsExternalChannelChangeSupported(void) override // ChannelBase
+        { return true; }
 
   private:
+    int                      m_tuneTimeout { -1 };
+    bool                     m_backgroundTuning {false};
     QString                  m_device;
     QStringList              m_args;
-    ExternalStreamHandler   *m_stream_handler;
+    ExternalStreamHandler   *m_streamHandler {nullptr};
+    QString                  m_loc;
 };
 
 #endif // _EXTERNAL_CHANNEL_H_

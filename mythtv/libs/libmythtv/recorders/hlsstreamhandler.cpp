@@ -13,7 +13,7 @@
 #include "mythlogging.h"
 #include "recorders/HLS/HLSReader.h"
 
-#define LOC QString("HLSSH(%1): ").arg(_device)
+#define LOC QString("HLSSH[%1](%2): ").arg(m_inputId).arg(m_device)
 
 // BUFFER_SIZE is a multiple of TS_SIZE
 #define TS_SIZE     188
@@ -23,7 +23,7 @@ QMap<QString,HLSStreamHandler*>  HLSStreamHandler::s_hlshandlers;
 QMap<QString,uint>               HLSStreamHandler::s_hlshandlers_refcnt;
 QMutex                           HLSStreamHandler::s_hlshandlers_lock;
 
-HLSStreamHandler* HLSStreamHandler::Get(const IPTVTuningData& tuning)
+HLSStreamHandler* HLSStreamHandler::Get(const IPTVTuningData& tuning, int inputid)
 {
     QMutexLocker locker(&s_hlshandlers_lock);
 
@@ -33,44 +33,44 @@ HLSStreamHandler* HLSStreamHandler::Get(const IPTVTuningData& tuning)
 
     if (it == s_hlshandlers.end())
     {
-        HLSStreamHandler* newhandler = new HLSStreamHandler(tuning);
+        auto* newhandler = new HLSStreamHandler(tuning, inputid);
         newhandler->Start();
         s_hlshandlers[devkey] = newhandler;
         s_hlshandlers_refcnt[devkey] = 1;
 
         LOG(VB_RECORD, LOG_INFO,
-            QString("HLSSH: Creating new stream handler %1 for %2")
-            .arg(devkey).arg(tuning.GetDeviceName()));
+            QString("HLSSH[%1]: Creating new stream handler %2 for %3")
+            .arg(inputid).arg(devkey).arg(tuning.GetDeviceName()));
     }
     else
     {
         s_hlshandlers_refcnt[devkey]++;
         uint rcount = s_hlshandlers_refcnt[devkey];
         LOG(VB_RECORD, LOG_INFO,
-            QString("HLSSH: Using existing stream handler %1 for %2")
-            .arg(devkey).arg(tuning.GetDeviceName()) +
+            QString("HLSSH[%1]: Using existing stream handler %2 for %3")
+            .arg(inputid).arg(devkey).arg(tuning.GetDeviceName()) +
             QString(" (%1 in use)").arg(rcount));
     }
 
     return s_hlshandlers[devkey];
 }
 
-void HLSStreamHandler::Return(HLSStreamHandler* & ref)
+void HLSStreamHandler::Return(HLSStreamHandler* & ref, int inputid)
 {
     QMutexLocker locker(&s_hlshandlers_lock);
 
-    QString devname = ref->_device;
+    QString devname = ref->m_device;
 
     QMap<QString,uint>::iterator rit = s_hlshandlers_refcnt.find(devname);
     if (rit == s_hlshandlers_refcnt.end())
         return;
 
-    LOG(VB_RECORD, LOG_INFO, QString("HLSSH: Return(%1) has %2 handlers")
-        .arg(devname).arg(*rit));
+    LOG(VB_RECORD, LOG_INFO, QString("HLSSH[%1]: Return(%2) has %3 handlers")
+        .arg(inputid).arg(devname).arg(*rit));
 
     if (*rit > 1)
     {
-        ref = NULL;
+        ref = nullptr;
         (*rit)--;
         return;
     }
@@ -78,31 +78,31 @@ void HLSStreamHandler::Return(HLSStreamHandler* & ref)
     QMap<QString,HLSStreamHandler*>::iterator it = s_hlshandlers.find(devname);
     if ((it != s_hlshandlers.end()) && (*it == ref))
     {
-        LOG(VB_RECORD, LOG_INFO, QString("HLSSH: Closing handler for %1")
-                           .arg(devname));
+        LOG(VB_RECORD, LOG_INFO, QString("HLSSH[%1]: Closing handler for %2")
+                           .arg(inputid).arg(devname));
         ref->Stop();
-        LOG(VB_RECORD, LOG_DEBUG, QString("HLSSH: handler for %1 stopped")
-            .arg(devname));
+        LOG(VB_RECORD, LOG_DEBUG, QString("HLSSH[%1]: handler for %2 stopped")
+            .arg(inputid).arg(devname));
         delete *it;
         s_hlshandlers.erase(it);
     }
     else
     {
         LOG(VB_GENERAL, LOG_ERR,
-            QString("HLSSH Error: Couldn't find handler for %1")
-                .arg(devname));
+            QString("HLSSH[%1] Error: Couldn't find handler for %2")
+            .arg(inputid).arg(devname));
     }
 
     s_hlshandlers_refcnt.erase(rit);
-    ref = NULL;
+    ref = nullptr;
 }
 
-HLSStreamHandler::HLSStreamHandler(const IPTVTuningData& tuning) :
-    IPTVStreamHandler(tuning)
+HLSStreamHandler::HLSStreamHandler(const IPTVTuningData& tuning, int inputid)
+    : IPTVStreamHandler(tuning, inputid)
 {
+    LOG(VB_GENERAL, LOG_INFO, LOC + "ctor");
     m_hls        = new HLSReader();
     m_readbuffer = new uint8_t[BUFFER_SIZE];
-    m_throttle   = true;
 }
 
 HLSStreamHandler::~HLSStreamHandler(void)
@@ -131,7 +131,7 @@ void HLSStreamHandler::run(void)
     m_hls->Throttle(false);
 
     int remainder = 0;
-    while (_running_desired)
+    while (m_runningDesired)
     {
         if (!m_hls->IsOpen(url))
         {
@@ -181,15 +181,13 @@ void HLSStreamHandler::run(void)
         {
             LOG(VB_RECORD, LOG_INFO, LOC +
                 QString("Packet not starting with SYNC Byte (got 0x%1)")
-                .arg((char)m_readbuffer[0], 2, QLatin1Char('0')));
+                .arg((char)m_readbuffer[0], 2, 16, QLatin1Char('0')));
             continue;
         }
 
         {
-            QMutexLocker locker(&_listener_lock);
-            HLSStreamHandler::StreamDataList::const_iterator sit;
-            sit = _stream_data_list.begin();
-            for (; sit != _stream_data_list.end(); ++sit)
+            QMutexLocker locker(&m_listenerLock);
+            for (auto sit = m_streamDataList.cbegin(); sit != m_streamDataList.cend(); ++sit)
                 remainder = sit.key()->ProcessData(m_readbuffer, size);
         }
 

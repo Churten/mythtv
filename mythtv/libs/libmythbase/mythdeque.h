@@ -4,13 +4,20 @@
 #define __MYTH_DEQUE_H__
 
 #include <QString>
+#include <QStringList>
 #include <deque>
 using std::deque;
 
 template<typename T>
-inline T myth_deque_init(const T*) { return (T)(0); }
+inline T myth_deque_init(const T */*unused*/) { return nullptr; }
 template<>
-inline QString myth_deque_init(const QString*) { return QString(); }
+inline int myth_deque_init(const int * /*unused*/) { return 0; }
+template<>
+inline uint myth_deque_init(const uint * /*unused*/) { return 0; }
+template<>
+inline QString myth_deque_init(const QString * /*unused*/) { return QString(); }
+template<>
+inline QStringList myth_deque_init(const QStringList * /*unused*/) { return QStringList(); }
 
 /** \class MythDeque
  *  \brief MythDeque is similar to QPtrQueue, while being based off
@@ -24,7 +31,7 @@ class MythDeque : public deque<T>
     /// \brief Removes item from front of list and returns a copy. O(1).
     T dequeue()
     {
-        T *dummy = NULL;
+        T *dummy = nullptr;
         if (deque<T>::empty())
             return myth_deque_init(dummy);
         T item = deque<T>::front();
@@ -34,14 +41,14 @@ class MythDeque : public deque<T>
     /// \brief Adds item to the back of the list. O(1).
     void enqueue(T d) { deque<T>::push_back(d); }
 
-    typedef typename deque<T>::iterator iterator;
-    typedef typename deque<T>::const_iterator const_iterator;
-    typedef typename deque<T>::size_type size_type;
+    using iterator = typename deque<T>::iterator;
+    using const_iterator = typename deque<T>::const_iterator;
+    using size_type = typename deque<T>::size_type;
 
     /// \brief Finds an item in the list via linear search O(n).
     iterator find(T const item)
     {
-        for (iterator it = deque<T>::begin(); it != deque<T>::end(); ++it)
+        for (auto it = deque<T>::begin(); it != deque<T>::end(); ++it)
             if (*it == item)
                 return it;
         return deque<T>::end();
@@ -50,7 +57,7 @@ class MythDeque : public deque<T>
     /// \brief Finds an item in the list via linear search O(n).
     const_iterator find(T const item) const
     {
-        for (const_iterator it = deque<T>::begin(); it != deque<T>::end(); ++it)
+        for (auto it = deque<T>::begin(); it != deque<T>::end(); ++it)
             if (*it == item)
                 return it;
         return deque<T>::end();
@@ -59,12 +66,13 @@ class MythDeque : public deque<T>
     /// \brief Removes any item from list. O(n).
     void remove(T const item)
     {
-        iterator it = find(item);
+        auto it = find(item);
         if (it != deque<T>::end())
             deque<T>::erase(it);
     }
 
     /// \brief Returns true if item is in list. O(n).
+    // cppcheck-suppress constParameter
     bool contains(T const &item) const
         { return find(item) != deque<T>::end(); }
 
@@ -74,16 +82,16 @@ class MythDeque : public deque<T>
     /// \brief Returns item at head of list. O(1).
     T head()
         { if (!deque<T>::empty()) return deque<T>::front();
-          T *dummy = NULL; return myth_deque_init(dummy); }
+          T *dummy = nullptr; return myth_deque_init(dummy); }
     /// \brief Returns item at head of list. O(1).
-    const T head() const
+    T head() const
         { if (!deque<T>::empty()) return deque<T>::front();
           T *dummy = NULL; return myth_deque_init(dummy); }
 
     /// \brief Returns item at tail of list. O(1).
     T tail()
         { if (!deque<T>::empty()) return deque<T>::back();
-          T *dummy = NULL; return myth_deque_init(dummy); }
+          T *dummy = nullptr; return myth_deque_init(dummy); }
     /// \brief Returns item at tail of list. O(1).
     const T tail() const
         { if (!deque<T>::empty()) return deque<T>::back();

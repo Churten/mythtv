@@ -24,7 +24,7 @@
 #include <QEventLoop>
 #include <QTimer>
 
-#include <stdint.h>
+#include <cstdint>
 
 /**
  * \class WebSocketServer
@@ -40,7 +40,7 @@ class UPNP_PUBLIC WebSocketServer : public ServerPool
 
   public:
     WebSocketServer();
-    virtual ~WebSocketServer();
+    ~WebSocketServer() override;
 
     bool IsRunning(void) const
     {
@@ -51,12 +51,12 @@ class UPNP_PUBLIC WebSocketServer : public ServerPool
     }
 
   protected slots:
-    virtual void newTcpConnection(qt_socket_fd_t socket); // QTcpServer
+    void newTcpConnection(qt_socket_fd_t socket) override; // QTcpServer
 
   protected:
     mutable QReadWriteLock  m_rwlock;
     MThreadPool             m_threadPool;
-    bool                    m_running; // protected by m_rwlock
+    bool                    m_running {true}; // protected by m_rwlock
 
 #ifndef QT_NO_OPENSSL
     QSslConfiguration       m_sslConfig;
@@ -75,31 +75,30 @@ class UPNP_PUBLIC WebSocketServer : public ServerPool
 class WebSocketFrame
 {
   public:
-    WebSocketFrame() : finalFrame(false), payloadSize(0), opCode(kOpTextFrame),
-                       isMasked(false), fragmented(false)
+    WebSocketFrame()
     {
-       mask.reserve(4);
+        m_mask.reserve(4);
     }
 
    ~WebSocketFrame()
     {
-        payload.clear();
-        mask.clear();
+        m_payload.clear();
+        m_mask.clear();
     }
 
     void reset(void)
     {
-        finalFrame = false;
-        payload.clear();
-        payload.resize(128);
-        payload.squeeze();
-        mask.clear();
-        payloadSize = 0;
-        opCode = kOpTextFrame;
-        fragmented = false;
+        m_finalFrame = false;
+        m_payload.clear();
+        m_payload.resize(128);
+        m_payload.squeeze();
+        m_mask.clear();
+        m_payloadSize = 0;
+        m_opCode = kOpTextFrame;
+        m_fragmented = false;
     }
 
-    typedef enum OpCodes
+    enum OpCode
     {
         kOpContinuation = 0x0,
         kOpTextFrame    = 0x1,
@@ -109,15 +108,15 @@ class WebSocketFrame
         kOpPing         = 0x9,
         kOpPong         = 0xA
         // Reserved
-    } OpCode;
+    };
 
-    bool finalFrame;
-    QByteArray payload;
-    uint64_t payloadSize;
-    OpCode opCode;
-    bool isMasked;
-    QByteArray mask;
-    bool fragmented;
+    bool       m_finalFrame  {false};
+    QByteArray m_payload;
+    uint64_t   m_payloadSize {0};
+    OpCode     m_opCode      {kOpTextFrame};
+    bool       m_isMasked    {false};
+    QByteArray m_mask;
+    bool       m_fragmented  {false};
 };
 
 class WebSocketWorker;
@@ -139,8 +138,8 @@ class WebSocketExtension : public QObject
   Q_OBJECT
 
   public:
-    WebSocketExtension() : QObject() { };
-    virtual ~WebSocketExtension() {};
+    WebSocketExtension() = default;;
+    ~WebSocketExtension() override = default;
 
     virtual bool HandleTextFrame(const WebSocketFrame &/*frame*/) { return false; }
     virtual bool HandleBinaryFrame(const WebSocketFrame &/*frame*/) { return false; }
@@ -161,12 +160,12 @@ class WebSocketWorkerThread : public QRunnable
     WebSocketWorkerThread(WebSocketServer &webSocketServer, qt_socket_fd_t sock,
                           PoolServerType type
 #ifndef QT_NO_OPENSSL
-                          , QSslConfiguration sslConfig
+                          , const QSslConfiguration& sslConfig
 #endif
                         );
-    virtual ~WebSocketWorkerThread();
+    ~WebSocketWorkerThread() override = default;
 
-    virtual void run(void);
+    void run(void) override; // QRunnable
 
   private:
     WebSocketServer  &m_webSocketServer;
@@ -205,19 +204,19 @@ class WebSocketWorker : public QObject
      * \param webSocketServer The parent server of this request
      * \param sock       The socket
      * \param type       The type of connection - Plain TCP or TLS?
-     * \param tlsConfig  The TLS (ssl) configuration (for TLS sockets)
+     * \param sslConfig  The TLS (ssl) configuration (for TLS sockets)
      */
     WebSocketWorker(WebSocketServer &webSocketServer, qt_socket_fd_t sock,
                     PoolServerType type
 #ifndef QT_NO_OPENSSL
-                    , QSslConfiguration sslConfig
+                    , const QSslConfiguration& sslConfig
 #endif
                     );
-    virtual ~WebSocketWorker();
+    ~WebSocketWorker() override;
 
     void Exec();
 
-    typedef enum ErrorCodes
+    enum ErrorCode
     {
         kCloseNormal        = 1000,
         kCloseGoingAway     = 1001,
@@ -238,7 +237,7 @@ class WebSocketWorker : public QObject
         // Reserved - 1012-1014
         kCloseNoTLS         = 1012  // Connection closed because it must use TLS
         // Reserved
-    } ErrorCode;
+    };
 
   public slots:
     void doRead();
@@ -250,15 +249,15 @@ class WebSocketWorker : public QObject
     bool SendBinary(const QByteArray &data);
 
   protected:
-    bool ProcessHandshake(QTcpSocket *); /// Returns false if an error occurs
-    void ProcessFrames(QTcpSocket *); /// Returns false if an error occurs
+    bool ProcessHandshake(QTcpSocket *socket); /// Returns false if an error occurs
+    void ProcessFrames(QTcpSocket *socket); /// Returns false if an error occurs
 
     void HandleControlFrame(const WebSocketFrame &frame);
     void HandleDataFrame(const WebSocketFrame &frame);
 
     void HandleCloseConnection(const QByteArray &payload);
 
-    QByteArray CreateFrame(WebSocketFrame::OpCode type, const QByteArray &payload);
+    static QByteArray CreateFrame(WebSocketFrame::OpCode type, const QByteArray &payload);
 
     bool SendFrame(const QByteArray &frame);
     bool SendPing(const QByteArray &payload);
@@ -271,25 +270,26 @@ class WebSocketWorker : public QObject
     void RegisterExtension(WebSocketExtension *extension);
     void DeregisterExtension(WebSocketExtension *extension);
 
-    QEventLoop *m_eventLoop;
+    QEventLoop     *m_eventLoop    {nullptr};
     WebSocketServer &m_webSocketServer;
     qt_socket_fd_t m_socketFD;
-    QTcpSocket *m_socket;
+    QTcpSocket    *m_socket        {nullptr};
     PoolServerType m_connectionType;
 
-    bool m_webSocketMode; // True if we've successfully upgraded from HTTP
+    // True if we've successfully upgraded from HTTP
+    bool           m_webSocketMode {false};
     WebSocketFrame m_readFrame;
 
-    uint8_t m_errorCount;
-    bool m_isRunning;
+    uint8_t m_errorCount           {0};
+    bool    m_isRunning            {false};
 
-    QTimer *m_heartBeat;
+    QTimer *m_heartBeat            {nullptr};
 
 #ifndef QT_NO_OPENSSL
     QSslConfiguration       m_sslConfig;
 #endif
 
-    bool m_fuzzTesting;
+    bool    m_fuzzTesting          {false};
 
     QList<WebSocketExtension *> m_extensions;
 };

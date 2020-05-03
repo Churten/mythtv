@@ -13,7 +13,12 @@
 #ifndef __UPNP_H__
 #define __UPNP_H__
 
+// Qt
+#include <QObject>
+
+// MythTV
 #include "configuration.h"
+#include "mythpower.h"
 
 //////////////////////////////////////////////////////////////////////////////
 //
@@ -28,7 +33,7 @@
 //
 //////////////////////////////////////////////////////////////////////////////
 
-typedef enum 
+enum UPnPResultCode
 {
     UPnPResult_Success                       =   0,
 
@@ -81,8 +86,7 @@ typedef enum
 
     UPnPResult_MythTV_NoNamespaceGiven       = 32001,
     UPnPResult_MythTV_XmlParseError          = 32002,
-
-} UPnPResultCode;
+};
 
 //////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////
@@ -92,15 +96,16 @@ typedef enum
 //////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////
 
-class UPNP_PUBLIC UPnp
+class UPNP_PUBLIC UPnp : public QObject
 {
+    Q_OBJECT
 
     protected:
 
         static Configuration   *g_pConfig;
 
-        HttpServer             *m_pHttpServer;
-        int                     m_nServicePort;
+        HttpServer             *m_pHttpServer  {nullptr};
+        int                     m_nServicePort {0};
 
     public:
 
@@ -118,13 +123,13 @@ class UPNP_PUBLIC UPnp
         bool Initialize( QList<QHostAddress> &sIPAddrList, int nServicePort,
                          HttpServer *pHttpServer );
 
-        bool isInitialized() { return (m_pHttpServer != NULL); }
+        bool isInitialized() { return (m_pHttpServer != nullptr); }
 
         virtual void Start();
 
-        void CleanUp      ();
+        static void CleanUp      ();
 
-        UPnpDevice *RootDevice() { return &(g_UPnpDeviceDesc.m_rootDevice); }
+        static UPnpDevice *RootDevice() { return &(g_UPnpDeviceDesc.m_rootDevice); }
 
         HttpServer *GetHttpServer() { return m_pHttpServer; }
 
@@ -138,7 +143,12 @@ class UPNP_PUBLIC UPnp
         static void            FormatRedirectResponse( HTTPRequest   *pRequest,
                                                        const QString &hostName );
 
+    public slots:
+        void DisableNotifications(uint);
+        void EnableNotificatins(qint64);
 
+    private:
+        MythPower* m_power;
 };
 
 #endif

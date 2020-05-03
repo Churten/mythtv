@@ -29,10 +29,6 @@
 using namespace std;
 
 
-PlayListFile::PlayListFile(void) : m_version(0)
-{
-}
-
 PlayListFile::~PlayListFile(void)
 {
     clear();
@@ -66,7 +62,7 @@ int PlayListFile::parsePLS(PlayListFile *pls, const QString &filename)
 
     for (int n = 1; n <= num_entries; n++)
     {
-        PlayListFileEntry *e = new PlayListFileEntry();
+        auto *e = new PlayListFileEntry();
         QString t_key = QString("Title%1").arg(n);
         QString f_key = QString("File%1").arg(n);
         QString l_key = QString("Length%1").arg(n);
@@ -110,7 +106,7 @@ int PlayListFile::parseM3U(PlayListFile *pls, const QString &filename)
             continue;
 
         // add to the playlist
-        PlayListFileEntry *e = new PlayListFileEntry();
+        auto *e = new PlayListFileEntry();
         e->setFile(*it);
         e->setTitle(*it);
         e->setLength(-1);
@@ -135,16 +131,16 @@ int PlayListFile::parseASX(PlayListFile *pls, const QString &filename)
     }
     file.close();
 
-    QDomElement docElem = doc.documentElement();
+    //QDomElement docElem = doc.documentElement();
     QDomNodeList entryList = doc.elementsByTagName("Entry");
     QString url;
 
-    for (int x = 0; x < (int) entryList.count(); x++)
+    for (int x = 0; x < entryList.count(); x++)
     {
         QDomNode n = entryList.item(x);
         QDomElement elem = n.toElement();
         QDomNodeList refList = elem.elementsByTagName("ref");
-        for (int y = 0; y < (int) refList.count(); y++)
+        for (int y = 0; y < refList.count(); y++)
         {
             QDomNode n2 = refList.item(y);
             QDomElement elem2 = n2.toElement();
@@ -153,7 +149,7 @@ int PlayListFile::parseASX(PlayListFile *pls, const QString &filename)
                 url = elem2.attribute("href");
 
                 // add to the playlist
-                PlayListFileEntry *e = new PlayListFileEntry();
+                auto *e = new PlayListFileEntry();
                 e->setFile(url.replace("mms://", "mmsh://"));
                 e->setTitle(url.replace("mms://", "mmsh://"));
                 e->setLength(-1);

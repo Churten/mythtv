@@ -9,9 +9,9 @@
 using namespace std;
 
 // Qt headers
+#include <QCoreApplication>
 #include <QDir>
 #include <QFileInfo>
-#include <QCoreApplication>
 
 // MythTV headers
 #include "compat.h"
@@ -49,15 +49,15 @@ bool needToReportState(bool showprogress, bool isrecording, long long frameno)
 void waitForBuffer(const struct timeval *framestart, int minlag, int flaglag,
         float fps, bool fullspeed)
 {
-    long usperframe = (long)(1000000.0 / fps);
-    struct timeval now, elapsed;
-    long sleepus;
+    long usperframe = (long)(1000000.0F / fps);
+    struct timeval now {};
+    struct timeval elapsed {};
 
-    (void)gettimeofday(&now, NULL);
+    (void)gettimeofday(&now, nullptr);
     timersub(&now, framestart, &elapsed);
 
     // Sleep for one frame's worth of time.
-    sleepus = usperframe - elapsed.tv_sec * 1000000 - elapsed.tv_usec;
+    long sleepus = usperframe - elapsed.tv_sec * 1000000 - elapsed.tv_usec;
     if (sleepus <= 0)
         return;
 
@@ -82,7 +82,7 @@ bool MythPlayerInited(FrameAnalyzerItem &pass,
                       MythPlayer *player,
                       long long nframes)
 {
-    FrameAnalyzerItem::iterator it = pass.begin();
+    auto it = pass.begin();
     while (it != pass.end())
     {
         FrameAnalyzer::analyzeFrameResult ares =
@@ -121,10 +121,10 @@ long long processFrame(FrameAnalyzerItem &pass,
                        const VideoFrame *frame,
                        long long frameno)
 {
-    long long nextFrame;
-    long long minNextFrame = FrameAnalyzer::ANYFRAME;
+    long long nextFrame = 0;
+    long long minNextFrame = FrameAnalyzer::kAnyFrame;
 
-    FrameAnalyzerItem::iterator it = pass.begin();
+    auto it = pass.begin();
     while (it != pass.end())
     {
         FrameAnalyzer::analyzeFrameResult ares =
@@ -155,10 +155,10 @@ long long processFrame(FrameAnalyzerItem &pass,
         }
     }
 
-    if (minNextFrame == FrameAnalyzer::ANYFRAME)
-        minNextFrame = FrameAnalyzer::NEXTFRAME;
+    if (minNextFrame == FrameAnalyzer::kAnyFrame)
+        minNextFrame = FrameAnalyzer::kNextFrame;
 
-    if (minNextFrame == FrameAnalyzer::NEXTFRAME)
+    if (minNextFrame == FrameAnalyzer::kNextFrame)
         minNextFrame = frameno + 1;
 
     return minNextFrame;
@@ -166,18 +166,16 @@ long long processFrame(FrameAnalyzerItem &pass,
 
 int passFinished(FrameAnalyzerItem &pass, long long nframes, bool final)
 {
-    FrameAnalyzerItem::iterator it = pass.begin();
-    for (; it != pass.end(); ++it)
-        (void)(*it)->finished(nframes, final);
+    for (auto & pas : pass)
+        (void)pas->finished(nframes, final);
 
     return 0;
 }
 
 int passReportTime(const FrameAnalyzerItem &pass)
 {
-    FrameAnalyzerItem::const_iterator it = pass.begin();
-    for (; it != pass.end(); ++it)
-        (void)(*it)->reportTime();
+    for (auto *pas : pass)
+        (void)pas->reportTime();
 
     return 0;
 }
@@ -187,9 +185,7 @@ bool searchingForLogo(TemplateFinder *tf, const FrameAnalyzerItem &pass)
     if (!tf)
         return false;
 
-    FrameAnalyzerItem::const_iterator it =
-        std::find(pass.begin(), pass.end(), tf);
-
+    auto it = std::find(pass.cbegin(), pass.cend(), tf);
     return it != pass.end();
 }
 
@@ -216,7 +212,7 @@ QString debugDirectory(int chanid, const QDateTime& recstartts)
         return "";
     }
 
-    const ProgramInfo pginfo(chanid, recstartts);
+    ProgramInfo pginfo(chanid, recstartts);
 
     if (!pginfo.GetChanID())
         return "";
@@ -226,12 +222,12 @@ QString debugDirectory(int chanid, const QDateTime& recstartts)
         return "";
 
     QString basename(query.value(0).toString());
-    QString debugdir = pburl.section('/',0,-2) + "/" + basename + "-debug";
+    QString m_debugdir = pburl.section('/',0,-2) + "/" + basename + "-debug";
 
-    return debugdir;
+    return m_debugdir;
 }
 
-void createDebugDirectory(QString dirname, QString comment)
+void createDebugDirectory(const QString& dirname, const QString& comment)
 {
     QDir qdir(dirname);
     if (qdir.exists())
@@ -257,45 +253,41 @@ void createDebugDirectory(QString dirname, QString comment)
 
 QString frameToTimestamp(long long frameno, float fps)
 {
-    int         ms, ss, mm, hh;
-    QString     ts;
+    int ms = (int)roundf(frameno / fps * 1000);
 
-    ms = (int)roundf(frameno / fps * 1000);
-
-    ss = ms / 1000;
+    int ss = ms / 1000;
     ms %= 1000;
     if (ms >= 500)
         ss++;
 
-    mm = ss / 60;
+    int mm = ss / 60;
     ss %= 60;
 
-    hh = mm / 60;
+    int hh = mm / 60;
     mm %= 60;
 
-    return ts.sprintf("%d:%02d:%02d", hh, mm, ss);
+    return QString("%1:%2:%3")
+        .arg(hh).arg(mm, 2, 10, QChar('0')) .arg(ss, 2, 10, QChar('0'));
 }
 
 QString frameToTimestampms(long long frameno, float fps)
 {
-    int         ms, ss, mm;
-    QString     ts;
+    int ms = (int)roundf(frameno / fps * 1000);
 
-    ms = (int)roundf(frameno / fps * 1000);
-
-    ss = ms / 1000;
+    int ss = ms / 1000;
     ms %= 1000;
 
-    mm = ss / 60;
+    int mm = ss / 60;
     ss %= 60;
 
-    return ts.sprintf("%d:%02d.%03d", mm, ss, ms);
+    return QString("%1:%2:%3")
+        .arg(mm).arg(ss, 2, 10, QChar(QChar('0'))).arg(ms, 2, 10, QChar(QChar('0')));
 }
 
 QString strftimeval(const struct timeval *tv)
 {
-    QString str;
-    return str.sprintf("%ld.%06ld", tv->tv_sec, tv->tv_usec);
+    return QString("%1.%2")
+        .arg(tv->tv_sec).arg(tv->tv_usec, 6, 10, QChar(QChar('0')));
 }
 
 };  /* namespace */
@@ -303,41 +295,38 @@ QString strftimeval(const struct timeval *tv)
 using namespace commDetector2;
 
 CommDetector2::CommDetector2(
-    enum SkipTypes     commDetectMethod_in,
+    SkipType           commDetectMethod_in,
     bool               showProgress_in,
     bool               fullSpeed_in,
     MythPlayer        *player_in,
     int                chanid,
-    const QDateTime   &startts_in,
-    const QDateTime   &endts_in,
-    const QDateTime   &recstartts_in,
-    const QDateTime   &recendts_in,
+    QDateTime          startts_in,
+    QDateTime          endts_in,
+    QDateTime          recstartts_in,
+    QDateTime          recendts_in,
     bool               useDB) :
-    commDetectMethod((enum SkipTypes)(commDetectMethod_in & ~COMM_DETECT_2)),
-    showProgress(showProgress_in),  fullSpeed(fullSpeed_in),
-    player(player_in),
-    startts(startts_in),            endts(endts_in),
-    recstartts(recstartts_in),      recendts(recendts_in),
-    isRecording(MythDate::current() < recendts),
-    sendBreakMapUpdates(false),     breakMapUpdateRequested(false),
-    finished(false),                currentFrameNumber(0),
-    logoFinder(NULL),               logoMatcher(NULL),
-    blankFrameDetector(NULL),       sceneChangeDetector(NULL),
-    debugdir("")
+    m_commDetectMethod((SkipType)(commDetectMethod_in & ~COMM_DETECT_2)),
+    m_showProgress(showProgress_in),  m_fullSpeed(fullSpeed_in),
+    m_player(player_in),
+    m_startts(std::move(startts_in)),       m_endts(std::move(endts_in)),
+    m_recstartts(std::move(recstartts_in)), m_recendts(std::move(recendts_in)),
+    m_isRecording(MythDate::current() < m_recendts),
+    m_debugdir("")
 {
-    FrameAnalyzerItem        pass0, pass1;
-    PGMConverter            *pgmConverter = NULL;
-    BorderDetector          *borderDetector = NULL;
-    HistogramAnalyzer       *histogramAnalyzer = NULL;
+    FrameAnalyzerItem        pass0;
+    FrameAnalyzerItem        pass1;
+    PGMConverter            *pgmConverter = nullptr;
+    BorderDetector          *borderDetector = nullptr;
+    HistogramAnalyzer       *histogramAnalyzer = nullptr;
 
     if (useDB)
-        debugdir = debugDirectory(chanid, recstartts);
+        m_debugdir = debugDirectory(chanid, m_recstartts);
 
     /*
      * Look for blank frames to use as delimiters between commercial and
      * non-commercial segments.
      */
-    if ((commDetectMethod & COMM_DETECT_2_BLANK))
+    if ((m_commDetectMethod & COMM_DETECT_2_BLANK))
     {
         if (!pgmConverter)
             pgmConverter = new PGMConverter();
@@ -348,14 +337,14 @@ CommDetector2::CommDetector2(
         if (!histogramAnalyzer)
         {
             histogramAnalyzer = new HistogramAnalyzer(pgmConverter,
-                    borderDetector, debugdir);
+                    borderDetector, m_debugdir);
         }
 
-        if (!blankFrameDetector)
+        if (!m_blankFrameDetector)
         {
-            blankFrameDetector = new BlankFrameDetector(histogramAnalyzer,
-                    debugdir);
-            pass1.push_back(blankFrameDetector);
+            m_blankFrameDetector = new BlankFrameDetector(histogramAnalyzer,
+                    m_debugdir);
+            pass1.push_back(m_blankFrameDetector);
         }
     }
 
@@ -363,7 +352,7 @@ CommDetector2::CommDetector2(
      * Look for "scene changes" to use as delimiters between commercial and
      * non-commercial segments.
      */
-    if ((commDetectMethod & COMM_DETECT_2_SCENE))
+    if ((m_commDetectMethod & COMM_DETECT_2_SCENE))
     {
         if (!pgmConverter)
             pgmConverter = new PGMConverter();
@@ -374,14 +363,14 @@ CommDetector2::CommDetector2(
         if (!histogramAnalyzer)
         {
             histogramAnalyzer = new HistogramAnalyzer(pgmConverter,
-                    borderDetector, debugdir);
+                    borderDetector, m_debugdir);
         }
 
-        if (!sceneChangeDetector)
+        if (!m_sceneChangeDetector)
         {
-            sceneChangeDetector = new SceneChangeDetector(histogramAnalyzer,
-                    debugdir);
-            pass1.push_back(sceneChangeDetector);
+            m_sceneChangeDetector = new SceneChangeDetector(histogramAnalyzer,
+                    m_debugdir);
+            pass1.push_back(m_sceneChangeDetector);
         }
     }
 
@@ -391,55 +380,52 @@ CommDetector2::CommDetector2(
      * second pass matches the template against the frame and computes the
      * closeness of the match.
      */
-    if ((commDetectMethod & COMM_DETECT_2_LOGO))
+    if ((m_commDetectMethod & COMM_DETECT_2_LOGO))
     {
-        CannyEdgeDetector       *cannyEdgeDetector = NULL;
-
         if (!pgmConverter)
             pgmConverter = new PGMConverter();
 
         if (!borderDetector)
             borderDetector = new BorderDetector();
 
-        if (!cannyEdgeDetector)
-            cannyEdgeDetector = new CannyEdgeDetector();
+        auto *cannyEdgeDetector = new CannyEdgeDetector();
 
-        if (!logoFinder)
+        if (!m_logoFinder)
         {
-            logoFinder = new TemplateFinder(pgmConverter, borderDetector,
-                    cannyEdgeDetector, player, recstartts.secsTo(recendts),
-                    debugdir);
-            pass0.push_back(logoFinder);
+            m_logoFinder = new TemplateFinder(pgmConverter, borderDetector,
+                    cannyEdgeDetector, m_player, m_recstartts.secsTo(m_recendts),
+                    m_debugdir);
+            pass0.push_back(m_logoFinder);
         }
 
-        if (!logoMatcher)
+        if (!m_logoMatcher)
         {
-            logoMatcher = new TemplateMatcher(pgmConverter, cannyEdgeDetector,
-                    logoFinder, debugdir);
-            pass1.push_back(logoMatcher);
+            m_logoMatcher = new TemplateMatcher(pgmConverter, cannyEdgeDetector,
+                    m_logoFinder, m_debugdir);
+            pass1.push_back(m_logoMatcher);
         }
     }
 
-    if (histogramAnalyzer && logoFinder)
-        histogramAnalyzer->setLogoState(logoFinder);
+    if (histogramAnalyzer && m_logoFinder)
+        histogramAnalyzer->setLogoState(m_logoFinder);
 
     /* Aggregate them all together. */
-    frameAnalyzers.push_back(pass0);
-    frameAnalyzers.push_back(pass1);
+    m_frameAnalyzers.push_back(pass0);
+    m_frameAnalyzers.push_back(pass1);
 }
 
 void CommDetector2::reportState(int elapsedms, long long frameno,
         long long nframes, unsigned int passno, unsigned int npasses)
 {
     float fps = elapsedms ? (float)frameno * 1000 / elapsedms : 0;
-    static int prevpercent = -1;
+    static int s_prevpercent = -1;
 
     /* Assume that 0-th pass is negligible in terms of computational cost. */
     int percentage = (passno == 0 || npasses == 1 || nframes == 0) ? 0 :
         (passno - 1) * 100 / (npasses - 1) +
         min((long long)100, (frameno * 100 / nframes) / (npasses - 1));
 
-    if (showProgress)
+    if (m_showProgress)
     {
         QString tmp = "";
 
@@ -464,9 +450,9 @@ void CommDetector2::reportState(int elapsedms, long long frameno,
             "%1 Frames Completed @ %2 fps.").arg(frameno).arg(fps));
     }
 
-    if (percentage % 10 == 0 && prevpercent != percentage)
+    if (percentage % 10 == 0 && s_prevpercent != percentage)
     {
-        prevpercent = percentage;
+        s_prevpercent = percentage;
         LOG(VB_GENERAL, LOG_INFO, QString("%1%% Completed @ %2 fps.")
             .arg(percentage) .arg(fps));
     }
@@ -474,46 +460,48 @@ void CommDetector2::reportState(int elapsedms, long long frameno,
 
 int CommDetector2::computeBreaks(long long nframes)
 {
-    int             trow, tcol, twidth, theight;
-    TemplateMatcher *matcher;
+    int trow = 0;
+    int tcol = 0;
+    int twidth = 0;
+    int theight = 0;
 
-    breaks.clear();
+    m_breaks.clear();
 
-    matcher = logoFinder &&
-        logoFinder->getTemplate(&trow, &tcol, &twidth, &theight) ? logoMatcher :
-        NULL;
+    TemplateMatcher *matcher = nullptr;
+    if (m_logoFinder && m_logoFinder->getTemplate(&trow, &tcol, &twidth, &theight))
+        matcher = m_logoMatcher;
 
-    if (matcher && blankFrameDetector)
+    if (matcher && m_blankFrameDetector)
     {
-        int cmp;
-        if (!(cmp = matcher->templateCoverage(nframes, finished)))
+        int cmp = matcher->templateCoverage(nframes, m_finished);
+        if (cmp == 0)
         {
-            if (matcher->adjustForBlanks(blankFrameDetector, nframes))
+            if (matcher->adjustForBlanks(m_blankFrameDetector, nframes))
                 return -1;
-            if (matcher->computeBreaks(&breaks))
+            if (matcher->computeBreaks(&m_breaks))
                 return -1;
         }
         else
         {
             if (cmp > 0 &&
-                    blankFrameDetector->computeForLogoSurplus(matcher))
+                    m_blankFrameDetector->computeForLogoSurplus(matcher))
                 return -1;
-            else if (cmp < 0 &&
-                    blankFrameDetector->computeForLogoDeficit(matcher))
+            if (cmp < 0 &&
+                    BlankFrameDetector::computeForLogoDeficit(matcher))
                 return -1;
 
-            if (blankFrameDetector->computeBreaks(&breaks))
+            if (m_blankFrameDetector->computeBreaks(&m_breaks))
                 return -1;
         }
     }
     else if (matcher)
     {
-        if (matcher->computeBreaks(&breaks))
+        if (matcher->computeBreaks(&m_breaks))
             return -1;
     }
-    else if (blankFrameDetector)
+    else if (m_blankFrameDetector)
     {
-        if (blankFrameDetector->computeBreaks(&breaks))
+        if (m_blankFrameDetector->computeBreaks(&m_breaks))
             return -1;
     }
 
@@ -524,29 +512,29 @@ bool CommDetector2::go(void)
 {
     int minlag = 7; // seconds
 
-    if (player->OpenFile() < 0)
+    if (m_player->OpenFile() < 0)
         return false;
 
-    if (!player->InitVideo())
+    if (!m_player->InitVideo())
     {
         LOG(VB_GENERAL, LOG_ERR,
             "NVP: Unable to initialize video for FlagCommercials.");
         return false;
     }
 
-    player->EnableSubtitles(false);
+    m_player->EnableSubtitles(false);
 
-    QTime totalFlagTime;
+    QElapsedTimer totalFlagTime;
     totalFlagTime.start();
 
     /* If still recording, estimate the eventual total number of frames. */
-    long long nframes = isRecording ?
-        (long long)roundf((recstartts.secsTo(recendts) + 5) *
-                          player->GetFrameRate()) :
-            player->GetTotalFrameCount();
-    bool postprocessing = !isRecording;
+    long long nframes = m_isRecording ?
+        (long long)roundf((m_recstartts.secsTo(m_recendts) + 5) *
+                          m_player->GetFrameRate()) :
+            m_player->GetTotalFrameCount();
+    bool postprocessing = !m_isRecording;
 
-    if (showProgress)
+    if (m_showProgress)
     {
         if (nframes)
             cerr << "  0%/      ";
@@ -557,57 +545,60 @@ bool CommDetector2::go(void)
 
     frm_dir_map_t lastBreakMap;
     unsigned int passno = 0;
-    unsigned int npasses = frameAnalyzers.size();
-    for (currentPass = frameAnalyzers.begin();
-            currentPass != frameAnalyzers.end();
-            ++currentPass, passno++)
+    unsigned int npasses = m_frameAnalyzers.size();
+    for (m_currentPass = m_frameAnalyzers.begin();
+            m_currentPass != m_frameAnalyzers.end();
+            ++m_currentPass, passno++)
     {
         FrameAnalyzerItem deadAnalyzers;
 
         LOG(VB_COMMFLAG, LOG_INFO,
             QString("CommDetector2::go pass %1 of %2 (%3 frames, %4 fps)")
                 .arg(passno + 1).arg(npasses)
-                .arg(player->GetTotalFrameCount())
-                .arg(player->GetFrameRate(), 0, 'f', 2));
+                .arg(m_player->GetTotalFrameCount())
+                .arg(m_player->GetFrameRate(), 0, 'f', 2));
 
         if (!MythPlayerInited(
-                *currentPass, finishedAnalyzers, deadAnalyzers, player, nframes))
+                *m_currentPass, m_finishedAnalyzers, deadAnalyzers, m_player, nframes))
         {
             return false;
         }
 
-        player->DiscardVideoFrame(player->GetRawVideoFrame(0));
+        m_player->DiscardVideoFrame(m_player->GetRawVideoFrame(0));
         long long nextFrame = -1;
-        currentFrameNumber = 0;
-        long long lastLoggedFrame = currentFrameNumber;
-        QTime passTime, clock;
-        struct timeval getframetime;
+        m_currentFrameNumber = 0;
+        long long lastLoggedFrame = m_currentFrameNumber;
+        QElapsedTimer passTime;
+        QElapsedTimer clock;
+        struct timeval getframetime {};
 
-        player->ResetTotalDuration();
+        m_player->ResetTotalDuration();
 
-        if (searchingForLogo(logoFinder, *currentPass))
+        if (searchingForLogo(m_logoFinder, *m_currentPass))
             emit statusUpdate(QCoreApplication::translate("(mythcommflag)",
                 "Performing Logo Identification"));
 
         clock.start();
         passTime.start();
         memset(&getframetime, 0, sizeof(getframetime));
-        while (!(*currentPass).empty() && player->GetEof() == kEofStateNone)
+        while (!(*m_currentPass).empty() && m_player->GetEof() == kEofStateNone)
         {
-            struct timeval start, end, elapsedtv;
+            struct timeval start {};
+            struct timeval end {};
+            struct timeval elapsedtv {};
 
-            (void)gettimeofday(&start, NULL);
-            bool fetchNext = (nextFrame == currentFrameNumber + 1);
+            (void)gettimeofday(&start, nullptr);
+            bool fetchNext = (nextFrame == m_currentFrameNumber + 1);
             VideoFrame *currentFrame =
-                player->GetRawVideoFrame(fetchNext ? -1 : nextFrame);
-            long long lastFrameNumber = currentFrameNumber;
-            currentFrameNumber = currentFrame->frameNumber + 1;
-            (void)gettimeofday(&end, NULL);
+                m_player->GetRawVideoFrame(fetchNext ? -1 : nextFrame);
+            long long lastFrameNumber = m_currentFrameNumber;
+            m_currentFrameNumber = currentFrame->frameNumber + 1;
+            (void)gettimeofday(&end, nullptr);
             timersub(&end, &start, &elapsedtv);
             timeradd(&getframetime, &elapsedtv, &getframetime);
 
             if (nextFrame != -1 && nextFrame == lastFrameNumber + 1 &&
-                    currentFrameNumber != nextFrame)
+                    m_currentFrameNumber != nextFrame)
             {
                 /*
                  * Don't log "Jumped" when we know we're skipping frames (e.g.,
@@ -615,15 +606,15 @@ bool CommDetector2::go(void)
                  */
                 LOG(VB_COMMFLAG, LOG_INFO,
                     QString("Jumped from frame %1 to frame %2")
-                        .arg(lastFrameNumber).arg(currentFrameNumber));
+                        .arg(lastFrameNumber).arg(m_currentFrameNumber));
             }
 
-            if (stopForBreath(isRecording, currentFrameNumber))
+            if (stopForBreath(m_isRecording, m_currentFrameNumber))
             {
                 emit breathe();
                 if (m_bStop)
                 {
-                    player->DiscardVideoFrame(currentFrame);
+                    m_player->DiscardVideoFrame(currentFrame);
                     return false;
                 }
             }
@@ -634,59 +625,58 @@ bool CommDetector2::go(void)
                 std::this_thread::sleep_for(std::chrono::seconds(1));
             }
 
-            if (!searchingForLogo(logoFinder, *currentPass) &&
-                    needToReportState(showProgress, isRecording,
-                        currentFrameNumber))
+            if (!searchingForLogo(m_logoFinder, *m_currentPass) &&
+                    needToReportState(m_showProgress, m_isRecording,
+                        m_currentFrameNumber))
             {
-                reportState(passTime.elapsed(), currentFrameNumber,
+                reportState(passTime.elapsed(), m_currentFrameNumber,
                         nframes, passno, npasses);
             }
 
             nextFrame = processFrame(
-                *currentPass, finishedAnalyzers,
-                deadAnalyzers, currentFrame, currentFrameNumber);
+                *m_currentPass, m_finishedAnalyzers,
+                deadAnalyzers, currentFrame, m_currentFrameNumber);
 
-            if (((currentFrameNumber >= 1) && (nframes > 0) &&
+            if (((m_currentFrameNumber >= 1) && (nframes > 0) &&
                  (((nextFrame * 10) / nframes) !=
-                  ((currentFrameNumber * 10) / nframes))) ||
+                  ((m_currentFrameNumber * 10) / nframes))) ||
                 (nextFrame >= nframes))
             {
                 /* Log something every 10%. */
                 int elapsed = clock.restart();
                 LOG(VB_COMMFLAG, LOG_INFO,
                     QString("processFrame %1 of %2 (%3%) - %4 fps")
-                        .arg(currentFrameNumber)
+                        .arg(m_currentFrameNumber)
                         .arg(nframes)
                         .arg((nframes == 0) ? 0 : 
-                            (int)roundf(currentFrameNumber * 100.0 / nframes))
-                        .arg((currentFrameNumber - lastLoggedFrame) * 1000 /
+                            (int)roundf(m_currentFrameNumber * 100.0 / nframes))
+                        .arg((m_currentFrameNumber - lastLoggedFrame) * 1000 /
                             (elapsed ? elapsed : 1)));
-                lastLoggedFrame = currentFrameNumber;
+                lastLoggedFrame = m_currentFrameNumber;
             }
 
-            if (isRecording)
+            if (m_isRecording)
             {
                 waitForBuffer(&start, minlag,
-                        recstartts.secsTo(MythDate::current()) -
-                        totalFlagTime.elapsed() / 1000, player->GetFrameRate(),
-                        fullSpeed);
+                        m_recstartts.secsTo(MythDate::current()) -
+                        totalFlagTime.elapsed() / 1000, m_player->GetFrameRate(),
+                        m_fullSpeed);
             }
 
             // sleep a little so we don't use all cpu even if we're niced
-            if (!fullSpeed && !isRecording)
+            if (!m_fullSpeed && !m_isRecording)
                 std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
-            if (sendBreakMapUpdates && (breakMapUpdateRequested ||
-                        !(currentFrameNumber % 500)))
+            if (m_sendBreakMapUpdates && (m_breakMapUpdateRequested ||
+                        !(m_currentFrameNumber % 500)))
             {
                 frm_dir_map_t breakMap;
 
                 GetCommercialBreakList(breakMap);
 
-                frm_dir_map_t::const_iterator ii, jj;
-                ii = breakMap.begin();
-                jj = lastBreakMap.begin();
-                while (ii != breakMap.end() && jj != lastBreakMap.end())
+                auto ii = breakMap.cbegin();
+                auto jj = lastBreakMap.cbegin();
+                while (ii != breakMap.cend() && jj != lastBreakMap.cend())
                 {
                     if (ii.key() != jj.key())
                         break;
@@ -698,37 +688,37 @@ bool CommDetector2::go(void)
                 bool same = ii == breakMap.end() && jj == lastBreakMap.end();
                 lastBreakMap = breakMap;
 
-                if (breakMapUpdateRequested || !same)
+                if (m_breakMapUpdateRequested || !same)
                     emit gotNewCommercialBreakList();
 
-                breakMapUpdateRequested = false;
+                m_breakMapUpdateRequested = false;
             }
 
-            player->DiscardVideoFrame(currentFrame);
+            m_player->DiscardVideoFrame(currentFrame);
         }
 
         // Save total duration only on the last pass, which hopefully does
         // no skipping.
         if (passno + 1 == npasses)
-            player->SaveTotalDuration();
+            m_player->SaveTotalDuration();
 
-        currentPass->insert(currentPass->end(),
-                            finishedAnalyzers.begin(),
-                            finishedAnalyzers.end());
-        finishedAnalyzers.clear();
+        m_currentPass->insert(m_currentPass->end(),
+                            m_finishedAnalyzers.begin(),
+                            m_finishedAnalyzers.end());
+        m_finishedAnalyzers.clear();
 
         if (postprocessing)
-            currentFrameNumber = player->GetTotalFrameCount() - 1;
-        if (passFinished(*currentPass, currentFrameNumber + 1, true))
+            m_currentFrameNumber = m_player->GetTotalFrameCount() - 1;
+        if (passFinished(*m_currentPass, m_currentFrameNumber + 1, true))
             return false;
 
         LOG(VB_COMMFLAG, LOG_INFO, QString("NVP Time: GetRawVideoFrame=%1s")
                 .arg(strftimeval(&getframetime)));
-        if (passReportTime(*currentPass))
+        if (passReportTime(*m_currentPass))
             return false;
     }
 
-    if (showProgress)
+    if (m_showProgress)
     {
         if (nframes)
             cerr << "\b\b\b\b\b\b      \b\b\b\b\b\b";
@@ -738,38 +728,35 @@ bool CommDetector2::go(void)
         cerr.flush();
     }
 
-    finished = true;
+    m_finished = true;
     return true;
 }
 
 void CommDetector2::GetCommercialBreakList(frm_dir_map_t &marks)
 {
-    if (!finished)
+    if (!m_finished)
     {
-        for (FrameAnalyzerList::iterator pass = frameAnalyzers.begin();
-             pass != frameAnalyzers.end(); ++pass)
+        for (auto & analyzer : m_frameAnalyzers)
         {
-            if (*pass == *currentPass &&
-                passFinished(finishedAnalyzers, currentFrameNumber + 1, false))
+            if (analyzer == *m_currentPass &&
+                passFinished(m_finishedAnalyzers, m_currentFrameNumber + 1, false))
             {
                 return;
             }
 
-            if (passFinished(*pass, currentFrameNumber + 1, false))
+            if (passFinished(analyzer, m_currentFrameNumber + 1, false))
                 return;
         }
     }
 
-    if (computeBreaks(currentFrameNumber + 1))
+    if (computeBreaks(m_currentFrameNumber + 1))
         return;
 
     marks.clear();
 
     /* Create break list. */
     long long breakframes = 0;
-    for (FrameAnalyzer::FrameMap::Iterator bb = breaks.begin();
-            bb != breaks.end();
-            ++bb)
+    for (auto bb = m_breaks.begin(); bb != m_breaks.end(); ++bb)
     {
         long long segb = bb.key();
         long long seglen = *bb;
@@ -785,19 +772,17 @@ void CommDetector2::GetCommercialBreakList(frm_dir_map_t &marks)
     }
 
     /* Report results. */
-    const float fps = player->GetFrameRate();
+    const float fps = m_player->GetFrameRate();
     for (frm_dir_map_t::const_iterator iimark = marks.begin();
             iimark != marks.end();
             ++iimark)
     {
-        long long   markstart, markend;
-
         /* Display as 1-based frame numbers. */
-        markstart = iimark.key() + 1;   /* MARK_COMM_BEGIN */
+        long long markstart = iimark.key() + 1;   /* MARK_COMM_BEGIN */
         ++iimark;                       /* MARK_COMM_END */
         if (iimark == marks.end())
             break;
-        markend = iimark.key() + 1;
+        long long markend = iimark.key() + 1;
 
         LOG(VB_COMMFLAG, LOG_INFO, QString("Break: frame %1-%2 (%3-%4, %5)")
                 .arg(markstart, 6).arg(markend, 6)
@@ -806,20 +791,20 @@ void CommDetector2::GetCommercialBreakList(frm_dir_map_t &marks)
                 .arg(frameToTimestamp(markend - markstart + 1, fps)));
     }
 
-    const long long nframes = player->GetTotalFrameCount();
+    const long long nframes = m_player->GetTotalFrameCount();
     LOG(VB_COMMFLAG, LOG_INFO,
         QString("Flagged %1 of %2 frames (%3 of %4), %5% commercials (%6)")
-            .arg(currentFrameNumber + 1).arg(nframes)
-            .arg(frameToTimestamp(currentFrameNumber + 1, fps))
+            .arg(m_currentFrameNumber + 1).arg(nframes)
+            .arg(frameToTimestamp(m_currentFrameNumber + 1, fps))
             .arg(frameToTimestamp(nframes, fps))
-            .arg(breakframes * 100 / currentFrameNumber)
+            .arg(breakframes * 100 / m_currentFrameNumber)
             .arg(frameToTimestamp(breakframes, fps)));
 }
 
 void CommDetector2::recordingFinished(long long totalFileSize)
 {
     CommDetectorBase::recordingFinished(totalFileSize);
-    isRecording = false;
+    m_isRecording = false;
     LOG(VB_COMMFLAG, LOG_INFO,
         QString("CommDetector2::recordingFinished: %1 bytes")
             .arg(totalFileSize));
@@ -827,7 +812,7 @@ void CommDetector2::recordingFinished(long long totalFileSize)
 
 void CommDetector2::requestCommBreakMapUpdate(void)
 {
-    if (searchingForLogo(logoFinder, *currentPass))
+    if (searchingForLogo(m_logoFinder, *m_currentPass))
     {
         LOG(VB_COMMFLAG, LOG_INFO, "Ignoring request for commBreakMapUpdate; "
                                    "still doing logo detection");
@@ -836,9 +821,9 @@ void CommDetector2::requestCommBreakMapUpdate(void)
 
     LOG(VB_COMMFLAG, LOG_INFO, 
         QString("commBreakMapUpdate requested at frame %1")
-            .arg(currentFrameNumber + 1));
-    sendBreakMapUpdates = true;
-    breakMapUpdateRequested = true;
+            .arg(m_currentFrameNumber + 1));
+    m_sendBreakMapUpdates = true;
+    m_breakMapUpdateRequested = true;
 }
 
 static void PrintReportMap(ostream &out,
@@ -862,20 +847,23 @@ static void PrintReportMap(ostream &out,
 }
 
 void CommDetector2::PrintFullMap(
-    ostream &out, const frm_dir_map_t *comm_breaks, bool verbose) const
+    ostream &out, const frm_dir_map_t */*comm_breaks*/, bool /*verbose*/) const
 {
-    FrameAnalyzer::FrameMap logoMap, blankMap, blankBreakMap, sceneMap;
-    if (logoFinder)
-        logoMap = logoFinder->GetMap(0);
+    FrameAnalyzer::FrameMap logoMap;
+    FrameAnalyzer::FrameMap blankMap;
+    FrameAnalyzer::FrameMap blankBreakMap;
+    FrameAnalyzer::FrameMap sceneMap;
+    if (m_logoFinder)
+        logoMap = m_logoFinder->GetMap(0);
 
-    if (blankFrameDetector)
+    if (m_blankFrameDetector)
     {
-        blankBreakMap = blankFrameDetector->GetMap(0);
-        blankMap      = blankFrameDetector->GetMap(1);
+        blankBreakMap = m_blankFrameDetector->GetMap(0);
+        blankMap      = m_blankFrameDetector->GetMap(1);
     }
 
-    if (sceneChangeDetector)
-        sceneMap = sceneChangeDetector->GetMap(0);
+    if (m_sceneChangeDetector)
+        sceneMap = m_sceneChangeDetector->GetMap(0);
 
     out << "Logo Break Map" << endl;
     PrintReportMap(out, logoMap);

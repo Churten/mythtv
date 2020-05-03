@@ -38,13 +38,6 @@ const QString VERSION = "0.6";
 MythExternControl::MythExternControl(void)
     : m_buffer(this)
     , m_commands(this)
-    , m_run(true)
-    , m_commands_running(true)
-    , m_buffer_running(true)
-    , m_fatal(false)
-    , m_streaming(false)
-    , m_xon(false)
-    , m_ready(false)
 {
     setObjectName("Control");
 
@@ -136,17 +129,6 @@ Q_SLOT void MythExternControl::ErrorMessage(const QString & msg)
 #undef LOC
 #define LOC QString("%1").arg(m_parent->Desc())
 
-Commands::Commands(MythExternControl * parent)
-    : m_thread()
-    , m_parent(parent)
-    , m_apiVersion(-1)
-{
-}
-
-Commands::~Commands(void)
-{
-}
-
 void Commands::Close(void)
 {
     std::lock_guard<std::mutex> lock(m_parent->m_flow_mutex);
@@ -191,6 +173,11 @@ void Commands::TuneChannel(const QString & serial, const QString & channum)
     emit m_parent->TuneChannel(serial, channum);
 }
 
+void Commands::TuneStatus(const QString & serial)
+{
+    emit m_parent->TuneStatus(serial);
+}
+
 void Commands::LoadChannels(const QString & serial)
 {
     emit m_parent->LoadChannels(serial);
@@ -206,21 +193,26 @@ void Commands::NextChannel(const QString & serial)
     emit m_parent->NextChannel(serial);
 }
 
-bool Commands::SendStatus(const QString & command, const QString & msg)
+void Commands::Cleanup(void)
 {
-    int len = write(2, msg.toUtf8().constData(), msg.size());
+    emit m_parent->Cleanup();
+}
+
+bool Commands::SendStatus(const QString & command, const QString & status)
+{
+    int len = write(2, status.toUtf8().constData(), status.size());
     write(2, "\n", 1);
 
-    if (len != static_cast<int>(msg.size()))
+    if (len != status.size())
     {
         LOG(VB_RECORD, LOG_ERR, LOC +
             QString("%1: Only wrote %2 of %3 bytes of message '%4'.")
-            .arg(command).arg(len).arg(msg.size()).arg(msg));
+            .arg(command).arg(len).arg(status.size()).arg(status));
         return false;
     }
 
     LOG(VB_RECORD, LOG_INFO, LOC + QString("Processing '%1' --> '%2'")
-        .arg(command).arg(msg));
+        .arg(command).arg(status));
 
     m_parent->ClearError();
     return true;
@@ -234,7 +226,7 @@ bool Commands::SendStatus(const QString & command, const QString & serial,
     int len = write(2, msg.toUtf8().constData(), msg.size());
     write(2, "\n", 1);
 
-    if (len != static_cast<int>(msg.size()))
+    if (len != msg.size())
     {
         LOG(VB_RECORD, LOG_ERR, LOC +
             QString("%1: Only wrote %2 of %3 bytes of message '%4'.")
@@ -260,7 +252,7 @@ bool Commands::ProcessCommand(const QString & cmd)
 {
     LOG(VB_RECORD, LOG_DEBUG, LOC + QString("Processing '%1'").arg(cmd));
 
-    std::unique_lock<std::mutex> lk(m_parent->m_msg_mutex);
+    std::unique_lock<std::mutex> lk1(m_parent->m_msg_mutex);
 
     if (cmd.startsWith("APIVersion?"))
     {
@@ -304,6 +296,15 @@ bool Commands::ProcessCommand(const QString & cmd)
         else
             SendStatus(cmd, tokens[0], "OK:" + VERSION);
     }
+    else if (tokens[1].startsWith("Description?"))
+    {
+        if (m_parent->m_fatal)
+            SendStatus(cmd, tokens[0], "ERR:" + m_parent->ErrorString());
+        else if (m_parent->m_desc.trimmed().isEmpty())
+            SendStatus(cmd, tokens[0], "WARN:Not set");
+        else
+            SendStatus(cmd, tokens[0], "OK:" + m_parent->m_desc.trimmed());
+    }
     else if (tokens[1].startsWith("HasLock?"))
     {
         if (m_parent->m_ready)
@@ -318,7 +319,7 @@ bool Commands::ProcessCommand(const QString & cmd)
         else
             SendStatus(cmd, tokens[0], "OK:20");
     }
-    else if (tokens[1].startsWith("LockTimeout"))
+    else if (tokens[1].startsWith("LockTimeout?"))
     {
         LockTimeout(tokens[0]);
     }
@@ -338,23 +339,37 @@ bool Commands::ProcessCommand(const QString & cmd)
     else if (tokens[1].startsWith("XON"))
     {
         // Used when FlowControl is XON/XOFF
-        SendStatus(cmd, tokens[0], "OK");
-        m_parent->m_xon = true;
-        m_parent->m_flow_cond.notify_all();
+        if (m_parent->m_streaming)
+        {
+            SendStatus(cmd, tokens[0], "OK");
+            m_parent->m_xon = true;
+            m_parent->m_flow_cond.notify_all();
+        }
+        else
+            SendStatus(cmd, tokens[0], "WARN:Not streaming");
     }
     else if (tokens[1].startsWith("XOFF"))
     {
-        SendStatus(cmd, tokens[0], "OK");
-        // Used when FlowControl is XON/XOFF
-        m_parent->m_xon = false;
-        m_parent->m_flow_cond.notify_all();
+        if (m_parent->m_streaming)
+        {
+            SendStatus(cmd, tokens[0], "OK");
+            // Used when FlowControl is XON/XOFF
+            m_parent->m_xon = false;
+            m_parent->m_flow_cond.notify_all();
+        }
+        else
+            SendStatus(cmd, tokens[0], "WARN:Not streaming");
     }
     else if (tokens[1].startsWith("TuneChannel"))
     {
-        if (tokens.size() > 1)
+        if (tokens.size() > 2)
             TuneChannel(tokens[0], tokens[2]);
         else
             SendStatus(cmd, tokens[0], "ERR:Missing channum");
+    }
+    else if (tokens[1].startsWith("TuneStatus?"))
+    {
+        TuneStatus(tokens[0]);
     }
     else if (tokens[1].startsWith("LoadChannels"))
     {
@@ -370,7 +385,7 @@ bool Commands::ProcessCommand(const QString & cmd)
     }
     else if (tokens[1].startsWith("IsOpen?"))
     {
-        std::unique_lock<std::mutex> lk(m_parent->m_run_mutex);
+        std::unique_lock<std::mutex> lk2(m_parent->m_run_mutex);
         if (m_parent->m_fatal)
             SendStatus(cmd, tokens[0], "ERR:" + m_parent->ErrorString());
         else if (m_parent->m_ready)
@@ -384,6 +399,7 @@ bool Commands::ProcessCommand(const QString & cmd)
             StopStreaming(tokens[0], true);
         m_parent->Terminate();
         SendStatus(cmd, tokens[0], "OK:Terminating");
+        Cleanup();
     }
     else if (tokens[1].startsWith("FlowControl?"))
     {
@@ -419,10 +435,7 @@ void Commands::Run(void)
     setObjectName("Commands");
 
     QString cmd;
-    int    timeout = 250;
 
-    int ret;
-    int poll_cnt = 1;
     struct pollfd polls[2];
     memset(polls, 0, sizeof(polls));
 
@@ -438,14 +451,16 @@ void Commands::Run(void)
 
     while (m_parent->m_run)
     {
-        ret = poll(polls, poll_cnt, timeout);
+        int timeout = 250;
+        int poll_cnt = 1;
+        int ret = poll(polls, poll_cnt, timeout);
 
         if (polls[0].revents & POLLHUP)
         {
             LOG(VB_RECORD, LOG_ERR, LOC + "poll eof (POLLHUP)");
             break;
         }
-        else if (polls[0].revents & POLLNVAL)
+        if (polls[0].revents & POLLNVAL)
         {
             m_parent->Fatal("poll error");
             return;
@@ -484,13 +499,9 @@ void Commands::Run(void)
 }
 
 Buffer::Buffer(MythExternControl * parent)
-    : m_parent(parent), m_thread()
+    : m_parent(parent)
 {
     m_heartbeat = std::chrono::system_clock::now();
-}
-
-Buffer::~Buffer(void)
-{
 }
 
 bool Buffer::Fill(const QByteArray & buffer)
@@ -498,8 +509,8 @@ bool Buffer::Fill(const QByteArray & buffer)
     if (buffer.size() < 1)
         return false;
 
-    static int dropped = 0;
-    static int dropped_bytes = 0;
+    static int s_dropped = 0;
+    static int s_droppedBytes = 0;
 
     m_parent->m_flow_mutex.lock();
     if (m_data.size() < MAX_QUEUE)
@@ -509,17 +520,17 @@ bool Buffer::Fill(const QByteArray & buffer)
                     + buffer.size());
 
         m_data.push(blk);
-        dropped = 0;
+        s_dropped = 0;
 
         LOG(VB_GENERAL, LOG_DEBUG, LOC +
             QString("Adding %1 bytes").arg(buffer.size()));
     }
     else
     {
-        dropped_bytes += buffer.size();
+        s_droppedBytes += buffer.size();
         LOG(VB_RECORD, LOG_WARNING, LOC +
             QString("Packet queue overrun. Dropped %1 packets, %2 bytes.")
-            .arg(++dropped).arg(dropped_bytes));
+            .arg(++s_dropped).arg(s_droppedBytes));
 
         std::this_thread::sleep_for(std::chrono::microseconds(250));
     }
@@ -538,12 +549,11 @@ void Buffer::Run(void)
 
     bool       is_empty = false;
     bool       wait = false;
-    time_t     send_time = time (NULL) + (60 * 5);
+    time_t     send_time = time (nullptr) + (60 * 5);
     uint64_t   write_total = 0;
     uint64_t   written = 0;
     uint64_t   write_cnt = 0;
     uint64_t   empty_cnt = 0;
-    uint       sz;
 
     LOG(VB_RECORD, LOG_INFO, LOC + "Buffer: Ready for data.");
 
@@ -557,18 +567,22 @@ void Buffer::Run(void)
             wait = false;
         }
 
-        if (send_time < static_cast<double>(time (NULL)))
+        if (send_time < static_cast<double>(time (nullptr)))
         {
             // Every 5 minutes, write out some statistics.
-            send_time = time (NULL) + (60 * 5);
+            send_time = time (nullptr) + (60 * 5);
             write_total += written;
             if (m_parent->m_streaming)
+            {
                 LOG(VB_RECORD, LOG_NOTICE, LOC +
                     QString("Count: %1, Empty cnt %2, Written %3, Total %4")
                     .arg(write_cnt).arg(empty_cnt)
                     .arg(written).arg(write_total));
+            }
             else
+            {
                 LOG(VB_GENERAL, LOG_NOTICE, LOC + "Not streaming.");
+            }
 
             write_cnt = empty_cnt = written = 0;
         }
@@ -589,7 +603,7 @@ void Buffer::Run(void)
 
                 if (!pkt.empty())
                 {
-                    sz = write(1, pkt.data(), pkt.size());
+                    uint sz = write(1, pkt.data(), pkt.size());
                     written += sz;
                     ++write_cnt;
 

@@ -5,7 +5,7 @@
 
 QString MasterGuideTable::TableClassString(uint i) const
 {
-    static const QString tts[] = {
+    static const QString kTts[] = {
         QString("UNKNOWN"),
         QString("Terrestrial VCT with current()"),
         QString("Terrestrial VCT with !current()"),
@@ -19,7 +19,7 @@ QString MasterGuideTable::TableClassString(uint i) const
         QString("RTT + 0x300")
     };
     int tt = TableClass(i) + 1;
-    return tts[tt];
+    return kTts[tt];
 }
 
 int MasterGuideTable::TableClass(uint i) const
@@ -29,41 +29,41 @@ int MasterGuideTable::TableClass(uint i) const
     {
         return tt;
     }
-    else if (tt < 0x300)
+    if (tt < 0x300)
     {
         if (tt < 0x200) return TableClass::EIT;
         return TableClass::ETTe;
     }
-    else if (tt >= 0x1400 && tt < 0x1500)
+    if (tt >= 0x1400 && tt < 0x1500)
         return TableClass::DCCT;
-    else if (tt < 0x400)
+    if (tt < 0x400)
         return TableClass::RRT;
     return TableClass::UNKNOWN;
 }
 
 void MasterGuideTable::Parse(void) const
 {
-    _ptrs.clear();
-    _ptrs.push_back(const_cast<unsigned char*>(psipdata()) + 3);
+    m_ptrs.clear();
+    m_ptrs.push_back(const_cast<unsigned char*>(psipdata()) + 3);
     for (uint i = 0; i < TableCount(); i++)
-        _ptrs.push_back(_ptrs[i] + 11 + TableDescriptorsLength(i));
+        m_ptrs.push_back(m_ptrs[i] + 11 + TableDescriptorsLength(i));
 }
 
 
 void VirtualChannelTable::Parse(void) const
 {
-    _ptrs.clear();
-    _ptrs.push_back(const_cast<unsigned char*>(psipdata()) + 2);
+    m_ptrs.clear();
+    m_ptrs.push_back(const_cast<unsigned char*>(psipdata()) + 2);
     for (uint i = 0; i < ChannelCount(); i++)
-        _ptrs.push_back(_ptrs[i] + 32 + DescriptorsLength(i));
+        m_ptrs.push_back(m_ptrs[i] + 32 + DescriptorsLength(i));
 }
 
 void EventInformationTable::Parse(void) const
 {
-    _ptrs.clear();
-    _ptrs.push_back(const_cast<unsigned char*>(psipdata()) + 2);
+    m_ptrs.clear();
+    m_ptrs.push_back(const_cast<unsigned char*>(psipdata()) + 2);
     for (uint i = 0; i < EventCount(); i++)
-        _ptrs.push_back(_ptrs[i] + 12 + TitleLength(i) + DescriptorsLength(i));
+        m_ptrs.push_back(m_ptrs[i] + 12 + TitleLength(i) + DescriptorsLength(i));
 }
 
 QString MasterGuideTable::toString(void) const
@@ -74,10 +74,10 @@ QString MasterGuideTable::toString(void) const
                .arg(PSIPTable::toString())
                .arg(TableCount()));
 
-    if (_ptrs.size() < TableCount())
+    if (m_ptrs.size() < TableCount())
         LOG(VB_GENERAL, LOG_ERR, "MasterGuideTable::toString(): Table count mismatch");
 
-    for (uint i = 0; i < TableCount() && i < _ptrs.size(); i++)
+    for (uint i = 0; i < TableCount() && i < m_ptrs.size(); i++)
     {
         str.append(QString("  Table #%1 ").arg(i, 2, 10));
         str.append(QString("pid(0x%1) ver(%2) ")
@@ -91,9 +91,9 @@ QString MasterGuideTable::toString(void) const
             vector<const unsigned char*> desc =
                 MPEGDescriptor::Parse(TableDescriptors(i),
                                       TableDescriptorsLength(i));
-            for (uint i = 0; i < desc.size(); i++)
+            for (auto & d : desc)
                 str.append(QString("  %1\n")
-                           .arg(MPEGDescriptor(desc[i]).toString()));
+                           .arg(MPEGDescriptor(d).toString()));
         }
     }
     if (0 != GlobalDescriptorsLength())
@@ -104,10 +104,10 @@ QString MasterGuideTable::toString(void) const
             MPEGDescriptor::Parse(GlobalDescriptors(),
                                   GlobalDescriptorsLength());
         str.append(QString("count: %1\n").arg(desc.size()));
-        for (uint i = 0; i < desc.size(); i++)
+        for (auto & i : desc)
         {
             str.append(QString("    %1\n")
-                       .arg(MPEGDescriptor(desc[i]).toString()));
+                       .arg(MPEGDescriptor(i).toString()));
         }
     }
     return str;
@@ -130,16 +130,16 @@ QString MasterGuideTable::toStringXML(uint indent_level) const
 
     vector<const unsigned char*> gdesc =
         MPEGDescriptor::Parse(GlobalDescriptors(), GlobalDescriptorsLength());
-    for (uint i = 0; i < gdesc.size(); i++)
+    for (auto & i : gdesc)
     {
-        str += MPEGDescriptor(gdesc[i], 300)
+        str += MPEGDescriptor(i, 300)
             .toStringXML(indent_level + 1) + "\n";
     }
 
-    if (_ptrs.size() < TableCount())
+    if (m_ptrs.size() < TableCount())
         LOG(VB_GENERAL, LOG_ERR, "MasterGuideTable::toStringXML(): Table count mismatch");
 
-    for (uint i = 0; i < TableCount() && i < _ptrs.size(); i++)
+    for (uint i = 0; i < TableCount() && i < m_ptrs.size(); i++)
     {
         str += QString(
             "%1<Table pid=\"0x%2\" version=\"%3\""
@@ -159,9 +159,9 @@ QString MasterGuideTable::toStringXML(uint indent_level) const
             MPEGDescriptor::Parse(
                 TableDescriptors(i), TableDescriptorsLength(i));
         str += (desc.empty()) ? " />\n" : ">\n";
-        for (uint i = 0; i < desc.size(); i++)
+        for (auto & j : desc)
         {
-            str += MPEGDescriptor(desc[i], 300)
+            str += MPEGDescriptor(j, 300)
                 .toStringXML(indent_level + 2) + "\n";
         }
 
@@ -174,29 +174,27 @@ QString MasterGuideTable::toStringXML(uint indent_level) const
 
 QString VirtualChannelTable::ModulationModeString(uint i) const
 {
-    static const char *modnames[6] =
+    static const char *s_modnames[6] =
     {
         "[Reserved]",   "Analog",      "SCTE mode 1",
         "SCTE mode 2",  "ATSC 8-VSB",  "ATSC 16-VSB",
     };
     uint mode = ModulationMode(i);
-    if (mode >= (sizeof(modnames) / sizeof(char*)))
+    if (mode >= (sizeof(s_modnames) / sizeof(char*)))
         return QString("Unknown 0x%1").arg(mode,2,16,QChar('0'));
-    else
-        return QString(modnames[mode]);
+    return QString(s_modnames[mode]);
 }
 
 QString VirtualChannelTable::ServiceTypeString(uint i) const
 {
-    static const char *servicenames[5] =
+    static const char *s_servicenames[5] =
     {
         "[Reserved]", "Analog", "ATSC TV", "ATSC Audio", "ATSC Data",
     };
     uint type = ServiceType(i);
-    if (type >= (sizeof(servicenames) / sizeof(char*)))
+    if (type >= (sizeof(s_servicenames) / sizeof(char*)))
         return QString("Unknown 0x%1").arg(type,2,16,QChar('0'));
-    else
-        return QString(servicenames[type]);
+    return QString(s_servicenames[type]);
 }
 
 QString VirtualChannelTable::toString(void) const
@@ -228,10 +226,10 @@ QString VirtualChannelTable::toString(void) const
             MPEGDescriptor::Parse(GlobalDescriptors(),
                                   GlobalDescriptorsLength());
         str.append(QString("count: %1\n").arg(desc.size()));
-        for (uint i = 0; i < desc.size(); i++)
+        for (auto & i : desc)
         {
             str.append(QString(" %1\n")
-                       .arg(MPEGDescriptor(desc[i]).toString()));
+                       .arg(MPEGDescriptor(i).toString()));
         }
     }
 
@@ -270,9 +268,9 @@ QString VirtualChannelTable::toStringXML(uint indent_level) const
 
     vector<const unsigned char*> gdesc =
         MPEGDescriptor::Parse(GlobalDescriptors(), GlobalDescriptorsLength());
-    for (uint i = 0; i < gdesc.size(); i++)
+    for (auto & i : gdesc)
     {
-        str += MPEGDescriptor(gdesc[i], 300)
+        str += MPEGDescriptor(i, 300)
             .toStringXML(indent_level + 1) + "\n";
     }
 
@@ -295,9 +293,9 @@ QString VirtualChannelTable::ChannelStringXML(
 
     vector<const unsigned char*> desc =
         MPEGDescriptor::Parse(Descriptors(chan), DescriptorsLength(chan));
-    for (uint i = 0; i < desc.size(); i++)
+    for (auto & i : desc)
     {
-        str += MPEGDescriptor(desc[i], 300)
+        str += MPEGDescriptor(i, 300)
             .toStringXML(indent_level + 1) + "\n";
     }
 
@@ -376,10 +374,10 @@ QString TerrestrialVirtualChannelTable::ChannelString(uint chan) const
         vector<const unsigned char*> desc =
             MPEGDescriptor::Parse(Descriptors(chan), DescriptorsLength(chan));
         str.append(QString("count:%1\n").arg(desc.size()));
-        for (uint i = 0; i < desc.size(); i++)
+        for (auto & i : desc)
         {
             str.append(QString("    %1\n")
-                       .arg(MPEGDescriptor(desc[i]).toString()));
+                       .arg(MPEGDescriptor(i).toString()));
         }
     }
     return str;
@@ -439,9 +437,9 @@ QString CableVirtualChannelTable::ChannelString(uint chan) const
         vector<const unsigned char*> desc =
             MPEGDescriptor::Parse(Descriptors(chan), DescriptorsLength(chan));
         str.append(QString("count:%1\n").arg(desc.size()));
-        for (uint i = 0; i < desc.size(); i++)
+        for (auto & i : desc)
             str.append(QString("    %1\n")
-                       .arg(MPEGDescriptor(desc[i]).toString()));
+                       .arg(MPEGDescriptor(i).toString()));
     }
     return str;
 }
@@ -465,9 +463,9 @@ QString EventInformationTable::toString(void) const
         {
             vector<const unsigned char*> desc =
                 MPEGDescriptor::Parse(Descriptors(i), DescriptorsLength(i));
-            for (uint j=0; j<desc.size(); j++)
+            for (auto & j : desc)
                 str.append(QString("%1\n")
-                           .arg(MPEGDescriptor(desc[j]).toString()));
+                           .arg(MPEGDescriptor(j).toString()));
         }
     }
     return str;
@@ -509,7 +507,7 @@ int VirtualChannelTable::Find(int major, int minor) const
 QString VirtualChannelTable::GetExtendedChannelName(uint i) const
 {
     if ((i >= ChannelCount()) || DescriptorsLength(i) == 0)
-        return QString::null;
+        return QString();
 
     vector<const unsigned char*> parsed =
         MPEGDescriptor::Parse(Descriptors(i), DescriptorsLength(i));
@@ -518,7 +516,7 @@ QString VirtualChannelTable::GetExtendedChannelName(uint i) const
         MPEGDescriptor::Find(parsed, DescriptorID::extended_channel_name);
 
     if (!desc)
-        return QString::null;
+        return QString();
 
     return ExtendedChannelNameDescriptor(desc).LongChannelNameString();
 }

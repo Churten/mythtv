@@ -34,7 +34,6 @@
 MHLink::MHLink()
 {
     m_EventData.m_Type = MHUnion::U_None;
-    m_nEventType = EventIsAvailable;
 }
 
 void MHLink::Initialise(MHParseNode *p, MHEngine *engine)
@@ -67,7 +66,7 @@ void MHLink::Initialise(MHParseNode *p, MHEngine *engine)
                     m_EventData.m_Type = MHUnion::U_String;
                     break;
                 default:
-                    pEventData->Failure("Unknown type of event data");
+                    MHParseNode::Failure("Unknown type of event data");
             }
         }
     }
@@ -77,7 +76,7 @@ void MHLink::Initialise(MHParseNode *p, MHEngine *engine)
 
         if (! pEventSource)
         {
-            p->Failure("Missing :EventSource");
+            MHParseNode::Failure("Missing :EventSource");
         }
         else
         {
@@ -88,7 +87,7 @@ void MHLink::Initialise(MHParseNode *p, MHEngine *engine)
 
         if (! pEventType)
         {
-            p->Failure("Missing :EventType");
+            MHParseNode::Failure("Missing :EventType");
         }
         else
         {
@@ -116,7 +115,7 @@ void MHLink::Initialise(MHParseNode *p, MHEngine *engine)
                     m_EventData.m_Type = MHUnion::U_String;
                     break;
                 default:
-                    pEventDataArg->Failure("Unknown type of event data");
+                    MHParseNode::Failure("Unknown type of event data");
             }
         }
     }
@@ -186,10 +185,7 @@ QString MHLink::EventTypeToString(enum EventType ev)
     {
         return rchEventType[ev-1];
     }
-    else
-    {
-        return QString("Unknown event %1").arg(ev);
-    }
+    return QString("Unknown event %1").arg(ev);
 }
 
 void MHLink::PrintMe(FILE *fd, int nTabs) const

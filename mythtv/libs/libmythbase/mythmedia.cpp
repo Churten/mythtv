@@ -64,19 +64,17 @@ const char* MythMediaDevice::MediaErrorStrings[] =
 QEvent::Type MythMediaEvent::kEventType =
     (QEvent::Type) QEvent::registerEventType();
 
+MythMediaEvent::~MythMediaEvent()
+{
+}
+
 ext_to_media_t MythMediaDevice::s_ext_to_media;
 
 MythMediaDevice::MythMediaDevice(QObject* par, const char* DevicePath,
                                  bool SuperMount,  bool AllowEject)
-               : QObject(par)
+    : QObject(par), m_DevicePath(DevicePath),
+      m_AllowEject(AllowEject), m_SuperMount(SuperMount)
 {
-    m_DevicePath = DevicePath;
-    m_AllowEject = AllowEject;
-    m_Locked = false;
-    m_DeviceHandle = -1;
-    m_SuperMount = SuperMount;
-    m_Status = MEDIASTAT_UNKNOWN;
-    m_MediaType = MEDIATYPE_UNKNOWN;
     m_RealDevice = getSymlinkTarget(m_DevicePath);
 }
 
@@ -101,12 +99,12 @@ bool MythMediaDevice::closeDevice()
     int ret = close(m_DeviceHandle);
     m_DeviceHandle = -1;
 
-    return (ret != -1) ? true : false;
+    return ret != -1;
 }
 
 bool MythMediaDevice::isDeviceOpen() const
 {
-    return (m_DeviceHandle >= 0) ? true : false;
+    return m_DeviceHandle >= 0;
 }
 
 bool MythMediaDevice::performMountCmd(bool DoMount)
@@ -134,13 +132,17 @@ bool MythMediaDevice::performMountCmd(bool DoMount)
         // Build a command line for mount/unmount and execute it...
         // Is there a better way to do this?
         if (QFile(PATHTO_PMOUNT).exists() && QFile(PATHTO_PUMOUNT).exists())
+        {
             MountCommand = QString("%1 %2")
                 .arg((DoMount) ? PATHTO_PMOUNT : PATHTO_PUMOUNT)
                 .arg(m_DevicePath);
+        }
         else
+        {
             MountCommand = QString("%1 %2")
                 .arg((DoMount) ? PATHTO_MOUNT : PATHTO_UNMOUNT)
                 .arg(m_DevicePath);
+        }
 
         LOG(VB_MEDIA, LOG_INFO, QString("Executing '%1'").arg(MountCommand));
         int ret = myth_system(MountCommand, kMSDontBlockInputDevs);
@@ -182,9 +184,8 @@ bool MythMediaDevice::performMountCmd(bool DoMount)
 
             return true;
         }
-        else
-            LOG(VB_GENERAL, LOG_ERR, QString("Failed to %1 %2.")
-                    .arg(DoMount ? "mount" : "unmount").arg(m_DevicePath));
+        LOG(VB_GENERAL, LOG_ERR, QString("Failed to %1 %2.")
+            .arg(DoMount ? "mount" : "unmount").arg(m_DevicePath));
     }
     else
     {
@@ -269,14 +270,8 @@ bool MythMediaDevice::ScanMediaType(const QString &directory, ext_cnt_t &cnt)
         return false;
 
     d.setFilter(QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot);
-    QFileInfoList list = d.entryInfoList();
-
-    for( QFileInfoList::iterator it = list.begin();
-                                 it != list.end();
-                               ++it )
+    foreach (auto & fi, d.entryInfoList())
     {
-        QFileInfo &fi = *it;
-
         if (fi.isSymLink())
             continue;
 
@@ -304,9 +299,8 @@ bool MythMediaDevice::ScanMediaType(const QString &directory, ext_cnt_t &cnt)
 void MythMediaDevice::RegisterMediaExtensions(uint mediatype,
                                               const QString &extensions)
 {
-    const QStringList list = extensions.split(",");
-    for (QStringList::const_iterator it = list.begin(); it != list.end(); ++it)
-        s_ext_to_media[*it] |= mediatype;
+    foreach (const auto & ext, extensions.split(","))
+        s_ext_to_media[ext] |= mediatype;
 }
 
 MythMediaError MythMediaDevice::eject(bool open_close)
@@ -316,7 +310,7 @@ MythMediaError MythMediaDevice::eject(bool open_close)
 #if CONFIG_DARWIN
     QString  command = "diskutil eject " + m_DevicePath;
 
-    int ret = myth_system(command, kMSRunBackground);
+    myth_system(command, kMSRunBackground);
     return MEDIAERR_OK;
 #endif
 
@@ -364,8 +358,7 @@ bool MythMediaDevice::isMounted(bool Verify)
 {
     if (Verify)
         return findMountPath();
-    else
-        return (m_Status == MEDIASTAT_MOUNTED);
+    return (m_Status == MEDIASTAT_MOUNTED);
 }
 
 /// \brief Try to find a mount of m_DevicePath in the mounts file.
@@ -514,8 +507,8 @@ MythMediaStatus MythMediaDevice::setStatus( MythMediaStatus NewStatus,
 
 void MythMediaDevice::clearData()
 {
-    m_VolumeID = QString::null;
-    m_KeyID = QString::null;
+    m_VolumeID.clear();
+    m_KeyID.clear();
     m_MediaType = MEDIATYPE_UNKNOWN;
 }
 

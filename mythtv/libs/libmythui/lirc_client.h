@@ -14,7 +14,11 @@
 #ifndef LIRC_CLIENT_H
 #define LIRC_CLIENT_H
 
+#ifdef __cplusplus
+#include <cstddef>
+#else
 #include <stddef.h>
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -28,7 +32,7 @@ extern "C" {
 enum lirc_flags {none=0x00,
 		 once=0x01,
 		 quit=0x02,
-		 mode=0x04,
+		 modex=0x04,
 		 ecno=0x08,
 		 startup_mode=0x10,
 		 toggle_reset=0x20,
@@ -86,7 +90,7 @@ struct lirc_config_entry
 struct lirc_state *lirc_init(const char *lircrc_root_file,
                              const char *lircrc_user_file,
                              const char *prog, const char *lircd, int verbose);
-int lirc_deinit(struct lirc_state*);
+int lirc_deinit(struct lirc_state *state);
 
 int lirc_readconfig(const struct lirc_state *state,
                     const char *file,struct lirc_config **config,
@@ -101,7 +105,7 @@ char *lirc_ir2char(const struct lirc_state *state, struct lirc_config *config,ch
 #endif
 
 int lirc_nextcode(struct lirc_state *state, char **code);
-int lirc_code2char(const struct lirc_state *state, struct lirc_config *config,char *code,char **string);
+int lirc_code2char(const struct lirc_state *state, struct lirc_config *config,const char *code,char **string);
 
 /* new interface for client daemon */
 int lirc_readconfig_only(const struct lirc_state *state,

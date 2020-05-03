@@ -72,8 +72,8 @@ isEmpty( LIBDIR ) {
     LIBDIR = $${RUNPREFIX}/$${LIBDIRNAME}
 }
 
-LIBVERSION = 29
-VERSION = 29.0
+LIBVERSION = 31
+VERSION = 31.0
 
 # Die on the (common) case where OS X users inadvertently use Fink's
 # Qt/X11 install instead of Qt/Mac. '
@@ -121,11 +121,6 @@ win32 {
         INCLUDEPATH += ./
         INCLUDEPATH += $$SRC_PATH_BARE/external
 
-        contains( CONFIG_MYTHLOGSERVER, "yes" ) {
-            INCLUDEPATH += $$SRC_PATH_BARE/external/zeromq/include
-            INCLUDEPATH += $$SRC_PATH_BARE/external/nzmqt/include/nzmqt
-        }
-
         INCLUDEPATH += $$SRC_PATH_BARE/../platform/win32/msvc/include
         INCLUDEPATH += $$SRC_PATH_BARE/../platform/win32/msvc/external/pthreads.2
         INCLUDEPATH += $$SRC_PATH_BARE/../platform/win32/msvc/external/zlib
@@ -144,11 +139,12 @@ win32 {
             DESTDIR         = $$SRC_PATH_BARE/bin/debug
             QMAKE_LIBDIR   += $$SRC_PATH_BARE/bin/debug
             MOC_DIR         = debug/moc
+            OBJECTS_DIR     = debug/obj
 
             QMAKE_CXXFLAGS *= /MDd /MP /wd4100 /wd4996
 
             LIBS           += -L$$SRC_PATH_BARE/bin/debug
-            EXTRA_LIBS     += -lpthreadVC2d -llibzmq -L$$SRC_PATH_BARE/bin/debug
+            EXTRA_LIBS     += -lpthreadVC2d -L$$SRC_PATH_BARE/bin/debug
 
         } else {
 
@@ -157,16 +153,14 @@ win32 {
             DESTDIR         = $$SRC_PATH_BARE/bin/release
             QMAKE_LIBDIR   += $$SRC_PATH_BARE/bin/release
             MOC_DIR         = release/moc
+            OBJECTS_DIR     = release/obj
 
             QMAKE_CXXFLAGS *= /MD /MP /wd4100 /wd4996
 
             LIBS           += -L$$SRC_PATH_BARE/bin/release
-            EXTRA_LIBS     += -lpthreadVC2 -llibzmq -L$$SRC_PATH_BARE/bin/release
+            EXTRA_LIBS     += -lpthreadVC2 -L$$SRC_PATH_BARE/bin/release
 
         }
-
-        EXTRA_LIBS += -lmythnzmqt
-
 
     }
 
@@ -229,19 +223,14 @@ win32 {
 
     EXTRA_LIBS += $$LOCAL_LIBDIR_OGL
     EXTRA_LIBS += $$LOCAL_LIBDIR_X11
+    # FIXME MK Jan/20 I'm not sure this is necessary or necessarily accurate.
+    # FFmpeg OpenGL is an option that we do not (and should not imho) enable -
+    # and we should in that case be stripping out GLES etc as well.
+    # and CONFIG_OPENGL_LIBS is always empty as we never set gl_lib anymore
     !isEmpty( CONFIG_OPENGL_LIBS ) {
         # Replace FFmpeg's OpenGL with OpenGLES
         EXTRA_LIBS -= -lGL
         EXTRA_LIBS += $$CONFIG_OPENGL_LIBS
-    }
-
-
-    contains( CONFIG_MYTHLOGSERVER, "yes" ) {
-        INCLUDEPATH += $$SRC_PATH_BARE/external/zeromq/include
-        INCLUDEPATH += $$SRC_PATH_BARE/external/nzmqt/include/nzmqt
-
-        EXTRA_LIBS += -L$$SRC_PATH_BARE/external/zeromq/src/.libs -lmythzmq
-        EXTRA_LIBS += -L$$SRC_PATH_BARE/external/nzmqt/src -lmythnzmqt
     }
 
     # remove warn_{on|off} from CONFIG since we set it in our CFLAGS
@@ -265,6 +254,8 @@ win32 {
     # Allow compilation with Qt Embedded, if Qt is compiled without "-fno-rtti"
     QMAKE_CXXFLAGS -= -fno-exceptions -fno-rtti
 
+    MOC_DIR         = moc
+    OBJECTS_DIR     = obj
 }
 
 # Globals in static libraries need special treatment on OS X
@@ -309,4 +300,9 @@ macx {
     _RPATH_="-rpath,"
 } else {
     _RPATH_="-rpath="
+}
+
+using_compdb:contains(CC, clang) {
+    QMAKE_CFLAGS += "-MJ $@.json"
+    QMAKE_CXXFLAGS += "-MJ $@.json"
 }

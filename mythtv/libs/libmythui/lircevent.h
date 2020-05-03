@@ -3,6 +3,9 @@
 #ifndef LIRCEVENT_H_
 #define LIRCEVENT_H_
 
+#include <utility>
+
+// Qt headers
 #include <QEvent>
 #include <QString>
 
@@ -10,14 +13,10 @@ class LircKeycodeEvent : public QEvent
 {
   public:
      LircKeycodeEvent(Type keytype, int key, Qt::KeyboardModifiers mod,
-                      const QString &text, const QString &lirc_text) :
+                      QString text, QString lirc_text) :
         QEvent(kEventType),
         m_keytype(keytype), m_key(key), m_modifiers(mod),
-        m_text(text), m_lirctext(lirc_text)
-    {
-        m_text.detach();
-        m_lirctext.detach();
-    }
+        m_text(std::move(text)), m_lirctext(std::move(lirc_text)) {}
 
     Type                  keytype(void)   const { return m_keytype;   }
     int                   key(void)       const { return m_key;       }
@@ -27,11 +26,7 @@ class LircKeycodeEvent : public QEvent
 
     static Type kEventType;
 
-#if QT_VERSION < QT_VERSION_CHECK(5, 0, 0)
-    static const int kLIRCInvalidKeyCombo  = 0xFFFFFFFF;
-#else
     static const unsigned kLIRCInvalidKeyCombo  = 0xFFFFFFFF;
-#endif
 
   private:
     Type                  m_keytype;

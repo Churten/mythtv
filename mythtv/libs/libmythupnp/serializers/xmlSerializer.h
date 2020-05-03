@@ -34,20 +34,20 @@ class UPNP_PUBLIC XmlSerializer : public Serializer
 
     protected:
 
-        QXmlStreamWriter *m_pXmlWriter;
+        QXmlStreamWriter *m_pXmlWriter   {nullptr};
         QString           m_sRequestName;
-        bool              m_bIsRoot;
+        bool              m_bIsRoot      {true};
 
-        virtual void BeginSerialize( QString &sName );
-        virtual void EndSerialize  ();
+        void BeginSerialize( QString &sName ) override; // Serializer
+        void EndSerialize  () override; // Serializer
 
-        virtual void BeginObject( const QString &sName, const QObject  *pObject );
-        virtual void EndObject  ( const QString &sName, const QObject  *pObject );
+        void BeginObject( const QString &sName, const QObject  *pObject ) override; // Serializer
+        void EndObject  ( const QString &sName, const QObject  *pObject ) override; // Serializer
 
-        virtual void AddProperty( const QString       &sName, 
-                                  const QVariant      &vValue,
-                                  const QMetaObject   *pMetaParent,
-                                  const QMetaProperty *pMetaProp );
+        void AddProperty( const QString       &sName, 
+                          const QVariant      &vValue,
+                          const QMetaObject   *pMetaParent,
+                          const QMetaProperty *pMetaProp ) override; // Serializer
 
         void    RenderValue     ( const QString &sName, const QVariant     &vValue );
 
@@ -60,24 +60,27 @@ class UPNP_PUBLIC XmlSerializer : public Serializer
         void    RenderList      ( const QString &sName, const QVariantList &list );
         void    RenderMap       ( const QString &sName, const QVariantMap  &map  );
 
-        QString GetItemName     ( const QString &sName );
+        static QString GetItemName     ( const QString &sName );
 
-        QString GetContentName  ( const QString        &sName, 
-                                  const QMetaObject   *pMetaObject,
-                                  const QMetaProperty *pMetaProp );
+        static QString GetContentName  ( const QString        &sName,
+                                         const QMetaObject   *pMetaObject,
+                                         const QMetaProperty *pMetaProp );
 
-        QString FindOptionValue ( const QStringList &sOptions, 
+        static QString FindOptionValue ( const QStringList &sOptions, 
                                   const QString &sName );
 
     public:
 
-        bool     PropertiesAsAttributes;
+        bool     PropertiesAsAttributes {true};
 
                  XmlSerializer( QIODevice *pDevice, const QString &sRequestName );
         virtual ~XmlSerializer();
 
-        virtual QString GetContentType();
+        QString GetContentType() override; // Serializer
 
+        // Deleted functions should be public.
+        XmlSerializer(const XmlSerializer &) = delete;            // not copyable
+        XmlSerializer &operator=(const XmlSerializer &) = delete; // not copyable
 };
 
 #endif

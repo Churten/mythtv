@@ -34,9 +34,8 @@ const int FRAME_UPDATE_TIME = 1000 / 10;  // try to update the frame 10 times a 
 
 ZMLivePlayer::ZMLivePlayer(MythScreenStack *parent, bool isMiniPlayer)
              :MythScreenType(parent, "zmliveview"),
-              m_frameTimer(new QTimer(this)), m_paused(false), m_monitorLayout(1),
-              m_monitorCount(0), m_players(NULL), m_isMiniPlayer(isMiniPlayer),
-              m_alarmMonitor(-1)
+              m_frameTimer(new QTimer(this)),
+              m_isMiniPlayer(isMiniPlayer)
 {
     ZMClient::get()->setIsMiniPlayerEnabled(false);
 
@@ -168,11 +167,8 @@ ZMLivePlayer::~ZMLivePlayer()
     if (m_players)
     {
         QString s = "";
-        Player *p;
-        vector<Player*>::iterator i = m_players->begin();
-        for (; i != m_players->end(); ++i)
+        for (auto *p : *m_players)
         {
-            p = *i;
             if (s != "")
                 s += ",";
             s += QString("%1").arg(p->getMonitor()->id);
@@ -195,9 +191,8 @@ bool ZMLivePlayer::keyPressEvent(QKeyEvent *event)
     if (GetFocusWidget() && GetFocusWidget()->keyPressEvent(event))
         return true;
 
-    bool handled = false;
     QStringList actions;
-    handled = GetMythMainWindow()->TranslateKeyPress("TV Playback", event, actions);
+    bool handled = GetMythMainWindow()->TranslateKeyPress("TV Playback", event, actions);
 
     for (int i = 0; i < actions.size() && !handled; i++)
     {
@@ -219,15 +214,16 @@ bool ZMLivePlayer::keyPressEvent(QKeyEvent *event)
         }
         else if (action == "INFO" && !m_isMiniPlayer)
         {
-            m_monitorLayout++;
-            if (m_monitorLayout > 5)
-                m_monitorLayout = 1;
-            setMonitorLayout(m_monitorLayout);
+            changeView();
         }
         else if (action == "1" || action == "2" || action == "3" ||
                  action == "4" || action == "5" || action == "6" ||
                  action == "7" || action == "8" || action == "9")
             changePlayerMonitor(action.toInt());
+        else if (action == "MENU")
+        {
+            ShowMenu();
+        }
         else
             handled = false;
     }
@@ -238,6 +234,78 @@ bool ZMLivePlayer::keyPressEvent(QKeyEvent *event)
     return handled;
 }
 
+void ZMLivePlayer::ShowMenu()
+{
+    MythScreenStack *popupStack = GetMythMainWindow()->GetStack("popup stack");
+
+    auto *menuPopup = new MythDialogBox("Menu", popupStack, "mainmenu");
+
+    if (menuPopup->Create())
+        popupStack->AddScreen(menuPopup);
+
+    menuPopup->SetReturnEvent(this, "mainmenu");
+
+    menuPopup->AddButton(tr("Change View"),     QVariant::fromValue(QString("VIEW")));
+    menuPopup->AddButton(tr("Change Camera 1"), QVariant::fromValue(QString("CAMERA1")));
+
+    if (m_monitorLayout > 1)
+        menuPopup->AddButton(tr("Change Camera 2"), QVariant::fromValue(QString("CAMERA2")));
+
+    if (m_monitorLayout > 2)
+    {
+        menuPopup->AddButton(tr("Change Camera 3"), QVariant::fromValue(QString("CAMERA3")));
+        menuPopup->AddButton(tr("Change Camera 4"), QVariant::fromValue(QString("CAMERA4")));
+    }
+
+    if (m_monitorLayout > 3)
+    {
+        menuPopup->AddButton(tr("Change Camera 5"), QVariant::fromValue(QString("CAMERA5")));
+        menuPopup->AddButton(tr("Change Camera 6"), QVariant::fromValue(QString("CAMERA6")));
+    }
+
+    if (m_monitorLayout > 4)
+    {
+        menuPopup->AddButton(tr("Change Camera 7"), QVariant::fromValue(QString("CAMERA7")));
+        menuPopup->AddButton(tr("Change Camera 8"), QVariant::fromValue(QString("CAMERA8")));
+    }
+}
+
+void ZMLivePlayer::customEvent(QEvent *event)
+{
+    if (event->type() == DialogCompletionEvent::kEventType)
+    {
+        auto *dce = dynamic_cast<DialogCompletionEvent*>(event);
+
+        // make sure the user didn't ESCAPE out of the menu
+        if ((dce == nullptr) || (dce->GetResult() < 0))
+            return;
+
+        QString resultid   = dce->GetId();
+        QString data = dce->GetData().toString();
+
+        if (resultid == "mainmenu")
+        {
+            if (data == "VIEW")
+                changeView();
+            else if (data.startsWith("CAMERA"))
+            {
+                data = data.remove("CAMERA");
+                int monitor = data.toInt();
+                changePlayerMonitor(monitor);
+            }
+        }
+    }
+    MythUIType::customEvent(event);
+}
+
+void ZMLivePlayer::changeView(void)
+{
+    m_monitorLayout++;
+    if (m_monitorLayout > 5)
+        m_monitorLayout = 1;
+    setMonitorLayout(m_monitorLayout);
+}
+
 void ZMLivePlayer::changePlayerMonitor(int playerNo)
 {
     if (playerNo > (int)m_players->size())
@@ -246,14 +314,13 @@ void ZMLivePlayer::changePlayerMonitor(int playerNo)
     m_frameTimer->stop();
 
     int oldMonID = m_players->at(playerNo - 1)->getMonitor()->id;
-    Monitor *mon;
 
     // find the old monitor ID in the list of available monitors
-    int pos;
+    int pos = 0;
     for (pos = 0; pos < ZMClient::get()->getMonitorCount(); pos++)
     {
-        mon = ZMClient::get()->getMonitorAt(pos);
-        if (oldMonID == mon->id)
+        Monitor *omon = ZMClient::get()->getMonitorAt(pos);
+        if (oldMonID == omon->id)
         {
             break;
         }
@@ -267,7 +334,7 @@ void ZMLivePlayer::changePlayerMonitor(int playerNo)
     if (pos >= ZMClient::get()->getMonitorCount())
         pos = 0;
 
-    mon = ZMClient::get()->getMonitorAt(pos);
+    Monitor *mon = ZMClient::get()->getMonitorAt(pos);
 
     m_players->at(playerNo - 1)->setMonitor(mon);
     m_players->at(playerNo - 1)->updateCamera();
@@ -277,16 +344,13 @@ void ZMLivePlayer::changePlayerMonitor(int playerNo)
 
 void ZMLivePlayer::updateFrame()
 {
-    static unsigned char buffer[MAX_IMAGE_SIZE];
+    static unsigned char s_buffer[MAX_IMAGE_SIZE];
     m_frameTimer->stop();
 
     // get a list of monitor id's that need updating
     QList<int> monList;
-    Player *p;
-    vector<Player*>::iterator i = m_players->begin();
-    for (; i != m_players->end(); ++i)
+    for (auto *p : *m_players)
     {
-        p = *i;
         if (!monList.contains(p->getMonitor()->id))
             monList.append(p->getMonitor()->id);
     }
@@ -294,16 +358,13 @@ void ZMLivePlayer::updateFrame()
     for (int x = 0; x < monList.count(); x++)
     {
         QString status;
-        int frameSize = ZMClient::get()->getLiveFrame(monList[x], status, buffer, sizeof(buffer));
+        int frameSize = ZMClient::get()->getLiveFrame(monList[x], status, s_buffer, sizeof(s_buffer));
 
         if (frameSize > 0 && !status.startsWith("ERROR"))
         {
             // update each player that is displaying this monitor
-            Player *p;
-            vector<Player*>::iterator i = m_players->begin();
-            for (; i != m_players->end(); ++i)
+            for (auto *p : *m_players)
             {
-                p = *i;
                 if (p->getMonitor()->id == monList[x])
                 {
                     if (p->getMonitor()->status != status)
@@ -311,7 +372,7 @@ void ZMLivePlayer::updateFrame()
                         p->getMonitor()->status = status;
                         p->updateStatus();
                     }
-                    p->updateFrame(buffer);
+                    p->updateFrame(s_buffer);
                 }
             }
         }
@@ -362,13 +423,13 @@ void ZMLivePlayer::setMonitorLayout(int layout, bool restore)
 
     for (int x = 1; x <= m_monitorCount; x++)
     {
-        Monitor *monitor = NULL;
+        Monitor *monitor = nullptr;
 
         if (restore)
         {
-            if (x <= (int) monList.size())
+            if (x <= monList.size())
             {
-                QString s = monList.at(x - 1);
+                const QString& s = monList.at(x - 1);
                 int monID = s.toInt(); 
 
                 // try to find a monitor that matches the monID
@@ -383,7 +444,7 @@ void ZMLivePlayer::setMonitorLayout(int layout, bool restore)
         MythUIText  *cameraText = dynamic_cast<MythUIText *> (GetChild(QString("name%1-%2").arg(layout).arg(x)));
         MythUIText  *statusText = dynamic_cast<MythUIText *> (GetChild(QString("status%1-%2").arg(layout).arg(x)));
 
-        Player *p = new Player();
+        auto *p = new Player();
         p->setMonitor(monitor);
         p->setWidgets(frameImage, statusText, cameraText);
         p->updateCamera();
@@ -398,12 +459,6 @@ void ZMLivePlayer::setMonitorLayout(int layout, bool restore)
 }
 
 ////////////////////////////////////////////////////////////////////////////////////
-
-Player::Player() :
-    m_frameImage(NULL), m_statusText(NULL), m_cameraText(NULL),
-    m_rgba(NULL)
-{
-}
 
 Player::~Player()
 {

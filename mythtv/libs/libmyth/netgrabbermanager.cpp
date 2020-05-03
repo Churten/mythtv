@@ -1,8 +1,9 @@
 // qt
-#include <QString>
 #include <QCoreApplication>
-#include <QFile>
 #include <QDir>
+#include <QFile>
+#include <QString>
+#include <utility>
 
 #include "mythdirs.h"
 #include "mythcontext.h"
@@ -26,7 +27,7 @@ GrabberScript::GrabberScript(const QString& title, const QString& image,
               const bool& search, const bool& tree,
               const QString& description, const QString& commandline,
               const double& version) :
-    MThread("GrabberScript"), m_lock(QMutex::Recursive)
+    MThread("GrabberScript")
 {
     m_title = title;
     m_image = image;
@@ -56,9 +57,11 @@ void GrabberScript::run()
     uint status = getTree.Wait();
 
     if( status == GENERIC_EXIT_CMD_NOT_FOUND )
+    {
         LOG(VB_GENERAL, LOG_ERR, LOC +
             QString("Internet Content Source %1 cannot run, file missing.")
                 .arg(m_title));
+    }
     else if( status == GENERIC_EXIT_OK )
     {
         LOG(VB_GENERAL, LOG_INFO, LOC +
@@ -85,10 +88,13 @@ void GrabberScript::run()
                     "marking as updated.").arg(m_title));
     }
     else
+    {
         LOG(VB_GENERAL, LOG_ERR, LOC +
             QString("Internet Content Source %1 crashed while grabbing tree.")
                 .arg(m_title));
+    }
 
+    // NOLINTNEXTLINE(readability-misleading-indentation)
     emit finished();
     RunEpilog();
 }
@@ -140,13 +146,11 @@ void GrabberScript::parseDBTree(const QString &feedtitle, const QString &path,
     }
 }
 
-GrabberManager::GrabberManager() :     m_lock(QMutex::Recursive)
+GrabberManager::GrabberManager()
 {
     m_updateFreq = (gCoreContext->GetNumSetting(
                        "netsite.updateFreq", 24) * 3600 * 1000);
     m_timer = new QTimer();
-    m_runningCount = 0;
-    m_refreshAll = false;
     connect( m_timer, SIGNAL(timeout()),
                       this, SLOT(timeout()));
 }
@@ -168,7 +172,7 @@ void GrabberManager::stopTimer()
 
 void GrabberManager::doUpdate()
 {
-    GrabberDownloadThread *gdt = new GrabberDownloadThread(this);
+    auto *gdt = new GrabberDownloadThread(this);
     if (m_refreshAll)
        gdt->refreshAll();
     gdt->start(QThread::LowPriority);
@@ -191,7 +195,6 @@ GrabberDownloadThread::GrabberDownloadThread(QObject *parent) :
     MThread("GrabberDownload")
 {
     m_parent = parent;
-    m_refreshAll = false;
 }
 
 GrabberDownloadThread::~GrabberDownloadThread()
@@ -245,8 +248,6 @@ void GrabberDownloadThread::run()
 }
 
 Search::Search()
-    : m_searchProcess(NULL), m_numResults(0),
-      m_numReturned(0), m_numIndex(0)
 {
     m_videoList.clear();
 }
@@ -256,7 +257,7 @@ Search::~Search()
     resetSearch();
 
     delete m_searchProcess;
-    m_searchProcess = NULL;
+    m_searchProcess = nullptr;
 }
 
 
@@ -273,7 +274,7 @@ void Search::executeSearch(const QString &script, const QString &query,
     connect(m_searchProcess, SIGNAL(error(uint)),
             this, SLOT(slotProcessSearchExit(uint)));
 
-    QString cmd = script;
+    const QString& cmd = script;
 
     QStringList args;
 
@@ -284,7 +285,7 @@ void Search::executeSearch(const QString &script, const QString &query,
     }
 
     args.append("-S");
-    QString term = query;
+    const QString& term = query;
     args.append(MythSystemLegacy::ShellEscape(term));
 
     LOG(VB_GENERAL, LOG_INFO, LOC +
@@ -340,12 +341,12 @@ void Search::process()
     }
     else
     {
-        QDomNodeList entries = m_document.elementsByTagName("item");
+        QDomNodeList items = m_document.elementsByTagName("item");
 
-        if (entries.count() == 0)
+        if (items.count() == 0)
             m_numReturned = 0;
         else
-            m_numReturned = entries.count();
+            m_numReturned = items.count();
     }
 
     Node = itemNode.namedItem(QString("startindex"));
@@ -383,7 +384,7 @@ void Search::slotProcessSearchExit(uint exitcode)
         {
             m_searchProcess->Term(true);
             m_searchProcess->deleteLater();
-            m_searchProcess = NULL;
+            m_searchProcess = nullptr;
         }
         emit searchTimedOut(this);
         return;
@@ -403,13 +404,13 @@ void Search::slotProcessSearchExit(uint exitcode)
     }
 
     m_searchProcess->deleteLater();
-    m_searchProcess = NULL;
+    m_searchProcess = nullptr;
     emit finishedSearch(this);
 }
 
 void Search::SetData(QByteArray data)
 {
-    m_data = data;
+    m_data = std::move(data);
     m_document.setContent(m_data, true);
 
 }

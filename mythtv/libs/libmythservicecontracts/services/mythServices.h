@@ -44,7 +44,7 @@
 class SERVICE_PUBLIC MythServices : public Service  //, public QScriptable ???
 {
     Q_OBJECT
-    Q_CLASSINFO( "version"    , "5.0" );
+    Q_CLASSINFO( "version"    , "5.2" );
     Q_CLASSINFO( "AddStorageGroupDir_Method",    "POST" )
     Q_CLASSINFO( "RemoveStorageGroupDir_Method", "POST" )
     Q_CLASSINFO( "PutSetting_Method",            "POST" )
@@ -54,15 +54,18 @@ class SERVICE_PUBLIC MythServices : public Service  //, public QScriptable ???
     Q_CLASSINFO( "SendNotification_Method",      "POST" )
     Q_CLASSINFO( "BackupDatabase_Method",        "POST" )
     Q_CLASSINFO( "CheckDatabase_Method",         "POST" )
+    Q_CLASSINFO( "DelayShutdown_Method",         "POST" )
     Q_CLASSINFO( "ProfileSubmit_Method",         "POST" )
     Q_CLASSINFO( "ProfileDelete_Method",         "POST" )
+    Q_CLASSINFO( "ManageDigestUser_Method",      "POST" )
+    Q_CLASSINFO( "ManageUrlProtection_Method",   "POST" )
 
     public:
 
         // Must call InitializeCustomTypes for each unique Custom Type used
         // in public slots below.
 
-        MythServices( QObject *parent = 0 ) : Service( parent )
+        MythServices( QObject *parent = nullptr ) : Service( parent )
         {
             DTC::ConnectionInfo     ::InitializeCustomTypes();
             DTC::SettingList        ::InitializeCustomTypes();
@@ -162,6 +165,8 @@ class SERVICE_PUBLIC MythServices : public Service  //, public QScriptable ???
 
         virtual bool                CheckDatabase       ( bool Repair ) = 0;
 
+        virtual bool                DelayShutdown       ( void ) = 0;
+
         virtual bool                ProfileSubmit       ( void ) = 0;
 
         virtual bool                ProfileDelete       ( void ) = 0;
@@ -173,6 +178,15 @@ class SERVICE_PUBLIC MythServices : public Service  //, public QScriptable ???
         virtual QString             ProfileText         ( void ) = 0;
 
         virtual DTC::BackendInfo*   GetBackendInfo      ( void ) = 0;
+
+        virtual bool                ManageDigestUser    ( const QString &Action,
+                                                          const QString &UserName,
+                                                          const QString &Password,
+                                                          const QString &NewPassword,
+                                                          const QString &AdminPassword ) = 0;
+
+        virtual bool                ManageUrlProtection ( const QString &Services,
+                                                          const QString &AdminPassword) = 0;
 };
 
 #endif

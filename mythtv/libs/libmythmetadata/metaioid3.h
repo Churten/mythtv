@@ -33,25 +33,25 @@ using TagLib::ID3v2::AttachedPictureFrame;
 class META_PUBLIC MetaIOID3 : public MetaIOTagLib
 {
   public:
-    MetaIOID3(void);
-    virtual ~MetaIOID3(void);
+    MetaIOID3(void) = default;
+    ~MetaIOID3(void) override { CloseFile(); }
 
-    virtual bool write(const QString &filename, MusicMetadata* mdata);
-    bool writeVolatileMetadata(const QString &filename, MusicMetadata* mdata);
+    bool write(const QString &filename, MusicMetadata* mdata) override; // MetaIOTagLib
+    bool writeVolatileMetadata(const QString &filename, MusicMetadata* mdata) override; // MetaIO
 
-    bool writeAlbumArt(const QString &filename, const AlbumArtImage *albumart);
-    bool removeAlbumArt(const QString &filename, const AlbumArtImage *albumart);
+    bool writeAlbumArt(const QString &filename, const AlbumArtImage *albumart) override; // MetaIO
+    bool removeAlbumArt(const QString &filename, const AlbumArtImage *albumart) override; // MetaIO
 
-    MusicMetadata* read(const QString &filename);
-    AlbumArtList getAlbumArtList(const QString &filename);
-    QImage *getAlbumArt(const QString &filename, ImageType type);
+    MusicMetadata* read(const QString &filename) override; // MetaIOTagLib
+    AlbumArtList getAlbumArtList(const QString &filename) override; // MetaIO
+    QImage *getAlbumArt(const QString &filename, ImageType type) override; // MetaIO
 
-    bool supportsEmbeddedImages(void) { return true; }
+    bool supportsEmbeddedImages(void) override { return true; } // MetaIO
 
     bool changeImageType(const QString &filename, const AlbumArtImage *albumart,
-                         ImageType newType);
+                         ImageType newType) override; // MetaIO
 
-    virtual bool TagExists(const QString &filename);
+    bool TagExists(const QString &filename) override; // MetaIO
 
   private:
     bool OpenFile(const QString &filename, bool forWriting = false);
@@ -61,23 +61,23 @@ class META_PUBLIC MetaIOID3 : public MetaIOTagLib
     TagLib::ID3v2::Tag* GetID3v2Tag(bool create = false);
     TagLib::ID3v1::Tag* GetID3v1Tag(bool create = false);
 
-    bool writePlayCount(TagLib::ID3v2::Tag *tag, int playcount);
-    bool writeRating(TagLib::ID3v2::Tag *tag, int rating);
-    bool writeLastPlay(TagLib::ID3v2::Tag *tag, QDateTime lastPlay);
+    static bool writePlayCount(TagLib::ID3v2::Tag *tag, int playcount);
+    static bool writeRating(TagLib::ID3v2::Tag *tag, int rating);
+    static bool writeLastPlay(TagLib::ID3v2::Tag *tag, QDateTime lastPlay);
 
-    AlbumArtList readAlbumArt(TagLib::ID3v2::Tag *tag);
-    UserTextIdentificationFrame* find(TagLib::ID3v2::Tag *tag,
+    static AlbumArtList readAlbumArt(TagLib::ID3v2::Tag *tag);
+    static UserTextIdentificationFrame* find(TagLib::ID3v2::Tag *tag,
                                       const String &description);
-    PopularimeterFrame* findPOPM(TagLib::ID3v2::Tag *tag, const String &email);
-    AttachedPictureFrame* findAPIC(TagLib::ID3v2::Tag *tag,
+    static PopularimeterFrame* findPOPM(TagLib::ID3v2::Tag *tag, const String &email);
+    static AttachedPictureFrame* findAPIC(TagLib::ID3v2::Tag *tag,
                                    const AttachedPictureFrame::Type &type,
                                    const String &description = String::null);
-    QString getExtFromMimeType(const QString &mimeType);
+    static QString getExtFromMimeType(const QString &mimeType);
 
-    TagLib::File *m_file;
+    TagLib::File *m_file {nullptr};
 
-    typedef enum { kMPEG, kFLAC } TagType;
-    TagType m_fileType;
+    enum TagType { kMPEG, kFLAC };
+    TagType m_fileType {kMPEG};
 };
 
 #endif

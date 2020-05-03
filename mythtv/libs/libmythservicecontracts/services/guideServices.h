@@ -40,14 +40,16 @@
 class SERVICE_PUBLIC GuideServices : public Service  //, public QScriptable ???
 {
     Q_OBJECT
-    Q_CLASSINFO( "version"    , "2.3" )
+    Q_CLASSINFO( "version"    , "2.4" )
+    Q_CLASSINFO( "AddToChannelGroup_Method",                     "POST" )
+    Q_CLASSINFO( "RemoveFromChannelGroup_Method",                "POST" )
 
     public:
 
         // Must call InitializeCustomTypes for each unique Custom Type used
         // in public slots below.
 
-        GuideServices( QObject *parent = 0 ) : Service( parent )
+        GuideServices( QObject *parent = nullptr ) : Service( parent )
         {
             DTC::ProgramGuide::InitializeCustomTypes();
             DTC::ProgramList ::InitializeCustomTypes();
@@ -63,7 +65,8 @@ class SERVICE_PUBLIC GuideServices : public Service  //, public QScriptable ???
                                                           bool             Details,
                                                           int              ChannelGroupId,
                                                           int              StartIndex,
-                                                          int              Count) = 0;
+                                                          int              Count,
+                                                          bool             WithInvisible) = 0;
 
         virtual DTC::ProgramList*   GetProgramList      ( int              StartIndex,
                                                           int              Count,
@@ -77,7 +80,8 @@ class SERVICE_PUBLIC GuideServices : public Service  //, public QScriptable ???
                                                           bool             OnlyNew,
                                                           bool             Details,
                                                           const QString   &Sort,
-                                                          bool             Descending ) = 0;
+                                                          bool             Descending,
+                                                          bool             WithInvisible) = 0;
 
         virtual DTC::Program*       GetProgramDetails   ( int              ChanId,
                                                           const QDateTime &StartTime ) = 0;

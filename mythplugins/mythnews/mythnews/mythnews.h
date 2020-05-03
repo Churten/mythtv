@@ -24,11 +24,11 @@ class MythNews : public MythScreenType
 
   public:
     MythNews(MythScreenStack *parent, const QString &name);
-    ~MythNews();
+    ~MythNews() override;
 
-    bool Create(void);
-    bool keyPressEvent(QKeyEvent *);
-    void customEvent(QEvent*);
+    bool Create(void) override; // MythScreenType
+    bool keyPressEvent(QKeyEvent *event) override; // MythScreenType
+    void customEvent(QEvent *event) override; // MythUIType
 
   private:
     void updateInfoView(void);
@@ -36,47 +36,47 @@ class MythNews : public MythScreenType
     void cancelRetrieve(void);
     void processAndShowNews(NewsSite *site);
 
-    QString formatSize(long long bytes, int prec);
-    void playVideo(const NewsArticle &article);
+    static QString formatSize(long long bytes, int prec);
+    static void playVideo(const NewsArticle &article);
 
     // menu stuff
-    void ShowMenu(void);
+    void ShowMenu(void) override; // MythScreenType
     void deleteNewsSite(void);
     void ShowEditDialog(bool edit);
     void ShowFeedManager();
 
-    mutable QMutex m_lock;
-    NewsSite::List m_NewsSites;
+    mutable QMutex m_lock            {QMutex::Recursive};
+    NewsSite::List m_newsSites;
 
-    QTimer        *m_RetrieveTimer;
-    int            m_TimerTimeout;
-    unsigned int   m_UpdateFreq;
+    QTimer        *m_retrieveTimer   {nullptr};
+    int            m_timerTimeout    {10*60*1000};
+    unsigned int   m_updateFreq      {30};
 
-    QString        m_zoom;
+    QString        m_zoom            {"1.0"};
     QString        m_browser;
-    MythDialogBox *m_menuPopup;
+    MythDialogBox *m_menuPopup       {nullptr};
 
-    MythUIButtonList *m_sitesList;
-    MythUIButtonList *m_articlesList;
+    MythUIButtonList *m_sitesList    {nullptr};
+    MythUIButtonList *m_articlesList {nullptr};
     QMap<MythUIButtonListItem*,NewsArticle> m_articles;
 
-    MythUIText *m_nositesText;
-    MythUIText *m_updatedText;
-    MythUIText *m_titleText;
-    MythUIText *m_descText;
+    MythUIText *m_nositesText        {nullptr};
+    MythUIText *m_updatedText        {nullptr};
+    MythUIText *m_titleText          {nullptr};
+    MythUIText *m_descText           {nullptr};
 
-    MythUIImage *m_thumbnailImage;
-    MythUIImage *m_downloadImage;
-    MythUIImage *m_enclosureImage;
-    MythUIImage *m_podcastImage;
+    MythUIImage *m_thumbnailImage    {nullptr};
+    MythUIImage *m_downloadImage     {nullptr};
+    MythUIImage *m_enclosureImage    {nullptr};
+    MythUIImage *m_podcastImage      {nullptr};
 
   private slots:
     void loadSites(void);
-    void updateInfoView(MythUIButtonListItem*);
-    void slotViewArticle(MythUIButtonListItem*);
+    void updateInfoView(MythUIButtonListItem *selected);
+    void slotViewArticle(MythUIButtonListItem *articlesListItem);
     void slotRetrieveNews(void);
-    void slotNewsRetrieved(NewsSite*);
-    void slotSiteSelected(MythUIButtonListItem*);
+    void slotNewsRetrieved(NewsSite *site);
+    void slotSiteSelected(MythUIButtonListItem *item);
 };
 
 #endif /* MYTHNEWS_H */

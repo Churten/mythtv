@@ -22,12 +22,12 @@ class DVDThemeSelector : public MythScreenType
   Q_OBJECT
 
   public:
-    DVDThemeSelector(MythScreenStack *parent, MythScreenType *previousScreen,
-                     ArchiveDestination archiveDestination, QString name);
-    ~DVDThemeSelector(void);
+    DVDThemeSelector(MythScreenStack *parent, MythScreenType *destinationScreen,
+                     ArchiveDestination archiveDestination, const QString& name);
+    ~DVDThemeSelector(void) override;
 
-    bool Create(void);
-    bool keyPressEvent(QKeyEvent *);
+    bool Create(void) override; // MythScreenType
+    bool keyPressEvent(QKeyEvent *event) override; // MythScreenType
 
   protected slots:
     void handleNextPage(void);
@@ -38,29 +38,29 @@ class DVDThemeSelector : public MythScreenType
 
   private:
     void getThemeList(void);
-    QString loadFile(const QString &filename);
+    static QString loadFile(const QString &filename);
     void loadConfiguration(void);
     void saveConfiguration(void);
 
-    MythScreenType    *m_destinationScreen;
+    MythScreenType    *m_destinationScreen {nullptr};
     ArchiveDestination m_archiveDestination;
 
-    QString themeDir;
+    QString           m_themeDir;
 
-    MythUIButtonList *theme_selector;
-    MythUIImage      *theme_image;
-    int               theme_no;
-    QStringList       theme_list;
+    MythUIButtonList *m_themeSelector      {nullptr};
+    MythUIImage      *m_themeImage         {nullptr};
+    int               m_themeNo            {0};
+    QStringList       m_themeList;
 
-    MythUIImage      *intro_image;
-    MythUIImage      *mainmenu_image;
-    MythUIImage      *chapter_image;
-    MythUIImage      *details_image;
-    MythUIText       *themedesc_text;
+    MythUIImage      *m_introImage         {nullptr};
+    MythUIImage      *m_mainmenuImage      {nullptr};
+    MythUIImage      *m_chapterImage       {nullptr};
+    MythUIImage      *m_detailsImage       {nullptr};
+    MythUIText       *m_themedescText      {nullptr};
 
-    MythUIButton     *m_nextButton;
-    MythUIButton     *m_prevButton;
-    MythUIButton     *m_cancelButton;
+    MythUIButton     *m_nextButton         {nullptr};
+    MythUIButton     *m_prevButton         {nullptr};
+    MythUIButton     *m_cancelButton       {nullptr};
 };
 
 #endif

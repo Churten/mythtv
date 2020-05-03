@@ -34,7 +34,7 @@ void MultiplexSetting::Load(void)
 {
     clearSelections();
 
-    if (!sourceid)
+    if (!m_sourceid)
         return;
 
     MSqlQuery query(MSqlQuery::InitCon());
@@ -45,7 +45,7 @@ void MultiplexSetting::Load(void)
         "FROM dtv_multiplex "
         "WHERE sourceid = :SOURCEID "
         "ORDER by frequency, networkid, transportid");
-    query.bindValue(":SOURCEID", sourceid);
+    query.bindValue(":SOURCEID", m_sourceid);
 
     if (!query.exec() || !query.isActive() || query.size() <= 0)
         return;
@@ -57,7 +57,7 @@ void MultiplexSetting::Load(void)
         {
             QString ChannelNumber =
                 QString("Freq %1").arg(query.value(3).toInt());
-            struct CHANLIST* curList = chanlists[0].list;
+            CHANLIST* curList = chanlists[0].list;
             int totalChannels = chanlists[0].count;
             int findFrequency = (query.value(3).toInt() / 1000) - 1750;
             for (int x = 0 ; x < totalChannels ; ++x)
@@ -84,8 +84,8 @@ void MultiplexSetting::Load(void)
     }
 }
 
-void MultiplexSetting::SetSourceID(uint _sourceid)
+void MultiplexSetting::SetSourceID(uint sourceid)
 {
-    sourceid = _sourceid;
+    m_sourceid = sourceid;
     Load();
 }

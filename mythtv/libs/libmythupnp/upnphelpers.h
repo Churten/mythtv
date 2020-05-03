@@ -7,7 +7,7 @@
 #include <QTime>
 #include <QSize>
 
-#include <stdint.h>
+#include <cstdint>
 
 #include "upnpexp.h"
 #include "compat.h"
@@ -49,8 +49,8 @@ namespace UPnPDateTime
     //-----------------------------------------------------------------------
 
     /**
-     * res@duration Format
-     *  B.2.1.4 res@duration - UPnP ContentDirectory Service 2008, 2013
+     * res\@duration Format
+     *  B.2.1.4 res\@duration - UPnP ContentDirectory Service 2008, 2013
      */
     UPNP_PUBLIC QString resDurationFormat(uint32_t msec);
 
@@ -157,7 +157,7 @@ namespace DLNA
      */
     UPNP_PUBLIC QString DLNAProfileName( const QString &mimeType,
                                          const QSize &resolution = QSize(),
-                                         const double videoFrameRate = 0.0,
+                                         double videoFrameRate = 0.0,
                                          const QString &container = "",
                                          const QString &vidCodec = "",
                                          const QString &audioCodec = "");
@@ -165,7 +165,7 @@ namespace DLNA
 
     /**
      * \brief Create a properly formatted string for the 4th field of
-     *        res@protocolInfo
+     *        res\@protocolInfo
      *
      * MM protocolInfo values: 4th field
      *
@@ -177,7 +177,7 @@ namespace DLNA
     UPNP_PUBLIC QString DLNAFourthField( UPNPProtocol::TransferProtocol protocol,
                                          const QString &mimeType,
                                          const QSize &resolution,
-                                         const double videoFrameRate,
+                                         double videoFrameRate,
                                          const QString &container,
                                          const QString &vidCodec,
                                          const QString &audioCodec,
@@ -185,7 +185,7 @@ namespace DLNA
 
     /**
      * \brief Create a properly formatted string for the 4th field of
-     *        res@protocolInfo
+     *        res\@protocolInfo
      *
      * MM protocolInfo values: 4th field
      *
@@ -197,7 +197,7 @@ namespace DLNA
     UPNP_PUBLIC QString ProtocolInfoString( UPNPProtocol::TransferProtocol protocol,
                                             const QString &mimeType,
                                             const QSize &resolution = QSize(),
-                                            const double videoFrameRate = 0.0,
+                                            double videoFrameRate = 0.0,
                                             const QString &container = "",
                                             const QString &vidCodec = "",
                                             const QString &audioCodec = "",
@@ -217,7 +217,7 @@ namespace DLNA
      *      are mutally exclusive. FlagsString() should account for these
      *      but care should still be taken. Read the DLNA documentation.
      */
-    enum UPNP_PUBLIC DNLA_Flags
+    enum UPNP_PUBLIC DLNA_Flags
     {
         // NAME                    BIT             BIT #      REFERENCE
 

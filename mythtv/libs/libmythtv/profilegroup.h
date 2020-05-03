@@ -6,7 +6,6 @@
 
 #include "mythtvexp.h"
 #include "standardsettings.h"
-#include "mythwidgets.h"
 
 class ProfileGroup;
 
@@ -16,14 +15,14 @@ class ProfileGroupStorage : public SimpleDBStorage
   public:
     ProfileGroupStorage(StorageUser        *_user,
                         const ProfileGroup &_parentProfile,
-                        QString             _name) :
+                        const QString&      _name) :
         SimpleDBStorage(_user, "profilegroups", _name),
         m_parent(_parentProfile)
     {
     }
 
-    virtual QString GetSetClause(MSqlBindings &bindings) const;
-    virtual QString GetWhereClause(MSqlBindings &bindings) const;
+    QString GetSetClause(MSqlBindings &bindings) const override; // SimpleDBStorage
+    QString GetWhereClause(MSqlBindings &bindings) const override; // SimpleDBStorage
     const ProfileGroup& m_parent;
 };
 
@@ -45,20 +44,20 @@ class ProfileGroup : public GroupSetting
     class Is_default : public StandardSetting
     {
       public:
-        Is_default(const ProfileGroup &parent) :
+        explicit Is_default(const ProfileGroup &parent) :
             StandardSetting(new ProfileGroupStorage(this, parent, "is_default"))
         {
             setVisible(false);
         }
 
-        virtual void edit(MythScreenType * /*screen*/) { }
-        virtual void resultEdit(DialogCompletionEvent * /*dce*/) { }
+        void edit(MythScreenType * /*screen*/) override { } // StandardSetting
+        void resultEdit(DialogCompletionEvent * /*dce*/) override { } // StandardSetting
     };
 
     class Name : public MythUITextEditSetting
     {
       public:
-        Name(const ProfileGroup &parent) :
+        explicit Name(const ProfileGroup &parent) :
             MythUITextEditSetting(new ProfileGroupStorage(this, parent, "name"))
         {
             setLabel(QObject::tr("Profile Group Name"));
@@ -68,7 +67,7 @@ class ProfileGroup : public GroupSetting
     class HostName : public MythUIComboBoxSetting
     {
       public:
-        HostName(const ProfileGroup &parent) :
+        explicit HostName(const ProfileGroup &parent) :
             MythUIComboBoxSetting(new ProfileGroupStorage(this, parent,
                                                           "hostname"))
         {
@@ -80,7 +79,7 @@ class ProfileGroup : public GroupSetting
     class CardInfo : public MythUIComboBoxSetting
     {
       public:
-        CardInfo(const ProfileGroup &parent) :
+        explicit CardInfo(const ProfileGroup &parent) :
             MythUIComboBoxSetting(new ProfileGroupStorage(this, parent,
                                                           "cardtype"))
         {
@@ -97,24 +96,25 @@ public:
     static void fillSelections(GroupSetting* setting);
     static void getHostNames(QStringList* hostnames);
     int getProfileNum(void) const {
-        return id->getValue().toInt();
+        return m_id->getValue().toInt();
     };
 
     int isDefault(void) const {
-        return is_default->getValue().toInt();
+        return m_isDefault->getValue().toInt();
     };
 
-    QString getName(void) const { return name->getValue(); };
+    QString getName(void) const { return m_name->getValue(); };
     static QString getName(int group);
-    void setName(const QString& newName) { name->setValue(newName); };
+    void setName(const QString& newName) override // StandardSetting
+        { m_name->setValue(newName); };
     bool allowedGroupName(void);
 
 private:
 
-    ID* id;
-    Name* name;
-    HostName* host;
-    Is_default* is_default;
+    ID         *m_id         {nullptr};
+    Name       *m_name       {nullptr};
+    HostName   *m_host       {nullptr};
+    Is_default *m_isDefault  {nullptr};
 };
 
 class MTV_PUBLIC ProfileGroupEditor :
@@ -125,7 +125,7 @@ class MTV_PUBLIC ProfileGroupEditor :
   public:
     ProfileGroupEditor() { setLabel(tr("Profile Group")); }
 
-    virtual void Load(void);
+    void Load(void) override; // StandardSetting
 };
 
 #endif

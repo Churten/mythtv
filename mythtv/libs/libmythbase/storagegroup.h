@@ -11,18 +11,16 @@
 class MBASE_PUBLIC StorageGroup
 {
   public:
-    StorageGroup(const QString &group = "", const QString &hostname = "",
-                 const bool allowFallback = true);
+    explicit StorageGroup(QString group = "", QString hostname = "",
+                 bool allowFallback = true);
 
     void    Init(const QString &group = "Default",
                  const QString &hostname = "",
-                 const bool allowFallback = true);
+                 bool allowFallback = true);
 
-    QString getName(void) const
-        { QString tmp = m_groupname; tmp.detach(); return tmp; }
+    QString getName(void) const { return m_groupname; }
 
-    QStringList GetDirList(void) const
-        { QStringList tmp = m_dirlist; tmp.detach(); return tmp; }
+    QStringList GetDirList(void) const { return m_dirlist; }
     QString GetFirstDir(bool appendSlash = false) const;
 
     QStringList GetDirFileList(const QString &dir, const QString &base,
@@ -35,7 +33,7 @@ class MBASE_PUBLIC StorageGroup
     static QString GetRelativePathname(const QString &filename);
     static bool FindDirs(const QString &group = "Default",
                          const QString &hostname = "",
-                         QStringList *dirlist = NULL);
+                         QStringList *dirlist = nullptr);
 
     QString FindFile(const QString &filename);
     QString FindFileDir(const QString &filename);

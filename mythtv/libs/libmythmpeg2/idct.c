@@ -60,17 +60,16 @@ do {					\
 #else
 #define BUTTERFLY(t0,t1,W0,W1,d0,d1)	\
 do {					\
-    int tmp = W0 * (d0 + d1);		\
-    t0 = tmp + (W1 - W0) * d1;		\
-    t1 = tmp - (W1 + W0) * d0;		\
+    int tmp = (W0) * ((d0) + (d1));		\
+    (t0) = tmp + ((W1) - (W0)) * (d1);		\
+    (t1) = tmp - ((W1) + (W0)) * (d0);		\
 } while (0)
 #endif
 
 static inline void idct_row (int16_t * const block)
 {
-    int d0, d1, d2, d3;
-    int a0, a1, a2, a3, b0, b1, b2, b3;
-    int t0, t1, t2, t3;
+    int t2 = 0;
+    int t3 = 0;
 
     /* shortcut */
     if (likely (!(block[1] | ((int32_t *)block)[1] | ((int32_t *)block)[2] |
@@ -84,17 +83,17 @@ static inline void idct_row (int16_t * const block)
 	return;
     }
 
-    d0 = (block[0] << 11) + 2048;
-    d1 = block[1];
-    d2 = block[2] << 11;
-    d3 = block[3];
-    t0 = d0 + d2;
-    t1 = d0 - d2;
+    int d0 = (block[0] << 11) + 2048;
+    int d1 = block[1];
+    int d2 = block[2] << 11;
+    int d3 = block[3];
+    int t0 = d0 + d2;
+    int t1 = d0 - d2;
     BUTTERFLY (t2, t3, W6, W2, d3, d1);
-    a0 = t0 + t2;
-    a1 = t1 + t3;
-    a2 = t1 - t3;
-    a3 = t0 - t2;
+    int a0 = t0 + t2;
+    int a1 = t1 + t3;
+    int a2 = t1 - t3;
+    int a3 = t0 - t2;
 
     d0 = block[4];
     d1 = block[5];
@@ -102,12 +101,12 @@ static inline void idct_row (int16_t * const block)
     d3 = block[7];
     BUTTERFLY (t0, t1, W7, W1, d3, d0);
     BUTTERFLY (t2, t3, W3, W5, d1, d2);
-    b0 = t0 + t2;
-    b3 = t1 + t3;
+    int b0 = t0 + t2;
+    int b3 = t1 + t3;
     t0 -= t2;
     t1 -= t3;
-    b1 = ((t0 + t1) >> 8) * 181;
-    b2 = ((t0 - t1) >> 8) * 181;
+    int b1 = ((t0 + t1) >> 8) * 181;
+    int b2 = ((t0 - t1) >> 8) * 181;
 
     block[0] = (a0 + b0) >> 12;
     block[1] = (a1 + b1) >> 12;
@@ -121,21 +120,20 @@ static inline void idct_row (int16_t * const block)
 
 static inline void idct_col (int16_t * const block)
 {
-    int d0, d1, d2, d3;
-    int a0, a1, a2, a3, b0, b1, b2, b3;
-    int t0, t1, t2, t3;
+    int t2 = 0;
+    int t3 = 0;
 
-    d0 = (block[8*0] << 11) + 65536;
-    d1 = block[8*1];
-    d2 = block[8*2] << 11;
-    d3 = block[8*3];
-    t0 = d0 + d2;
-    t1 = d0 - d2;
+    int d0 = (block[8*0] << 11) + 65536;
+    int d1 = block[8*1];
+    int d2 = block[8*2] << 11;
+    int d3 = block[8*3];
+    int t0 = d0 + d2;
+    int t1 = d0 - d2;
     BUTTERFLY (t2, t3, W6, W2, d3, d1);
-    a0 = t0 + t2;
-    a1 = t1 + t3;
-    a2 = t1 - t3;
-    a3 = t0 - t2;
+    int a0 = t0 + t2;
+    int a1 = t1 + t3;
+    int a2 = t1 - t3;
+    int a3 = t0 - t2;
 
     d0 = block[8*4];
     d1 = block[8*5];
@@ -143,12 +141,12 @@ static inline void idct_col (int16_t * const block)
     d3 = block[8*7];
     BUTTERFLY (t0, t1, W7, W1, d3, d0);
     BUTTERFLY (t2, t3, W3, W5, d1, d2);
-    b0 = t0 + t2;
-    b3 = t1 + t3;
+    int b0 = t0 + t2;
+    int b3 = t1 + t3;
     t0 -= t2;
     t1 -= t3;
-    b1 = ((t0 + t1) >> 8) * 181;
-    b2 = ((t0 - t1) >> 8) * 181;
+    int b1 = ((t0 + t1) >> 8) * 181;
+    int b2 = ((t0 - t1) >> 8) * 181;
 
     block[8*0] = (a0 + b0) >> 17;
     block[8*1] = (a1 + b1) >> 17;
@@ -163,7 +161,7 @@ static inline void idct_col (int16_t * const block)
 static void mpeg2_idct_copy_c (int16_t * block, uint8_t * dest,
 			       const int stride)
 {
-    int i;
+    int i = 0;
 
     for (i = 0; i < 8; i++)
 	idct_row (block + 8 * i);
@@ -190,7 +188,7 @@ static void mpeg2_idct_copy_c (int16_t * block, uint8_t * dest,
 static void mpeg2_idct_add_c (const int last, int16_t * block,
 			      uint8_t * dest, const int stride)
 {
-    int i;
+    int i = 0;
 
     if (last != 129 || (block[0] & (7 << 4)) == (4 << 4)) {
 	for (i = 0; i < 8; i++)
@@ -214,9 +212,7 @@ static void mpeg2_idct_add_c (const int last, int16_t * block,
 	    block += 8;
 	} while (--i);
     } else {
-	int DC;
-
-	DC = (block[0] + 64) >> 7;
+	int DC = (block[0] + 64) >> 7;
 	block[0] = block[63] = 0;
 	i = 8;
 	do {
@@ -256,25 +252,22 @@ void mpeg2_idct_init (uint32_t accel)
 	mpeg2_idct_add = mpeg2_idct_add_mvi;
 	mpeg2_idct_alpha_init ();
     } else if (ARCH_ALPHA && accel & MPEG2_ACCEL_ALPHA) {
-	int i;
-
 	mpeg2_idct_copy = mpeg2_idct_copy_alpha;
 	mpeg2_idct_add = mpeg2_idct_add_alpha;
 	mpeg2_idct_alpha_init ();
-	for (i = -3840; i < 3840 + 256; i++)
+	for (int i = -3840; i < 3840 + 256; i++)
 	    CLIP(i) = (i < 0) ? 0 : ((i > 255) ? 255 : i);
     } else
     {
 	extern uint8_t mpeg2_scan_norm[64];
 	extern uint8_t mpeg2_scan_alt[64];
-	int i, j;
 
 	mpeg2_idct_copy = mpeg2_idct_copy_c;
 	mpeg2_idct_add = mpeg2_idct_add_c;
-	for (i = -3840; i < 3840 + 256; i++)
+	for (int i = -3840; i < 3840 + 256; i++)
 	    CLIP(i) = (i < 0) ? 0 : ((i > 255) ? 255 : i);
-	for (i = 0; i < 64; i++) {
-	    j = mpeg2_scan_norm[i];
+	for (int i = 0; i < 64; i++) {
+	    int j = mpeg2_scan_norm[i];
 	    mpeg2_scan_norm[i] = ((j & 0x36) >> 1) | ((j & 0x09) << 2);
 	    j = mpeg2_scan_alt[i];
 	    mpeg2_scan_alt[i] = ((j & 0x36) >> 1) | ((j & 0x09) << 2);

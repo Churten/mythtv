@@ -1,4 +1,4 @@
-#include <stdlib.h>
+#include <cstdlib>
 #include <iostream>
 
 // qt
@@ -20,12 +20,7 @@ using namespace std;
 
 MythBrowser::MythBrowser(MythScreenStack *parent, QStringList &urlList)
     : MythScreenType (parent, "mythbrowser"),
-      m_urlList(urlList),   m_pageList(NULL),
-      m_progressBar(NULL),  m_titleText(NULL),
-      m_statusText(NULL),   m_backButton(NULL),
-      m_forwardButton(NULL),  m_exitButton(NULL),
-      m_currentBrowser(-1),   m_menuPopup(NULL),
-      m_defaultFavIcon(NULL)
+      m_urlList(urlList)
 {
     GetMythMainWindow()->PauseIdleTimer(true);
 }
@@ -38,7 +33,7 @@ MythBrowser::~MythBrowser()
     if (m_defaultFavIcon)
     {
         m_defaultFavIcon->DecrRef();
-        m_defaultFavIcon = NULL;
+        m_defaultFavIcon = nullptr;
     }
 }
 
@@ -49,7 +44,7 @@ bool MythBrowser::Create(void)
         return false;
 
     bool err = false;
-    MythUIWebBrowser *browser = NULL;
+    MythUIWebBrowser *browser = nullptr;
 
     UIUtilE::Assign(this, browser,         "webbrowser", &err);
     UIUtilE::Assign(this, m_pageList,      "pagelist", &err);
@@ -82,7 +77,7 @@ bool MythBrowser::Create(void)
     }
 
     // this is the template for all other browser tabs
-    WebPage *page = new WebPage(this, browser);
+    auto *page = new WebPage(this, browser);
 
     m_browserList.append(page);
     page->getBrowser()->SetDefaultSaveDirectory(m_defaultSaveDir);
@@ -137,8 +132,7 @@ MythUIWebBrowser* MythBrowser::activeBrowser(void)
 {
     if (m_currentBrowser >=0 && m_currentBrowser < m_browserList.size())
         return m_browserList[m_currentBrowser]->getBrowser();
-    else
-        return m_browserList[0]->getBrowser();
+    return m_browserList[0]->getBrowser();
 }
 
 void MythBrowser::slotEnterURL(void)
@@ -148,7 +142,7 @@ void MythBrowser::slotEnterURL(void)
     QString message = tr("Enter URL");
 
 
-    MythTextInputDialog *dialog = new MythTextInputDialog(popupStack, message);
+    auto *dialog = new MythTextInputDialog(popupStack, message);
 
     if (dialog->Create())
        popupStack->AddScreen(dialog);
@@ -160,8 +154,8 @@ void MythBrowser::slotEnterURL(void)
 void MythBrowser::slotAddTab(const QString &url, bool doSwitch)
 {
     QString name = QString("browser%1").arg(m_browserList.size() + 1);
-    WebPage *page = new WebPage(this, m_browserList[0]->getBrowser()->GetArea(),
-                                name.toLatin1().constData());
+    auto *page = new WebPage(this, m_browserList[0]->getBrowser()->GetArea(),
+                             name.toLatin1().constData());
     m_browserList.append(page);
 
     QString newUrl = url;
@@ -259,13 +253,13 @@ void MythBrowser::slotForward()
 
 void MythBrowser::slotAddBookmark()
 {
-    m_editBookmark.category = "";
-    m_editBookmark.name = m_pageList->GetValue();
-    m_editBookmark.url = activeBrowser()->GetUrl().toString();
+    m_editBookmark.m_category = "";
+    m_editBookmark.m_name = m_pageList->GetValue();
+    m_editBookmark.m_url = activeBrowser()->GetUrl().toString();
 
     MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
 
-    BookmarkEditor *editor = new BookmarkEditor(&m_editBookmark,
+    auto *editor = new BookmarkEditor(&m_editBookmark,
             true, mainStack, "bookmarkeditor");
 
 
@@ -333,9 +327,8 @@ bool MythBrowser::keyPressEvent(QKeyEvent *event)
     if (GetFocusWidget()->keyPressEvent(event))
         return true;
 
-    bool handled = false;
     QStringList actions;
-    handled = GetMythMainWindow()->TranslateKeyPress("Browser", event, actions);
+    bool handled = GetMythMainWindow()->TranslateKeyPress("Browser", event, actions);
 
     for (int i = 0; i < actions.size() && !handled; i++)
     {

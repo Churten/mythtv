@@ -11,7 +11,7 @@
 
 static TransMythUICheckBoxSetting *IsMasterBackend()
 {
-    TransMythUICheckBoxSetting *gc = new TransMythUICheckBoxSetting();
+    auto *gc = new TransMythUICheckBoxSetting();
     gc->setLabel(QObject::tr("This server is the Master Backend"));
     gc->setValue(false);
     gc->setHelpText(QObject::tr(
@@ -26,7 +26,7 @@ static TransMythUICheckBoxSetting *IsMasterBackend()
 
 static GlobalTextEditSetting *MasterServerName()
 {
-    GlobalTextEditSetting *gc = new GlobalTextEditSetting("MasterServerName");
+    auto *gc = new GlobalTextEditSetting("MasterServerName");
     gc->setLabel(QObject::tr("Master Backend Name"));
     gc->setValue("");
     gc->setEnabled(false);
@@ -38,7 +38,7 @@ static GlobalTextEditSetting *MasterServerName()
 
 static HostCheckBoxSetting *AllowConnFromAll()
 {
-    HostCheckBoxSetting *gc = new HostCheckBoxSetting("AllowConnFromAll");
+    auto *gc = new HostCheckBoxSetting("AllowConnFromAll");
     gc->setLabel(QObject::tr("Allow Connections from all Subnets"));
     gc->setValue(false);
     gc->setHelpText(QObject::tr(
@@ -50,7 +50,7 @@ static HostCheckBoxSetting *AllowConnFromAll()
 
 static HostComboBoxSetting *LocalServerIP()
 {
-    HostComboBoxSetting *gc = new HostComboBoxSetting("BackendServerIP");
+    auto *gc = new HostComboBoxSetting("BackendServerIP");
     gc->setLabel(QObject::tr("IPv4 address"));
     QList<QHostAddress> list = QNetworkInterface::allAddresses();
     QList<QHostAddress>::iterator it;
@@ -72,7 +72,7 @@ static HostComboBoxSetting *LocalServerIP()
 
 static HostComboBoxSetting *LocalServerIP6()
 {
-    HostComboBoxSetting *gc = new HostComboBoxSetting("BackendServerIP6");
+    auto *gc = new HostComboBoxSetting("BackendServerIP6");
     gc->setLabel(QObject::tr("Listen on IPv6 address"));
     QList<QHostAddress> list = QNetworkInterface::allAddresses();
     QList<QHostAddress>::iterator it;
@@ -107,7 +107,7 @@ static HostComboBoxSetting *LocalServerIP6()
 
 static HostCheckBoxSetting *UseLinkLocal()
 {
-    HostCheckBoxSetting *hc = new HostCheckBoxSetting("AllowLinkLocal");
+    auto *hc = new HostCheckBoxSetting("AllowLinkLocal");
     hc->setLabel(QObject::tr("Listen on Link-Local addresses"));
     hc->setValue(true);
     hc->setHelpText(QObject::tr("Enable servers on this machine to listen on "
@@ -121,22 +121,23 @@ static HostCheckBoxSetting *UseLinkLocal()
 class IpAddressSettings : public HostCheckBoxSetting
 {
   public:
-     HostComboBoxSetting *localServerIP;
-     HostComboBoxSetting *localServerIP6;
+     HostComboBoxSetting *m_localServerIP;
+     HostComboBoxSetting *m_localServerIP6;
      explicit IpAddressSettings(/*Setting* trigger*/) :
          HostCheckBoxSetting("ListenOnAllIps")
      {
-         setLabel(QObject::tr("Listen on All IP Addresses"));
+         setLabel(BackendSettings::tr("Listen on All IP Addresses"));
          setValue(true);
-         setHelpText(tr("Allow this backend to receive connections on any IP "
-                        "Address assigned to it. Recommended for most users "
-                        "for ease and reliability."));
+         setHelpText(BackendSettings::tr("Allow this backend to receive "
+                        "connections on any IP Address assigned to it. "
+                        "Recommended for most users for ease and "
+                        "reliability."));
 
-         localServerIP = LocalServerIP();
-         localServerIP6 = LocalServerIP6();
+         m_localServerIP = LocalServerIP();
+         m_localServerIP6 = LocalServerIP6();
          // show ip addresses if ListenOnAllIps is off
-         addTargetedChild("0", localServerIP);
-         addTargetedChild("0", localServerIP6);
+         addTargetedChild("0", m_localServerIP);
+         addTargetedChild("0", m_localServerIP6);
          addTargetedChild("0", UseLinkLocal());
      };
 };
@@ -145,7 +146,7 @@ class IpAddressSettings : public HostCheckBoxSetting
 
 static HostTextEditSetting *LocalServerPort()
 {
-    HostTextEditSetting *gc = new HostTextEditSetting("BackendServerPort");
+    auto *gc = new HostTextEditSetting("BackendServerPort");
     gc->setLabel(QObject::tr("Port"));
     gc->setValue("6543");
     gc->setHelpText(QObject::tr("Unless you've got good reason, don't "
@@ -155,7 +156,7 @@ static HostTextEditSetting *LocalServerPort()
 
 static HostTextEditSetting *LocalStatusPort()
 {
-    HostTextEditSetting *gc = new HostTextEditSetting("BackendStatusPort");
+    auto *gc = new HostTextEditSetting("BackendStatusPort");
     gc->setLabel(QObject::tr("Status port"));
     gc->setValue("6544");
     gc->setHelpText(QObject::tr("Port on which the server will listen for "
@@ -166,7 +167,7 @@ static HostTextEditSetting *LocalStatusPort()
 
 static HostComboBoxSetting *BackendServerAddr()
 {
-    HostComboBoxSetting *gc = new HostComboBoxSetting("BackendServerAddr", true);
+    auto *gc = new HostComboBoxSetting("BackendServerAddr", true);
     gc->setLabel(QObject::tr("Primary IP address / DNS name"));
     gc->setValue("127.0.0.1");
     gc->setHelpText(QObject::tr("The Primary IP address of this backend "
@@ -183,7 +184,7 @@ static HostComboBoxSetting *BackendServerAddr()
 // Deprecated
 static GlobalTextEditSetting *MasterServerIP()
 {
-    GlobalTextEditSetting *gc = new GlobalTextEditSetting("MasterServerIP");
+    auto *gc = new GlobalTextEditSetting("MasterServerIP");
     gc->setLabel(QObject::tr("IP address"));
     gc->setValue("127.0.0.1");
     return gc;
@@ -192,7 +193,7 @@ static GlobalTextEditSetting *MasterServerIP()
 // Deprecated
 static GlobalTextEditSetting *MasterServerPort()
 {
-    GlobalTextEditSetting *gc = new GlobalTextEditSetting("MasterServerPort");
+    auto *gc = new GlobalTextEditSetting("MasterServerPort");
     gc->setLabel(QObject::tr("Port"));
     gc->setValue("6543");
     return gc;
@@ -200,7 +201,7 @@ static GlobalTextEditSetting *MasterServerPort()
 
 static HostTextEditSetting *LocalSecurityPin()
 {
-    HostTextEditSetting *gc = new HostTextEditSetting("SecurityPin");
+    auto *gc = new HostTextEditSetting("SecurityPin");
     gc->setLabel(QObject::tr("Security PIN (required)"));
     gc->setValue("");
     gc->setHelpText(QObject::tr("PIN code required for a frontend to connect "
@@ -212,7 +213,7 @@ static HostTextEditSetting *LocalSecurityPin()
 
 static GlobalComboBoxSetting *TVFormat()
 {
-    GlobalComboBoxSetting *gc = new GlobalComboBoxSetting("TVFormat");
+    auto *gc = new GlobalComboBoxSetting("TVFormat");
     gc->setLabel(QObject::tr("TV format"));
 
     QStringList list = ChannelTVFormat::GetFormats();
@@ -225,7 +226,7 @@ static GlobalComboBoxSetting *TVFormat()
 
 static GlobalComboBoxSetting *VbiFormat()
 {
-    GlobalComboBoxSetting *gc = new GlobalComboBoxSetting("VbiFormat");
+    auto *gc = new GlobalComboBoxSetting("VbiFormat");
     gc->setLabel(QObject::tr("VBI format"));
     gc->addSelection("None");
     gc->addSelection("PAL teletext");
@@ -238,7 +239,7 @@ static GlobalComboBoxSetting *VbiFormat()
 
 static GlobalComboBoxSetting *FreqTable()
 {
-    GlobalComboBoxSetting *gc = new GlobalComboBoxSetting("FreqTable");
+    auto *gc = new GlobalComboBoxSetting("FreqTable");
     gc->setLabel(QObject::tr("Channel frequency table"));
 
     for (uint i = 0; chanlists[i].name; i++)
@@ -252,7 +253,7 @@ static GlobalComboBoxSetting *FreqTable()
 
 static GlobalCheckBoxSetting *SaveTranscoding()
 {
-    GlobalCheckBoxSetting *gc = new GlobalCheckBoxSetting("SaveTranscoding");
+    auto *gc = new GlobalCheckBoxSetting("SaveTranscoding");
     gc->setLabel(QObject::tr("Save original files after transcoding (globally)"));
     gc->setValue(false);
     gc->setHelpText(QObject::tr("If enabled and the transcoder is active, the "
@@ -263,7 +264,7 @@ static GlobalCheckBoxSetting *SaveTranscoding()
 
 static HostCheckBoxSetting *TruncateDeletes()
 {
-    HostCheckBoxSetting *hc = new HostCheckBoxSetting("TruncateDeletesSlowly");
+    auto *hc = new HostCheckBoxSetting("TruncateDeletesSlowly");
     hc->setLabel(QObject::tr("Delete files slowly"));
     hc->setValue(false);
     hc->setHelpText(QObject::tr("Some filesystems use a lot of resources when "
@@ -275,7 +276,7 @@ static HostCheckBoxSetting *TruncateDeletes()
 
 static GlobalCheckBoxSetting *DeletesFollowLinks()
 {
-    GlobalCheckBoxSetting *gc = new GlobalCheckBoxSetting("DeletesFollowLinks");
+    auto *gc = new GlobalCheckBoxSetting("DeletesFollowLinks");
     gc->setLabel(QObject::tr("Follow symbolic links when deleting files"));
     gc->setValue(false);
     gc->setHelpText(QObject::tr("If enabled, MythTV will follow symlinks "
@@ -286,7 +287,7 @@ static GlobalCheckBoxSetting *DeletesFollowLinks()
 
 static GlobalSpinBoxSetting *HDRingbufferSize()
 {
-    GlobalSpinBoxSetting *bs = new GlobalSpinBoxSetting(
+    auto *bs = new GlobalSpinBoxSetting(
         "HDRingbufferSize", 25*188, 512*188, 25*188);
     bs->setLabel(QObject::tr("HD ringbuffer size (kB)"));
     bs->setHelpText(QObject::tr("The HD device ringbuffer allows the "
@@ -301,7 +302,7 @@ static GlobalSpinBoxSetting *HDRingbufferSize()
 
 static GlobalComboBoxSetting *StorageScheduler()
 {
-    GlobalComboBoxSetting *gc = new GlobalComboBoxSetting("StorageScheduler");
+    auto *gc = new GlobalComboBoxSetting("StorageScheduler");
     gc->setLabel(QObject::tr("Storage Group disk scheduler"));
     gc->addSelection(QObject::tr("Balanced free space"), "BalancedFreeSpace");
     gc->addSelection(QObject::tr("Balanced percent free space"), "BalancedPercFreeSpace");
@@ -317,7 +318,7 @@ static GlobalComboBoxSetting *StorageScheduler()
 
 static GlobalCheckBoxSetting *DisableAutomaticBackup()
 {
-    GlobalCheckBoxSetting *gc = new GlobalCheckBoxSetting("DisableAutomaticBackup");
+    auto *gc = new GlobalCheckBoxSetting("DisableAutomaticBackup");
     gc->setLabel(QObject::tr("Disable automatic database backup"));
     gc->setValue(false);
     gc->setHelpText(QObject::tr("If enabled, MythTV will not backup the "
@@ -329,7 +330,7 @@ static GlobalCheckBoxSetting *DisableAutomaticBackup()
 
 static HostCheckBoxSetting *DisableFirewireReset()
 {
-    HostCheckBoxSetting *hc = new HostCheckBoxSetting("DisableFirewireReset");
+    auto *hc = new HostCheckBoxSetting("DisableFirewireReset");
     hc->setLabel(QObject::tr("Disable FireWire reset"));
     hc->setHelpText(
         QObject::tr(
@@ -343,7 +344,7 @@ static HostCheckBoxSetting *DisableFirewireReset()
 
 static HostTextEditSetting *MiscStatusScript()
 {
-    HostTextEditSetting *he = new HostTextEditSetting("MiscStatusScript");
+    auto *he = new HostTextEditSetting("MiscStatusScript");
     he->setLabel(QObject::tr("Miscellaneous status application"));
     he->setValue("");
     he->setHelpText(QObject::tr("External application or script that outputs "
@@ -355,7 +356,7 @@ static HostTextEditSetting *MiscStatusScript()
 
 static GlobalSpinBoxSetting *EITTransportTimeout()
 {
-    GlobalSpinBoxSetting *gc = new GlobalSpinBoxSetting("EITTransportTimeout", 1, 15, 1);
+    auto *gc = new GlobalSpinBoxSetting("EITTransportTimeout", 1, 15, 1);
     gc->setLabel(QObject::tr("EIT transport timeout (mins)"));
     gc->setValue(5);
     QString helpText = QObject::tr(
@@ -368,7 +369,7 @@ static GlobalSpinBoxSetting *EITTransportTimeout()
 
 static GlobalCheckBoxSetting *MasterBackendOverride()
 {
-    GlobalCheckBoxSetting *gc = new GlobalCheckBoxSetting("MasterBackendOverride");
+    auto *gc = new GlobalCheckBoxSetting("MasterBackendOverride");
     gc->setLabel(QObject::tr("Master backend override"));
     gc->setValue(true);
     gc->setHelpText(QObject::tr("If enabled, the master backend will stream and"
@@ -380,7 +381,7 @@ static GlobalCheckBoxSetting *MasterBackendOverride()
 
 static GlobalSpinBoxSetting *EITCrawIdleStart()
 {
-    GlobalSpinBoxSetting *gc = new GlobalSpinBoxSetting("EITCrawIdleStart", 30, 7200, 30);
+    auto *gc = new GlobalSpinBoxSetting("EITCrawIdleStart", 30, 7200, 30);
     gc->setLabel(QObject::tr("Backend idle before EIT crawl (secs)"));
     gc->setValue(60);
     QString help = QObject::tr(
@@ -392,7 +393,7 @@ static GlobalSpinBoxSetting *EITCrawIdleStart()
 
 static GlobalSpinBoxSetting *WOLbackendReconnectWaitTime()
 {
-    GlobalSpinBoxSetting *gc = new GlobalSpinBoxSetting("WOLbackendReconnectWaitTime", 0, 1200, 5);
+    auto *gc = new GlobalSpinBoxSetting("WOLbackendReconnectWaitTime", 0, 1200, 5);
     gc->setLabel(QObject::tr("Delay between wake attempts (secs)"));
     gc->setValue(0);
     gc->setHelpText(QObject::tr("Length of time the frontend waits between "
@@ -404,7 +405,7 @@ static GlobalSpinBoxSetting *WOLbackendReconnectWaitTime()
 
 static GlobalSpinBoxSetting *WOLbackendConnectRetry()
 {
-    GlobalSpinBoxSetting *gc = new GlobalSpinBoxSetting("WOLbackendConnectRetry", 1, 60, 1);
+    auto *gc = new GlobalSpinBoxSetting("WOLbackendConnectRetry", 1, 60, 1);
     gc->setLabel(QObject::tr("Wake attempts"));
     gc->setHelpText(QObject::tr("Number of times the frontend will try to wake "
                     "up the master backend."));
@@ -414,7 +415,7 @@ static GlobalSpinBoxSetting *WOLbackendConnectRetry()
 
 static GlobalTextEditSetting *WOLbackendCommand()
 {
-    GlobalTextEditSetting *gc = new GlobalTextEditSetting("WOLbackendCommand");
+    auto *gc = new GlobalTextEditSetting("WOLbackendCommand");
     gc->setLabel(QObject::tr("Wake command"));
     gc->setValue("");
     gc->setHelpText(QObject::tr("The command used to wake up your master "
@@ -424,7 +425,7 @@ static GlobalTextEditSetting *WOLbackendCommand()
 
 static HostTextEditSetting *SleepCommand()
 {
-    HostTextEditSetting *gc = new HostTextEditSetting("SleepCommand");
+    auto *gc = new HostTextEditSetting("SleepCommand");
     gc->setLabel(QObject::tr("Sleep command"));
     gc->setValue("");
     gc->setHelpText(QObject::tr("The command used to put this slave to sleep. "
@@ -435,7 +436,7 @@ static HostTextEditSetting *SleepCommand()
 
 static HostTextEditSetting *WakeUpCommand()
 {
-    HostTextEditSetting *gc = new HostTextEditSetting("WakeUpCommand");
+    auto *gc = new HostTextEditSetting("WakeUpCommand");
     gc->setLabel(QObject::tr("Wake command"));
     gc->setValue("");
     gc->setHelpText(QObject::tr("The command used to wake up this slave "
@@ -446,7 +447,7 @@ static HostTextEditSetting *WakeUpCommand()
 
 static GlobalTextEditSetting *BackendStopCommand()
 {
-    GlobalTextEditSetting *gc = new GlobalTextEditSetting("BackendStopCommand");
+    auto *gc = new GlobalTextEditSetting("BackendStopCommand");
     gc->setLabel(QObject::tr("Backend stop command"));
     gc->setValue("killall mythbackend");
     gc->setHelpText(QObject::tr("The command used to stop the backend"
@@ -457,7 +458,7 @@ static GlobalTextEditSetting *BackendStopCommand()
 
 static GlobalTextEditSetting *BackendStartCommand()
 {
-    GlobalTextEditSetting *gc = new GlobalTextEditSetting("BackendStartCommand");
+    auto *gc = new GlobalTextEditSetting("BackendStartCommand");
     gc->setLabel(QObject::tr("Backend start command"));
     gc->setValue("mythbackend");
     gc->setHelpText(QObject::tr("The command used to start the backend"
@@ -468,7 +469,7 @@ static GlobalTextEditSetting *BackendStartCommand()
 
 static GlobalSpinBoxSetting *idleTimeoutSecs()
 {
-    GlobalSpinBoxSetting *gc = new GlobalSpinBoxSetting("idleTimeoutSecs", 0, 1200, 5);
+    auto *gc = new GlobalSpinBoxSetting("idleTimeoutSecs", 0, 1200, 5);
     gc->setLabel(QObject::tr("Idle shutdown timeout (secs)"));
     gc->setValue(0);
     gc->setHelpText(QObject::tr("The number of seconds the master backend "
@@ -479,7 +480,7 @@ static GlobalSpinBoxSetting *idleTimeoutSecs()
 
 static GlobalSpinBoxSetting *idleWaitForRecordingTime()
 {
-    GlobalSpinBoxSetting *gc = new GlobalSpinBoxSetting("idleWaitForRecordingTime", 0, 300, 1);
+    auto *gc = new GlobalSpinBoxSetting("idleWaitForRecordingTime", 0, 300, 1);
     gc->setLabel(QObject::tr("Maximum wait for recording (mins)"));
     gc->setValue(15);
     gc->setHelpText(QObject::tr("The number of minutes the master backend "
@@ -491,7 +492,7 @@ static GlobalSpinBoxSetting *idleWaitForRecordingTime()
 
 static GlobalSpinBoxSetting *StartupSecsBeforeRecording()
 {
-    GlobalSpinBoxSetting *gc = new GlobalSpinBoxSetting("StartupSecsBeforeRecording", 0, 1200, 5);
+    auto *gc = new GlobalSpinBoxSetting("StartupSecsBeforeRecording", 0, 1200, 5);
     gc->setLabel(QObject::tr("Startup before recording (secs)"));
     gc->setValue(120);
     gc->setHelpText(QObject::tr("The number of seconds the master backend "
@@ -501,7 +502,7 @@ static GlobalSpinBoxSetting *StartupSecsBeforeRecording()
 
 static GlobalTextEditSetting *WakeupTimeFormat()
 {
-    GlobalTextEditSetting *gc = new GlobalTextEditSetting("WakeupTimeFormat");
+    auto *gc = new GlobalTextEditSetting("WakeupTimeFormat");
     gc->setLabel(QObject::tr("Wakeup time format"));
     gc->setValue("hh:mm yyyy-MM-dd");
     gc->setHelpText(QObject::tr("The format of the time string passed to the "
@@ -513,7 +514,7 @@ static GlobalTextEditSetting *WakeupTimeFormat()
 
 static GlobalTextEditSetting *SetWakeuptimeCommand()
 {
-    GlobalTextEditSetting *gc = new GlobalTextEditSetting("SetWakeuptimeCommand");
+    auto *gc = new GlobalTextEditSetting("SetWakeuptimeCommand");
     gc->setLabel(QObject::tr("Command to set wakeup time"));
     gc->setValue("");
     gc->setHelpText(QObject::tr("The command used to set the wakeup time "
@@ -523,7 +524,7 @@ static GlobalTextEditSetting *SetWakeuptimeCommand()
 
 static GlobalTextEditSetting *ServerHaltCommand()
 {
-    GlobalTextEditSetting *gc = new GlobalTextEditSetting("ServerHaltCommand");
+    auto *gc = new GlobalTextEditSetting("ServerHaltCommand");
     gc->setLabel(QObject::tr("Server halt command"));
     gc->setValue("sudo /sbin/halt -p");
     gc->setHelpText(QObject::tr("The command used to halt the backends."));
@@ -532,7 +533,7 @@ static GlobalTextEditSetting *ServerHaltCommand()
 
 static GlobalTextEditSetting *preSDWUCheckCommand()
 {
-    GlobalTextEditSetting *gc = new GlobalTextEditSetting("preSDWUCheckCommand");
+    auto *gc = new GlobalTextEditSetting("preSDWUCheckCommand");
     gc->setLabel(QObject::tr("Pre-shutdown-check command"));
     gc->setValue("");
     gc->setHelpText(QObject::tr("A command executed before the backend would "
@@ -545,7 +546,7 @@ static GlobalTextEditSetting *preSDWUCheckCommand()
 
 static GlobalCheckBoxSetting *blockSDWUwithoutClient()
 {
-    GlobalCheckBoxSetting *gc = new GlobalCheckBoxSetting("blockSDWUwithoutClient");
+    auto *gc = new GlobalCheckBoxSetting("blockSDWUwithoutClient");
     gc->setLabel(QObject::tr("Block shutdown before client connected"));
     gc->setValue(true);
     gc->setHelpText(QObject::tr("If enabled, the automatic shutdown routine will "
@@ -555,7 +556,7 @@ static GlobalCheckBoxSetting *blockSDWUwithoutClient()
 
 static GlobalTextEditSetting *startupCommand()
 {
-    GlobalTextEditSetting *gc = new GlobalTextEditSetting("startupCommand");
+    auto *gc = new GlobalTextEditSetting("startupCommand");
     gc->setLabel(QObject::tr("Startup command"));
     gc->setValue("");
     gc->setHelpText(QObject::tr("This command is executed right after starting "
@@ -567,7 +568,7 @@ static GlobalTextEditSetting *startupCommand()
 
 static HostSpinBoxSetting *JobQueueMaxSimultaneousJobs()
 {
-    HostSpinBoxSetting *gc = new HostSpinBoxSetting("JobQueueMaxSimultaneousJobs", 1, 10, 1);
+    auto *gc = new HostSpinBoxSetting("JobQueueMaxSimultaneousJobs", 1, 10, 1);
     gc->setLabel(QObject::tr("Maximum simultaneous jobs on this backend"));
     gc->setHelpText(QObject::tr("The Job Queue will be limited to running "
                     "this many simultaneous jobs on this backend."));
@@ -577,7 +578,7 @@ static HostSpinBoxSetting *JobQueueMaxSimultaneousJobs()
 
 static HostSpinBoxSetting *JobQueueCheckFrequency()
 {
-    HostSpinBoxSetting *gc = new HostSpinBoxSetting("JobQueueCheckFrequency", 5, 300, 5);
+    auto *gc = new HostSpinBoxSetting("JobQueueCheckFrequency", 5, 300, 5);
     gc->setLabel(QObject::tr("Job Queue check frequency (secs)"));
     gc->setHelpText(QObject::tr("When looking for new jobs to process, the "
                     "Job Queue will wait this many seconds between checks."));
@@ -587,7 +588,7 @@ static HostSpinBoxSetting *JobQueueCheckFrequency()
 
 static HostComboBoxSetting *JobQueueCPU()
 {
-    HostComboBoxSetting *gc = new HostComboBoxSetting("JobQueueCPU");
+    auto *gc = new HostComboBoxSetting("JobQueueCPU");
     gc->setLabel(QObject::tr("CPU usage"));
     gc->addSelection(QObject::tr("Low"), "0");
     gc->addSelection(QObject::tr("Medium"), "1");
@@ -601,7 +602,7 @@ static HostComboBoxSetting *JobQueueCPU()
 
 static HostTimeBoxSetting *JobQueueWindowStart()
 {
-    HostTimeBoxSetting *gc = new HostTimeBoxSetting("JobQueueWindowStart", "00:00");
+    auto *gc = new HostTimeBoxSetting("JobQueueWindowStart", "00:00");
     gc->setLabel(QObject::tr("Job Queue start time"));
     gc->setHelpText(QObject::tr("This setting controls the start of the "
                     "Job Queue time window, which determines when new jobs "
@@ -611,7 +612,7 @@ static HostTimeBoxSetting *JobQueueWindowStart()
 
 static HostTimeBoxSetting *JobQueueWindowEnd()
 {
-    HostTimeBoxSetting *gc = new HostTimeBoxSetting("JobQueueWindowEnd", "23:59");
+    auto *gc = new HostTimeBoxSetting("JobQueueWindowEnd", "23:59");
     gc->setLabel(QObject::tr("Job Queue end time"));
     gc->setHelpText(QObject::tr("This setting controls the end of the "
                     "Job Queue time window, which determines when new jobs "
@@ -621,7 +622,7 @@ static HostTimeBoxSetting *JobQueueWindowEnd()
 
 static GlobalCheckBoxSetting *JobsRunOnRecordHost()
 {
-    GlobalCheckBoxSetting *gc = new GlobalCheckBoxSetting("JobsRunOnRecordHost");
+    auto *gc = new GlobalCheckBoxSetting("JobsRunOnRecordHost");
     gc->setLabel(QObject::tr("Run jobs only on original recording backend"));
     gc->setValue(false);
     gc->setHelpText(QObject::tr("If enabled, jobs in the queue will be required "
@@ -632,7 +633,7 @@ static GlobalCheckBoxSetting *JobsRunOnRecordHost()
 
 static GlobalCheckBoxSetting *AutoTranscodeBeforeAutoCommflag()
 {
-    GlobalCheckBoxSetting *gc = new GlobalCheckBoxSetting("AutoTranscodeBeforeAutoCommflag");
+    auto *gc = new GlobalCheckBoxSetting("AutoTranscodeBeforeAutoCommflag");
     gc->setLabel(QObject::tr("Run transcode jobs before auto commercial "
                              "detection"));
     gc->setValue(false);
@@ -645,7 +646,7 @@ static GlobalCheckBoxSetting *AutoTranscodeBeforeAutoCommflag()
 
 static GlobalCheckBoxSetting *AutoCommflagWhileRecording()
 {
-    GlobalCheckBoxSetting *gc = new GlobalCheckBoxSetting("AutoCommflagWhileRecording");
+    auto *gc = new GlobalCheckBoxSetting("AutoCommflagWhileRecording");
     gc->setLabel(QObject::tr("Start auto-commercial-detection jobs when the "
                              "recording starts"));
     gc->setValue(false);
@@ -658,7 +659,7 @@ static GlobalCheckBoxSetting *AutoCommflagWhileRecording()
 
 static GlobalTextEditSetting *UserJob(uint job_num)
 {
-    GlobalTextEditSetting *gc = new GlobalTextEditSetting(QString("UserJob%1").arg(job_num));
+    auto *gc = new GlobalTextEditSetting(QString("UserJob%1").arg(job_num));
     gc->setLabel(QObject::tr("User Job #%1 command").arg(job_num));
     gc->setValue("");
     gc->setHelpText(QObject::tr("The command to run whenever this User Job "
@@ -668,7 +669,7 @@ static GlobalTextEditSetting *UserJob(uint job_num)
 
 static GlobalTextEditSetting *UserJobDesc(uint job_num)
 {
-    GlobalTextEditSetting *gc = new GlobalTextEditSetting(QString("UserJobDesc%1")
+    auto *gc = new GlobalTextEditSetting(QString("UserJobDesc%1")
                                             .arg(job_num));
     gc->setLabel(QObject::tr("User Job #%1 description").arg(job_num));
     gc->setValue(QObject::tr("User Job #%1").arg(job_num));
@@ -678,7 +679,7 @@ static GlobalTextEditSetting *UserJobDesc(uint job_num)
 
 static HostCheckBoxSetting *JobAllowMetadata()
 {
-    HostCheckBoxSetting *gc = new HostCheckBoxSetting("JobAllowMetadata");
+    auto *gc = new HostCheckBoxSetting("JobAllowMetadata");
     gc->setLabel(QObject::tr("Allow metadata lookup jobs"));
     gc->setValue(true);
     gc->setHelpText(QObject::tr("If enabled, allow jobs of this type to "
@@ -688,7 +689,7 @@ static HostCheckBoxSetting *JobAllowMetadata()
 
 static HostCheckBoxSetting *JobAllowCommFlag()
 {
-    HostCheckBoxSetting *gc = new HostCheckBoxSetting("JobAllowCommFlag");
+    auto *gc = new HostCheckBoxSetting("JobAllowCommFlag");
     gc->setLabel(QObject::tr("Allow commercial-detection jobs"));
     gc->setValue(true);
     gc->setHelpText(QObject::tr("If enabled, allow jobs of this type to "
@@ -698,8 +699,18 @@ static HostCheckBoxSetting *JobAllowCommFlag()
 
 static HostCheckBoxSetting *JobAllowTranscode()
 {
-    HostCheckBoxSetting *gc = new HostCheckBoxSetting("JobAllowTranscode");
+    auto *gc = new HostCheckBoxSetting("JobAllowTranscode");
     gc->setLabel(QObject::tr("Allow transcoding jobs"));
+    gc->setValue(true);
+    gc->setHelpText(QObject::tr("If enabled, allow jobs of this type to "
+                                "run on this backend."));
+    return gc;
+};
+
+static HostCheckBoxSetting *JobAllowPreview()
+{
+    auto *gc = new HostCheckBoxSetting("JobAllowPreview");
+    gc->setLabel(QObject::tr("Allow preview jobs"));
     gc->setValue(true);
     gc->setHelpText(QObject::tr("If enabled, allow jobs of this type to "
                                 "run on this backend."));
@@ -708,7 +719,7 @@ static HostCheckBoxSetting *JobAllowTranscode()
 
 static GlobalTextEditSetting *JobQueueTranscodeCommand()
 {
-    GlobalTextEditSetting *gc = new GlobalTextEditSetting("JobQueueTranscodeCommand");
+    auto *gc = new GlobalTextEditSetting("JobQueueTranscodeCommand");
     gc->setLabel(QObject::tr("Transcoder command"));
     gc->setValue("mythtranscode");
     gc->setHelpText(QObject::tr("The program used to transcode recordings. "
@@ -718,7 +729,7 @@ static GlobalTextEditSetting *JobQueueTranscodeCommand()
 
 static GlobalTextEditSetting *JobQueueCommFlagCommand()
 {
-    GlobalTextEditSetting *gc = new GlobalTextEditSetting("JobQueueCommFlagCommand");
+    auto *gc = new GlobalTextEditSetting("JobQueueCommFlagCommand");
     gc->setLabel(QObject::tr("Commercial-detection command"));
     gc->setValue("mythcommflag");
     gc->setHelpText(QObject::tr("The program used to detect commercials in a "
@@ -733,7 +744,7 @@ static HostCheckBoxSetting *JobAllowUserJob(uint job_num)
     QString desc  = gCoreContext->GetSetting(QString("UserJobDesc%1").arg(job_num));
     QString label = QObject::tr("Allow %1 jobs").arg(desc);
 
-    HostCheckBoxSetting *bc = new HostCheckBoxSetting(dbStr);
+    auto *bc = new HostCheckBoxSetting(dbStr);
     bc->setLabel(label);
     bc->setValue(false);
     // FIXME:
@@ -764,7 +775,7 @@ static GlobalCheckBoxSetting *UPNPShowRecordingUnderVideos()
 
 static GlobalComboBoxSetting *UPNPWmpSource()
 {
-    GlobalComboBoxSetting *gc = new GlobalComboBoxSetting("UPnP/WMPSource");
+    auto *gc = new GlobalComboBoxSetting("UPnP/WMPSource");
     gc->setLabel(QObject::tr("Video content to show a WMP client"));
     gc->addSelection(QObject::tr("Recordings"),"0");
     gc->addSelection(QObject::tr("Videos"),"1");
@@ -776,7 +787,7 @@ static GlobalComboBoxSetting *UPNPWmpSource()
 
 static GlobalCheckBoxSetting *MythFillEnabled()
 {
-    GlobalCheckBoxSetting *bc = new GlobalCheckBoxSetting("MythFillEnabled");
+    auto *bc = new GlobalCheckBoxSetting("MythFillEnabled");
     bc->setLabel(QObject::tr("Automatically update program listings"));
     bc->setValue(true);
     bc->setHelpText(QObject::tr("If enabled, the guide data program "
@@ -786,7 +797,7 @@ static GlobalCheckBoxSetting *MythFillEnabled()
 
 static GlobalSpinBoxSetting *MythFillMinHour()
 {
-    GlobalSpinBoxSetting *bs = new GlobalSpinBoxSetting("MythFillMinHour", 0, 23, 1);
+    auto *bs = new GlobalSpinBoxSetting("MythFillMinHour", 0, 23, 1);
     bs->setLabel(QObject::tr("Guide data program execution start"));
     bs->setValue(0);
     bs->setHelpText(QObject::tr("This setting and the following one define a "
@@ -799,7 +810,7 @@ static GlobalSpinBoxSetting *MythFillMinHour()
 
 static GlobalSpinBoxSetting *MythFillMaxHour()
 {
-    GlobalSpinBoxSetting *bs = new GlobalSpinBoxSetting("MythFillMaxHour", 0, 23, 1);
+    auto *bs = new GlobalSpinBoxSetting("MythFillMaxHour", 0, 23, 1);
     bs->setLabel(QObject::tr("Guide data program execution end"));
     bs->setValue(23);
     bs->setHelpText(QObject::tr("This setting and the preceding one define a "
@@ -812,11 +823,11 @@ static GlobalSpinBoxSetting *MythFillMaxHour()
 
 static GlobalCheckBoxSetting *MythFillGrabberSuggestsTime()
 {
-    GlobalCheckBoxSetting *bc = new GlobalCheckBoxSetting("MythFillGrabberSuggestsTime");
+    auto *bc = new GlobalCheckBoxSetting("MythFillGrabberSuggestsTime");
     bc->setLabel(QObject::tr("Run guide data program at time suggested by the "
                              "grabber."));
     bc->setValue(true);
-    bc->setHelpText(QObject::tr("If enabled, allow a DataDirect guide data "
+    bc->setHelpText(QObject::tr("If enabled, allow a guide data "
                     "provider to specify the next download time in order "
                     "to distribute load on their servers. Guide data program "
                     "execution start/end times are also ignored."));
@@ -825,7 +836,7 @@ static GlobalCheckBoxSetting *MythFillGrabberSuggestsTime()
 
 static GlobalTextEditSetting *MythFillDatabasePath()
 {
-    GlobalTextEditSetting *be = new GlobalTextEditSetting("MythFillDatabasePath");
+    auto *be = new GlobalTextEditSetting("MythFillDatabasePath");
     be->setLabel(QObject::tr("Guide data program"));
     be->setValue("mythfilldatabase");
     be->setHelpText(QObject::tr(
@@ -837,7 +848,7 @@ static GlobalTextEditSetting *MythFillDatabasePath()
 
 static GlobalTextEditSetting *MythFillDatabaseArgs()
 {
-    GlobalTextEditSetting *be = new GlobalTextEditSetting("MythFillDatabaseArgs");
+    auto *be = new GlobalTextEditSetting("MythFillDatabaseArgs");
     be->setLabel(QObject::tr("Guide data arguments"));
     be->setValue("");
     be->setHelpText(QObject::tr("Any arguments you want passed to the "
@@ -863,63 +874,55 @@ class MythFillSettings : public GroupSetting
      }
 };
 
-BackendSettings::BackendSettings() :
-    isMasterBackend(0),
-    localServerPort(0),
-    backendServerAddr(0),
-    masterServerName(0),
-    ipAddressSettings(0),
-    isLoaded(false),
-    masterServerIP(0),
-    masterServerPort(0)
+BackendSettings::BackendSettings()
 {
     // These two are included for backward compatibility -
     // used by python bindings. They could be removed later
-    masterServerIP = MasterServerIP();
-    masterServerPort = MasterServerPort();
+    m_masterServerIP = MasterServerIP();
+    m_masterServerPort = MasterServerPort();
 
     //++ Host Address Backend Setup ++
-    GroupSetting* server = new GroupSetting();
+    auto* server = new GroupSetting();
     server->setLabel(tr("Host Address Backend Setup"));
-    localServerPort = LocalServerPort();
-    server->addChild(localServerPort);
+    m_localServerPort = LocalServerPort();
+    server->addChild(m_localServerPort);
     server->addChild(LocalStatusPort());
     server->addChild(LocalSecurityPin());
     server->addChild(AllowConnFromAll());
     //+++ IP Addresses +++
-    ipAddressSettings = new IpAddressSettings();
-    server->addChild(ipAddressSettings);
-    connect(ipAddressSettings, &HostCheckBoxSetting::valueChanged,
+    m_ipAddressSettings = new IpAddressSettings();
+    server->addChild(m_ipAddressSettings);
+    connect(m_ipAddressSettings, &HostCheckBoxSetting::valueChanged,
             this, &BackendSettings::listenChanged);
-    connect(ipAddressSettings->localServerIP,
+    connect(m_ipAddressSettings->m_localServerIP,
             static_cast<void (StandardSetting::*)(const QString&)>(&StandardSetting::valueChanged),
             this, &BackendSettings::listenChanged);
-    connect(ipAddressSettings->localServerIP6,
+    connect(m_ipAddressSettings->m_localServerIP6,
             static_cast<void (StandardSetting::*)(const QString&)>(&StandardSetting::valueChanged),
             this, &BackendSettings::listenChanged);
-    backendServerAddr = BackendServerAddr();
-    server->addChild(backendServerAddr);
+    m_backendServerAddr = BackendServerAddr();
+    server->addChild(m_backendServerAddr);
     //++ Master Backend ++
-    isMasterBackend = IsMasterBackend();
-    connect(isMasterBackend, &TransMythUICheckBoxSetting::valueChanged,
+    m_isMasterBackend = IsMasterBackend();
+    connect(m_isMasterBackend, &TransMythUICheckBoxSetting::valueChanged,
             this, &BackendSettings::masterBackendChanged);
-    server->addChild(isMasterBackend);
-    masterServerName = MasterServerName();
-    server->addChild(masterServerName);
+    server->addChild(m_isMasterBackend);
+    m_masterServerName = MasterServerName();
+    server->addChild(m_masterServerName);
     addChild(server);
 
     //++ Locale Settings ++
-    GroupSetting* locale = new GroupSetting();
+    auto* locale = new GroupSetting();
     locale->setLabel(QObject::tr("Locale Settings"));
     locale->addChild(TVFormat());
     locale->addChild(VbiFormat());
     locale->addChild(FreqTable());
     addChild(locale);
 
-    GroupSetting* group2 = new GroupSetting();
+    auto* group2 = new GroupSetting();
     group2->setLabel(QObject::tr("Miscellaneous Settings"));
 
-    GroupSetting* fm = new GroupSetting();
+    auto* fm = new GroupSetting();
     fm->setLabel(QObject::tr("File Management Settings"));
     fm->addChild(MasterBackendOverride());
     fm->addChild(DeletesFollowLinks());
@@ -927,7 +930,7 @@ BackendSettings::BackendSettings() :
     fm->addChild(HDRingbufferSize());
     fm->addChild(StorageScheduler());
     group2->addChild(fm);
-    GroupSetting* upnp = new GroupSetting();
+    auto* upnp = new GroupSetting();
     upnp->setLabel(QObject::tr("UPnP Server Settings"));
     //upnp->addChild(UPNPShowRecordingUnderVideos());
     upnp->addChild(UPNPWmpSource());
@@ -937,13 +940,13 @@ BackendSettings::BackendSettings() :
     group2->addChild(DisableFirewireReset());
     addChild(group2);
 
-    GroupSetting* group2a1 = new GroupSetting();
+    auto* group2a1 = new GroupSetting();
     group2a1->setLabel(QObject::tr("EIT Scanner Options"));
     group2a1->addChild(EITTransportTimeout());
     group2a1->addChild(EITCrawIdleStart());
     addChild(group2a1);
 
-    GroupSetting* group3 = new GroupSetting();
+    auto* group3 = new GroupSetting();
     group3->setLabel(QObject::tr("Shutdown/Wakeup Options"));
     group3->addChild(startupCommand());
     group3->addChild(blockSDWUwithoutClient());
@@ -956,30 +959,30 @@ BackendSettings::BackendSettings() :
     group3->addChild(preSDWUCheckCommand());
     addChild(group3);
 
-    GroupSetting* group4 = new GroupSetting();
+    auto* group4 = new GroupSetting();
     group4->setLabel(QObject::tr("Backend Wakeup settings"));
 
-    GroupSetting* backend = new GroupSetting();
+    auto* backend = new GroupSetting();
     backend->setLabel(QObject::tr("Master Backend"));
     backend->addChild(WOLbackendReconnectWaitTime());
     backend->addChild(WOLbackendConnectRetry());
     backend->addChild(WOLbackendCommand());
     group4->addChild(backend);
 
-    GroupSetting* slaveBackend = new GroupSetting();
+    auto* slaveBackend = new GroupSetting();
     slaveBackend->setLabel(QObject::tr("Slave Backends"));
     slaveBackend->addChild(SleepCommand());
     slaveBackend->addChild(WakeUpCommand());
     group4->addChild(slaveBackend);
     addChild(group4);
 
-    GroupSetting* backendControl = new GroupSetting();
+    auto* backendControl = new GroupSetting();
     backendControl->setLabel(QObject::tr("Backend Control"));
     backendControl->addChild(BackendStopCommand());
     backendControl->addChild(BackendStartCommand());
     addChild(backendControl);
 
-    GroupSetting* group5 = new GroupSetting();
+    auto* group5 = new GroupSetting();
     group5->setLabel(QObject::tr("Job Queue (Backend-Specific)"));
     group5->addChild(JobQueueMaxSimultaneousJobs());
     group5->addChild(JobQueueCheckFrequency());
@@ -989,13 +992,14 @@ BackendSettings::BackendSettings() :
     group5->addChild(JobAllowMetadata());
     group5->addChild(JobAllowCommFlag());
     group5->addChild(JobAllowTranscode());
+    group5->addChild(JobAllowPreview());
     group5->addChild(JobAllowUserJob(1));
     group5->addChild(JobAllowUserJob(2));
     group5->addChild(JobAllowUserJob(3));
     group5->addChild(JobAllowUserJob(4));
     addChild(group5);
 
-    GroupSetting* group6 = new GroupSetting();
+    auto* group6 = new GroupSetting();
     group6->setLabel(QObject::tr("Job Queue (Global)"));
     group6->addChild(JobsRunOnRecordHost());
     group6->addChild(AutoCommflagWhileRecording());
@@ -1005,7 +1009,7 @@ BackendSettings::BackendSettings() :
     group6->addChild(SaveTranscoding());
     addChild(group6);
 
-    GroupSetting* group7 = new GroupSetting();
+    auto* group7 = new GroupSetting();
     group7->setLabel(QObject::tr("Job Queue (Job Commands)"));
     group7->addChild(UserJobDesc(1));
     group7->addChild(UserJob(1));
@@ -1017,85 +1021,85 @@ BackendSettings::BackendSettings() :
     group7->addChild(UserJob(4));
     addChild(group7);
 
-    MythFillSettings *mythfill = new MythFillSettings();
+    auto *mythfill = new MythFillSettings();
     addChild(mythfill);
 
 }
 
 void BackendSettings::masterBackendChanged()
 {
-    if (!isLoaded)
+    if (!m_isLoaded)
         return;
-    bool ismasterchecked = isMasterBackend->boolValue();
+    bool ismasterchecked = m_isMasterBackend->boolValue();
     if (ismasterchecked)
-        masterServerName->setValue(gCoreContext->GetHostName());
+        m_masterServerName->setValue(gCoreContext->GetHostName());
     else
-        masterServerName->setValue(priorMasterName);
+        m_masterServerName->setValue(m_priorMasterName);
 }
 
 void BackendSettings::listenChanged()
 {
-    if (!isLoaded)
+    if (!m_isLoaded)
         return;
-    bool addrChanged = backendServerAddr->haveChanged();
-    QString currentsetting = backendServerAddr->getValue();
-    backendServerAddr->clearSelections();
-    if (ipAddressSettings->boolValue())
+    bool addrChanged = m_backendServerAddr->haveChanged();
+    QString currentsetting = m_backendServerAddr->getValue();
+    m_backendServerAddr->clearSelections();
+    if (m_ipAddressSettings->boolValue())
     {
         QList<QHostAddress> list = QNetworkInterface::allAddresses();
         QList<QHostAddress>::iterator it;
         for (it = list.begin(); it != list.end(); ++it)
         {
             it->setScopeId(QString());
-            backendServerAddr->addSelection((*it).toString(), (*it).toString());
+            m_backendServerAddr->addSelection((*it).toString(), (*it).toString());
         }
     }
     else
     {
-        backendServerAddr->addSelection(
-            ipAddressSettings->localServerIP->getValue());
-        backendServerAddr->addSelection(
-            ipAddressSettings->localServerIP6->getValue());
+        m_backendServerAddr->addSelection(
+            m_ipAddressSettings->m_localServerIP->getValue());
+        m_backendServerAddr->addSelection(
+            m_ipAddressSettings->m_localServerIP6->getValue());
     }
     // Remove the blank entry that is caused by clearSelections
     // TODO probably not needed anymore?
-    // backendServerAddr->removeSelection(QString());
+    // m_backendServerAddr->removeSelection(QString());
 
     QHostAddress addr;
     if (addr.setAddress(currentsetting))
     {
         // if prior setting is an ip address
         // it only if it is now in the list
-        if (backendServerAddr->getValueIndex(currentsetting)
+        if (m_backendServerAddr->getValueIndex(currentsetting)
                 > -1)
-            backendServerAddr->setValue(currentsetting);
+            m_backendServerAddr->setValue(currentsetting);
         else
-            backendServerAddr->setValue(0);
+            m_backendServerAddr->setValue(0);
     }
     else if (! currentsetting.isEmpty())
     {
         // if prior setting was not an ip address, it must
         // have been a dns name so add it back and select it.
-        backendServerAddr->addSelection(currentsetting);
-        backendServerAddr->setValue(currentsetting);
+        m_backendServerAddr->addSelection(currentsetting);
+        m_backendServerAddr->setValue(currentsetting);
     }
     else
-        backendServerAddr->setValue(0);
-    backendServerAddr->setChanged(addrChanged);
+        m_backendServerAddr->setValue(0);
+    m_backendServerAddr->setChanged(addrChanged);
 }
 
 
 void BackendSettings::Load(void)
 {
-    isLoaded=false;
+    m_isLoaded=false;
     GroupSetting::Load();
 
     // These two are included for backward compatibility - only used by python
     // bindings. They should be removed later
-    masterServerIP->Load();
-    masterServerPort->Load();
+    m_masterServerIP->Load();
+    m_masterServerPort->Load();
 
-    QString mastername = masterServerName->getValue();
+    QString mastername = m_masterServerName->getValue();
     // new installation - default to master
     bool newInstall=false;
     if (mastername.isEmpty())
@@ -1104,62 +1108,60 @@ void BackendSettings::Load(void)
         newInstall=true;
     }
     bool ismaster = (mastername == gCoreContext->GetHostName());
-    isMasterBackend->setValue(ismaster);
-    priorMasterName = mastername;
-    isLoaded=true;
+    m_isMasterBackend->setValue(ismaster);
+    m_priorMasterName = mastername;
+    m_isLoaded=true;
     masterBackendChanged();
     listenChanged();
     if (!newInstall)
     {
-        backendServerAddr->setChanged(false);
-        isMasterBackend->setChanged(false);
-        masterServerName->setChanged(false);
+        m_backendServerAddr->setChanged(false);
+        m_isMasterBackend->setChanged(false);
+        m_masterServerName->setChanged(false);
     }
 }
 
 void BackendSettings::Save(void)
 {
     // Setup deprecated backward compatibility settings
-    if (isMasterBackend->boolValue())
+    if (m_isMasterBackend->boolValue())
     {
-        QString addr = backendServerAddr->getValue();
-        QString ip = gCoreContext->resolveAddress(addr);
-        masterServerIP->setValue(ip);
-        masterServerPort->setValue(localServerPort->getValue());
+        QString addr = m_backendServerAddr->getValue();
+        QString ip = MythCoreContext::resolveAddress(addr);
+        m_masterServerIP->setValue(ip);
+        m_masterServerPort->setValue(m_localServerPort->getValue());
     }
 
     // If listen on all is specified, set up values for the
     // specific IPV4 and IPV6 addresses for backward
     // compatibilty with other things that may use them
-    if (ipAddressSettings->boolValue())
+    if (m_ipAddressSettings->boolValue())
     {
-        QString bea = backendServerAddr->getValue();
+        QString bea = m_backendServerAddr->getValue();
         // initialize them to localhost values
-        ipAddressSettings->localServerIP->setValue(0);
-        ipAddressSettings->localServerIP6->setValue(0);
-        QString ip4 = gCoreContext->resolveAddress
+        m_ipAddressSettings->m_localServerIP->setValue(0);
+        m_ipAddressSettings->m_localServerIP6->setValue(0);
+        QString ip4 = MythCoreContext::resolveAddress
             (bea,MythCoreContext::ResolveIPv4);
-        QString ip6 = gCoreContext->resolveAddress
+        QString ip6 = MythCoreContext::resolveAddress
             (bea,MythCoreContext::ResolveIPv6);
         // the setValue calls below only set the value if it is in the list.
-        ipAddressSettings->localServerIP->setValue(ip4);
-        ipAddressSettings->localServerIP6->setValue(ip6);
+        m_ipAddressSettings->m_localServerIP->setValue(ip4);
+        m_ipAddressSettings->m_localServerIP6->setValue(ip6);
     }
 
     GroupSetting::Save();
 
     // These two are included for backward compatibility - only used by python
     // bindings. They should be removed later
-    masterServerIP->Save();
-    masterServerPort->Save();
+    m_masterServerIP->Save();
+    m_masterServerPort->Save();
 }
 
 BackendSettings::~BackendSettings()
 {
-    if (masterServerIP)
-        delete masterServerIP;
-    masterServerIP=0;
-    if (masterServerPort)
-        delete masterServerPort;
-    masterServerPort=0;
+    delete m_masterServerIP;
+    m_masterServerIP=nullptr;
+    delete m_masterServerPort;
+    m_masterServerPort=nullptr;
 }

@@ -24,19 +24,23 @@ class HLSReader;
 class HLSStreamHandler : public IPTVStreamHandler
 {
   public:
-    static HLSStreamHandler* Get(const IPTVTuningData& tuning);
-    static void Return(HLSStreamHandler* & ref);
+    static HLSStreamHandler* Get(const IPTVTuningData& tuning, int inputid);
+    static void Return(HLSStreamHandler* & ref, int inputid);
+
+    // Deleted functions should be public.
+    HLSStreamHandler(const HLSStreamHandler &) = delete;            // not copyable
+    HLSStreamHandler &operator=(const HLSStreamHandler &) = delete; // not copyable
 
   protected:
-    explicit HLSStreamHandler(const IPTVTuningData &tuning);
-    virtual ~HLSStreamHandler(void);
+    explicit HLSStreamHandler(const IPTVTuningData &tuning, int inputid);
+    ~HLSStreamHandler(void) override;
 
-    virtual void run(void); // MThread
+    void run(void) override; // MThread
 
   protected:
-    HLSReader*     m_hls;
-    uint8_t*       m_readbuffer;
-    bool           m_throttle;
+    HLSReader*     m_hls        {nullptr};
+    uint8_t*       m_readbuffer {nullptr};
+    bool           m_throttle   {true};
 
     // for implementing Get & Return
     static QMutex                            s_hlshandlers_lock;

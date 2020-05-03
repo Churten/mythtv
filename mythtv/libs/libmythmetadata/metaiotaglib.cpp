@@ -15,15 +15,6 @@
 #include "musicmetadata.h"
 #include "musicutils.h"
 
-MetaIOTagLib::MetaIOTagLib()
-    : MetaIO()
-{
-}
-
-MetaIOTagLib::~MetaIOTagLib(void)
-{
-}
-
 /*!
 * \brief Writes metadata common to all tag formats to the tag
 *
@@ -80,7 +71,7 @@ void MetaIOTagLib::ReadGenericMetadata(Tag *tag, MusicMetadata *metadata)
     if (metadata->Title().isEmpty())
         readFromFilename(metadata);
 
-    // If we don't have title and artist or don't have the length return NULL
+    // If we don't have title and artist or don't have the length return nullptr
     if (metadata->Title().isEmpty() && metadata->Artist().isEmpty())
     {
         LOG(VB_GENERAL, LOG_ERR,
@@ -115,16 +106,18 @@ int MetaIOTagLib::getTrackLength(const QString &filename)
 {
     int milliseconds = 0;
     QByteArray fname = filename.toLocal8Bit();
-    TagLib::FileRef *file = new TagLib::FileRef(fname.constData());
+    auto *file = new TagLib::FileRef(fname.constData());
 
     if (file && file->audioProperties())
         milliseconds = file->audioProperties()->length() * 1000;
 
     // If we didn't get a valid length, add the metadata but show warning.
     if (milliseconds <= 1000)
+    {
         LOG(VB_GENERAL, LOG_ERR,
             QString("MetaIOTagLib: Failed to read length "
                     "from '%1'. It may be corrupt.").arg(filename));
+    }
 
     delete file;
 

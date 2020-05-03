@@ -29,88 +29,46 @@ class RecordingRule;
 class RecordingInfo;
 class RecordingRule;
 
-typedef AutoDeleteDeque<RecordingInfo*> RecordingList;
+using RecordingList = AutoDeleteDeque<RecordingInfo*>;
 
 class MTV_PUBLIC RecordingInfo : public ProgramInfo
 {
   public:
-    RecordingInfo(void) : 
-        oldrecstatus(RecStatus::Unknown),
-        savedrecstatus(RecStatus::Unknown),
-        future(false),
-        schedorder(0),
-        mplexid(0),
-        sgroupid(0),
-        desiredrecstartts(),
-        desiredrecendts(),
-        record(NULL),
-        m_recordingFile(NULL) { LoadRecordingFile(); }
+    RecordingInfo(void) { LoadRecordingFile(); }
     RecordingInfo(const RecordingInfo &other) :
         ProgramInfo(other),
-        oldrecstatus(other.oldrecstatus),
-        savedrecstatus(other.savedrecstatus),
-        future(other.future),
-        schedorder(other.schedorder),
-        mplexid(other.mplexid),
-        sgroupid(other.sgroupid),
-        desiredrecstartts(other.desiredrecstartts),
-        desiredrecendts(other.desiredrecendts),
-        record(NULL),
-        m_recordingFile(NULL)  { LoadRecordingFile(); }
-    RecordingInfo(const ProgramInfo &other) :
+        m_oldrecstatus(other.m_oldrecstatus),
+        m_savedrecstatus(other.m_savedrecstatus),
+        m_future(other.m_future),
+        m_schedOrder(other.m_schedOrder),
+        m_mplexId(other.m_mplexId),
+        m_sgroupId(other.m_sgroupId),
+        m_desiredRecStartTs(other.m_desiredRecStartTs),
+        m_desiredRecEndTs(other.m_desiredRecEndTs)  { LoadRecordingFile(); }
+    explicit RecordingInfo(const ProgramInfo &other) :
         ProgramInfo(other),
-        oldrecstatus(RecStatus::Unknown),
-        savedrecstatus(RecStatus::Unknown),
-        future(false),
-        schedorder(0),
-        mplexid(0),
-        sgroupid(0),
-        desiredrecstartts(startts),
-        desiredrecendts(endts),
-        record(NULL),
-        m_recordingFile(NULL)  { LoadRecordingFile(); }
-    RecordingInfo(uint _recordedid) :
+        m_desiredRecStartTs(m_startTs),
+        m_desiredRecEndTs(m_endTs)  { LoadRecordingFile(); }
+    explicit RecordingInfo(uint _recordedid) :
         ProgramInfo(_recordedid),
-        oldrecstatus(RecStatus::Unknown),
-        savedrecstatus(RecStatus::Unknown),
-        future(false),
-        schedorder(0),
-        mplexid(0),
-        sgroupid(0),
-        desiredrecstartts(startts),
-        desiredrecendts(endts),
-        record(NULL),
-        m_recordingFile(NULL)  { LoadRecordingFile(); }
+        m_desiredRecStartTs(m_startTs),
+        m_desiredRecEndTs(m_endTs)  { LoadRecordingFile(); }
     RecordingInfo(uint _chanid, const QDateTime &_recstartts) : /// DEPRECATED
         ProgramInfo(_chanid, _recstartts),
-        oldrecstatus(RecStatus::Unknown),
-        savedrecstatus(RecStatus::Unknown),
-        future(false),
-        schedorder(0),
-        mplexid(0),
-        sgroupid(0),
-        desiredrecstartts(startts),
-        desiredrecendts(endts),
-        record(NULL),
-        m_recordingFile(NULL)  { LoadRecordingFile(); }
+        m_desiredRecStartTs(m_startTs),
+        m_desiredRecEndTs(m_endTs)  { LoadRecordingFile(); }
     RecordingInfo(QStringList::const_iterator &it,
-                  QStringList::const_iterator  end) :
+                  const QStringList::const_iterator&  end) :
         ProgramInfo(it, end),
-        oldrecstatus(RecStatus::Unknown),
-        savedrecstatus(RecStatus::Unknown),
-        future(false),
-        schedorder(0),
-        mplexid(0),
-        sgroupid(0),
-        desiredrecstartts(startts),
-        desiredrecendts(endts),
-        record(NULL),
-        m_recordingFile(NULL)  { LoadRecordingFile(); }
+        m_desiredRecStartTs(m_startTs),
+        m_desiredRecEndTs(m_endTs)  { LoadRecordingFile(); }
     /// Create RecordingInfo from 'program'+'record'+'channel' tables,
     /// used in scheduler.cpp @ ~ 3296
     RecordingInfo(
         const QString &title,
+        const QString &sortTitle,
         const QString &subtitle,
+        const QString &sortSubtitle,
         const QString &description,
         uint season,
         uint episode,
@@ -136,7 +94,7 @@ class MTV_PUBLIC RecordingInfo : public ProgramInfo
         const QString &seriesid,
         const QString &programid,
         const QString &inetref,
-        const CategoryType catType,
+        CategoryType catType,
 
         int recpriority,
 
@@ -160,7 +118,7 @@ class MTV_PUBLIC RecordingInfo : public ProgramInfo
         RecordingDupMethodType dupmethod,
 
         uint sourceid,
-        uint cardid,
+        uint inputid,
 
         uint findid,
 
@@ -178,7 +136,9 @@ class MTV_PUBLIC RecordingInfo : public ProgramInfo
     /// user in scheduler.cpp  @ ~ 3566 & ~ 3643
     RecordingInfo(
         const QString &title,
+        const QString &sortTitle,
         const QString &subtitle,
+        const QString &sortSubtitle,
         const QString &description,
         uint season,
         uint episode,
@@ -216,87 +176,90 @@ class MTV_PUBLIC RecordingInfo : public ProgramInfo
 
     // Create ProgramInfo that overlaps the desired time on the
     // specified channel id.
-    typedef enum {
+    enum LoadStatus {
         kNoProgram           = 0,
         kFoundProgram        = 1,
         kFakedLiveTVProgram  = 2,
         kFakedZeroMinProgram = 3,
-    } LoadStatus;
+    };
     RecordingInfo(uint _chanid, const QDateTime &desiredts,
                   bool genUnknown, uint maxHours = 0,
-                  LoadStatus *status = NULL);
+                  LoadStatus *status = nullptr);
 
-    typedef enum {
+    enum SpecialRecordingGroups {
         kDefaultRecGroup     = 1, // Auto-increment columns start at one
         kLiveTVRecGroup      = 2,
         kDeletedRecGroup     = 3,
-    } SpecialRecordingGroups;
+    };
 
   public:
     RecordingInfo &operator=(const RecordingInfo &other)
-        { clone(other); return *this; }
+        { RecordingInfo::clone(other); return *this; }
     RecordingInfo &operator=(const ProgramInfo &other)
-        { clone(other); return *this; }
+        { RecordingInfo::clone(other); return *this; }
     virtual void clone(const RecordingInfo &other,
                        bool ignore_non_serialized_data = false);
-    virtual void clone(const ProgramInfo &other,
-                       bool ignore_non_serialized_data = false);
+    void clone(const ProgramInfo &other,
+               bool ignore_non_serialized_data = false) override; // ProgramInfo
 
-    virtual void clear(void);
+    void clear(void) override; // ProgramInfo
 
     // Destructor
-    virtual ~RecordingInfo();
+    ~RecordingInfo() override;
 
     // Serializers
-    virtual void SubstituteMatches(QString &str);
+    void SubstituteMatches(QString &str) override; // ProgramInfo
 
-    void SetRecordingID(uint _recordedid) {  recordedid = _recordedid;
-                                             m_recordingFile->m_recordingId = _recordedid; }
+    void SetRecordingID(uint _recordedid) override // ProgramInfo
+        {  m_recordedId = _recordedid;
+            m_recordingFile->m_recordingId = _recordedid; }
 
     // Quick gets
     /// Creates a unique string that can be used to identify a
     /// scheduled recording.
     QString MakeUniqueSchedulerKey(void) const
-        { return MakeUniqueKey(chanid, startts); }
+        { return MakeUniqueKey(m_chanId, m_startTs); }
 
     // Used to query and set RecordingRule info
     RecordingRule *GetRecordingRule(void);
     int getRecordID(void);
+    static bool QueryRecordedIdForKey(int & recordedid,
+                                      uint chanid, const QDateTime& recstartts);
     int GetAutoRunJobs(void) const;
     RecordingType GetProgramRecordingStatus(void);
     QString GetProgramRecordingProfile(void) const;
     void ApplyRecordStateChange(RecordingType newstate, bool save = true);
-    void ApplyRecordRecPriorityChange(int);
+    void ApplyRecordRecPriorityChange(int newrecpriority);
     void QuickRecord(void);
 
     // Used in determining start and end for RecordingQuality determination
-    void SetDesiredStartTime(const QDateTime &dt) { desiredrecstartts = dt; }
-    void SetDesiredEndTime(const QDateTime &dt) { desiredrecendts = dt; }
-    QDateTime GetDesiredStartTime(void) const { return desiredrecstartts; }
-    QDateTime GetDesiredEndTime(void) const { return desiredrecendts; }
+    void SetDesiredStartTime(const QDateTime &dt) { m_desiredRecStartTs = dt; }
+    void SetDesiredEndTime(const QDateTime &dt) { m_desiredRecEndTs = dt; }
+    QDateTime GetDesiredStartTime(void) const { return m_desiredRecStartTs; }
+    QDateTime GetDesiredEndTime(void) const { return m_desiredRecEndTs; }
 
     // these five can be moved to programinfo
-    void AddHistory(bool resched = true, bool forcedup = false, 
+    void AddHistory(bool resched = true, bool forcedup = false,
                     bool future = false);//pi
     void DeleteHistory(void);//pi
     void ForgetHistory(void);//pi
     void SetDupHistory(void);//pi
 
     // Used to update database with recording info
-    void StartedRecording(QString ext);
+    void StartedRecording(const QString& ext);
     void FinishedRecording(bool allowReRecord);
     void UpdateRecordingEnd(void);//pi
     void ReactivateRecording(void);//pi
     void ApplyRecordRecID(void);//pi
     void ApplyRecordRecGroupChange(const QString &newrecgroup);
     void ApplyRecordRecGroupChange(int newrecgroupid);
-    void ApplyRecordPlayGroupChange(const QString &newrecgroup);
+    void ApplyRecordPlayGroupChange(const QString &newplaygroup);
     void ApplyStorageGroupChange(const QString &newstoragegroup);
     void ApplyRecordRecTitleChange(const QString &newTitle,
                                    const QString &newSubtitle,
                                    const QString &newDescription);
     void ApplyTranscoderProfileChange(const QString &profile) const;//pi
-    void ApplyTranscoderProfileChangeById(int);
+    void ApplyTranscoderProfileChangeById(int id);
     void ApplyNeverRecord(void);
 
     // Temporary while we transition from string to integer
@@ -306,28 +269,28 @@ class MTV_PUBLIC RecordingInfo : public ProgramInfo
     // File specific metdata
     void LoadRecordingFile();
     RecordingFile *GetRecordingFile() const { return m_recordingFile; }
-    void SaveFilesize(uint64_t fsize);   /// Will replace the one in ProgramInfo
-    void SetFilesize( uint64_t sz );     /// Will replace the one in ProgramInfo
-    uint64_t GetFilesize(void) const; /// Will replace the one in ProgramInfo
+    void SaveFilesize(uint64_t fsize) override; // ProgramInfo
+    void SetFilesize( uint64_t fsize ) override; // ProgramInfo
+    uint64_t GetFilesize(void) const override; // ProgramInfo
 
-    RecStatus::Type oldrecstatus;
-    RecStatus::Type savedrecstatus;
-    bool future;
-    int schedorder;
-    uint mplexid; // Only valid within the scheduler
-    uint sgroupid; // Only valid within the scheduler
-    QDateTime desiredrecstartts;
-    QDateTime desiredrecendts;
+    RecStatus::Type m_oldrecstatus      {RecStatus::Unknown};
+    RecStatus::Type m_savedrecstatus    {RecStatus::Unknown};
+    bool            m_future            {false};
+    int             m_schedOrder        {0};
+    uint            m_mplexId           {0}; // Only valid within the scheduler
+    uint            m_sgroupId          {0}; // Only valid within the scheduler
+    QDateTime       m_desiredRecStartTs;
+    QDateTime       m_desiredRecEndTs;
 
   private:
-    mutable class RecordingRule *record;
-    RecordingFile *m_recordingFile;
+    mutable class RecordingRule *m_record        {nullptr};
+    RecordingFile               *m_recordingFile {nullptr};
 
   protected:
     static bool InsertProgram(RecordingInfo *pg,
                               const RecordingRule *rule);
 
-    static QString unknownTitle;
+    static QString s_unknownTitle;
 };
 
 Q_DECLARE_METATYPE(RecordingInfo*)

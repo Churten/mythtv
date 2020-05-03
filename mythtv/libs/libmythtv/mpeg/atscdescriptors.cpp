@@ -60,9 +60,8 @@ QString MultipleStringStructure::toString() const
 static uint maxPriority(const QMap<uint,uint> &langPrefs)
 {
     uint max_pri = 0;
-    QMap<uint,uint>::const_iterator it = langPrefs.begin();
-    for (; it != langPrefs.end(); ++it)
-        max_pri = max(max_pri, *it);
+    foreach (uint pref, langPrefs)
+        max_pri = max(max_pri, pref);
     return max_pri;
 }
 
@@ -96,7 +95,7 @@ QString MultipleStringStructure::GetBestMatch(QMap<uint,uint> &langPrefs) const
 {
     if (StringCount())
         return GetFullString(GetIndexOfBestMatch(langPrefs));
-    return QString::null;
+    return QString();
 }
 
 QString MultipleStringStructure::GetSegment(uint i, uint j) const
@@ -149,8 +148,7 @@ QString MultipleStringStructure::Uncompressed(
         // Standard Compression Scheme for Unicode (SCSU)
         str=QString("TODO SCSU encoding");
     } else if (mode==0x3f) { //  Unicode, UTF-16 Form
-        const unsigned short* ustr =
-            reinterpret_cast<const unsigned short*>(buf);
+        const auto* ustr = reinterpret_cast<const unsigned short*>(buf);
         for (int j=0; j<(len>>1); j++)
             str.append( QChar( (ustr[j]<<8) | (ustr[j]>>8) ) );
     } else if (0x40<=mode && mode<=0x41)
@@ -164,25 +162,25 @@ QString MultipleStringStructure::Uncompressed(
 
 void MultipleStringStructure::Parse(void) const
 {
-    _ptrs.clear();
-    _ptrs[Index(0,-1)] = _data + 1;
+    m_ptrs.clear();
+    m_ptrs[Index(0,-1)] = m_data + 1;
     for (uint i = 0; i < StringCount(); i++)
     {
-        _ptrs[Index(i,0)] = Offset(i,-1) + 4;
+        m_ptrs[Index(i,0)] = Offset(i,-1) + 4;
         uint j = 0;
         for (; j < SegmentCount(i); j++)
-            _ptrs[Index(i,j+1)] = Offset(i,j) + Bytes(i,j) + 3;
-        _ptrs[Index(i+1,-1)] = Offset(i,j);
+            m_ptrs[Index(i,j+1)] = Offset(i,j) + Bytes(i,j) + 3;
+        m_ptrs[Index(i+1,-1)] = Offset(i,j);
     }
 }
 
 bool CaptionServiceDescriptor::Parse(void)
 {
-    _ptrs.clear();
-    _ptrs[Index(0,-1)] = _data+3;
+    m_ptrs.clear();
+    m_ptrs[Index(0,-1)] = m_data+3;
 
     for (uint i = 0; i < ServicesCount(); i++)
-        _ptrs[Index(i+1,-1)] = Offset(i,-1) + 6;
+        m_ptrs[Index(i+1,-1)] = Offset(i,-1) + 6;
 
     return true;
 }
@@ -199,10 +197,14 @@ QString CaptionServiceDescriptor::toString(void) const
         str.append(QString("easy_reader(%1) wide(%2) ")
                    .arg(EasyReader(i)).arg(WideAspectRatio(i)));
         if (Type(i))
+        {
             str.append(QString("service_num(%1)")
                        .arg(CaptionServiceNumber(i)));
+        }
         else
+        {
             str.append(QString("line_21_field(%1)").arg(Line21Field(i)));
+        }
     }
 
     return str;
@@ -210,18 +212,18 @@ QString CaptionServiceDescriptor::toString(void) const
 
 bool ContentAdvisoryDescriptor::Parse(void)
 {
-    _ptrs.clear();
-    _ptrs[Index(0,-1)] = _data + 2;
+    m_ptrs.clear();
+    m_ptrs[Index(0,-1)] = m_data + 2;
 
     for (uint i = 0; i < RatingRegionCount(); i++)
     {
-        _ptrs[Index(i,0)] = Offset(i,-1)+2;
+        m_ptrs[Index(i,0)] = Offset(i,-1)+2;
         uint j = 0;
         for (; j < RatedDimensions(i); j++)
-            _ptrs[Index(i,j+1)] = Offset(i,j) + 2;
+            m_ptrs[Index(i,j+1)] = Offset(i,j) + 2;
         const unsigned char *tmp = Offset(i,-1) + 3 + (RatedDimensions(i)<<1);
         uint len = RatingDescriptionLength(i);
-        _ptrs[Index(i+1,-1)] = tmp + len;
+        m_ptrs[Index(i+1,-1)] = tmp + len;
     }
 
     return true;
@@ -234,25 +236,26 @@ QString ContentAdvisoryDescriptor::toString() const
 
 QString AudioStreamDescriptor::SampleRateCodeString(void) const
 {
-    static const char* asd[] =
+    static const char* s_asd[] =
     {
         "48kbps", "44.1kbps", "32kbps", "Reserved",
         "48kbps or 44.1kbps", "48kbps or 32kbps",
         "44.1kbps or 32kbps", "48kbps or 44.1kbps or 32kbps"
     };
-    return QString(asd[SampleRateCode()]);
+    return QString(s_asd[SampleRateCode()]);
 }
 
 QString AudioStreamDescriptor::BitRateCodeString(void) const
 {
-    static const char* ebr[19] =
+    // cppcheck-suppress variableScope
+    static const char* s_ebr[19] =
     {
         "=32kbps",  "=40kbps",  "=48kbps",  "=56kbps",  "=64kbps",
         "=80kbps",  "=96kbps",  "=112kbps", "=128kbps", "=160kbps",
         "=192kbps", "=224kbps", "=256kbps", "=320kbps", "=384kbps",
         "=448kbps", "=512kbps", "=576kbps", "=640kbps"
     };
-    static const char* ubr[19] =
+    static const char* s_ubr[19] =
     {
         "<=32kbps",  "<=40kbps", "<=48kbps",  "<=56kbps",  "<=64kbps",
         "<=80kbps",  "<=96kbps", "<=112kbps", "<=128kbps", "<=160kbps",
@@ -261,35 +264,34 @@ QString AudioStreamDescriptor::BitRateCodeString(void) const
     };
 
     if (BitRateCode() <= 18)
-        return QString(ebr[BitRateCode()]);
-    else if ((BitRateCode() >= 32) && (BitRateCode() <= 50))
-        return QString(ubr[BitRateCode()-32]);
-
+        return QString(s_ebr[BitRateCode()]);
+    if ((BitRateCode() >= 32) && (BitRateCode() <= 50))
+        return QString(s_ubr[BitRateCode()-32]);
     return QString("Unknown Bit Rate Code");
 }
 
 QString AudioStreamDescriptor::SurroundModeString(void) const
 {
-    static const char* sms[] =
+    static const char* s_sms[] =
     {
         "Not indicated",
         "Not Dolby surround encoded",
         "Dolby surround encoded",
         "Reserved",
     };
-    return QString(sms[SurroundMode()]);
+    return QString(s_sms[SurroundMode()]);
 }
 
 QString AudioStreamDescriptor::ChannelsString(void) const
 {
-    static const char* cs[] =
+    static const char* s_cs[] =
     {
         "1 + 1",    "1/0",      "2/0",      "3/0",
         "2/1",      "3/1",      "2/2 ",     "3/2",
         "1",        "<= 2",     "<= 3",     "<= 4",
         "<= 5",     "<= 6",     "Reserved", "Reserved"
     };
-    return cs[Channels()];
+    return s_cs[Channels()];
 }
 
 QString AudioStreamDescriptor::toString() const
@@ -333,7 +335,7 @@ QString AudioStreamDescriptor::toString() const
 MultipleStringStructure ExtendedChannelNameDescriptor::LongChannelName(
     void) const
 {
-    return MultipleStringStructure(_data + 2);
+    return MultipleStringStructure(m_data + 2);
 }
 
 /** \fn ExtendedChannelNameDescriptor::LongChannelNameString(void) const

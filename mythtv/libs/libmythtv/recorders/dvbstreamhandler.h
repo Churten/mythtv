@@ -26,59 +26,56 @@ class DVBPIDInfo : public PIDInfo
     explicit DVBPIDInfo(uint pid) : PIDInfo(pid) {}
     DVBPIDInfo(uint pid, uint stream_type, int pes_type) :
         PIDInfo(pid, stream_type, pes_type) {}
-    bool Open(const QString &dvb_dev, bool use_section_reader);
-    bool Close(const QString &dvb_dev);
+    bool Open(const QString &dvb_dev, bool use_section_reader) override; // PIDInfo
+    bool Close(const QString &dvb_dev) override; // PIDInfo
 };
 
 class DVBStreamHandler : public StreamHandler
 {
   public:
-    static DVBStreamHandler *Get(const QString &dvb_device,
-                                 int recorder_id = -1);
-    static void Return(DVBStreamHandler * & ref, int recorder_id = -1);
+    static DVBStreamHandler *Get(const QString &devname, int inputid);
+    static void Return(DVBStreamHandler * & ref, int inputid);
 
     // DVB specific
 
     void RetuneMonitor(void);
 
-    bool IsRetuneAllowed(void) const { return _allow_retune; }
+    bool IsRetuneAllowed(void) const { return m_allowRetune; }
 
     void SetRetuneAllowed(bool              allow,
                           DTVSignalMonitor *sigmon,
                           DVBChannel       *dvbchan);
 
   private:
-    explicit DVBStreamHandler(const QString &);
+    explicit DVBStreamHandler(const QString &dvb_device, int inputid);
 
-    virtual void run(void); // MThread
+    void run(void) override; // MThread
     void RunTS(void);
     void RunSR(void);
 
-    virtual void CycleFiltersByPriority(void);
+    void CycleFiltersByPriority(void) override; // StreamHandler
 
     bool SupportsTSMonitoring(void);
 
-    virtual PIDInfo *CreatePIDInfo(uint pid, uint stream_type, int pes_type)
+    PIDInfo *CreatePIDInfo(uint pid, uint stream_type, int pes_type) override // StreamHandler
         { return new DVBPIDInfo(pid, stream_type, pes_type); }
 
-    virtual void SetRunningDesired(bool desired); // StreamHandler
-
   private:
-    QString           _dvr_dev_path;
-    volatile bool     _allow_retune;
+    QString           m_dvrDevPath;
+    volatile bool     m_allowRetune;
 
-    DTVSignalMonitor *_sigmon;
-    DVBChannel       *_dvbchannel;
-    DeviceReadBuffer *_drb;
+    DTVSignalMonitor *m_sigMon;
+    DVBChannel       *m_dvbChannel;
+    DeviceReadBuffer *m_drb;
 
     // for caching TS monitoring supported value.
-    static QMutex             _rec_supports_ts_monitoring_lock;
-    static QMap<QString,bool> _rec_supports_ts_monitoring;
+    static QMutex             s_rec_supportsTsMonitoringLock;
+    static QMap<QString,bool> s_recSupportsTsMonitoring;
 
     // for implementing Get & Return
-    static QMutex                          _handlers_lock;
-    static QMap<QString,DVBStreamHandler*> _handlers;
-    static QMap<QString,uint>              _handlers_refcnt;
+    static QMutex                          s_handlersLock;
+    static QMap<QString,DVBStreamHandler*> s_handlers;
+    static QMap<QString,uint>              s_handlersRefCnt;
 };
 
 #endif // _DVBSTREAMHANDLER_H_

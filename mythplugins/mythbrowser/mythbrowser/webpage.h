@@ -21,7 +21,7 @@ class WebPage : public QObject
     WebPage (MythBrowser *parent, QRect area, const char* name);
     WebPage (MythBrowser *parent, MythUIWebBrowser *browser);
 
-    ~WebPage();
+    ~WebPage() override;
 
     void SetActive(bool active);
 
@@ -44,11 +44,11 @@ class WebPage : public QObject
   protected:
 
   private:
-    bool                  m_active;
+    bool                  m_active   {false};
 
-    MythBrowser          *m_parent;
-    MythUIWebBrowser     *m_browser;
-    MythUIButtonListItem *m_listItem;
+    MythBrowser          *m_parent   {nullptr};
+    MythUIWebBrowser     *m_browser  {nullptr};
+    MythUIButtonListItem *m_listItem {nullptr};
 };
 
 #endif

@@ -19,17 +19,17 @@ class MBASE_PUBLIC HardwareProfile : public QObject
 
   public:
     HardwareProfile();
-   ~HardwareProfile(void);
+   ~HardwareProfile(void) override = default;
 
     void Enable(void);
-    void Disable(void);
+    static void Disable(void);
 
     void GenerateUUIDs(void);
 
-    QString GetPrivateUUIDFromFile(void) const;
-    bool WritePrivateUUIDToFile(QString uuid);
+    static QString GetPrivateUUIDFromFile(void) ;
+    static bool WritePrivateUUIDToFile(const QString &uuid);
     QString GetPublicUUIDFromFile(void) const;
-    QString GetAdminPasswordFromFile(void) const;
+    static QString GetAdminPasswordFromFile(void) ;
 
     bool NeedsUpdate(void) const;
     bool SubmitProfile(bool updateTime=true);
@@ -39,10 +39,10 @@ class MBASE_PUBLIC HardwareProfile : public QObject
     QString   GetPrivateUUID(void) const { return m_uuid; };
     QDateTime GetLastUpdate(void) const { return m_lastUpdate; };
     QString   GetProfileURL(void) const;
-    QString   GetHardwareProfile(void) const;
+    static QString   GetHardwareProfile(void) ;
 
   private:
-    bool      m_enabled;
+    bool      m_enabled {false};
     QString   m_uuid;
     QString   m_publicuuid;
     QDateTime m_lastUpdate;
@@ -54,12 +54,12 @@ class MBASE_PUBLIC HardwareProfileTask : public PeriodicHouseKeeperTask
   public:
     HardwareProfileTask(void) : PeriodicHouseKeeperTask("HardwareProfiler",
                                             2592000,  // 30 days in seconds
-                                            0.96667f, // up to one day early
-                                            1.03333f, // up to one day late
+                                            0.96667F, // up to one day early
+                                            1.03333F, // up to one day late
                                             86400, // retry daily on error
                                             kHKLocal, kHKRunOnStartup) {}
-    virtual bool DoCheckRun(QDateTime now);
-    virtual bool DoRun(void);
+    bool DoCheckRun(const QDateTime& now) override; // HouseKeeperTask
+    bool DoRun(void) override; // HouseKeeperTask
   private:
 
 };

@@ -16,19 +16,18 @@ class MythQtImage : public MythImage
 {
   public:
     explicit MythQtImage(MythQtPainter *parent) :
-        MythImage(parent, "MythQtImage"),
-        m_Pixmap(NULL), m_bRegenPixmap(false) { }
+        MythImage(parent, "MythQtImage") { }
 
-    void SetChanged(bool change = true);
-    QPixmap *GetPixmap(void) { return m_Pixmap; }
-    void SetPixmap(QPixmap *p) { m_Pixmap = p; }
+    void SetChanged(bool change = true) override; // MythImage
+    QPixmap *GetPixmap(void) { return m_pixmap; }
+    void SetPixmap(QPixmap *p) { m_pixmap = p; }
 
     bool NeedsRegen(void) { return m_bRegenPixmap; }
     void RegeneratePixmap(void);
 
   protected:
-    QPixmap *m_Pixmap;
-    bool m_bRegenPixmap;
+    QPixmap *m_pixmap   {nullptr};
+    bool m_bRegenPixmap {false};
 };
 
 void MythQtImage::SetChanged(bool change)
@@ -43,20 +42,14 @@ void MythQtImage::RegeneratePixmap(void)
 {
     // We allocate the pixmap here so it is done in the UI
     // thread since QPixmap uses non-reentrant X calls.
-    if (!m_Pixmap)
-        m_Pixmap = new QPixmap;
+    if (!m_pixmap)
+        m_pixmap = new QPixmap;
 
-    if (m_Pixmap)
+    if (m_pixmap)
     {
-        *m_Pixmap = QPixmap::fromImage(*((QImage *)this));
+        *m_pixmap = QPixmap::fromImage(*((QImage *)this));
         m_bRegenPixmap = false;
     }
-}
-
-MythQtPainter::MythQtPainter() :
-    MythPainter(),
-    painter(0)
-{
 }
 
 MythQtPainter::~MythQtPainter()
@@ -87,53 +80,53 @@ void MythQtPainter::Begin(QPaintDevice *parent)
 
     MythPainter::Begin(parent);
 
-    painter = new QPainter(parent);
-    clipRegion = QRegion(QRect(0, 0, 0, 0));
+    m_painter = new QPainter(parent);
+    m_clipRegion = QRegion(QRect(0, 0, 0, 0));
 
     DeletePixmaps();
 }
 
 void MythQtPainter::End(void)
 {
-    painter->end();
-    delete painter;
+    m_painter->end();
+    delete m_painter;
 
     MythPainter::End();
 }
 
 void MythQtPainter::SetClipRect(const QRect &clipRect)
 {
-    painter->setClipRect(clipRect);
+    m_painter->setClipRect(clipRect);
     if (!clipRect.isEmpty())
     {
-        painter->setClipping(true);
-        if (clipRegion.isEmpty())
-            clipRegion = QRegion(clipRect);
+        m_painter->setClipping(true);
+        if (m_clipRegion.isEmpty())
+            m_clipRegion = QRegion(clipRect);
         else
-            clipRegion = clipRegion.united(clipRect);
+            m_clipRegion = m_clipRegion.united(clipRect);
     }
     else
-        painter->setClipping(false);
+        m_painter->setClipping(false);
 }
 
 void MythQtPainter::DrawImage(const QRect &r, MythImage *im,
                               const QRect &src, int alpha)
 {
-    if (!painter)
+    if (!m_painter)
     {
         LOG(VB_GENERAL, LOG_ERR,
             "FATAL ERROR: DrawImage called with no painter");
         return;
     }
 
-    MythQtImage *qim = reinterpret_cast<MythQtImage *>(im);
+    auto *qim = reinterpret_cast<MythQtImage *>(im);
 
     if (qim->NeedsRegen())
         qim->RegeneratePixmap();
 
-    painter->setOpacity(static_cast<float>(alpha) / 255.0);
-    painter->drawPixmap(r.topLeft(), *(qim->GetPixmap()), src);
-    painter->setOpacity(1.0);
+    m_painter->setOpacity(static_cast<float>(alpha) / 255.0F);
+    m_painter->drawPixmap(r.topLeft(), *(qim->GetPixmap()), src);
+    m_painter->setOpacity(1.0);
 }
 
 MythImage *MythQtPainter::GetFormatImagePriv()
@@ -143,12 +136,12 @@ MythImage *MythQtPainter::GetFormatImagePriv()
 
 void MythQtPainter::DeleteFormatImagePriv(MythImage *im)
 {
-    MythQtImage *qim = static_cast<MythQtImage *>(im);
+    auto *qim = static_cast<MythQtImage *>(im);
 
     QMutexLocker locker(&m_imageDeleteLock);
     if (qim->GetPixmap())
     {
         m_imageDeleteList.push_back(qim->GetPixmap());
-        qim->SetPixmap(NULL);
+        qim->SetPixmap(nullptr);
     }
 }

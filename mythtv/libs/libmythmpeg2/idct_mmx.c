@@ -81,16 +81,16 @@ static inline void idct_row (int16_t * row, int offset,
 
 /* MMXEXT row IDCT */
 
-#define mmxext_table(c1,c2,c3,c4,c5,c6,c7)	{  c4,  c2, -c4, -c2,	\
-						   c4,  c6,  c4,  c6,	\
-						   c1,  c3, -c1, -c5,	\
-						   c5,  c7,  c3, -c7,	\
-						   c4, -c6,  c4, -c6,	\
-						  -c4,  c2,  c4, -c2,	\
-						   c5, -c1,  c3, -c1,	\
-						   c7,  c3,  c7, -c5 }
+#define mmxext_table(c1,c2,c3,c4,c5,c6,c7)	{  (c4),  (c2), -(c4), -(c2), \
+						   (c4),  (c6),  (c4),  (c6), \
+						   (c1),  (c3), -(c1), -(c5), \
+						   (c5),  (c7),  (c3), -(c7), \
+						   (c4), -(c6),  (c4), -(c6), \
+						  -(c4),  (c2),  (c4), -(c2), \
+						   (c5), -(c1),  (c3), -(c1), \
+						   (c7),  (c3),  (c7), -(c5) }
 
-static inline void mmxext_row_head (int16_t * const row, const int offset,
+static inline void mmxext_row_head (const int16_t * const row, const int offset,
 				    const int16_t * const table)
 {
     movq_m2r (*(row+offset), mm2);	/* mm2 = x6 x4 x2 x0 */
@@ -147,6 +147,7 @@ static inline void mmxext_row (const int16_t * const table,
     psubd_r2r (mm5, mm4);		/* mm4 = a3-b3 a2-b2 + rounder */
 }
 
+/* NOLINTNEXTLINE(readability-non-const-parameter) */
 static inline void mmxext_row_tail (int16_t * const row, const int store)
 {
     psrad_i2r (ROW_SHIFT, mm0);		/* mm0 = y3 y2 */
@@ -165,6 +166,7 @@ static inline void mmxext_row_tail (int16_t * const row, const int store)
     movq_r2m (mm4, *(row+store+4));	/* save y7 y6 y5 y4 */
 }
 
+/* NOLINTNEXTLINE(readability-non-const-parameter) */
 static inline void mmxext_row_mid (int16_t * const row, const int store,
 				   const int offset,
 				   const int16_t * const table)
@@ -196,16 +198,16 @@ static inline void mmxext_row_mid (int16_t * const row, const int store,
 
 /* MMX row IDCT */
 
-#define mmx_table(c1,c2,c3,c4,c5,c6,c7)	{  c4,  c2,  c4,  c6,	\
-					   c4,  c6, -c4, -c2,	\
-					   c1,  c3,  c3, -c7,	\
-					   c5,  c7, -c1, -c5,	\
-					   c4, -c6,  c4, -c2,	\
-					  -c4,  c2,  c4, -c6,	\
-					   c5, -c1,  c7, -c5,	\
-					   c7,  c3,  c3, -c1 }
+#define mmx_table(c1,c2,c3,c4,c5,c6,c7)	{  (c4),  (c2),  (c4),  (c6), \
+					   (c4),  (c6), -(c4), -(c2), \
+					   (c1),  (c3),  (c3), -(c7), \
+					   (c5),  (c7), -(c1), -(c5), \
+					   (c4), -(c6),  (c4), -(c2), \
+					  -(c4),  (c2),  (c4), -(c6), \
+					   (c5), -(c1),  (c7), -(c5), \
+					   (c7),  (c3),  (c3), -(c1) }
 
-static inline void mmx_row_head (int16_t * const row, const int offset,
+static inline void mmx_row_head (const int16_t * const row, const int offset,
 				 const int16_t * const table)
 {
     movq_m2r (*(row+offset), mm2);	/* mm2 = x6 x4 x2 x0 */
@@ -265,6 +267,7 @@ static inline void mmx_row (const int16_t * const table,
     psubd_r2r (mm5, mm7);		/* mm7 = a3-b3 a2-b2 + rounder */
 }
 
+/* NOLINTNEXTLINE(readability-non-const-parameter) */
 static inline void mmx_row_tail (int16_t * const row, const int store)
 {
     psrad_i2r (ROW_SHIFT, mm0);		/* mm0 = y3 y2 */
@@ -289,6 +292,7 @@ static inline void mmx_row_tail (int16_t * const row, const int store)
     movq_r2m (mm7, *(row+store+4));	/* save y7 y6 y5 y4 */
 }
 
+/* NOLINTNEXTLINE(readability-non-const-parameter) */
 static inline void mmx_row_mid (int16_t * const row, const int store,
 				const int offset, const int16_t * const table)
 {
@@ -397,6 +401,7 @@ static inline void idct_col (int16_t * col, int offset)
 
 
 /* MMX column IDCT */
+/* NOLINTNEXTLINE(readability-non-const-parameter) */
 static inline void idct_col (int16_t * const col, const int offset)
 {
 #define T1 13036
@@ -404,15 +409,15 @@ static inline void idct_col (int16_t * const col, const int offset)
 #define T3 43790
 #define C4 23170
 
-    static const short _T1[] ATTR_ALIGN(8) = {T1,T1,T1,T1};
-    static const short _T2[] ATTR_ALIGN(8) = {T2,T2,T2,T2};
-    static const short _T3[] ATTR_ALIGN(8) = {T3,T3,T3,T3};
-    static const short _C4[] ATTR_ALIGN(8) = {C4,C4,C4,C4};
+    static const short kT1[] ATTR_ALIGN(8) = {T1,T1,T1,T1};
+    static const short kT2[] ATTR_ALIGN(8) = {T2,T2,T2,T2};
+    static const short kT3[] ATTR_ALIGN(8) = {T3,T3,T3,T3};
+    static const short kC4[] ATTR_ALIGN(8) = {C4,C4,C4,C4};
 
     /* column code adapted from peter gubanov */
     /* http://www.elecard.com/peter/idct.shtml */
 
-    movq_m2r (*_T1, mm0);		/* mm0 = T1 */
+    movq_m2r (*kT1, mm0);		/* mm0 = T1 */
 
     movq_m2r (*(col+offset+1*8), mm1);	/* mm1 = x1 */
     movq_r2r (mm0, mm2);		/* mm2 = T1 */
@@ -420,7 +425,7 @@ static inline void idct_col (int16_t * const col, const int offset)
     movq_m2r (*(col+offset+7*8), mm4);	/* mm4 = x7 */
     pmulhw_r2r (mm1, mm0);		/* mm0 = T1*x1 */
 
-    movq_m2r (*_T3, mm5);		/* mm5 = T3 */
+    movq_m2r (*kT3, mm5);		/* mm5 = T3 */
     pmulhw_r2r (mm4, mm2);		/* mm2 = T1*x7 */
 
     movq_m2r (*(col+offset+5*8), mm6);	/* mm6 = x5 */
@@ -429,7 +434,7 @@ static inline void idct_col (int16_t * const col, const int offset)
     movq_m2r (*(col+offset+3*8), mm3);	/* mm3 = x3 */
     psubsw_r2r (mm4, mm0);		/* mm0 = v17 */
 
-    movq_m2r (*_T2, mm4);		/* mm4 = T2 */
+    movq_m2r (*kT2, mm4);		/* mm4 = T2 */
     pmulhw_r2r (mm3, mm5);		/* mm5 = (T3-1)*x3 */
 
     paddsw_r2r (mm2, mm1);		/* mm1 = u17 */
@@ -467,7 +472,7 @@ static inline void idct_col (int16_t * const col, const int offset)
     movq_m2r (*(col+offset+0*8), mm3);	/* mm3 = x0 */
     paddsw_r2r (mm5, mm1);		/* mm1 = u12+v12 */
 
-    movq_m2r (*_C4, mm0);		/* mm0 = C4/2 */
+    movq_m2r (*kC4, mm0);		/* mm0 = C4/2 */
     psubsw_r2r (mm5, mm7);		/* mm7 = u12-v12 */
 
     movq_r2m (mm6, *(col+offset+5*8));	/* save b0 in scratch1 */
@@ -595,14 +600,15 @@ static inline void idct (int16_t * const block)				\
 
 #define COPY_MMX(offset,r0,r1,r2)	\
 do {					\
-    movq_m2r (*(block+offset), r0);	\
+    movq_m2r (*(block+(offset)), r0);	\
     dest += stride;			\
-    movq_m2r (*(block+offset+4), r1);	\
+    movq_m2r (*(block+(offset)+4), r1);	\
     movq_r2m (r2, *dest);		\
     packuswb_r2r (r1, r0);		\
 } while (0)
 
-static inline void block_copy (int16_t * const block, uint8_t * dest,
+/* NOLINTNEXTLINE(readability-non-const-parameter) */
+static inline void block_copy (const int16_t * const block, uint8_t * dest,
 			       const int stride)
 {
     movq_m2r (*(block+0*8), mm0);
@@ -630,12 +636,13 @@ do {					\
     dest += stride;			\
     movq_r2m (r3, *dest);		\
     punpcklbw_r2r (mm0, r1);		\
-    paddsw_m2r (*(block+offset), r1);	\
+    paddsw_m2r (*(block+(offset)), r1);	\
     punpckhbw_r2r (mm0, r2);		\
-    paddsw_m2r (*(block+offset+4), r2);	\
+    paddsw_m2r (*(block+(offset)+4), r2);	\
 } while (0)
 
-static inline void block_add (int16_t * const block, uint8_t * dest,
+/* NOLINTNEXTLINE(readability-non-const-parameter) */
+static inline void block_add (const int16_t * const block, uint8_t * dest,
 			      const int stride)
 {
     movq_m2r (*dest, mm1);
@@ -664,6 +671,7 @@ static inline void block_add (int16_t * const block, uint8_t * dest,
 }
 
 
+/* NOLINTNEXTLINE(readability-non-const-parameter) */
 static inline void block_zero (int16_t * const block)
 {
     pxor_r2r (mm0, mm0);
@@ -698,6 +706,7 @@ do {					\
 	pshufw_r2r (reg, reg, 0x00);	\
 } while (0)
 
+/* NOLINTNEXTLINE(readability-non-const-parameter) */
 static inline void block_add_DC (int16_t * const block, uint8_t * dest,
 				 const int stride, const int cpu)
 {
@@ -799,12 +808,11 @@ void mpeg2_idct_mmx_init (void)
 {
     extern uint8_t mpeg2_scan_norm[64];
     extern uint8_t mpeg2_scan_alt[64];
-    int i, j;
 
     /* the mmx/mmxext idct uses a reordered input, so we patch scan tables */
 
-    for (i = 0; i < 64; i++) {
-	j = mpeg2_scan_norm[i];
+    for (int i = 0; i < 64; i++) {
+	int j = mpeg2_scan_norm[i];
 	mpeg2_scan_norm[i] = (j & 0x38) | ((j & 6) >> 1) | ((j & 1) << 2);
 	j = mpeg2_scan_alt[i];
 	mpeg2_scan_alt[i] = (j & 0x38) | ((j & 6) >> 1) | ((j & 1) << 2);

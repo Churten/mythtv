@@ -12,19 +12,6 @@
 #include "proglist.h"
 #include "mythdate.h"
 
-PhrasePopup::PhrasePopup(MythScreenStack *parentStack,
-                         ProgLister *parent,
-                         RecSearchType searchType,
-                         const QStringList &list,
-                         const QString &currentValue) :
-    MythScreenType(parentStack, "phrasepopup"),
-    m_parent(parent), m_searchType(searchType),  m_list(list),
-    m_titleText(NULL), m_phraseList(NULL), m_phraseEdit(NULL),
-    m_okButton(NULL), m_deleteButton(NULL), m_recordButton(NULL)
-{
-    m_currentValue = currentValue;
-}
-
 bool PhrasePopup::Create()
 {
     if (!LoadWindowFromXML("schedule-ui.xml", "phrasepopup", this))
@@ -47,18 +34,18 @@ bool PhrasePopup::Create()
     if (m_searchType == kPowerSearch)
     {
         m_titleText->SetText(tr("Select Search"));
-        new MythUIButtonListItem(m_phraseList, tr("<New Search>"), NULL, false);
+        new MythUIButtonListItem(m_phraseList, tr("<New Search>"), nullptr, false);
         m_okButton->SetText(tr("Edit"));
     }
     else
     {
         m_titleText->SetText(tr("Phrase"));
-        new MythUIButtonListItem(m_phraseList, tr("<New Phrase>"), NULL, false);
+        new MythUIButtonListItem(m_phraseList, tr("<New Phrase>"), nullptr, false);
     }
 
     for (int x = 0; x < m_list.size(); x++)
     {
-        new MythUIButtonListItem(m_phraseList, m_list.at(x), NULL, false);
+        new MythUIButtonListItem(m_phraseList, m_list.at(x), nullptr, false);
     }
 
     connect(m_phraseList, SIGNAL(itemClicked(MythUIButtonListItem*)),
@@ -144,7 +131,7 @@ void PhrasePopup::deleteClicked(void)
         return;
 
     QString text = m_list[view];
-    QString qphrase = text;
+    const QString& qphrase = text;
 
     MSqlQuery query(MSqlQuery::InitCon());
     query.prepare("DELETE FROM keyword "
@@ -173,9 +160,8 @@ void PhrasePopup::deleteClicked(void)
 void PhrasePopup::recordClicked(void)
 {
     QString text = m_phraseEdit->GetText();
-    bool genreflag = false;
-
     QString what = text;
+    QString fromgenre;
 
     if (text.trimmed().isEmpty())
         return;
@@ -192,7 +178,12 @@ void PhrasePopup::recordClicked(void)
             return;
 
         MSqlBindings bindings;
-        genreflag = m_parent->PowerStringToSQL(text, what, bindings);
+        if (ProgLister::PowerStringToSQL(text, what, bindings))
+        {
+            fromgenre = QString("LEFT JOIN programgenres ON "
+                                "program.chanid = programgenres.chanid AND "
+                                "program.starttime = programgenres.starttime ");
+        }
 
         if (what.isEmpty())
             return;
@@ -200,22 +191,12 @@ void PhrasePopup::recordClicked(void)
         MSqlEscapeAsAQuery(what, bindings);
     }
 
-    RecordingRule *record = new RecordingRule();
+    auto *record = new RecordingRule();
 
-    if (genreflag)
-    {
-        QString fromgenre = QString("LEFT JOIN programgenres ON "
-                                    "program.chanid = programgenres.chanid AND "
-                                    "program.starttime = programgenres.starttime ");
-        record->LoadBySearch(m_searchType, text, what, fromgenre);
-    }
-    else
-    {
-        record->LoadBySearch(m_searchType, text, what);
-    }
+    record->LoadBySearch(m_searchType, text, what, fromgenre);
 
     MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
-    ScheduleEditor *schededit = new ScheduleEditor(mainStack, record);
+    auto *schededit = new ScheduleEditor(mainStack, record);
     if (schededit->Create())
     {
         mainStack->AddScreen(schededit);
@@ -226,19 +207,6 @@ void PhrasePopup::recordClicked(void)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-
-PowerSearchPopup::PowerSearchPopup(MythScreenStack *parentStack,
-                                   ProgLister *parent,
-                                   RecSearchType searchType,
-                                   const QStringList &list,
-                                   const QString &currentValue)
-    : MythScreenType(parentStack, "phrasepopup"),
-      m_parent(parent), m_searchType(searchType), m_list(list),
-      m_currentValue(currentValue),
-      m_titleText(NULL), m_phraseList(NULL), m_phraseEdit(NULL),
-      m_editButton(NULL), m_deleteButton(NULL), m_recordButton(NULL)
-{
-}
 
 bool PowerSearchPopup::Create()
 {
@@ -259,11 +227,11 @@ bool PowerSearchPopup::Create()
     }
 
     m_titleText->SetText(tr("Select Search"));
-    new MythUIButtonListItem(m_phraseList, tr("<New Search>"), NULL, false);
+    new MythUIButtonListItem(m_phraseList, tr("<New Search>"), nullptr, false);
 
     for (int x = 0; x < m_list.size(); x++)
     {
-        new MythUIButtonListItem(m_phraseList, m_list.at(x), NULL, false);
+        new MythUIButtonListItem(m_phraseList, m_list.at(x), nullptr, false);
     }
 
     connect(m_phraseList, SIGNAL(itemClicked(MythUIButtonListItem*)),
@@ -324,8 +292,7 @@ void PowerSearchPopup::editClicked(void)
     if (m_phraseList->GetCurrentPos() != 0)
         currentItem = m_phraseList->GetValue();
 
-    EditPowerSearchPopup *popup = new EditPowerSearchPopup(
-        popupStack, m_parent, currentItem);
+    auto *popup = new EditPowerSearchPopup(popupStack, m_parent, currentItem);
 
     if (!popup->Create())
     {
@@ -346,7 +313,7 @@ void PowerSearchPopup::deleteClicked(void)
         return;
 
     QString text = m_list[view];
-    QString qphrase = text;
+    const QString& qphrase = text;
 
     MSqlQuery query(MSqlQuery::InitCon());
     query.prepare("DELETE FROM keyword "
@@ -375,9 +342,8 @@ void PowerSearchPopup::deleteClicked(void)
 void PowerSearchPopup::recordClicked(void)
 {
     QString text = m_phraseList->GetValue();
-    bool genreflag = false;
-
     QString what = text;
+    QString fromgenre;
 
     if (text.trimmed().isEmpty())
         return;
@@ -394,7 +360,13 @@ void PowerSearchPopup::recordClicked(void)
             return;
 
         MSqlBindings bindings;
-        genreflag = m_parent->PowerStringToSQL(text, what, bindings);
+        if (ProgLister::PowerStringToSQL(text, what, bindings))
+        {
+            fromgenre = QString(
+                "LEFT JOIN programgenres ON "
+                "program.chanid = programgenres.chanid AND "
+                "program.starttime = programgenres.starttime ");
+        }
 
         if (what.isEmpty())
             return;
@@ -402,23 +374,12 @@ void PowerSearchPopup::recordClicked(void)
         MSqlEscapeAsAQuery(what, bindings);
     }
 
-    RecordingRule *record = new RecordingRule();
+    auto *record = new RecordingRule();
 
-    if (genreflag)
-    {
-        QString fromgenre = QString(
-            "LEFT JOIN programgenres ON "
-            "program.chanid = programgenres.chanid AND "
-            "program.starttime = programgenres.starttime ");
-        record->LoadBySearch(m_searchType, text, what, fromgenre);
-    }
-    else
-    {
-        record->LoadBySearch(m_searchType, text, what);
-    }
+    record->LoadBySearch(m_searchType, text, what, fromgenre);
 
     MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
-    ScheduleEditor *schededit = new ScheduleEditor(mainStack, record);
+    auto *schededit = new ScheduleEditor(mainStack, record);
     if (schededit->Create())
     {
         mainStack->AddScreen(schededit);
@@ -434,10 +395,7 @@ void PowerSearchPopup::recordClicked(void)
 EditPowerSearchPopup::EditPowerSearchPopup(MythScreenStack *parentStack,
                                            ProgLister *parent,
                                            const QString &currentValue)
-    : MythScreenType(parentStack, "phrasepopup"),
-        m_titleEdit(NULL), m_subtitleEdit(NULL), m_descEdit(NULL),
-        m_categoryList(NULL), m_genreList(NULL), m_channelList(NULL),
-        m_okButton(NULL)
+    : MythScreenType(parentStack, "phrasepopup")
 {
     m_parent = parent;
 
@@ -522,21 +480,21 @@ void EditPowerSearchPopup::initLists(void)
     // category type
     m_categories.clear();
     new MythUIButtonListItem(
-        m_categoryList, tr("(Any Program Type)"), NULL, false);
+        m_categoryList, tr("(Any Program Type)"), nullptr, false);
     m_categories << "";
-    new MythUIButtonListItem(m_categoryList, tr("Movies"), NULL, false);
+    new MythUIButtonListItem(m_categoryList, tr("Movies"), nullptr, false);
     m_categories << "movie";
-    new MythUIButtonListItem(m_categoryList, tr("Series"), NULL, false);
+    new MythUIButtonListItem(m_categoryList, tr("Series"), nullptr, false);
     m_categories << "series";
-    new MythUIButtonListItem(m_categoryList, tr("Show"), NULL, false);
+    new MythUIButtonListItem(m_categoryList, tr("Show"), nullptr, false);
     m_categories << "tvshow";
-    new MythUIButtonListItem(m_categoryList, tr("Sports"), NULL, false);
+    new MythUIButtonListItem(m_categoryList, tr("Sports"), nullptr, false);
     m_categories << "sports";
     m_categoryList->SetItemCurrent(m_categories.indexOf(field[3]));
 
     // genre
     m_genres.clear();
-    new MythUIButtonListItem(m_genreList, tr("(Any Genre)"), NULL, false);
+    new MythUIButtonListItem(m_genreList, tr("(Any Genre)"), nullptr, false);
     m_genres << "";
 
     MSqlQuery query(MSqlQuery::InitCon());
@@ -551,7 +509,7 @@ void EditPowerSearchPopup::initLists(void)
             if (category.isEmpty() || category.trimmed().isEmpty())
                 continue;
             category = query.value(0).toString();
-            new MythUIButtonListItem(m_genreList, category, NULL, false);
+            new MythUIButtonListItem(m_genreList, category, nullptr, false);
             m_genres << category;
             if (category == field[4])
                 m_genreList->SetItemCurrent(m_genreList->GetCount() - 1);
@@ -563,28 +521,28 @@ void EditPowerSearchPopup::initLists(void)
         "ChannelOrdering", "channum");
 
     m_channels.clear();
-    new MythUIButtonListItem(m_channelList, tr("(Any Channel)"), NULL, false);
+    new MythUIButtonListItem(m_channelList, tr("(Any Channel)"), nullptr, false);
     m_channels << "";
 
     ChannelInfoList channels = ChannelUtil::GetChannels(0, true, "callsign");
     ChannelUtil::SortChannels(channels, channelOrdering, true);
 
-    MythUIButtonListItem *item;
-    for (uint i = 0; i < channels.size(); ++i)
+    for (auto & channel : channels)
     {
-        QString chantext = channels[i].GetFormatted(ChannelInfo::kChannelShort);
+        QString chantext = channel.GetFormatted(ChannelInfo::kChannelShort);
 
-        m_parent->m_viewList << QString::number(channels[i].chanid);
+        m_parent->m_viewList << QString::number(channel.m_chanId);
         m_parent->m_viewTextList << chantext;
 
-        item = new MythUIButtonListItem(m_channelList, chantext, NULL, false);
+        auto *item = new MythUIButtonListItem(m_channelList, chantext,
+                                              nullptr, false);
 
         InfoMap chanmap;
-        channels[i].ToMap(chanmap);
+        channel.ToMap(chanmap);
         item->SetTextFromMap(chanmap);
 
-        m_channels << channels[i].callsign;
-        if (channels[i].callsign == field[5])
+        m_channels << channel.m_callSign;
+        if (channel.m_callSign == field[5])
             m_channelList->SetItemCurrent(m_channelList->GetCount() - 1);
     }
 }

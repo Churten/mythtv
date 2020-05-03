@@ -31,6 +31,7 @@
 #include <audiooutpututil.h>
 #include <mythlogging.h>
 #include <decoderhandler.h>
+#include <mythavutil.h>
 
 using namespace std;
 
@@ -53,23 +54,22 @@ extern "C" {
 
 /****************************************************************************/
 
-typedef QMap<QString,QString> ShoutCastMetaMap;
+using ShoutCastMetaMap = QMap<QString,QString>;
 
 class ShoutCastMetaParser
 {
   public:
-    ShoutCastMetaParser(void) :
-        m_meta_artist_pos(-1), m_meta_title_pos(-1), m_meta_album_pos(-1) { }
-    ~ShoutCastMetaParser(void) { }
+    ShoutCastMetaParser(void) = default;
+    ~ShoutCastMetaParser(void) = default;
 
     void setMetaFormat(const QString &metaformat);
-    ShoutCastMetaMap parseMeta(const QString &meta);
+    ShoutCastMetaMap parseMeta(const QString &mdata);
 
   private:
-    QString m_meta_format;
-    int m_meta_artist_pos;
-    int m_meta_title_pos;
-    int m_meta_album_pos;
+    QString m_metaFormat;
+    int     m_metaArtistPos {-1};
+    int     m_metaTitlePos  {-1};
+    int     m_metaAlbumPos  {-1};
 };
 
 void ShoutCastMetaParser::setMetaFormat(const QString &metaformat)
@@ -81,24 +81,24 @@ void ShoutCastMetaParser::setMetaFormat(const QString &metaformat)
   %b - album
   %r - random bytes
  */
-    m_meta_format = metaformat;
+    m_metaFormat = metaformat;
 
-    m_meta_artist_pos = 0;
-    m_meta_title_pos = 0;
-    m_meta_album_pos = 0;
+    m_metaArtistPos = 0;
+    m_metaTitlePos  = 0;
+    m_metaAlbumPos  = 0;
 
     int assign_index = 1;
     int pos = 0;
 
-    pos = m_meta_format.indexOf("%", pos);
+    pos = m_metaFormat.indexOf("%", pos);
     while (pos >= 0)
     {
         pos++;
 
         QChar ch;
 
-        if (pos < m_meta_format.length())
-            ch = m_meta_format.at(pos);
+        if (pos < m_metaFormat.length())
+            ch = m_metaFormat.at(pos);
 
         if (!ch.isNull() && ch == '%')
         {
@@ -107,61 +107,62 @@ void ShoutCastMetaParser::setMetaFormat(const QString &metaformat)
         else if (!ch.isNull() && (ch == 'r' || ch == 'a' || ch == 'b' || ch == 't'))
         {
             if (ch == 'a')
-                m_meta_artist_pos = assign_index;
+                m_metaArtistPos = assign_index;
 
             if (ch == 'b')
-                m_meta_album_pos = assign_index;
+                m_metaAlbumPos = assign_index;
 
             if (ch == 't')
-                m_meta_title_pos = assign_index;
+                m_metaTitlePos = assign_index;
 
             assign_index++;
         }
         else
+        {
             LOG(VB_GENERAL, LOG_ERR,
                 QString("ShoutCastMetaParser: malformed metaformat '%1'")
-                    .arg(m_meta_format));
+                    .arg(m_metaFormat));
+        }
 
-        pos = m_meta_format.indexOf("%", pos);
+        pos = m_metaFormat.indexOf("%", pos);
     }
 
-    m_meta_format.replace("%a", "(.*)");
-    m_meta_format.replace("%t", "(.*)");
-    m_meta_format.replace("%b", "(.*)");
-    m_meta_format.replace("%r", "(.*)");
-    m_meta_format.replace("%%", "%");
+    m_metaFormat.replace("%a", "(.*)");
+    m_metaFormat.replace("%t", "(.*)");
+    m_metaFormat.replace("%b", "(.*)");
+    m_metaFormat.replace("%r", "(.*)");
+    m_metaFormat.replace("%%", "%");
 }
 
 ShoutCastMetaMap ShoutCastMetaParser::parseMeta(const QString &mdata)
 {
     ShoutCastMetaMap result;
     int title_begin_pos = mdata.indexOf("StreamTitle='");
-    int title_end_pos;
 
     if (title_begin_pos >= 0)
     {
         title_begin_pos += 13;
-        title_end_pos = mdata.indexOf("';", title_begin_pos);
+        int title_end_pos = mdata.indexOf("';", title_begin_pos);
         QString title = mdata.mid(title_begin_pos, title_end_pos - title_begin_pos);
         QRegExp rx;
-        rx.setPattern(m_meta_format);
+        rx.setPattern(m_metaFormat);
         if (rx.indexIn(title) != -1)
         {
             LOG(VB_PLAYBACK, LOG_INFO, QString("ShoutCast: Meta     : '%1'")
                     .arg(mdata));
             LOG(VB_PLAYBACK, LOG_INFO,
                 QString("ShoutCast: Parsed as: '%1' by '%2'")
-                    .arg(rx.cap(m_meta_title_pos))
-                    .arg(rx.cap(m_meta_artist_pos)));
+                    .arg(rx.cap(m_metaTitlePos))
+                    .arg(rx.cap(m_metaArtistPos)));
 
-            if (m_meta_title_pos > 0)
-                result["title"] = rx.cap(m_meta_title_pos);
+            if (m_metaTitlePos > 0)
+                result["title"] = rx.cap(m_metaTitlePos);
 
-            if (m_meta_artist_pos > 0)
-                result["artist"] = rx.cap(m_meta_artist_pos);
+            if (m_metaArtistPos > 0)
+                result["artist"] = rx.cap(m_metaArtistPos);
 
-            if (m_meta_album_pos > 0)
-                result["album"] = rx.cap(m_meta_album_pos);
+            if (m_metaAlbumPos > 0)
+                result["album"] = rx.cap(m_metaAlbumPos);
         }
     }
 
@@ -173,9 +174,9 @@ static void myth_av_log(void *ptr, int level, const char* fmt, va_list vl)
     if (VERBOSE_LEVEL_NONE)
         return;
 
-    static QString full_line("");
-    static const int msg_len = 255;
-    static QMutex string_lock;
+    static QString   s_fullLine("");
+    static constexpr int kMsgLen = 255;
+    static QMutex    s_stringLock;
     uint64_t   verbose_mask  = VB_GENERAL;
     LogLevel_t verbose_level = LOG_DEBUG;
 
@@ -208,49 +209,41 @@ static void myth_av_log(void *ptr, int level, const char* fmt, va_list vl)
     if (!VERBOSE_LEVEL_CHECK(verbose_mask, verbose_level))
         return;
 
-    string_lock.lock();
-    if (full_line.isEmpty() && ptr) {
+    s_stringLock.lock();
+    if (s_fullLine.isEmpty() && ptr) {
         AVClass* avc = *(AVClass**)ptr;
-        full_line.sprintf("[%s @ %p] ", avc->item_name(ptr), avc);
+        s_fullLine.sprintf("[%s @ %p] ", avc->item_name(ptr), avc);
     }
 
-    char str[msg_len+1];
-    int bytes = vsnprintf(str, msg_len+1, fmt, vl);
+    char str[kMsgLen+1];
+    int bytes = vsnprintf(str, kMsgLen+1, fmt, vl);
 
     // check for truncated messages and fix them
-    if (bytes > msg_len)
+    if (bytes > kMsgLen)
     {
         LOG(VB_GENERAL, LOG_WARNING,
             QString("Libav log output truncated %1 of %2 bytes written")
-                .arg(msg_len).arg(bytes));
-        str[msg_len-1] = '\n';
+                .arg(kMsgLen).arg(bytes));
+        str[kMsgLen-1] = '\n';
     }
 
-    full_line += QString(str);
-    if (full_line.endsWith("\n"))
+    s_fullLine += QString(str);
+    if (s_fullLine.endsWith("\n"))
     {
-        LOG(verbose_mask, verbose_level, full_line.trimmed());
-        full_line.truncate(0);
+        LOG(verbose_mask, verbose_level, s_fullLine.trimmed());
+        s_fullLine.truncate(0);
     }
-    string_lock.unlock();
+    s_stringLock.unlock();
 }
 
 avfDecoder::avfDecoder(const QString &file, DecoderFactory *d, AudioOutput *o) :
-    Decoder(d, o),
-    m_inited(false),              m_userStop(false),
-    m_stat(0),                    m_finish(false),
-    m_freq(0),                    m_bitrate(0),
-    m_channels(0),
-    m_seekTime(-1.0),             m_devicename(""),
-    m_inputFormat(NULL),          m_inputContext(NULL),
-    m_audioDec(NULL),             m_inputIsFile(false),
-    m_mdataTimer(NULL),           m_errCode(0)
+    Decoder(d, o)
 {
     MThread::setObjectName("avfDecoder");
     setURL(file);
 
     m_outputBuffer =
-        (uint8_t *)av_malloc(AudioOutput::MAX_SIZE_BUFFER);
+        (uint8_t *)av_malloc(AudioOutput::kMaxSizeBuffer);
 
     bool debug = VERBOSE_LEVEL_CHECK(VB_LIBAV, LOG_ANY);
     av_log_set_level((debug) ? AV_LOG_DEBUG : AV_LOG_ERROR);
@@ -259,8 +252,7 @@ avfDecoder::avfDecoder(const QString &file, DecoderFactory *d, AudioOutput *o) :
 
 avfDecoder::~avfDecoder(void)
 {
-    if (m_mdataTimer)
-        delete m_mdataTimer;
+    delete m_mdataTimer;
 
     if (m_inited)
         deinit();
@@ -268,8 +260,7 @@ avfDecoder::~avfDecoder(void)
     if (m_outputBuffer)
         av_freep(&m_outputBuffer);
 
-    if (m_inputContext)
-        delete m_inputContext;
+    delete m_inputContext;
 }
 
 void avfDecoder::stop()
@@ -297,14 +288,9 @@ bool avfDecoder::initialize()
         return false;
     }
 
-    // register av codecs
-    av_register_all();
-
     output()->PauseUntilBuffered();
 
-    if (m_inputContext)
-        delete m_inputContext;
-
+    delete m_inputContext;
     m_inputContext = new RemoteAVFormatContext(getURL());
 
     if (!m_inputContext->isOpen())
@@ -326,7 +312,7 @@ bool avfDecoder::initialize()
         // we don't get metadata updates for MMS streams so grab the metadata from the headers
         if (getURL().startsWith("mmsh://"))
         {
-            AVDictionaryEntry *tag = NULL;
+            AVDictionaryEntry *tag = nullptr;
             MusicMetadata mdata =  gPlayer->getDecoderHandler()->getMetadata();
 
             tag = av_dict_get(m_inputContext->getContext()->metadata, "title", tag, AV_DICT_IGNORE_SUFFIX);
@@ -345,7 +331,7 @@ bool avfDecoder::initialize()
 
     // determine the stream format
     // this also populates information needed for metadata
-    if (avformat_find_stream_info(m_inputContext->getContext(), NULL) < 0)
+    if (avformat_find_stream_info(m_inputContext->getContext(), nullptr) < 0)
     {
         error("Could not determine the stream format.");
         deinit();
@@ -354,7 +340,7 @@ bool avfDecoder::initialize()
 
     // let FFmpeg finds the best audio stream (should only be one), also catter
     // should the file/stream not be an audio one
-    AVCodec *codec;
+    AVCodec *codec = nullptr;
     int selTrack = av_find_best_stream(m_inputContext->getContext(), AVMEDIA_TYPE_AUDIO,
                                        -1, -1, &codec, 0);
 
@@ -366,12 +352,13 @@ bool avfDecoder::initialize()
     }
 
     // Store the audio codec of the stream
-    m_audioDec = m_inputContext->getContext()->streams[selTrack]->codec;
+    m_audioDec = gCodecMap->getCodecContext
+        (m_inputContext->getContext()->streams[selTrack]);
 
     // Store the input format of the context
     m_inputFormat = m_inputContext->getContext()->iformat;
 
-    if (avcodec_open2(m_audioDec, codec, NULL) < 0)
+    if (avcodec_open2(m_audioDec, codec, nullptr) < 0)
     {
         error(QString("Could not open audio codec: %1")
             .arg(m_audioDec->codec_id));
@@ -427,7 +414,7 @@ void avfDecoder::deinit()
     m_inited = m_userStop = m_finish = false;
     m_freq = m_bitrate = 0;
     m_stat = m_channels = 0;
-    setOutput(0);
+    setOutput(nullptr);
 
     // Cleanup here
     if (m_inputContext && m_inputContext->getContext())
@@ -435,13 +422,12 @@ void avfDecoder::deinit()
         for (uint i = 0; i < m_inputContext->getContext()->nb_streams; i++)
         {
             AVStream *st = m_inputContext->getContext()->streams[i];
-            if (st->codec && st->codec->codec)
-                avcodec_close(st->codec);
+            gCodecMap->freeCodecContext(st);
         }
     }
 
-    m_audioDec = NULL;
-    m_inputFormat = NULL;
+    m_audioDec = nullptr;
+    m_inputFormat = nullptr;
 }
 
 void avfDecoder::run()
@@ -453,7 +439,8 @@ void avfDecoder::run()
         return;
     }
 
-    AVPacket pkt, tmp_pkt;
+    AVPacket pkt;
+    AVPacket tmp_pkt;
     memset(&pkt, 0, sizeof(AVPacket));
     av_init_packet(&pkt);
 
@@ -532,11 +519,8 @@ void avfDecoder::run()
                 // never go below 1s buffered
                 if (buffered < 1000)
                     break;
-                else
-                {
-                    // wait
-                    usleep((buffered - 1000) * 1000);
-                }
+                // wait
+                usleep((buffered - 1000) * 1000);
             }
         }
     }
@@ -567,11 +551,11 @@ void avfDecoder::run()
 
 void avfDecoder::checkMetatdata(void)
 {
-    uint8_t *mdata = NULL;
+    uint8_t *pdata = nullptr;
 
-    if (av_opt_get(m_inputContext->getContext(), "icy_metadata_packet", AV_OPT_SEARCH_CHILDREN, &mdata) >= 0)
+    if (av_opt_get(m_inputContext->getContext(), "icy_metadata_packet", AV_OPT_SEARCH_CHILDREN, &pdata) >= 0)
     {
-        QString s = QString::fromUtf8((const char*) mdata);
+        QString s = QString::fromUtf8((const char*) pdata);
 
         if (m_lastMetadata != s)
         {
@@ -594,7 +578,7 @@ void avfDecoder::checkMetatdata(void)
             dispatch(ev);
         }
 
-        av_free(mdata);
+        av_free(pdata);
     }
 
     if (m_inputContext->getContext()->pb)
@@ -620,13 +604,13 @@ bool avfDecoderFactory::supports(const QString &source) const
 
 const QString &avfDecoderFactory::extension() const
 {
-    return MetaIO::ValidFileExtensions;
+    return MetaIO::kValidFileExtensions;
 }
 
 const QString &avfDecoderFactory::description() const
 {
-    static QString desc(tr("Internal Decoder"));
-    return desc;
+    static QString s_desc(tr("Internal Decoder"));
+    return s_desc;
 }
 
 Decoder *avfDecoderFactory::create(const QString &file, AudioOutput *output, bool deletable)
@@ -634,15 +618,15 @@ Decoder *avfDecoderFactory::create(const QString &file, AudioOutput *output, boo
     if (deletable)
         return new avfDecoder(file, this, output);
 
-    static avfDecoder *decoder = 0;
-    if (!decoder)
+    static avfDecoder *s_decoder = nullptr;
+    if (!s_decoder)
     {
-        decoder = new avfDecoder(file, this, output);
+        s_decoder = new avfDecoder(file, this, output);
     }
     else
     {
-        decoder->setOutput(output);
+        s_decoder->setOutput(output);
     }
 
-    return decoder;
+    return s_decoder;
 }

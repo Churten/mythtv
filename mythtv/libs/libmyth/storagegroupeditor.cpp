@@ -1,10 +1,11 @@
 // Qt headers
+#include <QCoreApplication>
 #include <QDir>
 #include <QFile>
 #include <QRegExp>
 #include <QUrl>
 #include <QVector>
-#include <QCoreApplication>
+#include <utility>
 
 // MythTV headers
 #include "storagegroupeditor.h"
@@ -19,7 +20,7 @@
 /****************************************************************************/
 
 StorageGroupEditor::StorageGroupEditor(QString group) :
-    m_group(group)
+    m_group(std::move(group))
 {
     SetLabel();
 }
@@ -61,8 +62,7 @@ bool StorageGroupEditor::keyPressEvent(QKeyEvent *e)
     }
     if (handled)
         return handled;
-    else
-        return GroupSetting::keyPressEvent(e);
+    return GroupSetting::keyPressEvent(e);
 }
 
 bool StorageGroupEditor::canDelete(void)
@@ -95,8 +95,7 @@ void StorageGroupEditor::ShowDeleteDialog()
     }
 
     MythScreenStack *popupStack = GetMythMainWindow()->GetStack("popup stack");
-    MythConfirmationDialog *confirmDelete =
-        new MythConfirmationDialog(popupStack, message, true);
+    auto *confirmDelete = new MythConfirmationDialog(popupStack, message, true);
     if (confirmDelete->Create())
     {
         connect(confirmDelete, SIGNAL(haveResult(bool)),
@@ -141,10 +140,10 @@ void StorageGroupEditor::DoDeleteSlot(bool doDelete)
 
 StorageGroupDirStorage::StorageGroupDirStorage(StorageUser *_user,
                                                int id,
-                                               const QString &group) :
+                                               QString group) :
     SimpleDBStorage(_user, "storagegroup", "dirname"),
     m_id(id),
-    m_group(group)
+    m_group(std::move(group))
 {
 }
 
@@ -154,7 +153,7 @@ QString StorageGroupDirStorage::GetSetClause(MSqlBindings &bindings) const
 
     QString query("dirname = " + dirnameTag);
 
-    bindings.insert(dirnameTag, user->GetDBValue());
+    bindings.insert(dirnameTag, m_user->GetDBValue());
 
     return query;
 }
@@ -202,8 +201,7 @@ void StorageGroupDirSetting::ShowDeleteDialog()
     QString message =
         tr("Remove '%1'\nDirectory From Storage Group?").arg(getValue());
     MythScreenStack *popupStack = GetMythMainWindow()->GetStack("popup stack");
-    MythConfirmationDialog *confirmDelete =
-        new MythConfirmationDialog(popupStack, message, true);
+    auto *confirmDelete = new MythConfirmationDialog(popupStack, message, true);
 
     if (confirmDelete->Create())
     {
@@ -238,8 +236,7 @@ void StorageGroupEditor::Load(void)
 {
     clearSettings();
 
-    ButtonStandardSetting *button =
-        new ButtonStandardSetting(tr("(Add New Directory)"));
+    auto *button = new ButtonStandardSetting(tr("(Add New Directory)"));
     connect(button, SIGNAL(clicked()), SLOT(ShowFileBrowser()));
     addChild(button);
 
@@ -283,7 +280,7 @@ void StorageGroupEditor::ShowFileBrowser()
 {
     MythScreenStack *popupStack = GetMythMainWindow()->GetStack("popup stack");
 
-    MythUIFileBrowser *settingdialog = new MythUIFileBrowser(popupStack, "");
+    auto *settingdialog = new MythUIFileBrowser(popupStack, "");
     settingdialog->SetTypeFilter(QDir::AllDirs | QDir::Drives);
 
     if (settingdialog->Create())
@@ -299,7 +296,9 @@ void StorageGroupEditor::customEvent(QEvent *event)
 {
     if (event->type() == DialogCompletionEvent::kEventType)
     {
-        DialogCompletionEvent *dce = (DialogCompletionEvent*)(event);
+        auto *dce = dynamic_cast<DialogCompletionEvent*>(event);
+        if (dce == nullptr)
+            return;
         QString resultid  = dce->GetId();
 
         if (resultid == "editsetting")
@@ -348,7 +347,7 @@ StorageGroupListEditor::StorageGroupListEditor(void)
 void StorageGroupListEditor::AddSelection(const QString &label,
                                           const QString &value)
 {
-    StorageGroupEditor *button = new StorageGroupEditor(value);
+    auto *button = new StorageGroupEditor(value);
     button->setLabel(label);
     addChild(button);
 }
@@ -368,8 +367,10 @@ void StorageGroupListEditor::Load(void)
                   "ORDER BY groupname;");
     query.bindValue(":HOSTNAME", gCoreContext->GetHostName());
     if (!query.exec())
+    {
         MythDB::DBError("StorageGroup::Load getting local group names",
                              query);
+    }
     else
     {
         while (query.next())
@@ -380,8 +381,10 @@ void StorageGroupListEditor::Load(void)
                   "FROM storagegroup "
                   "ORDER BY groupname;");
     if (!query.exec())
+    {
         MythDB::DBError("StorageGroup::Load getting all group names",
                              query);
+    }
     else
     {
         while (query.next())
@@ -432,17 +435,18 @@ void StorageGroupListEditor::Load(void)
     {
         groupName = StorageGroup::kSpecialGroups[curGroup];
         if (createAddSpecialGroupButton[curGroup])
+        {
             AddSelection(tr("(Create %1 group)")
                 .arg(QCoreApplication::translate("(StorageGroups)",
                     groupName.toLatin1().constData())),
                 groupName);
+        }
         curGroup++;
     }
 
     if (isMaster)
     {
-        ButtonStandardSetting *newGroup =
-            new ButtonStandardSetting(tr("(Create new group)"));
+        auto *newGroup = new ButtonStandardSetting(tr("(Create new group)"));
         connect(newGroup, SIGNAL(clicked()), SLOT(ShowNewGroupDialog()));
         addChild(newGroup);
     }
@@ -454,9 +458,11 @@ void StorageGroupListEditor::Load(void)
             if ((masterNames[curName] != "Default") &&
                 (!StorageGroup::kSpecialGroups.contains(masterNames[curName])) &&
                 (!names.contains(masterNames[curName])))
+            {
                 AddSelection(tr("(Create %1 group)")
                                 .arg(masterNames[curName]),
                              masterNames[curName]);
+            }
             curName++;
         }
     }
@@ -468,8 +474,7 @@ void StorageGroupListEditor::Load(void)
 void StorageGroupListEditor::ShowNewGroupDialog()
 {
     MythScreenStack *popupStack = GetMythMainWindow()->GetStack("popup stack");
-    MythTextInputDialog *settingdialog =
-        new MythTextInputDialog(popupStack,
+    auto *settingdialog = new MythTextInputDialog(popupStack,
                                 tr("Enter the name of the new storage group"));
 
     if (settingdialog->Create())
@@ -484,9 +489,9 @@ void StorageGroupListEditor::ShowNewGroupDialog()
     }
 }
 
-void StorageGroupListEditor::CreateNewGroup(QString name)
+void StorageGroupListEditor::CreateNewGroup(const QString& name)
 {
-    StorageGroupEditor *button = new StorageGroupEditor(name);
+    auto *button = new StorageGroupEditor(name);
     button->setLabel(name + tr(" Storage Group Directories"));
     button->Load();
     addChild(button);

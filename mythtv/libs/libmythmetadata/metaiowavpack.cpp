@@ -1,4 +1,4 @@
-#include <math.h>
+#include <cmath>
 
 #include <apetag.h>
 #include <apeitem.h>
@@ -10,15 +10,6 @@
 #include "musicmetadata.h"
 #include "musicutils.h"
 
-MetaIOWavPack::MetaIOWavPack(void)
-    : MetaIOTagLib()
-{
-}
-
-MetaIOWavPack::~MetaIOWavPack(void)
-{
-}
-
 /*!
 * \brief Open the file to read the tag
 *
@@ -28,12 +19,12 @@ MetaIOWavPack::~MetaIOWavPack(void)
 TagLib::WavPack::File *MetaIOWavPack::OpenFile(const QString &filename)
 {
     QByteArray fname = filename.toLocal8Bit();
-    TagLib::WavPack::File *wpfile = new TagLib::WavPack::File(fname.constData());
+    auto *wpfile = new TagLib::WavPack::File(fname.constData());
 
     if (!wpfile->isOpen())
     {
         delete wpfile;
-        wpfile = NULL;
+        wpfile = nullptr;
     }
 
     return wpfile;
@@ -83,8 +74,7 @@ bool MetaIOWavPack::write(const QString &filename, MusicMetadata* mdata)
     bool result = wpfile->save();
     restoreTimeStamps();
 
-    if (wpfile)
-        delete wpfile;
+    delete wpfile;
 
     return (result);
 }
@@ -97,17 +87,17 @@ MusicMetadata* MetaIOWavPack::read(const QString &filename)
     TagLib::WavPack::File *wpfile = OpenFile(filename);
 
     if (!wpfile)
-        return NULL;
+        return nullptr;
 
     TagLib::APE::Tag *tag = wpfile->APETag();
 
     if (!tag)
     {
         delete wpfile;
-        return NULL;
+        return nullptr;
     }
 
-    MusicMetadata *metadata = new MusicMetadata(filename);
+    auto *metadata = new MusicMetadata(filename);
 
     ReadGenericMetadata(tag, metadata);
 

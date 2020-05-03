@@ -36,8 +36,9 @@
 
 #include "mythtvexp.h"
 #include "standardsettings.h"
+#include "cardutil.h"
 
-class VideoSourceSelector;
+class VideoSourceShow;
 class MultiplexID;
 
 /*
@@ -51,7 +52,7 @@ class TransportSetting : public GroupSetting
     TransportSetting(const QString &label, uint mplexid, uint sourceid,
                      uint cardtype);
 
-    bool keyPressEvent(QKeyEvent *event);
+    bool keyPressEvent(QKeyEvent *event) override; // StandardSetting
 
     uint getMplexId() const;
 
@@ -60,7 +61,7 @@ class TransportSetting : public GroupSetting
     void openMenu();
 
   private:
-    MultiplexID *m_mplexid;
+    MultiplexID *m_mplexid {nullptr};
 };
 
 // Page for selecting a transport to be created/edited
@@ -70,7 +71,7 @@ class MTV_PUBLIC TransportListEditor : public GroupSetting
 
   public:
     explicit TransportListEditor(uint initial_sourceid);
-    virtual void Load(void);
+    void Load(void) override; // StandardSetting
 
     void SetSourceID(uint _sourceid);
 
@@ -80,15 +81,15 @@ class MTV_PUBLIC TransportListEditor : public GroupSetting
     void NewTransport(void);
 
   private:
-    ~TransportListEditor() { }
+    ~TransportListEditor() override = default;
     void Delete(TransportSetting *transport);
 
   private:
-    VideoSourceSelector *m_videosource;
+    VideoSourceShow *m_videosource {nullptr};
     QVector<StandardSetting*> m_list;
-    uint m_sourceid;
-    uint m_cardtype;
-    bool isLoading;
+    uint m_sourceid  {0};
+    uint m_cardtype  {CardUtil::ERROR_PROBE};
+    bool m_isLoading {false};
 };
 
 #endif // _TRANSPORT_EDITOR_H_

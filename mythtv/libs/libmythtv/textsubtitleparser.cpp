@@ -40,7 +40,7 @@ class SubtitleLoadHelper : public QRunnable
         ++s_loading[m_target];
     }
 
-    virtual void run(void)
+    void run(void) override // QRunnable
     {
         TextSubtitleParser::LoadSubtitles(m_fileName, *m_target, false);
 
@@ -53,7 +53,7 @@ class SubtitleLoadHelper : public QRunnable
     static bool IsLoading(TextSubtitles *target)
     {
         QMutexLocker locker(&s_lock);
-        return s_loading[target];
+        return s_loading[target] != 0U;
     }
 
     static void Wait(TextSubtitles *target)
@@ -85,7 +85,7 @@ QMap<TextSubtitles*,uint> SubtitleLoadHelper::s_loading;
 class RemoteFileWrapper
 {
 public:
-    RemoteFileWrapper(const QString &filename) {
+    explicit RemoteFileWrapper(const QString &filename) {
         // This test stolen from FileRingBuffer::OpenFile()
         bool is_local =
             (!filename.startsWith("/dev")) &&
@@ -93,56 +93,49 @@ public:
         m_isRemote = !is_local;
         if (m_isRemote)
         {
-            m_localFile = NULL;
+            m_localFile = nullptr;
             m_remoteFile = new RemoteFile(filename, false, false, 0);
         }
         else
         {
-            m_remoteFile = NULL;
+            m_remoteFile = nullptr;
             m_localFile = new QFile(filename);
             if (!m_localFile->open(QIODevice::ReadOnly))
             {
                 delete m_localFile;
-                m_localFile = NULL;
+                m_localFile = nullptr;
             }
         }
     }
     ~RemoteFileWrapper() {
-        if (m_remoteFile)
-            delete m_remoteFile;
-        if (m_localFile)
-            delete m_localFile;
+        delete m_remoteFile;
+        delete m_localFile;
     }
+
+    RemoteFileWrapper(const RemoteFileWrapper &) = delete;            // not copyable
+    RemoteFileWrapper &operator=(const RemoteFileWrapper &) = delete; // not copyable
+
     bool isOpen(void) const {
         if (m_isRemote)
             return m_remoteFile->isOpen();
-        else
-            return m_localFile;
+        return m_localFile;
     }
     long long GetFileSize(void) const {
         if (m_isRemote)
             return m_remoteFile->GetFileSize();
-        else
-        {
-            if (m_localFile)
-                return m_localFile->size();
-            else
-                return 0;
-        }
+        if (m_localFile)
+            return m_localFile->size();
+        return 0;
     }
     int Read(void *data, int size) {
         if (m_isRemote)
             return m_remoteFile->Read(data, size);
-        else
+        if (m_localFile)
         {
-            if (m_localFile)
-            {
-                QDataStream stream(m_localFile);
-                return stream.readRawData(static_cast<char*>(data), size);
-            }
-            else
-                return 0;
+            QDataStream stream(m_localFile);
+            return stream.readRawData(static_cast<char*>(data), size);
         }
+        return 0;
     }
 private:
     bool m_isRemote;
@@ -153,7 +146,7 @@ private:
 static bool operator<(const text_subtitle_t& left,
                       const text_subtitle_t& right)
 {
-    return left.start < right.start;
+    return left.m_start < right.m_start;
 }
 
 TextSubtitles::~TextSubtitles()
@@ -173,8 +166,8 @@ TextSubtitles::~TextSubtitles()
  */
 bool TextSubtitles::HasSubtitleChanged(uint64_t timecode) const
 {
-    return (timecode < m_lastReturnedSubtitle.start ||
-            timecode > m_lastReturnedSubtitle.end);
+    return (timecode < m_lastReturnedSubtitle.m_start ||
+            timecode > m_lastReturnedSubtitle.m_end);
 }
 
 /** \fn TextSubtitles::GetSubtitles(uint64_t timecode) const
@@ -195,24 +188,23 @@ QStringList TextSubtitles::GetSubtitles(uint64_t timecode)
     TextSubtitleList::const_iterator nextSubPos =
         lower_bound(m_subtitles.begin(), m_subtitles.end(), searchTarget);
 
-    uint64_t startCode = 0, endCode = 0;
+    uint64_t startCode = 0;
+    uint64_t endCode = 0;
     if (nextSubPos != m_subtitles.begin())
     {
-        TextSubtitleList::const_iterator currentSubPos = nextSubPos;
+        auto currentSubPos = nextSubPos;
         --currentSubPos;
 
         const text_subtitle_t &sub = *currentSubPos;
-        if (sub.start <= timecode && sub.end >= timecode)
+        if (sub.m_start <= timecode && sub.m_end >= timecode)
         {
             // found a sub to display
             m_lastReturnedSubtitle = sub;
-            QStringList tmp = m_lastReturnedSubtitle.textLines;
-            tmp.detach();
-            return tmp;
+            return m_lastReturnedSubtitle.m_textLines;
         }
 
         // the subtitle time span has ended, let's display a blank sub
-        startCode = sub.end + 1;
+        startCode = sub.m_end + 1;
     }
 
     if (nextSubPos == m_subtitles.end())
@@ -221,10 +213,14 @@ QStringList TextSubtitles::GetSubtitles(uint64_t timecode)
         {
             const int maxReloadInterval = 1000; // ms
             if (IsFrameBasedTiming())
+            {
                 // Assume conservative 24fps
                 endCode = startCode + maxReloadInterval / 24;
+            }
             else
+            {
                 endCode = startCode + maxReloadInterval;
+            }
             QDateTime now = QDateTime::currentDateTimeUtc();
             if (!m_fileName.isEmpty() &&
                 m_lastLoaded.msecsTo(now) >= maxReloadInterval)
@@ -241,7 +237,7 @@ QStringList TextSubtitles::GetSubtitles(uint64_t timecode)
     }
     else
     {
-        endCode = (*nextSubPos).start - 1;
+        endCode = (*nextSubPos).m_start - 1;
     }
 
     // we are in a position in which there are no subtitles to display,
@@ -278,12 +274,14 @@ void TextSubtitleParser::LoadSubtitles(const QString &fileName,
     if (inBackground)
     {
         if (!SubtitleLoadHelper::IsLoading(&target))
+        {
             MThreadPool::globalInstance()->
                 start(new SubtitleLoadHelper(fileName, &target),
                       "SubtitleLoadHelper");
+        }
         return;
     }
-    demux_sputext_t sub_data;
+    demux_sputext_t sub_data {};
     RemoteFileWrapper rfile(fileName/*, false, false, 0*/);
 
     LOG(VB_VBI, LOG_INFO,
@@ -322,7 +320,7 @@ void TextSubtitleParser::LoadSubtitles(const QString &fileName,
 
     // try to determine the text codec
     QByteArray test(sub_data.rbuffer_text, sub_data.rbuffer_len);
-    QTextCodec *textCodec = QTextCodec::codecForUtfText(test, NULL);
+    QTextCodec *textCodec = QTextCodec::codecForUtfText(test, nullptr);
     if (!textCodec)
     {
         LOG(VB_VBI, LOG_WARNING, "Failed to autodetect a UTF encoding.");
@@ -372,7 +370,7 @@ void TextSubtitleParser::LoadSubtitles(const QString &fileName,
 
     LOG(VB_VBI, LOG_INFO, QString("Found %1 subtitles in file '%2'")
         .arg(sub_data.num).arg(fileName));
-    target.SetFrameBasedTiming(!sub_data.uses_time);
+    target.SetFrameBasedTiming(sub_data.uses_time == 0);
     target.Clear();
 
     // convert the subtitles to our own format, free the original structures
@@ -388,8 +386,8 @@ void TextSubtitleParser::LoadSubtitles(const QString &fileName,
 
         if (!target.IsFrameBasedTiming())
         {
-            newsub.start *= 10; // convert from csec to msec
-            newsub.end *= 10;
+            newsub.m_start *= 10; // convert from csec to msec
+            newsub.m_end *= 10;
         }
 
         for (int line = 0; line < sub->lines; ++line)
@@ -400,7 +398,7 @@ void TextSubtitleParser::LoadSubtitles(const QString &fileName,
                 str = dec->toUnicode(subLine, strlen(subLine));
             else
                 str = QString(subLine);
-            newsub.textLines.push_back(str);
+            newsub.m_textLines.push_back(str);
 
             free(sub->text[line]);
         }

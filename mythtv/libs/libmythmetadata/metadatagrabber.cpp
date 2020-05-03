@@ -1,10 +1,11 @@
 // Qt headers
-#include <QMap>
-#include <QDir>
-#include <QMutex>
-#include <QRegExp>
 #include <QDateTime>
+#include <QDir>
+#include <QMap>
+#include <QMutex>
 #include <QMutexLocker>
+#include <QRegExp>
+#include <utility>
 
 // MythTV headers
 #include "metadatagrabber.h"
@@ -23,11 +24,11 @@ static GrabberList     grabberList;
 static QMutex          grabberLock;
 static QDateTime       grabberAge;
 
-typedef struct GrabberOpts {
-    QString     path;
-    QString     setting;
-    QString     def;
-} GrabberOpts;
+struct GrabberOpts {
+    QString     m_path;
+    QString     m_setting;
+    QString     m_def;
+};
 
 // TODO
 // it would be nice to statically compile these, but I can't manage to get it
@@ -43,9 +44,9 @@ static GrabberOpts GrabberOptsMaker(QString thepath, QString thesetting, QString
 {
     GrabberOpts opts;
 
-    opts.path = thepath;
-    opts.setting = thesetting;
-    opts.def = thedefault;
+    opts.m_path = std::move(thepath);
+    opts.m_setting = std::move(thesetting);
+    opts.m_def = std::move(thedefault);
 
     return opts;
 }
@@ -103,7 +104,8 @@ GrabberList MetaGrabberScript::GetList(GrabberType type,
 {
     InitializeStaticMaps();
 
-    GrabberList tmpGrabberList, retGrabberList;
+    GrabberList tmpGrabberList;
+    GrabberList retGrabberList;
     {
         QMutexLocker listLock(&grabberLock);
         QDateTime now = MythDate::current();
@@ -122,17 +124,16 @@ GrabberList MetaGrabberScript::GetList(GrabberType type,
             QMap<GrabberType, GrabberOpts>::const_iterator it;
             for (it = grabberTypes.begin(); it != grabberTypes.end(); ++it)
             {
-                QString path = (it->path).arg(GetShareDir());
-                QStringList scripts = QDir(path).entryList(QDir::Files);
+                QString path = (it->m_path).arg(GetShareDir());
+                QStringList scripts = QDir(path).entryList(QDir::Executable | QDir::Files);
                 if (scripts.count() == 0)
                     // no scripts found
                     continue;
 
                 // loop through discovered scripts
-                QStringList::const_iterator it2 = scripts.begin();
-                for (; it2 != scripts.end(); ++it2)
+                foreach (auto & name, scripts)
                 {
-                    QString cmd = QString("%1%2").arg(path).arg(*it2);
+                    QString cmd = QDir(path).filePath(name);
                     MetaGrabberScript script(cmd);
 
                     if (script.IsValid())
@@ -149,11 +150,10 @@ GrabberList MetaGrabberScript::GetList(GrabberType type,
         tmpGrabberList = grabberList;
     }
 
-    GrabberList::const_iterator it = tmpGrabberList.begin();
-    for (; it != tmpGrabberList.end(); ++it)
+    foreach (auto & item, tmpGrabberList)
     {
-        if ((type == kGrabberAll) || (it->GetType() == type))
-            retGrabberList.append(*it);
+        if ((type == kGrabberAll) || (item.GetType() == type))
+            retGrabberList.append(item);
     }
 
     return retGrabberList;
@@ -198,25 +198,23 @@ MetaGrabberScript MetaGrabberScript::GetType(const GrabberType type)
 {
     InitializeStaticMaps();
 
-    QString cmd = gCoreContext->GetSetting(grabberTypes[type].setting,
-                                           grabberTypes[type].def);
+    QString cmd = gCoreContext->GetSetting(grabberTypes[type].m_setting,
+                                           grabberTypes[type].m_def);
 
     if (cmd.isEmpty())
     {
         // should the python bindings had not been installed at any stage
         // the settings could have been set to an empty string, so use default
-        cmd = grabberTypes[type].def;
+        cmd = grabberTypes[type].m_def;
     }
 
     if (grabberAge.isValid() && grabberAge.secsTo(MythDate::current()) <= kGrabberRefresh)
     {
         // just pull it from the cache
         GrabberList list = GetList();
-        GrabberList::const_iterator it = list.begin();
-
-        for (; it != list.end(); ++it)
-            if (it->GetPath().endsWith(cmd))
-                return *it;
+        foreach (auto & item, list)
+            if (item.GetPath().endsWith(cmd))
+                return item;
     }
 
     // polling the cache will cause a refresh, so lets just grab and
@@ -236,25 +234,24 @@ MetaGrabberScript MetaGrabberScript::FromTag(const QString &tag,
                                             bool absolute)
 {
     GrabberList list = GetList();
-    GrabberList::const_iterator it = list.begin();
 
     // search for direct match on tag
-    for (; it != list.end(); ++it)
+    foreach (auto & item, list)
     {
-        if (it->GetCommand() == tag)
+        if (item.GetCommand() == tag)
         {
-            return *it;
+            return item;
         }
     }
 
     // no direct match. do we require a direct match? search for one that works
     if (!absolute)
     {
-        for (it = list.begin(); it != list.end(); ++it)
+        foreach (auto & item, list)
         {
-            if (it->Accepts(tag))
+            if (item.Accepts(tag))
             {
-                return *it;
+                return item;
             }
         }
     }
@@ -266,19 +263,19 @@ MetaGrabberScript MetaGrabberScript::FromTag(const QString &tag,
 MetaGrabberScript MetaGrabberScript::FromInetref(const QString &inetref,
                                                  bool absolute)
 {
-    static QRegExp retagref("^([a-zA-Z0-9_\\-\\.]+\\.[a-zA-Z0-9]{1,3})_(.*)");
-    static QRegExp retagref2("^([a-zA-Z0-9_\\-\\.]+\\.[a-zA-Z0-9]{1,3}):(.*)");
-    static QMutex reLock;
-    QMutexLocker lock(&reLock);
+    static QRegExp s_retagref("^([a-zA-Z0-9_\\-\\.]+\\.[a-zA-Z0-9]{1,3})_(.*)");
+    static QRegExp s_retagref2("^([a-zA-Z0-9_\\-\\.]+\\.[a-zA-Z0-9]{1,3}):(.*)");
+    static QMutex s_reLock;
+    QMutexLocker lock(&s_reLock);
     QString tag;
 
-    if (retagref.indexIn(inetref) > -1)
+    if (s_retagref.indexIn(inetref) > -1)
     {
-        tag = retagref.cap(1);
+        tag = s_retagref.cap(1);
     }
-    else if (retagref2.indexIn(inetref) > -1)
+    else if (s_retagref2.indexIn(inetref) > -1)
     {
-        tag = retagref2.cap(1);
+        tag = s_retagref2.cap(1);
     }
     if (!tag.isEmpty())
     {
@@ -294,44 +291,32 @@ MetaGrabberScript MetaGrabberScript::FromInetref(const QString &inetref,
 
 QString MetaGrabberScript::CleanedInetref(const QString &inetref)
 {
-    static QRegExp retagref("^([a-zA-Z0-9_\\-\\.]+\\.[a-zA-Z0-9]{1,3})_(.*)");
-    static QRegExp retagref2("^([a-zA-Z0-9_\\-\\.]+\\.[a-zA-Z0-9]{1,3}):(.*)");
-    static QMutex reLock;
-    QMutexLocker lock(&reLock);
+    static QRegExp s_retagref("^([a-zA-Z0-9_\\-\\.]+\\.[a-zA-Z0-9]{1,3})_(.*)");
+    static QRegExp s_retagref2("^([a-zA-Z0-9_\\-\\.]+\\.[a-zA-Z0-9]{1,3}):(.*)");
+    static QMutex s_reLock;
+    QMutexLocker lock(&s_reLock);
 
     // try to strip grabber tag from inetref
-    if (retagref.indexIn(inetref) > -1)
-        return retagref.cap(2);
-    if (retagref2.indexIn(inetref) > -1)
-        return retagref2.cap(2);
+    if (s_retagref.indexIn(inetref) > -1)
+        return s_retagref.cap(2);
+    if (s_retagref2.indexIn(inetref) > -1)
+        return s_retagref2.cap(2);
 
     return inetref;
 }
 
-MetaGrabberScript::MetaGrabberScript(void) :
-    m_name(""), m_author(""), m_thumbnail(""), m_fullcommand(""), m_command(""),
-    m_type(kGrabberInvalid), m_typestring(""), m_description(""), m_accepts(),
-    m_version(0.0), m_valid(false)
+MetaGrabberScript::MetaGrabberScript(QString path, const QDomElement &dom) :
+    m_fullcommand(std::move(path))
 {
+    ParseGrabberVersion(dom);
 }
 
-MetaGrabberScript::MetaGrabberScript(const QString &path,
-                                     const QDomElement &dom) :
-    m_valid(false)
+MetaGrabberScript::MetaGrabberScript(const QDomElement &dom)
 {
-    m_fullcommand = path;
     ParseGrabberVersion(dom);
 }
 
-MetaGrabberScript::MetaGrabberScript(const QDomElement &dom) :
-    m_valid(false)
-{
-    ParseGrabberVersion(dom);
-    
-}
-
-MetaGrabberScript::MetaGrabberScript(const QString &path) :
-    m_type(kGrabberInvalid), m_version(0.0), m_valid(false)
+MetaGrabberScript::MetaGrabberScript(const QString &path)
 {
     if (path.isEmpty())
         return;
@@ -364,16 +349,6 @@ MetaGrabberScript::MetaGrabberScript(const QString &path) :
         return;
 
     m_valid = true;
-}
-
-MetaGrabberScript::MetaGrabberScript(const MetaGrabberScript &other) :
-    m_name(other.m_name), m_author(other.m_author),
-    m_thumbnail(other.m_thumbnail), m_fullcommand(other.m_fullcommand),
-    m_command(other.m_command), m_type(other.m_type),
-    m_typestring(other.m_typestring), m_description(other.m_description),
-    m_accepts(other.m_accepts), m_version(other.m_version),
-    m_valid(other.m_valid)
-{
 }
 
 MetaGrabberScript& MetaGrabberScript::operator=(const MetaGrabberScript &other)
@@ -432,10 +407,7 @@ bool MetaGrabberScript::Test(void)
     MythSystemLegacy grabber(m_fullcommand, args, kMSStdOut);
 
     grabber.Run();
-    if (grabber.Wait() != GENERIC_EXIT_OK)
-        return false;
-
-    return true;
+    return grabber.Wait() == GENERIC_EXIT_OK;
 }
 
 // TODO
@@ -453,7 +425,7 @@ MetadataLookupList MetaGrabberScript::RunGrabber(const QStringList &args,
         .arg(m_fullcommand).arg(args.join(" ")));
 
     grabber.Run();
-    if (grabber.Wait() != GENERIC_EXIT_OK)
+    if (grabber.Wait(60) != GENERIC_EXIT_OK)
         return list;
 
     QByteArray result = grabber.ReadAll();

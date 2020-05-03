@@ -7,7 +7,7 @@
 #include "mythfontmanager.h"
 #include "mythlogging.h"
 
-static MythFontManager *gFontManager = NULL;
+static MythFontManager *gFontManager = nullptr;
 
 #define LOC      QString("MythFontManager: ")
 #define MAX_DIRS 100
@@ -30,6 +30,24 @@ void MythFontManager::LoadFonts(const QString &directory,
 {
     int maxDirs = MAX_DIRS;
     LoadFonts(directory, registeredFor, &maxDirs);
+
+    QFontDatabase database;
+    foreach (const QString & family, database.families())
+    {
+        QString result = QString("Font Family '%1': ").arg(family);
+        foreach (const QString &style, database.styles(family))
+        {
+            result += QString("%1(").arg(style);
+
+            QString sizes;
+            foreach (int points, database.smoothSizes(family, style))
+                sizes += QString::number(points) + ' ';
+
+            result += QString("%1) ").arg(sizes.trimmed());
+        }
+
+        LOG(VB_GUI, LOG_DEBUG, LOC + result.trimmed());
+    }
 }
 
 /**
@@ -153,7 +171,7 @@ void MythFontManager::LoadFontsFromDirectory(const QString &directory,
 /**
  *  \brief Loads fonts from the file specified in fontPath.
  *
- *  \param directory      The directory to scan
+ *  \param fontPath       The absolute path to the font file
  *  \param registeredFor  The user of the font.
  */
 void MythFontManager::LoadFontFile(const QString &fontPath,
@@ -209,8 +227,10 @@ void MythFontManager::LoadFontFile(const QString &fontPath,
 /**
  *  \brief Registers the font as being used by registeredFor
  *
- *  \param directory      The directory to scan
+ *  \param fontPath       The absolute path to the font file
  *  \param registeredFor  The user of the font.
+ *  \param fontID         The number provided by Qt when the font was
+ *                        registered.
  */
 bool MythFontManager::RegisterFont(const QString &fontPath,
                                    const QString &registeredFor,
@@ -224,13 +244,11 @@ bool MythFontManager::RegisterFont(const QString &fontPath,
         if (values.isEmpty())
             return false;
         MythFontReference *ref = values.first();
-        if (ref == NULL)
+        if (ref == nullptr)
             return false;
-        else
-            id = ref->GetFontID();
+        id = ref->GetFontID();
     }
-    MythFontReference *fontReference;
-    fontReference = new MythFontReference(fontPath, registeredFor, id);
+    auto *fontReference = new MythFontReference(fontPath, registeredFor, id);
     m_fontPathToReference.insert(fontPath, fontReference);
     return true;
 }
@@ -256,13 +274,6 @@ MythFontManager *MythFontManager::GetGlobalFontManager(void)
 MythFontManager *GetGlobalFontManager(void)
 {
     return MythFontManager::GetGlobalFontManager();
-}
-
-MythFontReference::MythFontReference(const QString &fontPath,
-                                     const QString &registeredFor,
-                                     const int fontID) :
-    m_fontPath(fontPath), m_registeredFor(registeredFor), m_fontID(fontID)
-{
 }
 
 /* vim: set expandtab tabstop=4 shiftwidth=4: */

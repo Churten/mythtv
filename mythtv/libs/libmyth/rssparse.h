@@ -17,12 +17,12 @@
 #include "mythexp.h"
 #include "mythtypes.h"
 
-typedef enum ArticleTypes {
+enum ArticleType {
     VIDEO_FILE = 0,
     VIDEO_PODCAST = 1,
     AUDIO_FILE = 2,
     AUDIO_PODCAST = 3
-} ArticleType;
+};
 
 /** Describes an enclosure associated with an item.
  */
@@ -71,20 +71,20 @@ struct MRSSScene
 struct MRSSEntry
 {
     QString URL;
-    qint64 Size;
+    qint64  Size         {0};
     QString Type;
     QString Medium;
-    bool IsDefault;
+    bool    IsDefault    {false};
     QString Expression;
-    int Bitrate;
-    double Framerate;
-    double SamplingRate;
-    int Channels;
-    int Duration;
-    int Width;
-    int Height;
+    int     Bitrate      {0};
+    double  Framerate    {0.0};
+    double  SamplingRate {0.0};
+    int     Channels     {0};
+    int     Duration     {0};
+    int     Width        {0};
+    int     Height       {0};
     QString Lang;
-    int Group;
+    int     Group        {0};
     QString Rating;
     QString RatingScheme;
     QString Title;
@@ -92,12 +92,12 @@ struct MRSSEntry
     QString Keywords;
     QString CopyrightURL;
     QString CopyrightText;
-    int RatingAverage;
-    int RatingCount;
-    int RatingMin;
-    int RatingMax;
-    int Views;
-    int Favs;
+    int     RatingAverage {0};
+    int     RatingCount   {0};
+    int     RatingMin     {0};
+    int     RatingMax     {0};
+    int     Views         {0};
+    int     Favs          {0};
     QString Tags;
     QList<MRSSThumbnail> Thumbnails;
     QList<MRSSCredit> Credits;
@@ -111,10 +111,11 @@ class MPUBLIC ResultItem
 
   public:
 
-    typedef QList<ResultItem *> resultList;
-    typedef std::vector<ResultItem> List;
+    using resultList = QList<ResultItem *>;
+    using List = std::vector<ResultItem>;
 
-    ResultItem(const QString& title, const QString& subtitle,
+    ResultItem(const QString& title, const QString& sortTitle,
+              const QString& subtitle, const QString& sortSubtitle,
               const QString& desc, const QString& URL,
               const QString& thumbnail, const QString& mediaURL,
               const QString& author, const QDateTime& date, const QString& time,
@@ -124,15 +125,18 @@ class MPUBLIC ResultItem
               const uint& width, const uint& height, const QString& language,
               const bool& downloadable, const QStringList& countries,
               const uint& season, const uint& episode, const bool& customhtml);
-    ResultItem();
-    ~ResultItem();
+    ResultItem() = default;
+    ~ResultItem() = default;
 
-    void toMap(InfoMap &infoMap);
+    void ensureSortFields(void);
+    void toMap(InfoMap &metadataMap);
 
     const QString& GetTitle() const { return m_title; }
+    const QString& GetSortTitle() const { return m_sorttitle; }
     const QString& GetSubtitle() const { return m_subtitle; }
+    const QString& GetSortSubtitle() const { return m_sortsubtitle; }
     const QString& GetDescription() const { return m_desc; }
-    const QString& GetURL() const { return m_URL; }
+    const QString& GetURL() const { return m_url; }
     const QString& GetThumbnail() const { return m_thumbnail; }
     const QString& GetMediaURL() const { return m_mediaURL; }
     const QString& GetAuthor() const { return m_author; }
@@ -155,28 +159,30 @@ class MPUBLIC ResultItem
 
   private:
     QString      m_title;
+    QString      m_sorttitle;
     QString      m_subtitle;
+    QString      m_sortsubtitle;
     QString      m_desc;
-    QString      m_URL;
+    QString      m_url;
     QString      m_thumbnail;
     QString      m_mediaURL;
     QString      m_author;
     QDateTime    m_date;
     QString      m_time;
     QString      m_rating;
-    off_t        m_filesize;
+    off_t        m_filesize     {0};
     QString      m_player;
     QStringList  m_playerargs;
     QString      m_download;
     QStringList  m_downloadargs;
-    uint         m_width;
-    uint         m_height;
+    uint         m_width        {0};
+    uint         m_height       {0};
     QString      m_language;
-    bool         m_downloadable;
+    bool         m_downloadable {false};
     QStringList  m_countries;
-    uint         m_season;
-    uint         m_episode;
-    bool         m_customhtml;
+    uint         m_season       {0};
+    uint         m_episode      {0};
+    bool         m_customhtml   {false};
 };
 
 class MPUBLIC Parse : public QObject
@@ -185,41 +191,39 @@ class MPUBLIC Parse : public QObject
     friend class MRSSParser;
 
   public:
-    Parse();
-    virtual ~Parse();
+    Parse() = default;
+    ~Parse() override = default;
 
-    ResultItem::resultList parseRSS(QDomDocument domDoc);
+    ResultItem::resultList parseRSS(const QDomDocument& domDoc);
     ResultItem* ParseItem(const QDomElement& item) const;
 
-    QString GetLink(const QDomElement&) const;
-    QString GetAuthor(const QDomElement&) const;
-    QString GetCommentsRSS(const QDomElement&) const;
-    QString GetCommentsLink(const QDomElement&) const;
-    QDateTime GetDCDateTime(const QDomElement&) const;
-    QDateTime FromRFC3339(const QString&) const;
-    QDateTime RFC822TimeToQDateTime (const QString&) const;
-    int GetNumComments (const QDomElement&) const;
+    static QString GetLink(const QDomElement& parent);
+    static QString GetAuthor(const QDomElement& parent);
+    static QString GetCommentsRSS(const QDomElement& parent);
+    static QString GetCommentsLink(const QDomElement& parent);
+    static QDateTime GetDCDateTime(const QDomElement& parent);
+    static QDateTime FromRFC3339(const QString& t);
+    QDateTime RFC822TimeToQDateTime (const QString& parent) const;
     QStringList GetAllCategories (const QDomElement&) const;
-    QPair<double, double> GetGeoPoint (const QDomElement&) const;
-    QList<MRSSEntry> GetMediaRSS (const QDomElement&) const;
-    QList<Enclosure> GetEnclosures(const QDomElement& entry) const;
-    static QString UnescapeHTML (const QString&);
+    static QList<MRSSEntry> GetMediaRSS (const QDomElement& item);
+    static QList<Enclosure> GetEnclosures(const QDomElement& entry);
+    static QString UnescapeHTML (const QString& escaped);
 
   private:
-    QMap<QString, int> TimezoneOffsets;
+    QMap<QString, int> m_timezoneOffsets;
 
   protected:
-    static const QString DC;
-    static const QString WFW;
-    static const QString Atom;
-    static const QString RDF;
-    static const QString Slash;
-    static const QString Enc;
-    static const QString ITunes;
-    static const QString GeoRSSSimple;
-    static const QString GeoRSSW3;
-    static const QString MediaRSS;
-    static const QString MythRSS;
+    static const QString kDC;
+    static const QString kWFW;
+    static const QString kAtom;
+    static const QString kRDF;
+    static const QString kSlash;
+    static const QString kEnc;
+    static const QString kITunes;
+    static const QString kGeoRSSSimple;
+    static const QString kGeoRSSW3;
+    static const QString kMediaRSS;
+    static const QString kMythRSS;
 };
 
 Q_DECLARE_METATYPE(ResultItem*)

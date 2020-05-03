@@ -1,7 +1,7 @@
 #ifndef _FREE_SPACE_H_
 #define _FREE_SPACE_H_
 
-#include <stdint.h>
+#include <cstdint>
 
 #include <QStringList>
 #include <QDateTime>
@@ -19,12 +19,12 @@ class QStringList;
 class QObject;
 class QTimer;
 
-typedef enum CheckAvailabilityType {
+enum CheckAvailabilityType {
     kCheckForCache,
     kCheckForMenuAction,
     kCheckForPlayAction,
     kCheckForPlaylistAction,
-} CheckAvailabilityType;
+};
 
 class PlaybackBoxHelper : public MThread
 {
@@ -32,21 +32,21 @@ class PlaybackBoxHelper : public MThread
 
   public:
     explicit PlaybackBoxHelper(QObject *listener);
-    ~PlaybackBoxHelper(void);
+    ~PlaybackBoxHelper(void) override;
 
     void ForceFreeSpaceUpdate(void);
-    void StopRecording(const ProgramInfo&);
+    void StopRecording(const ProgramInfo &pginfo);
     void DeleteRecording( uint recordingID, bool forceDelete,
                           bool forgetHistory);
-    void DeleteRecordings(const QStringList&);
+    void DeleteRecordings(const QStringList &list);
     void UndeleteRecording(uint recordingID);
-    void CheckAvailability(const ProgramInfo&,
+    void CheckAvailability(const ProgramInfo &pginfo,
                            CheckAvailabilityType cat = kCheckForCache);
-    QString GetPreviewImage(const ProgramInfo&, bool check_availibility = true);
+    QString GetPreviewImage(const ProgramInfo &pginfo, bool check_availability = true);
 
     QString LocateArtwork(const QString &inetref, uint season,
                           VideoArtworkType type, const ProgramInfo *pginfo,
-                          const QString &groupname = NULL);
+                          const QString &groupname = nullptr);
 
     uint64_t GetFreeSpaceTotalMB(void) const;
     uint64_t GetFreeSpaceUsedMB(void) const;
@@ -55,13 +55,13 @@ class PlaybackBoxHelper : public MThread
     void UpdateFreeSpace(void);
 
   private:
-    QObject            *m_listener;
-    PBHEventHandler    *m_eventHandler;
+    QObject            *m_listener         {nullptr};
+    PBHEventHandler    *m_eventHandler     {nullptr};
     mutable QMutex      m_lock;
 
     // Free disk space tracking
-    uint64_t            m_freeSpaceTotalMB;
-    uint64_t            m_freeSpaceUsedMB;
+    uint64_t            m_freeSpaceTotalMB {0LL};
+    uint64_t            m_freeSpaceUsedMB  {0LL};
 
     // Artwork Variables //////////////////////////////////////////////////////
     InfoMap             m_artworkCache;

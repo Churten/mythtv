@@ -28,24 +28,31 @@
  */
 
 #include "inputselectorsetting.h"
+
+#include <utility>
+
 #include "cardutil.h"
 #include "mythcorecontext.h"
 #include "mythdb.h"
 
-InputSelector::InputSelector(
-    uint _default_cardid, const QString &_default_inputname) :
-    sourceid(0), default_cardid(_default_cardid),
-    default_inputname(_default_inputname)
+InputSelector::InputSelector(uint default_cardid,
+                             QString default_inputname) :
+    m_defaultCardId(default_cardid),
+    m_defaultInputName(std::move(default_inputname))
 {
-    default_inputname.detach();
     setLabel(tr("Input"));
+    setHelpText(
+        QObject::tr(
+            "Select a capture card from the capture cards that are "
+            "connected to the currently selected video source."
+            ));
 }
 
 void InputSelector::Load(void)
 {
     clearSelections();
 
-    if (!sourceid)
+    if (!m_sourceId)
         return;
 
     MSqlQuery query(MSqlQuery::InitCon());
@@ -54,10 +61,11 @@ void InputSelector::Load(void)
         "FROM capturecard, videosource "
         "WHERE capturecard.sourceid = videosource.sourceid AND "
         "      hostname             = :HOSTNAME            AND "
-        "      capturecard.sourceid = :SOURCEID");
+        "      capturecard.sourceid = :SOURCEID            AND "
+        "      capturecard.parentid = 0");
 
     query.bindValue(":HOSTNAME", gCoreContext->GetHostName());
-    query.bindValue(":SOURCEID", sourceid);
+    query.bindValue(":SOURCEID", m_sourceId);
 
     if (!query.exec() || !query.isActive())
     {
@@ -65,7 +73,8 @@ void InputSelector::Load(void)
         return;
     }
 
-    uint which = 0, cnt = 0;
+    uint which = 0;
+    uint cnt = 0;
     for (; query.next(); ++cnt)
     {
         uint    cardid     = query.value(0).toUInt();
@@ -80,18 +89,18 @@ void InputSelector::Load(void)
 
         addSelection(desc, key);
 
-        which = (default_cardid == cardid) ? cnt : which;
+        which = (m_defaultCardId == cardid) ? cnt : which;
     }
 
     if (cnt)
         setValue(which);
 }
 
-void InputSelector::SetSourceID(const QString &_sourceid)
+void InputSelector::SetSourceID(const QString &sourceid)
 {
-    if (sourceid != _sourceid.toUInt())
+    if (m_sourceId != sourceid.toUInt())
     {
-        sourceid = _sourceid.toUInt();
+        m_sourceId = sourceid.toUInt();
         Load();
     }
 }
@@ -99,7 +108,7 @@ void InputSelector::SetSourceID(const QString &_sourceid)
 uint InputSelector::GetCardID(void) const
 {
     uint    cardid    = 0;
-    QString inputname = QString::null;
+    QString inputname;
 
     Parse(getValue(), cardid, inputname);
 
@@ -109,7 +118,7 @@ uint InputSelector::GetCardID(void) const
 QString InputSelector::GetInputName(void) const
 {
     uint    cardid    = 0;
-    QString inputname = QString::null;
+    QString inputname;
 
     Parse(getValue(), cardid, inputname);
 
@@ -121,7 +130,7 @@ bool InputSelector::Parse(const QString &cardid_inputname,
                           QString       &inputname)
 {
     cardid    = 0;
-    inputname = QString::null;
+    inputname.clear();
 
     int sep0 = cardid_inputname.indexOf(':');
     if (sep0 < 1)

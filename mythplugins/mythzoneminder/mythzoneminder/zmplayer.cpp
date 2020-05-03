@@ -37,14 +37,9 @@ using namespace std;
 ZMPlayer::ZMPlayer(MythScreenStack *parent, const char *name,
                    vector<Event *> *eventList, int *currentEvent)
          :MythScreenType(parent, name),
-          m_activeFrameImage(NULL), m_frameImageFS(NULL), m_frameImage(NULL),
-          m_noEventsText(NULL), m_eventText(NULL),
-          m_cameraText(NULL), m_frameText(NULL), m_dateText(NULL),
-          m_playButton(NULL), m_deleteButton(NULL), m_nextButton(NULL),
-          m_prevButton(NULL), m_currentEvent(currentEvent),
+          m_currentEvent(currentEvent),
           m_eventList(eventList), m_frameList(new vector<Frame*>),
-          m_frameTimer(new QTimer(this)), m_curFrame(0),
-          m_paused(false), m_fullScreen(false), m_image(NULL)
+          m_frameTimer(new QTimer(this))
 {
     connect(m_frameTimer, SIGNAL(timeout()), this,
             SLOT(updateFrame()));
@@ -56,8 +51,7 @@ ZMPlayer::~ZMPlayer()
 
     m_frameTimer->deleteLater();
 
-    if (m_frameList)
-        delete m_frameList;
+    delete m_frameList;
 }
 
 void ZMPlayer::stopPlayer(void)
@@ -67,11 +61,8 @@ void ZMPlayer::stopPlayer(void)
 
 bool ZMPlayer::Create(void)
 {
-    bool foundtheme = false;
-
     // Load the theme for this screen
-    foundtheme = LoadWindowFromXML("zoneminder-ui.xml", "zmplayer", this);
-
+    bool foundtheme = LoadWindowFromXML("zoneminder-ui.xml", "zmplayer", this);
     if (!foundtheme)
         return false;
 
@@ -135,8 +126,7 @@ bool ZMPlayer::Create(void)
 
 void ZMPlayer::getEventInfo()
 {
-    if (m_frameTimer)
-        m_frameTimer->stop();
+    m_frameTimer->stop();
 
     if (*m_currentEvent == -1)
     {
@@ -155,11 +145,9 @@ void ZMPlayer::getEventInfo()
 
         return;
     }
-    else
-    {
-        if (m_noEventsText)
-            m_noEventsText->SetVisible(false);
-    }
+
+    if (m_noEventsText)
+        m_noEventsText->SetVisible(false);
 
     Event *event = m_eventList->at(*m_currentEvent);
     if (!event)
@@ -167,7 +155,7 @@ void ZMPlayer::getEventInfo()
 
     m_curFrame = 1;
 
-    m_eventText->SetText(QString(event->eventName() + " (%1/%2)")
+    m_eventText->SetText(event->eventName() + QString(" (%1/%2)")
             .arg((*m_currentEvent) + 1)
             .arg(m_eventList->size()));
     m_cameraText->SetText(event->monitorName());
@@ -191,9 +179,8 @@ bool ZMPlayer::keyPressEvent(QKeyEvent *event)
     if (GetFocusWidget()->keyPressEvent(event))
         return true;
 
-    bool handled = false;
     QStringList actions;
-    handled = GetMythMainWindow()->TranslateKeyPress("TV Playback", event, actions);
+    bool handled = GetMythMainWindow()->TranslateKeyPress("TV Playback", event, actions);
 
     for (int i = 0; i < actions.size() && !handled; i++)
     {
@@ -359,7 +346,7 @@ void ZMPlayer::prevPressed()
 
 void ZMPlayer::updateFrame(void)
 {
-    if (!m_frameList->size())
+    if (m_frameList->empty())
         return;
 
     m_frameTimer->stop();

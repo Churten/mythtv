@@ -1,11 +1,15 @@
 #ifndef MYTHSCREEN_TYPE_H_
 #define MYTHSCREEN_TYPE_H_
 
+#include <utility>
+
+// Qt headers
+#include <QEvent>
+#include <QSemaphore>
+
+// MythTV headers
 #include "mythuicomposite.h"
 #include "mythuiutils.h"
-
-#include <QSemaphore>
-#include <QEvent>
 
 class ScreenLoadTask;
 class MythScreenStack;
@@ -20,8 +24,8 @@ class MythUIBusyDialog;
 class MUI_PUBLIC ScreenLoadCompletionEvent : public QEvent
 {
   public:
-    explicit ScreenLoadCompletionEvent(const QString &id) :
-        QEvent(kEventType), m_id(id) { }
+    explicit ScreenLoadCompletionEvent(QString id) :
+        QEvent(kEventType), m_id(std::move(id)) { }
 
     QString GetId() { return m_id; }
 
@@ -46,11 +50,11 @@ class MUI_PUBLIC MythScreenType : public MythUIComposite
   public:
     MythScreenType(MythScreenStack *parent, const QString &name,
                    bool fullscreen = true);
-    virtual ~MythScreenType();
+    ~MythScreenType() override;
 
     virtual bool Create(void); // do the actual work of making the screen.
-    virtual bool keyPressEvent(QKeyEvent *);
-    virtual bool gestureEvent(MythGestureEvent *);
+    bool keyPressEvent(QKeyEvent *event) override; // MythUIType
+    bool gestureEvent(MythGestureEvent *event) override; // MythUIType
     virtual void ShowMenu(void);
 
     void doInit(void);
@@ -62,7 +66,7 @@ class MUI_PUBLIC MythScreenType : public MythUIComposite
     void SetFullscreen(bool full);
 
     MythUIType *GetFocusWidget(void) const;
-    bool SetFocusWidget(MythUIType *widget = NULL);
+    bool SetFocusWidget(MythUIType *widget = nullptr);
     virtual bool NextPrevWidgetFocus(bool up_or_down);
     void BuildFocusList(void);
 
@@ -77,7 +81,7 @@ class MUI_PUBLIC MythScreenType : public MythUIComposite
     bool IsLoading(void) { return m_IsLoading; }
     bool IsLoaded(void) { return m_IsLoaded; }
 
-    virtual MythPainter *GetPainter(void);
+    MythPainter *GetPainter(void) override; // MythUIType
 
   public slots:
     virtual void Close();
@@ -90,38 +94,39 @@ class MUI_PUBLIC MythScreenType : public MythUIComposite
     MythScreenType(MythUIType *parent, const QString &name,
                    bool fullscreen = true);
 
-    virtual void CopyFrom(MythUIType *base);
-    virtual void CreateCopy(MythUIType *parent);
-    virtual bool ParseElement(
-        const QString &filename, QDomElement &element, bool showWarnings);
+    void CopyFrom(MythUIType *base) override; // MythUIType
+    void CreateCopy(MythUIType *parent) override; // MythUIType
+    bool ParseElement( const QString &filename,
+                       QDomElement &element,
+                       bool showWarnings) override; // MythUIType
 
     virtual void Load(void);   // ONLY to be used for loading data, NO UI WORK or it will segfault
     virtual void Init(void);   // UI work to draw data loaded
 
-    void LoadInBackground(QString message = "");
+    void LoadInBackground(const QString& message = "");
     void ReloadInBackground(void);
 
-    void OpenBusyPopup(QString message = "");
+    void OpenBusyPopup(const QString& message = "");
     void CloseBusyPopup(void);
     void SetBusyPopupMessage(const QString &message);
     void ResetBusyPopup(void);
 
-    bool m_FullScreen;
-    bool m_IsDeleting;
+    bool m_FullScreen                {false};
+    bool m_IsDeleting                {false};
 
-    QSemaphore m_LoadLock;
-    volatile bool m_IsLoading;
-    volatile bool m_IsLoaded;
-    bool m_IsInitialized;
+    QSemaphore m_LoadLock            {1};
+    volatile bool m_IsLoading        {false};
+    volatile bool m_IsLoaded         {false};
+    bool m_IsInitialized             {false};
 
-    MythUIType *m_CurrentFocusWidget;
+    MythUIType *m_CurrentFocusWidget {nullptr};
     //TODO We are currently dependant on the internal sorting of QMap for
     //     entries to be iterated in the correct order, this should probably
     //     be changed.
     QMap<int, MythUIType *> m_FocusWidgetList;
 
-    MythScreenStack *m_ScreenStack;
-    MythUIBusyDialog *m_BusyPopup;
+    MythScreenStack  *m_ScreenStack  {nullptr};
+    MythUIBusyDialog *m_BusyPopup    {nullptr};
 
     QRegion m_SavedMask;
 

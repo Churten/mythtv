@@ -8,7 +8,7 @@
 #include <QCoreApplication>
 #include <QMutex>
 
-#include <stdint.h>
+#include <cstdint>
 #include <vector>
 
 using std::vector;
@@ -25,7 +25,7 @@ namespace MythTV
 
 class MTV_PUBLIC AudioPlayer
 {
-    Q_DECLARE_TR_FUNCTIONS(AudioPlayer)
+    Q_DECLARE_TR_FUNCTIONS(AudioPlayer);
 
   public:
     AudioPlayer(MythPlayer *parent, bool muted);
@@ -41,34 +41,34 @@ class MTV_PUBLIC AudioPlayer
     void  SetAudioInfo(const QString &main_device,
                        const QString &passthru_device,
                        uint           samplerate,
-                       int            bitrate = -1);
+                       int            codec_profile = -1);
     void  SetAudioParams(AudioFormat format, int orig_channels, int channels,
-                         int codec, int samplerate, bool passthru,
-                         int bitrate = -1);
+                         AVCodecID codec, int samplerate, bool passthru,
+                         int codec_profile = -1);
     void  SetEffDsp(int dsprate);
 
     void  CheckFormat(void);
-    void  SetNoAudio(void)           { m_no_audio_out = true;    }
-    bool  HasAudioIn(void) const     { return !m_no_audio_in;    }
-    bool  HasAudioOut(void) const    { return !m_no_audio_out;   }
-    bool  ControlsVolume(void) const { return m_controls_volume; }
+    void  SetNoAudio(void)           { m_noAudioOut = true;      }
+    bool  HasAudioIn(void) const     { return !m_noAudioIn;      }
+    bool  HasAudioOut(void) const    { return !m_noAudioOut;     }
+    bool  ControlsVolume(void) const { return m_controlsVolume;  }
 
     bool  Pause(bool pause);
     bool  IsPaused(void);
     void  PauseAudioUntilBuffered(void);
-    int   GetCodec(void)        const { return m_codec;         }
+    AVCodecID GetCodec(void)    const { return m_codec;         }
     int   GetNumChannels(void)  const { return m_channels;      }
-    int   GetOrigChannels(void) const { return m_orig_channels; }
-    int   GetSampleRate(void)   const { return m_samplerate;    }
+    int   GetOrigChannels(void) const { return m_origChannels;  }
+    int   GetSampleRate(void)   const { return m_sampleRate;    }
     uint  GetVolume(void);
     uint  AdjustVolume(int change);
     uint  SetVolume(int newvolume);
-    float GetStretchFactor(void) const { return m_stretchfactor; }
+    float GetStretchFactor(void) const { return m_stretchFactor; }
     void  SetStretchFactor(float factor);
     bool  IsUpmixing(void);
     bool  EnableUpmix(bool enable, bool toggle = false);
     bool  CanUpmix(void);
-    bool  CanPassthrough(int samplerate, int channels, int codec, int profile);
+    bool  CanPassthrough(int samplerate, int channels, AVCodecID codec, int profile);
     bool  CanDownmix(void);
     bool  CanAC3(void);
     bool  CanDTS(void);
@@ -88,7 +88,7 @@ class MTV_PUBLIC AudioPlayer
     bool      IsMuted(void) { return GetMuteState() == kMuteAll; }
     bool      SetMuted(bool mute);
     MuteState GetMuteState(void);
-    MuteState SetMuteState(MuteState);
+    MuteState SetMuteState(MuteState mstate);
     MuteState IncrMuteState(void);
 
     void AddAudioData(char *buffer, int len, int64_t timecode, int frames);
@@ -109,23 +109,23 @@ class MTV_PUBLIC AudioPlayer
     void ResetVisuals(void);
 
   private:
-    MythPlayer  *m_parent;
-    AudioOutput *m_audioOutput;
-    int          m_channels;
-    int          m_orig_channels;
-    int          m_codec;
-    AudioFormat  m_format;
-    int          m_samplerate;
-    int          m_codec_profile;
-    float        m_stretchfactor;
-    bool         m_passthru;
-    QMutex       m_lock;
-    bool         m_muted_on_creation;
-    QString      m_main_device;
-    QString      m_passthru_device;
-    bool         m_no_audio_in;
-    bool         m_no_audio_out;
-    bool         m_controls_volume;
+    MythPlayer  *m_parent            {nullptr};
+    AudioOutput *m_audioOutput       {nullptr};
+    int          m_channels          {-1};
+    int          m_origChannels      {-1};
+    AVCodecID    m_codec             {AV_CODEC_ID_NONE};
+    AudioFormat  m_format            {FORMAT_NONE};
+    int          m_sampleRate        {44100};
+    int          m_codecProfile      {0};
+    float        m_stretchFactor     {1.0F};
+    bool         m_passthru          {false};
+    QMutex       m_lock              {QMutex::Recursive};
+    bool         m_mutedOnCreation   {false};
+    QString      m_mainDevice;
+    QString      m_passthruDevice;
+    bool         m_noAudioIn         {false};
+    bool         m_noAudioOut        {true};
+    bool         m_controlsVolume    {true};
     vector<MythTV::Visual*> m_visuals;
 };
 

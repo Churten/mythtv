@@ -13,18 +13,6 @@
 #include "imagemetadata.h"
 
 /*!
- \brief Constructor
- \param name Thread name
- \param dbfs Filesystem/Database adapter
-*/
-template <class DBFS>
-ThumbThread<DBFS>::ThumbThread(const QString &name, DBFS *const dbfs)
-    : MThread(name), m_dbfs(*dbfs),
-      m_requestQ(), m_backgroundQ(), m_doBackground(true)
-{}
-
-
-/*!
  \brief Destructor
 */
 template <class DBFS>
@@ -241,7 +229,7 @@ void ThumbThread<DBFS>::run()
 /*!
  \brief Generate thumbnail for an image
  \param im Image
- \param int priority
+ \param thumbPriority 
  */
 template <class DBFS>
 QString ThumbThread<DBFS>::CreateThumbnail(ImagePtrK im, int thumbPriority)
@@ -357,14 +345,14 @@ ImageThumb<DBFS>::~ImageThumb()
 {
     delete m_imageThread;
     delete m_videoThread;
-    m_imageThread = m_videoThread = NULL;
+    m_imageThread = m_videoThread = nullptr;
 }
 
 
 /*!
  \brief Clears thumbnails for a device
  \param devId Device identity
- \param deleteFiles If true, the device thumbnails will be deleted
+ \param action [DEVICE] (CLOSE | CLEAR)
  \warning May block for several seconds
 */
 template <class DBFS>
@@ -405,7 +393,8 @@ QString ImageThumb<DBFS>::DeleteThumbs(const ImageList &images)
     QStringList ids;
 
     // Pictures & videos are deleted by their own threads
-    ImageListK pics, videos;
+    ImageListK pics;
+    ImageListK videos;
     foreach (ImagePtrK im, images)
     {
         if (im->m_type == kVideoFile)
@@ -444,23 +433,24 @@ void ImageThumb<DBFS>::CreateThumbnail(const ImagePtrK &im, int priority,
     TaskPtr task(new ThumbTask("CREATE", im, priority, notify));
 
     if (im->m_type == kImageFile && m_imageThread)
-
+    {
         m_imageThread->Enqueue(task);
-
+    }
     else if (im->m_type == kVideoFile && m_videoThread)
-
+    {
         m_videoThread->Enqueue(task);
-
+    }
     else
+    {
         LOG(VB_FILE, LOG_INFO, QString("Ignoring create thumbnail %1, type %2")
             .arg(im->m_id).arg(im->m_type));
+    }
 }
 
 
 /*!
  \brief Renames a thumbnail
  \param im Image
- \param priority Request priority
 */
 template <class DBFS>
 void ImageThumb<DBFS>::MoveThumbnail(const ImagePtrK &im)
@@ -471,16 +461,18 @@ void ImageThumb<DBFS>::MoveThumbnail(const ImagePtrK &im)
     TaskPtr task(new ThumbTask("MOVE", im));
 
     if (im->m_type == kImageFile && m_imageThread)
-
+    {
         m_imageThread->Enqueue(task);
-
+    }
     else if (im->m_type == kVideoFile && m_videoThread)
-
+    {
         m_videoThread->Enqueue(task);
-
+    }
     else
+    {
         LOG(VB_FILE, LOG_INFO, QString("Ignoring move thumbnail %1, type %2")
             .arg(im->m_id).arg(im->m_type));
+    }
 }
 
 

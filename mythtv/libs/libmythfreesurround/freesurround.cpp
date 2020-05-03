@@ -41,7 +41,7 @@ using namespace std;
 static const unsigned default_block_size = SURROUND_BUFSIZE;
 // Gain of center and lfe channels in passive mode (sqrt 0.5)
 static const float center_level = 0.707107;
-static const float m3db = 0.7071067811865476f;           // 3dB  = SQRT(2)
+static const float m3db = 0.7071067811865476F;           // 3dB  = SQRT(2)
 static const float m6db = 0.5;                           // 6dB  = SQRT(4)
 static const float m7db = 0.44721359549996;              // 7dB  = SQRT(5)
 
@@ -49,22 +49,22 @@ unsigned int block_size = default_block_size;
 
 struct buffers
 {
-    buffers(unsigned int s):
-        l(s),r(s),c(s),ls(s),rs(s),lfe(s), rls(s), rrs(s) { }
+    explicit buffers(unsigned int s):
+        m_l(s),m_r(s),m_c(s),m_ls(s),m_rs(s),m_lfe(s), m_rls(s), m_rrs(s) { }
     void resize(unsigned int s)
     {
-        l.resize(s); r.resize(s); lfe.resize(s);
-        ls.resize(s); rs.resize(s); c.resize(s);
-        rls.resize(s); rrs.resize(s);
+        m_l.resize(s);   m_r.resize(s);  m_lfe.resize(s);
+        m_ls.resize(s);  m_rs.resize(s); m_c.resize(s);
+        m_rls.resize(s); m_rrs.resize(s);
     }
     void clear()
     {
-        l.clear(); r.clear(); lfe.clear();
-        ls.clear(); rs.clear(); c.clear();
-        rls.clear(); rrs.clear();
+        m_l.clear();   m_r.clear();  m_lfe.clear();
+        m_ls.clear();  m_rs.clear(); m_c.clear();
+        m_rls.clear(); m_rrs.clear();
     }
-    std::vector<float> l,r,c,ls,rs,lfe,cs,lcs,rcs,
-                       rls, rrs;       // for demultiplexing
+    std::vector<float> m_l,m_r,m_c,m_ls,m_rs,m_lfe,m_cs,m_lcs,m_rcs,
+                       m_rls, m_rrs;       // for demultiplexing
 };
 
 //#define SPEAKERTEST
@@ -73,16 +73,8 @@ int channel_select = -1;
 #endif
 
 FreeSurround::FreeSurround(uint srate, bool moviemode, SurroundMode smode) :
-    srate(srate),
-    bufs(NULL),
-    decoder(0),
-    in_count(0),
-    out_count(0),
-    processed(true),
-    processed_size(0),
-    surround_mode(smode),
-    latency_frames(0),
-    channels(0)
+    m_srate(srate),
+    m_surroundMode(smode)
 {
     LOG(VB_AUDIO, LOG_DEBUG,
         QString("FreeSurround::FreeSurround rate %1 moviemode %2")
@@ -90,29 +82,29 @@ FreeSurround::FreeSurround(uint srate, bool moviemode, SurroundMode smode) :
 
     if (moviemode)
     {
-        params.phasemode = 1;
-        params.center_width = 25;
-        params.dimension = 0.5;
+        m_params.phasemode = 1;
+        m_params.center_width = 25;
+        m_params.dimension = 0.5;
     }
     else
     {
-        params.center_width = 65;
-        params.dimension = 0.3;
+        m_params.center_width = 65;
+        m_params.dimension = 0.3;
     }
-    switch (surround_mode)
+    switch (m_surroundMode)
     {
         case SurroundModeActiveSimple:
-            params.steering = 0;
+            m_params.steering = 0;
             break;
         case SurroundModeActiveLinear:
-            params.steering = 1;
-            latency_frames = block_size/2;
+            m_params.steering = 1;
+            m_latencyFrames = block_size/2;
             break;
         default:
             break;
     }
 
-    bufs = new buffers(block_size/2);
+    m_bufs = new buffers(block_size/2);
     open();
 #ifdef SPEAKERTEST
     channel_select++;
@@ -127,24 +119,19 @@ FreeSurround::FreeSurround(uint srate, bool moviemode, SurroundMode smode) :
 
 void FreeSurround::SetParams()
 {
-    if (decoder)
+    if (m_decoder)
     {
-        decoder->steering_mode(params.steering);
-        decoder->phase_mode(params.phasemode);
-        decoder->surround_coefficients(params.coeff_a, params.coeff_b);
-        decoder->separation(params.front_sep/100.0,params.rear_sep/100.0);
+        m_decoder->steering_mode(m_params.steering);
+        m_decoder->phase_mode(m_params.phasemode);
+        m_decoder->surround_coefficients(m_params.coeff_a, m_params.coeff_b);
+        m_decoder->separation(m_params.front_sep/100.0,m_params.rear_sep/100.0);
     }
 }
 
 FreeSurround::fsurround_params::fsurround_params(int32_t center_width,
                                                  int32_t dimension) :
     center_width(center_width),
-    dimension(dimension),
-    coeff_a(0.8165),coeff_b(0.5774),
-    phasemode(0),
-    steering(1),
-    front_sep(100),
-    rear_sep(100)
+    dimension(dimension)
 {
 }
 
@@ -152,25 +139,25 @@ FreeSurround::~FreeSurround()
 {
     LOG(VB_AUDIO, LOG_DEBUG, QString("FreeSurround::~FreeSurround"));
     close();
-    delete bufs;
-    bufs = NULL;
+    delete m_bufs;
+    m_bufs = nullptr;
     LOG(VB_AUDIO, LOG_DEBUG, QString("FreeSurround::~FreeSurround done"));
 }
 
 uint FreeSurround::putFrames(void* buffer, uint numFrames, uint numChannels)
 {
-    int i = 0;
-    int ic = in_count;
+    uint i = 0;
+    int ic = m_inCount;
     int bs = block_size/2;
     bool process = true;
-    float *samples = (float *)buffer;
+    auto *samples = (float *)buffer;
     // demultiplex
 
-    float **inputs = decoder->getInputBuffers();
+    float **inputs = m_decoder->getInputBuffers();
     float *lt      = &inputs[0][ic];
     float *rt      = &inputs[1][ic];
 
-    if ((surround_mode != SurroundModePassive) && (ic+numFrames > bs))
+    if ((m_surroundMode != SurroundModePassive) && (ic+numFrames > bs))
     {
         numFrames = bs - ic;
     }
@@ -178,7 +165,7 @@ uint FreeSurround::putFrames(void* buffer, uint numFrames, uint numChannels)
     switch (numChannels)
     {
         case 1:
-            switch (surround_mode)
+            switch (m_surroundMode)
             {
                 case SurroundModePassive:
                 case SurroundModePassiveHall:
@@ -186,8 +173,8 @@ uint FreeSurround::putFrames(void* buffer, uint numFrames, uint numChannels)
                     {
                         // should be -7dB to keep power level the same
                         // but we bump the level a tad.
-                        bufs->c[ic] = bufs->l[ic] = bufs->r[ic] = samples[i] * m6db;
-                        bufs->ls[ic] = bufs->rs[ic] = bufs->c[ic];
+                        m_bufs->m_c[ic]  = m_bufs->m_l[ic]  = m_bufs->m_r[ic] = samples[i] * m6db;
+                        m_bufs->m_ls[ic] = m_bufs->m_rs[ic] = m_bufs->m_c[ic];
                     }
                     process = false;
                     break;
@@ -197,23 +184,23 @@ uint FreeSurround::putFrames(void* buffer, uint numFrames, uint numChannels)
                     process = true;
                     break;
             }
-            channels = 6;
+            m_channels = 6;
             break;
 
         case 2:
-            switch (surround_mode)
+            switch (m_surroundMode)
             {
                 case SurroundModePassive:
                     for (i = 0; i < numFrames && ic < bs; i++,ic++)
                     {
                         float lt      = *samples++;
                         float rt      = *samples++;
-                        bufs->l[ic]   = lt;
-                        bufs->lfe[ic] = bufs->c[ic] = (lt+rt) * m3db;
-                        bufs->r[ic]   = rt;
+                        m_bufs->m_l[ic]   = lt;
+                        m_bufs->m_lfe[ic] = m_bufs->m_c[ic] = (lt+rt) * m3db;
+                        m_bufs->m_r[ic]   = rt;
                         // surround channels receive out-of-phase
-                        bufs->ls[ic]  = (rt-lt) * 0.5;
-                        bufs->rs[ic]  = (lt-rt) * 0.5;
+                        m_bufs->m_ls[ic]  = (rt-lt) * 0.5;
+                        m_bufs->m_rs[ic]  = (lt-rt) * 0.5;
                     }
                     process = false;
                     break;
@@ -222,11 +209,11 @@ uint FreeSurround::putFrames(void* buffer, uint numFrames, uint numChannels)
                     {
                         float lt      = *samples++;
                         float rt      = *samples++;
-                        bufs->l[ic]   = lt * m3db;
-                        bufs->lfe[ic] = bufs->c[ic] = (lt+rt) * m3db;
-                        bufs->r[ic]   = rt * m3db;
-                        bufs->ls[ic]  = bufs->l[ic];
-                        bufs->rs[ic]  = bufs->r[ic];
+                        m_bufs->m_l[ic]   = lt * m3db;
+                        m_bufs->m_lfe[ic] = m_bufs->m_c[ic] = (lt+rt) * m3db;
+                        m_bufs->m_r[ic]   = rt * m3db;
+                        m_bufs->m_ls[ic]  = m_bufs->m_l[ic];
+                        m_bufs->m_rs[ic]  = m_bufs->m_r[ic];
                     }
                     process = false;
                     break;
@@ -239,7 +226,7 @@ uint FreeSurround::putFrames(void* buffer, uint numFrames, uint numChannels)
                     process = true;
                     break;
             }
-            channels = 6;
+            m_channels = 6;
             break;
 
         case 5:
@@ -250,15 +237,15 @@ uint FreeSurround::putFrames(void* buffer, uint numFrames, uint numChannels)
                 float c       = *samples++;
                 float ls      = *samples++;
                 float rs      = *samples++;
-                bufs->l[ic]   = lt;
-                bufs->lfe[ic] = 0.0f;
-                bufs->c[ic]   = c;
-                bufs->r[ic]   = rt;
-                bufs->ls[ic]  = ls;
-                bufs->rs[ic]  = rs;
+                m_bufs->m_l[ic]   = lt;
+                m_bufs->m_lfe[ic] = 0.0F;
+                m_bufs->m_c[ic]   = c;
+                m_bufs->m_r[ic]   = rt;
+                m_bufs->m_ls[ic]  = ls;
+                m_bufs->m_rs[ic]  = rs;
             }
             process = false;
-            channels = 6;
+            m_channels = 6;
             break;
 
         case 7:
@@ -272,16 +259,16 @@ uint FreeSurround::putFrames(void* buffer, uint numFrames, uint numChannels)
                 float cs      = *samples++;
                 float ls      = *samples++;
                 float rs      = *samples++;
-                bufs->l[ic]   = lt;
-                bufs->lfe[ic] = lfe;
-                bufs->c[ic]   = c;
-                bufs->r[ic]   = rt;
-                bufs->ls[ic]  = ls;
-                bufs->rs[ic]  = rs;
-                bufs->rls[ic]  = bufs->rrs[ic]  = cs * m3db;
+                m_bufs->m_l[ic]   = lt;
+                m_bufs->m_lfe[ic] = lfe;
+                m_bufs->m_c[ic]   = c;
+                m_bufs->m_r[ic]   = rt;
+                m_bufs->m_ls[ic]  = ls;
+                m_bufs->m_rs[ic]  = rs;
+                m_bufs->m_rls[ic]  = m_bufs->m_rrs[ic]  = cs * m3db;
             }
             process = false;
-            channels = 8;
+            m_channels = 8;
             break;
         default:
             break;
@@ -293,53 +280,52 @@ uint FreeSurround::putFrames(void* buffer, uint numFrames, uint numChannels)
         {
             // dont modify unless no processing is to be done
             // for audiotime consistency
-            in_count = ic;
+            m_inCount = ic;
         }
         else
         {
-            processed = process;
+            m_processed = process;
             // process_block takes some time so dont update in and out count
             // before its finished so that Audiotime is correctly calculated
             process_block();
-            in_count = 0;
-            out_count = bs;
-            processed_size = bs;
-            latency_frames = block_size/2;
+            m_inCount = 0;
+            m_outCount = bs;
+            m_processedSize = bs;
+            m_latencyFrames = block_size/2;
         }
     }
     else
     {
-        in_count = 0;
-        out_count = processed_size = ic;
-        processed = false;
-        latency_frames = 0;
+        m_inCount = 0;
+        m_outCount = m_processedSize = ic;
+        m_processed = false;
+        m_latencyFrames = 0;
     }
 
     LOG(VB_AUDIO | VB_TIMESTAMP, LOG_DEBUG,
         QString("FreeSurround::putFrames %1 #ch %2 used %3 generated %4")
-            .arg(numFrames).arg(numChannels).arg(i).arg(out_count));
+            .arg(numFrames).arg(numChannels).arg(i).arg(m_outCount));
 
     return i;
 }
 
 uint FreeSurround::receiveFrames(void *buffer, uint maxFrames)
 {
-    uint i;
-    uint oc = out_count;
+    uint oc = m_outCount;
     if (maxFrames > oc) maxFrames = oc;
-    uint outindex = processed_size - oc;
-    float *output = (float *)buffer;
-    if (channels == 8)
+    uint outindex = m_processedSize - oc;
+    auto *output = (float *)buffer;
+    if (m_channels == 8)
     {
-        float *l   = &bufs->l[outindex];
-        float *c   = &bufs->c[outindex];
-        float *r   = &bufs->r[outindex];
-        float *ls  = &bufs->ls[outindex];
-        float *rs  = &bufs->rs[outindex];
-        float *lfe = &bufs->lfe[outindex];
-        float *rls = &bufs->rls[outindex];
-        float *rrs = &bufs->rrs[outindex];
-        for (i = 0; i < maxFrames; i++)
+        float *l   = &m_bufs->m_l[outindex];
+        float *c   = &m_bufs->m_c[outindex];
+        float *r   = &m_bufs->m_r[outindex];
+        float *ls  = &m_bufs->m_ls[outindex];
+        float *rs  = &m_bufs->m_rs[outindex];
+        float *lfe = &m_bufs->m_lfe[outindex];
+        float *rls = &m_bufs->m_rls[outindex];
+        float *rrs = &m_bufs->m_rrs[outindex];
+        for (uint i = 0; i < maxFrames; i++)
         {
 //            printf("1:%f 2:%f 3:%f 4:%f 5:%f 6:%f 7:%f 8:%f\n",
 //                   *l, *r, *c, *lfe, *rls, *rrs, *ls, *rs);
@@ -355,20 +341,19 @@ uint FreeSurround::receiveFrames(void *buffer, uint maxFrames)
             *output++ = *rs++;
         }
         oc -= maxFrames;
-        outindex += maxFrames;
     }
     else        // channels == 6
     {
-        if (processed)
+        if (m_processed)
         {
-            float** outputs = decoder->getOutputBuffers();
+            float** outputs = m_decoder->getOutputBuffers();
             float *l   = &outputs[0][outindex];
             float *c   = &outputs[1][outindex];
             float *r   = &outputs[2][outindex];
             float *ls  = &outputs[3][outindex];
             float *rs  = &outputs[4][outindex];
             float *lfe = &outputs[5][outindex];
-            for (i = 0; i < maxFrames; i++)
+            for (uint i = 0; i < maxFrames; i++)
             {
                 *output++ = *l++;
                 *output++ = *r++;
@@ -378,17 +363,16 @@ uint FreeSurround::receiveFrames(void *buffer, uint maxFrames)
                 *output++ = *rs++;
             }
             oc -= maxFrames;
-            outindex += maxFrames;
         }
         else
         {
-            float *l   = &bufs->l[outindex];
-            float *c   = &bufs->c[outindex];
-            float *r   = &bufs->r[outindex];
-            float *ls  = &bufs->ls[outindex];
-            float *rs  = &bufs->rs[outindex];
-            float *lfe = &bufs->lfe[outindex];
-            for (i = 0; i < maxFrames; i++)
+            float *l   = &m_bufs->m_l[outindex];
+            float *c   = &m_bufs->m_c[outindex];
+            float *r   = &m_bufs->m_r[outindex];
+            float *ls  = &m_bufs->m_ls[outindex];
+            float *rs  = &m_bufs->m_rs[outindex];
+            float *lfe = &m_bufs->m_lfe[outindex];
+            for (uint i = 0; i < maxFrames; i++)
             {
                 *output++ = *l++;
                 *output++ = *r++;
@@ -398,10 +382,9 @@ uint FreeSurround::receiveFrames(void *buffer, uint maxFrames)
                 *output++ = *rs++;
             }
             oc -= maxFrames;
-            outindex += maxFrames;
         }
     }
-    out_count = oc;
+    m_outCount = oc;
     LOG(VB_AUDIO | VB_TIMESTAMP, LOG_DEBUG,
         QString("FreeSurround::receiveFrames %1").arg(maxFrames));
     return maxFrames;
@@ -412,9 +395,9 @@ void FreeSurround::process_block()
     // process the data
     try
     {
-        if (decoder)
+        if (m_decoder)
         {
-            decoder->decode(params.center_width/100.0,params.dimension/100.0);
+            m_decoder->decode(m_params.center_width/100.0,m_params.dimension/100.0);
         }
     }
     catch(...)
@@ -425,54 +408,53 @@ void FreeSurround::process_block()
 long long FreeSurround::getLatency()
 {
     // returns in usec
-    if (latency_frames == 0)
+    if (m_latencyFrames == 0)
         return 0;
-    return decoder ? ((long long)(latency_frames + in_count)*1000000)/(2*srate) : 0;
+    return m_decoder ? ((long long)(m_latencyFrames + m_inCount)*1000000)/(2*m_srate) : 0;
 }
 
 void FreeSurround::flush()
 {
-    if (decoder)
-        decoder->flush();
-    bufs->clear();
+    if (m_decoder)
+        m_decoder->flush();
+    m_bufs->clear();
 }
 
 // load the lib and initialize the interface
 void FreeSurround::open()
 {
-    if (!decoder)
+    if (!m_decoder)
     {
-        decoder = new fsurround_decoder(block_size);
-        decoder->flush();
-        if (bufs)
-            bufs->clear();
-        decoder->sample_rate(srate);
+        m_decoder = new fsurround_decoder(block_size);
+        m_decoder->flush();
+        if (m_bufs)
+            m_bufs->clear();
+        m_decoder->sample_rate(m_srate);
     }
     SetParams();
 }
 
 void FreeSurround::close()
 {
-    delete decoder;
-    decoder = NULL;
+    delete m_decoder;
+    m_decoder = nullptr;
 }
 
 uint FreeSurround::numUnprocessedFrames()
 {
-    return in_count;
+    return m_inCount;
 }
 
 uint FreeSurround::numFrames()
 {
-    return out_count;
+    return m_outCount;
 }
 
 uint FreeSurround::frameLatency()
 {
-    if (processed)
-        return in_count + out_count + (block_size/2);
-    else
-        return in_count + out_count;
+    if (m_processed)
+        return m_inCount + m_outCount + (block_size/2);
+    return m_inCount + m_outCount;
 }
 
 uint FreeSurround::framesPerBlock()

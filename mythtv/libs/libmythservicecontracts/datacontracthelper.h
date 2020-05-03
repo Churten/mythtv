@@ -87,7 +87,7 @@
     public:                             \
     type* name()                        \
     {                                   \
-        if (m_##name == NULL)           \
+        if (m_##name == nullptr)        \
             m_##name = new type( this );\
         return m_##name;                \
     }
@@ -118,8 +118,7 @@ inline void DeleteListContents( QVariantList &list )
 
         const QObject *pObject = vValue.value< QObject* >();
 
-        if (pObject != NULL)
-            delete pObject;
+        delete pObject;
     }
 }
 
@@ -128,19 +127,17 @@ inline void DeleteListContents( QVariantList &list )
 template< class T >
 void CopyListContents( QObject *pParent, QVariantList &dst, const QVariantList &src )
 {
-    for( int nIdx = 0; nIdx < src.size(); nIdx++ )
+    foreach (auto vValue, src)
     {
-        QVariant vValue = src[ nIdx ];
-
         if ( vValue.canConvert< QObject* >())
         {
             const QObject *pObject = vValue.value< QObject* >();
 
-            if (pObject != NULL)
+            if (pObject != nullptr)
             {
                 QObject *pNew = new T( pParent );
 
-                ((T *)pNew)->Copy( (const T &)(*pObject) );
+                ((T *)pNew)->Copy( (const T *)pObject );
 
                 dst.append( QVariant::fromValue<QObject *>( pNew ));
             }

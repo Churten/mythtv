@@ -13,12 +13,7 @@
 #include "tv_rec.h"
 
 #define LOC QString("CetonRec[%1]: ") \
-            .arg(tvrec ? tvrec->GetInputId() : -1)
-
-CetonRecorder::CetonRecorder(TVRec *rec, CetonChannel *channel) :
-    DTVRecorder(rec), _channel(channel), _stream_handler(NULL)
-{
-}
+            .arg(m_tvrec ? m_tvrec->GetInputId() : -1)
 
 bool CetonRecorder::Open(void)
 {
@@ -30,8 +25,8 @@ bool CetonRecorder::Open(void)
 
     ResetForNewFile();
 
-    _stream_handler = CetonStreamHandler::Get(_channel->GetDevice(),
-                                              tvrec ? tvrec->GetInputId() : -1);
+    m_streamHandler = CetonStreamHandler::Get(m_channel->GetDevice(),
+                                               m_tvrec ? m_tvrec->GetInputId() : -1);
 
     LOG(VB_RECORD, LOG_INFO, LOC + "Ceton opened successfully");
 
@@ -43,8 +38,8 @@ void CetonRecorder::Close(void)
     LOG(VB_RECORD, LOG_INFO, LOC + "Close() -- begin");
 
     if (IsOpen())
-        CetonStreamHandler::Return(_stream_handler,
-                                   tvrec ? tvrec->GetInputId() : -1);
+        CetonStreamHandler::Return(m_streamHandler,
+                                   m_tvrec ? m_tvrec->GetInputId() : -1);
 
     LOG(VB_RECORD, LOG_INFO, LOC + "Close() -- end");
 }
@@ -52,8 +47,8 @@ void CetonRecorder::Close(void)
 void CetonRecorder::StartNewFile(void)
 {
     // Make sure the first things in the file are a PAT & PMT
-    HandleSingleProgramPAT(_stream_data->PATSingleProgram(), true);
-    HandleSingleProgramPMT(_stream_data->PMTSingleProgram(), true);
+    HandleSingleProgramPAT(m_streamData->PATSingleProgram(), true);
+    HandleSingleProgramPMT(m_streamData->PMTSingleProgram(), true);
 }
 
 void CetonRecorder::run(void)
@@ -63,23 +58,23 @@ void CetonRecorder::run(void)
     /* Create video socket. */
     if (!Open())
     {
-        _error = "Failed to open CetonRecorder device";
-        LOG(VB_GENERAL, LOG_ERR, LOC + _error);
+        m_error = "Failed to open CetonRecorder device";
+        LOG(VB_GENERAL, LOG_ERR, LOC + m_error);
         return;
     }
 
     {
-        QMutexLocker locker(&pauseLock);
-        request_recording = true;
-        recording = true;
-        recordingWait.wakeAll();
+        QMutexLocker locker(&m_pauseLock);
+        m_requestRecording = true;
+        m_recording = true;
+        m_recordingWait.wakeAll();
     }
 
     StartNewFile();
 
-    _stream_data->AddAVListener(this);
-    _stream_data->AddWritingListener(this);
-    _stream_handler->AddListener(_stream_data);
+    m_streamData->AddAVListener(this);
+    m_streamData->AddWritingListener(this);
+    m_streamHandler->AddListener(m_streamData);
 
     while (IsRecordingRequested() && !IsErrored())
     {
@@ -91,13 +86,13 @@ void CetonRecorder::run(void)
 
         {   // sleep 100 milliseconds unless StopRecording() or Unpause()
             // is called, just to avoid running this too often.
-            QMutexLocker locker(&pauseLock);
-            if (!request_recording || request_pause)
+            QMutexLocker locker(&m_pauseLock);
+            if (!m_requestRecording || m_requestPause)
                 continue;
-            unpauseWait.wait(&pauseLock, 100);
+            m_unpauseWait.wait(&m_pauseLock, 100);
         }
 
-        if (!_input_pmt)
+        if (!m_inputPmt)
         {
             LOG(VB_GENERAL, LOG_WARNING, LOC +
                     "Recording will not commence until a PMT is set.");
@@ -105,53 +100,53 @@ void CetonRecorder::run(void)
             continue;
         }
 
-        if (!_stream_handler->IsRunning())
+        if (!m_streamHandler->IsRunning())
         {
-            _error = "Stream handler died unexpectedly.";
-            LOG(VB_GENERAL, LOG_ERR, LOC + _error);
+            m_error = "Stream handler died unexpectedly.";
+            LOG(VB_GENERAL, LOG_ERR, LOC + m_error);
         }
     }
 
     LOG(VB_RECORD, LOG_INFO, LOC + "run -- ending...");
 
-    _stream_handler->RemoveListener(_stream_data);
-    _stream_data->RemoveWritingListener(this);
-    _stream_data->RemoveAVListener(this);
+    m_streamHandler->RemoveListener(m_streamData);
+    m_streamData->RemoveWritingListener(this);
+    m_streamData->RemoveAVListener(this);
 
     Close();
 
     FinishRecording();
 
-    QMutexLocker locker(&pauseLock);
-    recording = false;
-    recordingWait.wakeAll();
+    QMutexLocker locker(&m_pauseLock);
+    m_recording = false;
+    m_recordingWait.wakeAll();
 
     LOG(VB_RECORD, LOG_INFO, LOC + "run -- end");
 }
 
 bool CetonRecorder::PauseAndWait(int timeout)
 {
-    QMutexLocker locker(&pauseLock);
-    if (request_pause)
+    QMutexLocker locker(&m_pauseLock);
+    if (m_requestPause)
     {
         if (!IsPaused(true))
         {
-            _stream_handler->RemoveListener(_stream_data);
+            m_streamHandler->RemoveListener(m_streamData);
 
-            paused = true;
-            pauseWait.wakeAll();
-            if (tvrec)
-                tvrec->RecorderPaused();
+            m_paused = true;
+            m_pauseWait.wakeAll();
+            if (m_tvrec)
+                m_tvrec->RecorderPaused();
         }
 
-        unpauseWait.wait(&pauseLock, timeout);
+        m_unpauseWait.wait(&m_pauseLock, timeout);
     }
 
-    if (!request_pause && IsPaused(true))
+    if (!m_requestPause && IsPaused(true))
     {
-        paused = false;
-        _stream_handler->AddListener(_stream_data);
-        unpauseWait.wakeAll();
+        m_paused = false;
+        m_streamHandler->AddListener(m_streamData);
+        m_unpauseWait.wakeAll();
     }
 
     return IsPaused(true);
@@ -159,7 +154,7 @@ bool CetonRecorder::PauseAndWait(int timeout)
 
 QString CetonRecorder::GetSIStandard(void) const
 {
-    return _channel->GetSIStandard();
+    return m_channel->GetSIStandard();
 }
 
 /* vim: set expandtab tabstop=4 shiftwidth=4: */

@@ -4,6 +4,7 @@
 
 extern "C" {
 #include "libavcodec/avcodec.h"
+#include "libavutil/imgutils.h"
 }
 #include "mythframe.h"
 #include "mythlogging.h"
@@ -30,18 +31,19 @@ static enum PixelFormat pixelTypeOfVideoFrameType(VideoFrameType codec)
 
 int pgm_read(unsigned char *buf, int width, int height, const char *filename)
 {
-    FILE        *fp;
-    int         nn, fwidth, fheight, maxgray, rr;
-
-    if (!(fp = fopen(filename, "r")))
+    FILE *fp = fopen(filename, "r");
+    if (fp == nullptr)
     {
         LOG(VB_COMMFLAG, LOG_ERR, QString("pgm_read fopen %1 failed: %2")
                 .arg(filename).arg(strerror(errno)));
         return -1;
     }
 
-    if ((nn = fscanf(fp, "P5\n%20d %20d\n%20d\n",
-                     &fwidth, &fheight, &maxgray)) != 3)
+    int fwidth = 0;
+    int fheight = 0;
+    int maxgray = 0;
+    int nn = fscanf(fp, "P5\n%20d %20d\n%20d\n", &fwidth, &fheight, &maxgray);
+    if (nn != 3)
     {
         LOG(VB_COMMFLAG, LOG_ERR, QString("pgm_read fscanf %1 failed: %2")
                 .arg(filename).arg(strerror(errno)));
@@ -57,7 +59,7 @@ int pgm_read(unsigned char *buf, int width, int height, const char *filename)
         goto error;
     }
 
-    for (rr = 0; rr < height; rr++)
+    for (int rr = 0; rr < height; rr++)
     {
         if (fread(buf + rr * width, 1, width, fp) != (size_t)width)
         {
@@ -79,10 +81,9 @@ int pgm_write(const unsigned char *buf, int width, int height,
               const char *filename)
 {
     /* Copied from libavcodec/apiexample.c */
-    FILE        *fp;
-    int         rr;
 
-    if (!(fp = fopen(filename, "w")))
+    FILE *fp = fopen(filename, "w");
+    if (fp == nullptr)
     {
         LOG(VB_COMMFLAG, LOG_ERR, QString("pgm_write fopen %1 failed: %2")
                 .arg(filename).arg(strerror(errno)));
@@ -90,7 +91,7 @@ int pgm_write(const unsigned char *buf, int width, int height,
     }
 
     (void)fprintf(fp, "P5\n%d %d\n%d\n", width, height, UCHAR_MAX);
-    for (rr = 0; rr < height; rr++)
+    for (int rr = 0; rr < height; rr++)
     {
         if (fwrite(buf + rr * width, 1, width, fp) != (size_t)width)
         {
@@ -108,7 +109,7 @@ error:
     return -1;
 }
 
-static int pgm_expand(AVPicture *dst, const AVPicture *src, int srcheight,
+static int pgm_expand(AVFrame *dst, const AVFrame *src, int srcheight,
                       int extratop, int extraright, int extrabottom,
                       int extraleft)
 {
@@ -116,52 +117,55 @@ static int pgm_expand(AVPicture *dst, const AVPicture *src, int srcheight,
     const int           srcwidth = src->linesize[0];
     const int           newwidth = srcwidth + extraleft + extraright;
     const int           newheight = srcheight + extratop + extrabottom;
-    const unsigned char *srcdata;
-    int                 rr;
 
     /* Copy the image. */
-    for (rr = 0; rr < srcheight; rr++)
+    for (int rr = 0; rr < srcheight; rr++)
+    {
         memcpy(dst->data[0] + (rr + extratop) * newwidth + extraleft,
                 src->data[0] + rr * srcwidth,
                 srcwidth);
+    }
 
     /* Pad the top. */
-    srcdata = src->data[0];
-    for (rr = 0; rr < extratop; rr++)
+    const uchar *srcdata = src->data[0];
+    for (int rr = 0; rr < extratop; rr++)
         memcpy(dst->data[0] + rr * newwidth + extraleft, srcdata, srcwidth);
 
     /* Pad the bottom. */
     srcdata = src->data[0] + (srcheight - 1) * srcwidth;
-    for (rr = extratop + srcheight; rr < newheight; rr++)
+    for (int rr = extratop + srcheight; rr < newheight; rr++)
         memcpy(dst->data[0] + rr * newwidth + extraleft, srcdata, srcwidth);
 
     /* Pad the left. */
-    for (rr = 0; rr < newheight; rr++)
+    for (int rr = 0; rr < newheight; rr++)
+    {
         memset(dst->data[0] + rr * newwidth,
                 dst->data[0][rr * newwidth + extraleft],
                 extraleft);
+    }
 
     /* Pad the right. */
-    for (rr = 0; rr < newheight; rr++)
+    for (int rr = 0; rr < newheight; rr++)
+    {
         memset(dst->data[0] + rr * newwidth + extraleft + srcwidth,
                 dst->data[0][rr * newwidth + extraleft + srcwidth - 1],
                 extraright);
+    }
 
     return 0;
 }
 
-static int pgm_expand_uniform(AVPicture *dst, const AVPicture *src,
+static int pgm_expand_uniform(AVFrame *dst, const AVFrame *src,
                               int srcheight, int extramargin)
 {
     return pgm_expand(dst, src, srcheight,
             extramargin, extramargin, extramargin, extramargin);
 }
 
-int pgm_crop(AVPicture *dst, const AVPicture *src, int srcheight,
+int pgm_crop(AVFrame *dst, const AVFrame *src, int srcheight,
              int srcrow, int srccol, int cropwidth, int cropheight)
 {
     const int   srcwidth = src->linesize[0];
-    int         rr;
 
     if (dst->linesize[0] != cropwidth)
     {
@@ -170,22 +174,23 @@ int pgm_crop(AVPicture *dst, const AVPicture *src, int srcheight,
         return -1;
     }
 
-    for (rr = 0; rr < cropheight; rr++)
+    for (int rr = 0; rr < cropheight; rr++)
+    {
         memcpy(dst->data[0] + rr * cropwidth,
                 src->data[0] + (srcrow + rr) * srcwidth + srccol,
                 cropwidth);
+    }
 
     (void)srcheight;    /* gcc */
     return 0;
 }
 
-int pgm_overlay(AVPicture *dst, const AVPicture *s1, int s1height,
-                int s1row, int s1col, const AVPicture *s2, int s2height)
+int pgm_overlay(AVFrame *dst, const AVFrame *s1, int s1height,
+                int s1row, int s1col, const AVFrame *s2, int s2height)
 {
     const int   dstwidth = dst->linesize[0];
     const int   s1width = s1->linesize[0];
     const int   s2width = s2->linesize[0];
-    int         rr;
 
     if (dstwidth != s1width)
     {
@@ -194,19 +199,27 @@ int pgm_overlay(AVPicture *dst, const AVPicture *s1, int s1height,
         return -1;
     }
 
-    av_picture_copy(dst, s1, AV_PIX_FMT_GRAY8, s1width, s1height);
+    // av_image_copy is badly designed to require writeable
+    // pointers to the read-only data, so copy the pointers here
+    const uint8_t *src_data[4]
+      =  {s1->data[0], s1->data[1], s1->data[2], s1->data[3]};
+
+    av_image_copy(dst->data, dst->linesize, src_data, s1->linesize,
+        AV_PIX_FMT_GRAY8, s1width, s1height);
 
     /* Overwrite overlay area of "dst" with "s2". */
-    for (rr = 0; rr < s2height; rr++)
+    for (int rr = 0; rr < s2height; rr++)
+    {
         memcpy(dst->data[0] + (s1row + rr) * s1width + s1col,
                 s2->data[0] + rr * s2width,
                 s2width);
+    }
 
     return 0;
 }
 
-int pgm_convolve_radial(AVPicture *dst, AVPicture *s1, AVPicture *s2,
-                        const AVPicture *src, int srcheight,
+int pgm_convolve_radial(AVFrame *dst, AVFrame *s1, AVFrame *s2,
+                        const AVFrame *src, int srcheight,
                         const double *mask, int mask_radius)
 {
     /*
@@ -225,46 +238,52 @@ int pgm_convolve_radial(AVPicture *dst, AVPicture *s1, AVPicture *s2,
     const int       srcwidth = src->linesize[0];
     const int       newwidth = srcwidth + 2 * mask_radius;
     const int       newheight = srcheight + 2 * mask_radius;
-    int             ii, rr, cc, rr2, cc2;
-    double          sum;
 
     /* Get a padded copy of the src image for use by the convolutions. */
     if (pgm_expand_uniform(s1, src, srcheight, mask_radius))
         return -1;
 
     /* copy s1 to s2 and dst */
-    av_picture_copy(s2, s1, AV_PIX_FMT_GRAY8, newwidth, newheight);
-    av_picture_copy(dst, s1, AV_PIX_FMT_GRAY8, newwidth, newheight);
+
+    // av_image_copy is badly designed to require writeable
+    // pointers to the read-only data, so copy the pointers here
+    const uint8_t *src_data[4]
+    =  {s1->data[0], s1->data[1], s1->data[2], s1->data[3]};
+
+    av_image_copy(s2->data, s2->linesize, src_data, s1->linesize,
+        AV_PIX_FMT_GRAY8, newwidth, newheight);
+    av_image_copy(dst->data, dst->linesize, src_data, s1->linesize,
+        AV_PIX_FMT_GRAY8, newwidth, newheight);
 
     /* "s1" convolve with column vector => "s2" */
-    rr2 = mask_radius + srcheight;
-    cc2 = mask_radius + srcwidth;
-    for (rr = mask_radius; rr < rr2; rr++)
+    int rr2 = mask_radius + srcheight;
+    int cc2 = mask_radius + srcwidth;
+    for (int rr = mask_radius; rr < rr2; rr++)
     {
-        for (cc = mask_radius; cc < cc2; cc++)
+        for (int cc = mask_radius; cc < cc2; cc++)
         {
-            sum = 0;
-            for (ii = -mask_radius; ii <= mask_radius; ii++)
+            double sum = 0;
+            for (int ii = -mask_radius; ii <= mask_radius; ii++)
             {
                 sum += mask[ii + mask_radius] *
                     s1->data[0][(rr + ii) * newwidth + cc];
             }
-            s2->data[0][rr * newwidth + cc] = (unsigned char)(sum + 0.5);
+            s2->data[0][rr * newwidth + cc] = lround(sum);
         }
     }
 
     /* "s2" convolve with row vector => "dst" */
-    for (rr = mask_radius; rr < rr2; rr++)
+    for (int rr = mask_radius; rr < rr2; rr++)
     {
-        for (cc = mask_radius; cc < cc2; cc++)
+        for (int cc = mask_radius; cc < cc2; cc++)
         {
-            sum = 0;
-            for (ii = -mask_radius; ii <= mask_radius; ii++)
+            double sum = 0;
+            for (int ii = -mask_radius; ii <= mask_radius; ii++)
             {
                 sum += mask[ii + mask_radius] *
                     s2->data[0][rr * newwidth + cc + ii];
             }
-            dst->data[0][rr * newwidth + cc] = (unsigned char)(sum + 0.5);
+            dst->data[0][rr * newwidth + cc] = lround(sum);
         }
     }
 

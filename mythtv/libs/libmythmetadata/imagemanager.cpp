@@ -1,7 +1,8 @@
 #include "imagemanager.h"
 
-#include <QRunnable>
 #include <QImageReader>
+#include <QRunnable>
+#include <utility>
 
 #include "dbaccess.h"  // for FileAssociations
 #include "mthreadpool.h"
@@ -18,11 +19,11 @@
 #define DB_TABLE "gallery_files"
 
 #define RESULT_ERR(ERR, MESG) \
-{   LOG(VB_GENERAL, LOG_ERR, LOC + MESG); \
-    return QStringList("ERROR") << ERR; }
+{   LOG(VB_GENERAL, LOG_ERR, LOC + (MESG)); \
+    return QStringList("ERROR") << (ERR); }
 
 #define RESULT_OK(MESG) \
-{   LOG(VB_FILE, LOG_DEBUG, LOC + MESG); \
+{   LOG(VB_FILE, LOG_DEBUG, LOC + (MESG)); \
     return QStringList("OK"); }
 
 #define IMPORTDIR "Import"
@@ -32,9 +33,9 @@
 class Device
 {
 public:
-    Device(const QString &name, const QString &mount,
-           MythMediaDevice *media = NULL, QTemporaryDir *import = NULL)
-        : m_present(true), m_name(name), m_mount(mount),
+    Device(QString name, QString mount,
+           MythMediaDevice *media = nullptr, QTemporaryDir *import = nullptr)
+        : m_present(true), m_name(std::move(name)), m_mount(std::move(mount)),
           m_media(media), m_dir(import)
     {
         // Path relative to TEMP storage group
@@ -48,8 +49,7 @@ public:
         Close();
 
         // Remove imported images
-        if (m_dir)
-            delete m_dir;
+        delete m_dir;
 
         // Clean up non-SG thumbnails
         if (m_mount != STORAGE_GROUP_MOUNT)
@@ -76,7 +76,7 @@ public:
                 LOG(VB_MEDIA, LOG_DEBUG, LOC + QString("Unlocked '%1'").arg(m_name));
 
             MediaMonitor::GetMediaMonitor()->Unlock(m_media);
-            m_media = NULL;
+            m_media = nullptr;
         }
     }
 
@@ -85,30 +85,14 @@ public:
      \brief Clears all files and sub-dirs within a directory
      \param path Dir to clear
     */
-    void RemoveDirContents(QString path)
+    static void RemoveDirContents(const QString& path)
     {
-#if QT_VERSION >= QT_VERSION_CHECK(5, 0, 0)
         QDir(path).removeRecursively();
-#else
-        // Delete all files
-        QDir dir = QDir(path);
-        foreach(const QFileInfo &info,
-                dir.entryInfoList(QDir::AllEntries | QDir::NoDotAndDotDot))
-        {
-            if (info.isDir())
-            {
-                RemoveDirContents(info.absoluteFilePath());
-                dir.rmdir(info.absoluteFilePath());
-            }
-            else
-                QFile::remove(info.absoluteFilePath());
-        }
-#endif
     }
 
 
     //! Delete thumbnails associated with device
-    void RemoveThumbs(bool eject = false)
+    void RemoveThumbs(void)
     {
         // Remove thumbnails
         QString dir = QString("%1/" TEMP_SUBDIR "/%2").arg(GetConfDir(), m_thumbs);
@@ -164,7 +148,10 @@ QString DeviceManager::ThumbDir(int fs) const
 /*!
  \brief Define a new device and assign it a unique id. If the device is already
  known, its existing id is returned.
- \param device Device
+ \param name  Device model/volume/id
+ \param mount Device mountpoint
+ \param media Set for MediaMonitor devices only
+ \param dir   Dir path of images: import devices only
  \return int A unique id for this device.
 */
 int DeviceManager::OpenDevice(const QString &name, const QString &mount,
@@ -194,9 +181,9 @@ int DeviceManager::OpenDevice(const QString &name, const QString &mount,
 
 
 /*!
- \brief Remove a device
+ \brief Remove a device (or all devices)
  \param devId Id of device to remove
- \param removeImport If false, the Import device will not be discarded
+ \param action What action to take.
  \return bool True if device is recognized
 */
 QStringList DeviceManager::CloseDevices(int devId, const QString &action)
@@ -238,7 +225,7 @@ QStringList DeviceManager::CloseDevices(int devId, const QString &action)
 
 /*!
  \brief Find the id of a device
- \param device Device
+ \param mount Device mountpoint
  \return int Id (positive) if found, 0 if unknown
 */
 int DeviceManager::LocateMount(const QString &mount) const
@@ -284,9 +271,8 @@ QList<int> DeviceManager::GetAbsentees()
 
 /*!
  \brief Constructor
- \param thumbPath Absolute path of dir where thumbnails will be stored
 */
-ImageAdapterBase::ImageAdapterBase() : DeviceManager(),
+ImageAdapterBase::ImageAdapterBase() :
     m_imageFileExt(SupportedImages()),
     m_videoFileExt(SupportedVideos())
 {
@@ -329,11 +315,10 @@ QStringList ImageAdapterBase::SupportedVideos()
     QStringList formats;
     const FileAssociations::association_list faList =
         FileAssociations::getFileAssociation().getList();
-    for (FileAssociations::association_list::const_iterator p =
-        faList.begin(); p != faList.end(); ++p)
+    for (const auto & fa : faList)
     {
-        if (!p->use_default && p->playcommand == "Internal")
-            formats << QString(p->extension);
+        if (!fa.use_default && fa.playcommand == "Internal")
+            formats << QString(fa.extension);
     }
     return formats;
 }
@@ -341,16 +326,16 @@ QStringList ImageAdapterBase::SupportedVideos()
 
 /*!
  \brief Construct a local image from a file
- \param fileInfo File
+ \param fi File
  \param parentId Id of the parent dir
  \param devId Id of device containing the file
  \param base Unused but required for adapter interface
  \return ImageItem An image object
 */
 ImageItem *ImageAdapterLocal::CreateItem(const QFileInfo &fi, int parentId,
-                                         int devId, const QString &) const
+                                         int devId, const QString & /*base*/) const
 {
-    ImageItem *im = new ImageItem();
+    auto *im = new ImageItem();
 
     im->m_parentId  = parentId;
     im->m_device    = devId;
@@ -359,15 +344,25 @@ ImageItem *ImageAdapterLocal::CreateItem(const QFileInfo &fi, int parentId,
     if (parentId == GALLERY_DB_ID)
     {
         // Import devices show time of import, other devices show 'last scan time'
+#if QT_VERSION < QT_VERSION_CHECK(5,8,0)
         im->m_date    = im->m_filePath.contains(IMPORTDIR)
                 ? fi.lastModified().toTime_t()
                 : QDateTime::currentMSecsSinceEpoch() / 1000;
+#else
+        im->m_date    = im->m_filePath.contains(IMPORTDIR)
+                ? fi.lastModified().toSecsSinceEpoch()
+                : QDateTime::currentSecsSinceEpoch();
+#endif
         im->m_modTime = im->m_date;
         im->m_type    = kDevice;
         return im;
     }
 
+#if QT_VERSION < QT_VERSION_CHECK(5,8,0)
     im->m_modTime = fi.lastModified().toTime_t();
+#else
+    im->m_modTime = fi.lastModified().toSecsSinceEpoch();
+#endif
 
     if (fi.isDir())
     {
@@ -381,7 +376,7 @@ ImageItem *ImageAdapterLocal::CreateItem(const QFileInfo &fi, int parentId,
     if (im->m_type == kUnknown)
     {
         delete im;
-        return NULL;
+        return nullptr;
     }
 
     im->m_thumbPath = GetAbsThumbPath(ThumbDir(im->m_device), ThumbPath(*im));
@@ -397,7 +392,7 @@ ImageItem *ImageAdapterLocal::CreateItem(const QFileInfo &fi, int parentId,
  * \param extra Message data
  */
 void ImageAdapterLocal::Notify(const QString &mesg,
-                               const QStringList &extra) const
+                               const QStringList &extra)
 {
     QString host(gCoreContext->GetHostName());
     gCoreContext->SendEvent(MythEvent(QString("%1 %2").arg(mesg, host), extra));
@@ -406,16 +401,16 @@ void ImageAdapterLocal::Notify(const QString &mesg,
 
 /*!
  \brief Construct a remote image from a file
- \param fileInfo File
+ \param fi File
  \param parentId Id of the parent dir
  \param devId Unused
  \param base SG dir path
  \return ImageItem An image object
 */
 ImageItem *ImageAdapterSg::CreateItem(const QFileInfo &fi, int parentId,
-                                      int, const QString &base) const
+                                      int /*devId*/, const QString &base) const
 {
-    ImageItem *im = new ImageItem();
+    auto *im = new ImageItem();
 
     im->m_device    = 0;
     im->m_parentId  = parentId;
@@ -432,7 +427,11 @@ ImageItem *ImageAdapterSg::CreateItem(const QFileInfo &fi, int parentId,
 
     // Strip SG path & leading / to leave a relative path
     im->m_filePath = fi.absoluteFilePath().mid(base.size() + 1);
+#if QT_VERSION < QT_VERSION_CHECK(5,8,0)
     im->m_modTime  = fi.lastModified().toTime_t();
+#else
+    im->m_modTime  = fi.lastModified().toSecsSinceEpoch();
+#endif
 
     if (fi.isDir())
     {
@@ -446,7 +445,7 @@ ImageItem *ImageAdapterSg::CreateItem(const QFileInfo &fi, int parentId,
     if (im->m_type == kUnknown)
     {
         delete im;
-        return NULL;
+        return nullptr;
     }
 
     im->m_thumbPath = GetAbsThumbPath(ThumbDir(im->m_device), ThumbPath(*im));
@@ -462,7 +461,7 @@ ImageItem *ImageAdapterSg::CreateItem(const QFileInfo &fi, int parentId,
  * \param extra Message data
  */
 void ImageAdapterSg::Notify(const QString &mesg,
-                            const QStringList &extra) const
+                            const QStringList &extra)
 {
     gCoreContext->SendEvent(MythEvent(mesg, extra));
 }
@@ -513,7 +512,7 @@ QString ImageAdapterSg::GetAbsFilePath(const ImagePtrK &im) const
 template <class FS>
 ImageItem *ImageDb<FS>::CreateImage(const MSqlQuery &query) const
 {
-    ImageItem *im = new ImageItem(FS::ImageId(query.value(0).toInt()));
+    auto *im = new ImageItem(FS::ImageId(query.value(0).toInt()));
 
     // Ordered as per DB_COLUMNS
     im->m_filePath      = query.value(1).toString();
@@ -524,7 +523,7 @@ ImageItem *ImageDb<FS>::CreateImage(const MSqlQuery &query) const
     im->m_size          = query.value(6).toInt();
     im->m_extension     = query.value(7).toString();
     im->m_date          = query.value(8).toUInt();
-    im->m_isHidden      = query.value(9).toInt();
+    im->m_isHidden      = query.value(9).toBool();
     im->m_orientation   = query.value(10).toInt();
     im->m_userThumbnail = FS::ImageId(query.value(11).toInt());
     im->m_comment       = query.value(12).toString();
@@ -548,8 +547,8 @@ ImageItem *ImageDb<FS>::CreateImage(const MSqlQuery &query) const
 /*!
  * \brief Read database images/dirs by id
  * \param[in] ids Comma-separated list of ids
- * \param[in out] files List of files
- * \param[in out] files List of dirs
+ * \param[in,out] files List of files
+ * \param[in,out] dirs List of dirs
  * \param[in] refine SQL clause to refine selection & apply ordering
  * \return int Number of items matching query, -1 on SQL error
  */
@@ -567,8 +566,8 @@ int ImageDb<FS>::GetImages(const QString &ids, ImageList &files, ImageList &dirs
 
 /*!
  \brief Read immediate children of a dir
- \param[in out] dirs List of child subdirs
- \param[in out] files List of child files
+ \param[in,out] dirs List of child subdirs
+ \param[in,out] files List of child files
  \param[in] ids Comma-separated list of dir ids
  \param[in] refine SQL clause to refine selection & apply ordering
  \return int Number of items matching query, -1 on SQL error
@@ -584,16 +583,10 @@ int ImageDb<FS>::GetChildren(QString ids, ImageList &files, ImageList &dirs,
 
 /*!
  \brief Read a dir and its immediate children from Db
- \param[out] parent Dir item
- \param[in out] dirs List of child subdirs
- \param[in out] files List of child files
- \param[in] ids Comma-separated list of dir ids
- \param[in] refine SQL clause to refine selection & apply ordering
- \return int Number of items matching query, -1 on SQL error
-
- \param[in out] subdirs Ordered/filtered child subdirs
- \param[in out] files Ordered/filtered child files
  \param[in] id Dir id
+ \param[out] parent Dir item
+ \param[in,out] dirs Ordered/filtered child subdirs
+ \param[in,out] files Ordered/filtered child files
  \param[in] refine SQL clause for filtering/ordering child images
  \return int Number of items matching query.
 */
@@ -617,7 +610,7 @@ int ImageDb<FS>::GetDirectory(int id, ImagePtr &parent,
         MythDB::DBError(DBLOC, query);
         return -1;
     }
-    else while (query.next())
+    while (query.next())
     {
         ImagePtr im(CreateImage(query));
 
@@ -635,10 +628,9 @@ int ImageDb<FS>::GetDirectory(int id, ImagePtr &parent,
 /*!
  \brief Return images and all of their descendants.
 
- \param[in out] files Ordered/filtered files
- \param[in out] dirs  Ordered/filtered dirs
  \param[in] ids Image ids
- \param[in] refine SQL clause for filtering/ordering child images
+ \param[in,out] files Ordered/filtered files
+ \param[in,out] dirs  Ordered/filtered dirs
 */
 template <class FS>
 bool ImageDb<FS>::GetDescendants(const QString &ids,
@@ -658,10 +650,10 @@ bool ImageDb<FS>::GetDescendants(const QString &ids,
                     "FROM %1 WHERE filename LIKE :PREFIX "
                     "ORDER BY depth;").arg(m_table);
 
-    foreach (const ImagePtr &im, dirs)
+    foreach (const ImagePtr &im1, dirs)
     {
         query.prepare(sql);
-        query.bindValue(":PREFIX", im->m_filePath + "/%");
+        query.bindValue(":PREFIX", im1->m_filePath + "/%");
 
         if (!query.exec())
         {
@@ -671,11 +663,11 @@ bool ImageDb<FS>::GetDescendants(const QString &ids,
 
         while (query.next())
         {
-            ImagePtr im(CreateImage(query));
-            if (im->IsDirectory())
-                dirs.append(im);
+            ImagePtr im2(CreateImage(query));
+            if (im2->IsDirectory())
+                dirs.append(im2);
             else
-                files.append(im);
+                files.append(im2);
         }
     }
     return true;
@@ -684,7 +676,7 @@ bool ImageDb<FS>::GetDescendants(const QString &ids,
 
 /*!
  \brief Returns all files in the sub-tree of a dir.
- \param[in out] files List of images within sub-tree. Direct children first, then
+ \param[in,out] files List of images within sub-tree. Direct children first, then
   depth-first traversal of peer sub-dirs. Each level ordered as per refine criteria
  \param id Dir id
  \param refine SQL clause defining filter & ordering criteria
@@ -706,8 +698,8 @@ bool ImageDb<FS>::GetImageTree(int id, ImageList &files, const QString &refine) 
 
 /*!
  * \brief Read all database images and dirs as map. No filters or ordering applied.
- * \param[in out] files Map <filepath, image>
- * \param[in out] dirs Map <filepath, dir>
+ * \param[in,out] files Map <filepath, image>
+ * \param[in,out] dirs Map <filepath, dir>
  */
 template <class FS>
 bool ImageDb<FS>::ReadAllImages(ImageHash &files, ImageHash &dirs) const
@@ -736,7 +728,7 @@ bool ImageDb<FS>::ReadAllImages(ImageHash &files, ImageHash &dirs) const
 /*!
  \brief Clear Db for device & remove device
  \param devId Device id, 0 to clear all devices
- \param removeImport If false, the Import device will not be removed
+ \param action The myth protocol message. Determines whether/how much information is removed from the database.
  \return Either list of ids that have been deleted or "ALL" with list of
  filepath prefixes that will remove device images from the UI image cache
 */
@@ -1013,10 +1005,10 @@ int ImageDb<FS>::ReadImages(ImageList &dirs, ImageList &files,
  \brief Return counts of dirs, pics, videos and size in the subtree of a dir.
  \param[in] id Dir id
  \param[in] all Sum whole table (without filtering on dir path)
- \param[in out] dirs Number of dirs in parent sub-tree
- \param[in out] pics Number of pictures in parent sub-tree
- \param[in out] videos Number of videos in parent sub-tree
- \param[in out] sizeKb Size in KiB of parent sub-tree
+ \param[in,out] dirs Number of dirs in parent sub-tree
+ \param[in,out] pics Number of pictures in parent sub-tree
+ \param[in,out] videos Number of videos in parent sub-tree
+ \param[in,out] sizeKb Size in KiB of parent sub-tree
 */
 template <class FS>
 void ImageDb<FS>::GetDescendantCount(int id, bool all, int &dirs,
@@ -1071,8 +1063,7 @@ ImageDbSg::ImageDbSg() : ImageDb(DB_TABLE)
  \brief Local database constructor
 */
 ImageDbLocal::ImageDbLocal()
-    : ImageDb(QString("`%1_%2`").arg(DB_TABLE, gCoreContext->GetHostName())),
-      m_DbExists(false)
+    : ImageDb(QString("`%1_%2`").arg(DB_TABLE, gCoreContext->GetHostName()))
 {
     // Remove any table leftover from a previous FE crash
     DropTable();
@@ -1131,13 +1122,14 @@ bool ImageDbLocal::CreateTable()
 class ReadMetaThread : public QRunnable
 {
 public:
-    ReadMetaThread(ImagePtrK im, const QString &path)
-        : QRunnable(), m_im(im), m_path(path) {}
+    ReadMetaThread(ImagePtrK im, QString path)
+        : m_im(std::move(im)), m_path(std::move(path)) {}
 
-    void run()
+    void run() override // QRunnable
     {
         QStringList tags;
-        QString     orientation, size;
+        QString     orientation;
+        QString     size;
 
         // Read metadata for files only
         if (m_im->IsFile())
@@ -1180,14 +1172,15 @@ private:
  \details Reads exif tags from a picture or FFMPEG video tags
  \param id Image id
  \return QStringList Error message or "OK", seperator token,
- list of <tag name><seperator><tag value>.
+ list of \<tag name\>\<seperator\><tag value\>.
  Clients must use the embedded seperator to split the tags.
 */
 template <class DBFS>
 QStringList ImageHandler<DBFS>::HandleGetMetadata(const QString &id) const
 {
     // Find image in DB
-    ImageList files, dirs;
+    ImageList files;
+    ImageList dirs;
     if (DBFS::GetImages(id, files, dirs) != 1)
         RESULT_ERR("Image not found", QString("Unknown image %1").arg(id))
 
@@ -1198,7 +1191,7 @@ QStringList ImageHandler<DBFS>::HandleGetMetadata(const QString &id) const
         RESULT_ERR("Image not found",
                    QString("File %1 not found").arg(im->m_filePath))
 
-    ReadMetaThread *worker = new ReadMetaThread(im, absPath);
+    auto *worker = new ReadMetaThread(im, absPath);
 
     MThreadPool::globalInstance()->start(worker, "ImageMetaData");
 
@@ -1222,7 +1215,8 @@ QStringList ImageHandler<DBFS>::HandleRename(const QString &id,
         RESULT_ERR("Invalid name", QString("Invalid name %1").arg(newBase))
 
     // Find image in DB
-    ImageList files, dirs;
+    ImageList files;
+    ImageList dirs;
     if (DBFS::GetImages(id, files, dirs) != 1)
         RESULT_ERR("Image not found", QString("Image %1 not in Db").arg(id))
 
@@ -1292,7 +1286,8 @@ template <class DBFS>
 QStringList ImageHandler<DBFS>::HandleDelete(const QString &ids) const
 {
     // Get subtree of all files
-    ImageList files, dirs;
+    ImageList files;
+    ImageList dirs;
     // Dirs will be in depth-first order, (subdirs after parent)
     DBFS::GetDescendants(ids, files, dirs);
 
@@ -1324,8 +1319,9 @@ QStringList ImageHandler<DBFS>::HandleDelete(const QString &ids) const
  to retain state of the copied images. Initiates a scan to populate them fully
  and generate thumbnails. This retains
  \param defs A list of image definitions in the form
- <id><sep><type><sep><filepath><sep><hidden><sep><orientation><sep><cover id>
- where <sep> is the first list item
+ \<id\>\<sep\>\<type\>\<sep\>\<filepath\>\<sep\>\<hidden\>
+ \<sep\>\<orientation\>\<sep\>\<cover id\>
+ where \<sep\> is the first list item.
  Dirs must follow their children (files & subdirs)
  \return QStringList Error message or "OK"
 */
@@ -1363,7 +1359,7 @@ QStringList ImageHandler<DBFS>::HandleDbCreate(QStringList defs) const
 
         im.m_type          = aDef[1].toInt();
         im.m_filePath      = aDef[2];
-        im.m_isHidden      = aDef[3].toInt();
+        im.m_isHidden      = (aDef[3].toInt() != 0);
         im.m_orientation   = aDef[4].toInt();
         im.m_userThumbnail = idMap.value(aDef[5]);
 
@@ -1398,7 +1394,9 @@ QStringList ImageHandler<DBFS>::HandleDbMove(const QString &ids,
         RESULT_ERR("Invalid path", QString("Invalid path %1").arg(destPath))
 
     // Get subtrees of renamed files
-    ImageList images, dirs, files;
+    ImageList images;
+    ImageList dirs;
+    ImageList files;
     bool ok = DBFS::GetDescendants(ids, files, dirs);
     images << dirs << files;
 
@@ -1450,7 +1448,7 @@ QStringList ImageHandler<DBFS>::HandleDbMove(const QString &ids,
  \brief Hides/unhides images/dirs
  \details Updates hidden status in db and updates clients
  \param hide hide flag: 0 = Show, 1 = Hide
- \param fids Csv list of file/dir ids
+ \param ids Csv list of file/dir ids
  \return QStringList Error message or "OK"
 */
 template <class DBFS>
@@ -1482,7 +1480,8 @@ QStringList ImageHandler<DBFS>::HandleTransform(int transform,
     if (transform < kResetToExif || transform > kFlipVertical)
         RESULT_ERR("Transform failed", QString("Bad transform %1").arg(transform))
 
-    ImageList files, dirs;
+    ImageList files;
+    ImageList dirs;
     if (DBFS::GetImages(ids, files, dirs) < 1 || files.isEmpty())
         RESULT_ERR("Image not found", QString("Images %1 not in Db").arg(ids))
 
@@ -1527,7 +1526,8 @@ QStringList ImageHandler<DBFS>::HandleDirs(const QString &destId,
                                            const QStringList &relPaths) const
 {
     // Find image in DB
-    ImageList files, dirs;
+    ImageList files;
+    ImageList dirs;
     if (DBFS::GetImages(destId, files, dirs) != 1 || dirs.isEmpty())
         RESULT_ERR("Destination not found",
                    QString("Image %1 not in Db").arg(destId))
@@ -1603,7 +1603,7 @@ template <class DBFS>
 QStringList ImageHandler<DBFS>::HandleIgnore(const QString &exclusions) const
 {
     // Save new setting. FE will have already saved it but not cleared the cache
-    gCoreContext->SaveSettingOnHost("GalleryIgnoreFilter", exclusions, NULL);
+    gCoreContext->SaveSettingOnHost("GalleryIgnoreFilter", exclusions, nullptr);
 
     // Rescan
     HandleScanRequest("START");
@@ -1676,7 +1676,8 @@ QStringList ImageHandler<DBFS>::HandleCreateThumbnails
                 ? kDirRequestPriority : kPicRequestPriority;
 
     // get specific image details from db
-    ImageList files, dirs;
+    ImageList files;
+    ImageList dirs;
     DBFS::GetImages(message.at(1), files, dirs);
 
     foreach (const ImagePtrK &im, files)
@@ -1789,8 +1790,8 @@ QString ImageDbReader::OrderSelector(int order)
  \brief Return images (local and/or remote) for a dir and its direct children
  \param[in] id Dir id
  \param[out] parent Parent image
- \param[in out] subdirs Child dirs, filtered & ordered iaw current settings.
- \param[in out] files Child files, filtered & ordered iaw current settings.
+ \param[in,out] files Child files, filtered & ordered iaw current settings.
+ \param[in,out] dirs Child dirs, filtered & ordered iaw current settings.
  \return int Number of images, including parent
 */
 int ImageDbReader::GetDirectory(int id, ImagePtr &parent,
@@ -1821,10 +1822,11 @@ int ImageDbReader::GetDirectory(int id, ImagePtr &parent,
 /*!
  \brief Returns images (local or remote but not a combination)
  \param[in] ids Image ids
- \param[in out] images List of images, filtered & ordered iaw current settings.
+ \param[in,out] files List of files, filtered & ordered iaw current settings.
+ \param[in,out] dirs List of dirs, filtered & ordered iaw current settings.
  \return int Number of images
 */
-int ImageDbReader::GetImages(ImageIdList ids,
+int ImageDbReader::GetImages(const ImageIdList& ids,
                              ImageList &files, ImageList &dirs) const
 {
     // Ids are either all local or all remote. GALLERY_DB_ID not valid
@@ -1841,8 +1843,8 @@ int ImageDbReader::GetImages(ImageIdList ids,
 /*!
  \brief Return (local or remote) images that are direct children of a dir
  \param[in] id Directory id
- \param[in out] files List of files, filtered & ordered iaw current settings.
- \param[in out] dirs List of dirs, filtered & ordered iaw current settings.
+ \param[in,out] files List of files, filtered & ordered iaw current settings.
+ \param[in,out] dirs List of dirs, filtered & ordered iaw current settings.
  \return int Number of Images
 */
 int ImageDbReader::GetChildren(int id, ImageList &files, ImageList &dirs) const
@@ -1860,9 +1862,9 @@ int ImageDbReader::GetChildren(int id, ImageList &files, ImageList &dirs) const
 
 /*!
  \brief Return all (local or remote) images that are direct children of a dir
- \param[in] id Directory id, GALLERY_DB_ID not valid
- \param[in out] files List of files, unfiltered & unordered
- \param[in out] dirs List of dirs, unfiltered & unordered
+ \param[in] ids Directory ids, GALLERY_DB_ID not valid
+ \param[in,out] files List of files, unfiltered & unordered
+ \param[in,out] dirs List of dirs, unfiltered & unordered
 */
 void ImageDbReader::GetDescendants(const ImageIdList &ids,
                                    ImageList &files, ImageList &dirs) const
@@ -1880,7 +1882,7 @@ void ImageDbReader::GetDescendants(const ImageIdList &ids,
 /*!
  \brief Return all files (local or remote) in the sub-trees of a dir
  \param[in] id Dir id
- \param[in out] files List of images within sub-tree. Ordered & filtered iaw current
+ \param[in,out] files List of images within sub-tree. Ordered & filtered iaw current
  settings
 */
 void ImageDbReader::GetImageTree(int id, ImageList &files) const
@@ -1895,10 +1897,10 @@ void ImageDbReader::GetImageTree(int id, ImageList &files) const
 /*!
  \brief Return counts of dirs, pics and videos in the subtree of a dir. Also dir size
  \param[in] id Dir id
- \param[in out] dirs Number of dirs in parent sub-tree
- \param[in out] pics Number of pictures in parent sub-tree
- \param[in out] videos Number of videos in parent sub-tree
- \param[in out] sizeKb Size in KiB of parent sub-tree
+ \param[in,out] dirs Number of dirs in parent sub-tree
+ \param[in,out] pics Number of pictures in parent sub-tree
+ \param[in,out] videos Number of videos in parent sub-tree
+ \param[in,out] sizeKb Size in KiB of parent sub-tree
 */
 void ImageDbReader::GetDescendantCount(int id, int &dirs, int &pics,
                                        int &videos, int &sizeKb) const
@@ -1925,9 +1927,9 @@ void ImageDbReader::GetDescendantCount(int id, int &dirs, int &pics,
 
 
 //! Backend Gallery instance
-ImageManagerBe *ImageManagerBe::m_instance = NULL;
+ImageManagerBe *ImageManagerBe::s_instance = nullptr;
 //! Frontend Gallery instance
-ImageManagerFe *ImageManagerFe::m_instance = NULL;
+ImageManagerFe *ImageManagerFe::s_instance = nullptr;
 
 
 /*!
@@ -1936,9 +1938,9 @@ ImageManagerFe *ImageManagerFe::m_instance = NULL;
 */
 ImageManagerBe* ImageManagerBe::getInstance()
 {
-    if (!m_instance)
-        m_instance = new ImageManagerBe();
-    return m_instance;
+    if (!s_instance)
+        s_instance = new ImageManagerBe();
+    return s_instance;
 }
 
 
@@ -1948,15 +1950,17 @@ ImageManagerBe* ImageManagerBe::getInstance()
 */
 ImageManagerFe& ImageManagerFe::getInstance()
 {
-    if (!m_instance)
+    if (!s_instance)
+    {
         // Use saved settings
-        m_instance = new ImageManagerFe
+        s_instance = new ImageManagerFe
                 (gCoreContext->GetNumSetting("GalleryImageOrder"),
                  gCoreContext->GetNumSetting("GalleryDirOrder"),
-                 gCoreContext->GetNumSetting("GalleryShowHidden"),
+                 gCoreContext->GetBoolSetting("GalleryShowHidden"),
                  gCoreContext->GetNumSetting("GalleryShowType"),
                  gCoreContext->GetSetting("GalleryDateFormat"));
-    return *m_instance;
+    }
+    return *s_instance;
 }
 
 
@@ -2169,7 +2173,7 @@ QString ImageManagerFe::IgnoreDirs(const QString &excludes)
  \brief Create directories
  \param parent Dir in which to create new dirs
  \param names List of dir names
- \param Whether to scan after creating dirs
+ \param rescan Whether to scan after creating dirs
  \return QString Error message, if not empty
 */
 QString ImageManagerFe::MakeDir(int parent, const QStringList &names, bool rescan)
@@ -2194,7 +2198,7 @@ QString ImageManagerFe::MakeDir(int parent, const QStringList &names, bool resca
  * \param  name New name of the file/dir (basename only, no path or extension)
  * \return QString Error message, if not empty
  */
-QString ImageManagerFe::RenameFile(ImagePtrK im, const QString &name)
+QString ImageManagerFe::RenameFile(const ImagePtrK& im, const QString &name)
 {
     if (!im->IsLocal())
     {
@@ -2258,7 +2262,7 @@ QString ImageManagerFe::CreateImages(int destId, const ImageListK &images)
  * \param srcPath Original parent path
  * \return QString Error message
  */
-QString ImageManagerFe::MoveDbImages(ImagePtrK destDir, ImageListK &images,
+QString ImageManagerFe::MoveDbImages(const ImagePtrK& destDir, ImageListK &images,
                                      const QString &srcPath)
 {
     QStringList idents;
@@ -2315,12 +2319,16 @@ QString ImageManagerFe::DeleteFiles(const ImageIdList &ids)
  \param im Image or dir
  \return QString Time or date string formatted as per Myth general settings
 */
-QString ImageManagerFe::LongDateOf(ImagePtrK im) const
+QString ImageManagerFe::LongDateOf(const ImagePtrK& im)
 {
     if (im->m_id == GALLERY_DB_ID)
         return "";
 
+#if QT_VERSION < QT_VERSION_CHECK(5,8,0)
     uint secs = 0;
+#else
+    qint64 secs = 0;
+#endif
     uint format = MythDate::kDateFull | MythDate::kAddYear;
 
     if (im->m_date > 0)
@@ -2331,7 +2339,11 @@ QString ImageManagerFe::LongDateOf(ImagePtrK im) const
     else
         secs = im->m_modTime;
 
+#if QT_VERSION < QT_VERSION_CHECK(5,8,0)
     return MythDate::toString(QDateTime::fromTime_t(secs), format);
+#else
+    return MythDate::toString(QDateTime::fromSecsSinceEpoch(secs), format);
+#endif
 }
 
 
@@ -2341,13 +2353,18 @@ QString ImageManagerFe::LongDateOf(ImagePtrK im) const
  \param im Image or dir
  \return QString Date formatted as per Gallery caption date format.
 */
-QString ImageManagerFe::ShortDateOf(ImagePtrK im) const
+QString ImageManagerFe::ShortDateOf(const ImagePtrK& im) const
 {
     if (im->m_id == GALLERY_DB_ID)
         return "";
 
+#if QT_VERSION < QT_VERSION_CHECK(5,8,0)
     uint secs(im->m_date > 0 ? im->m_date : im->m_modTime);
     return QDateTime::fromTime_t(secs).date().toString(m_dateFormat);
+#else
+    qint64 secs(im->m_date > 0 ? im->m_date : im->m_modTime);
+    return QDateTime::fromSecsSinceEpoch(secs).date().toString(m_dateFormat);
+#endif
 }
 
 
@@ -2360,11 +2377,10 @@ QString ImageManagerFe::DeviceCaption(ImageItemK &im) const
 {
     if (im.m_id == GALLERY_DB_ID)
         return tr("Gallery");
-    else if (im.m_id == PHOTO_DB_ID)
+    if (im.m_id == PHOTO_DB_ID)
         return tr("Photographs");
-    else
-        return im.IsLocal() ? DeviceName(im.m_device)
-                            : m_remote->DeviceName(im.m_device);
+    return im.IsLocal() ? DeviceName(im.m_device)
+                        : m_remote->DeviceName(im.m_device);
 }
 
 
@@ -2372,7 +2388,7 @@ QString ImageManagerFe::DeviceCaption(ImageItemK &im) const
  \brief Return a displayable name (with optional path) for an image.
  \details Uses device name rather than mount path for local devices
  \param im Image
- \param path If true, name will include path. Otherwise only the basename
+ \param getPath If true, name will include path. Otherwise only the basename
  \return QString Filepath for display
 */
 QString ImageManagerFe::CrumbName(ImageItemK &im, bool getPath) const
@@ -2383,7 +2399,8 @@ QString ImageManagerFe::CrumbName(ImageItemK &im, bool getPath) const
     if (!getPath)
         return im.m_baseName;
 
-    QString dev, path(im.m_filePath);
+    QString dev;
+    QString path(im.m_filePath);
 
     if (im.IsLocal())
     {
@@ -2493,7 +2510,7 @@ void ImageManagerFe::DeviceEvent(MythMediaEvent *event)
 
 QString ImageManagerFe::CreateImport()
 {
-    QTemporaryDir *tmp = new QTemporaryDir(QDir::tempPath() % "/" IMPORTDIR "-XXXXXX");
+    auto *tmp = new QTemporaryDir(QDir::tempPath() % "/" IMPORTDIR "-XXXXXX");
     if (!tmp->isValid())
     {
         delete tmp;
@@ -2501,7 +2518,7 @@ QString ImageManagerFe::CreateImport()
     }
 
     QString time(QDateTime::currentDateTime().toString("mm:ss"));
-    OpenDevice("Import " + time, tmp->path(), NULL, tmp);
+    OpenDevice("Import " + time, tmp->path(), nullptr, tmp);
     return tmp->path();
 }
 

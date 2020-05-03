@@ -1,12 +1,13 @@
 #ifndef VIDEOVISUAL_H
 #define VIDEOVISUAL_H
 
-#include "stdint.h"
+#include <cstdint>
 
 #include <QRect>
 #include <QList>
 #include <QDateTime>
 
+#include "mythtvexp.h"
 #include "mythlogging.h"
 #include "visual.h"
 #include "mythrender_base.h"
@@ -22,19 +23,21 @@ class VisualNode
 {
   public:
     VisualNode(short *l, short *r, unsigned long n, unsigned long o)
-        : left(l), right(r), length(n), offset(o) { }
+        : m_left(l), m_right(r), m_length(n), m_offset(o) { }
 
     ~VisualNode()
     {
-        delete [] left;
-        delete [] right;
+        delete [] m_left;
+        delete [] m_right;
     }
 
-    short *left, *right;
-    long length, offset;
+    short *m_left   {nullptr};
+    short *m_right  {nullptr};
+    long   m_length;
+    long   m_offset;
 };
 
-class VideoVisual : public MythTV::Visual
+class MTV_PUBLIC VideoVisual : public MythTV::Visual
 {
   public:
     static bool CanVisualise(AudioPlayer *audio, MythRender *render);
@@ -43,24 +46,24 @@ class VideoVisual : public MythTV::Visual
     static QStringList GetVisualiserList(RenderType type);
 
     VideoVisual(AudioPlayer *audio, MythRender *render);
-   ~VideoVisual();
+   ~VideoVisual() override;
 
     virtual void Draw(const QRect &area, MythPainter *painter,
                       QPaintDevice* device) = 0;
     virtual QString Name(void) = 0;
 
-    virtual void add(const void *b, unsigned long b_len, unsigned long w, int c, int p);
-    virtual void prepare();
+    void add(const void *b, unsigned long b_len, unsigned long w, int c, int p) override; // Visual
+    void prepare() override; // Visual
 
   protected:
     VisualNode* GetNode(void);
     void DeleteNodes(void);
     int64_t SetLastUpdate(void);
 
-    AudioPlayer       *m_audio;
-    bool               m_disabled;
+    AudioPlayer       *m_audio    {nullptr};
+    bool               m_disabled {false};
     QRect              m_area;
-    MythRender        *m_render;
+    MythRender        *m_render   {nullptr};
     QList<VisualNode*> m_nodes;
     QDateTime          m_lastUpdate;
 };
@@ -73,7 +76,7 @@ class VideoVisualFactory
         m_nextVideoVisualFactory = g_videoVisualFactory;
         g_videoVisualFactory = this;
     }
-    virtual ~VideoVisualFactory() { }
+    virtual ~VideoVisualFactory() = default;
     virtual const QString &name(void) const = 0;
     virtual VideoVisual* Create(AudioPlayer *audio,
                                 MythRender *render) const = 0;
@@ -89,6 +92,6 @@ class VideoVisualFactory
 
   protected:
     static VideoVisualFactory* g_videoVisualFactory;
-    VideoVisualFactory*        m_nextVideoVisualFactory;
+    VideoVisualFactory*        m_nextVideoVisualFactory {nullptr};
 };
 #endif // VIDEOVISUAL_H

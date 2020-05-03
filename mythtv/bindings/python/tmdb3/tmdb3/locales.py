@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #-----------------------
 # Name: locales.py    Stores locale information for filtering results
@@ -6,7 +5,7 @@
 # Author: Raymond Wagner
 #-----------------------
 
-from tmdb_exceptions import *
+from .tmdb_exceptions import *
 import locale
 
 syslocale = None

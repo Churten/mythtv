@@ -9,19 +9,19 @@
 class ProgramInfo;
 class RecordingInfo;
 
-typedef std::deque<RecordingInfo*> RecList;
+using RecList = std::deque<RecordingInfo*>;
 #define SORT_RECLIST(LIST, ORDER) \
-  do { std::stable_sort((LIST).begin(), (LIST).end(), ORDER); } while (0)
+  do { std::stable_sort((LIST).begin(), (LIST).end(), ORDER); } while (false)
 
-typedef RecList::const_iterator RecConstIter;
-typedef RecList::iterator RecIter;
+using RecConstIter = RecList::const_iterator;
+using RecIter = RecList::iterator;
 
 /** This is an generic interface to a program scheduler */
 class MythScheduler
 {
   public:
-    MythScheduler() {}
-    virtual ~MythScheduler() {}
+    MythScheduler() = default;
+    virtual ~MythScheduler() = default;
     // Returns a string list containing the a boolean
     // value for whether there are conflicts, followed
     // by the number of ProgramInfo's represented by

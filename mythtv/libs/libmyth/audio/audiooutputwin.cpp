@@ -24,7 +24,7 @@ using namespace std;
 #endif
 
 #ifndef _WAVEFORMATEXTENSIBLE_
-typedef struct {
+struct WAVEFORMATEXTENSIBLE {
     WAVEFORMATEX    Format;
     union {
         WORD wValidBitsPerSample;       // bits of precision
@@ -33,7 +33,8 @@ typedef struct {
     } Samples;
     DWORD           dwChannelMask;      // which channels are present in stream
     GUID            SubFormat;
-} WAVEFORMATEXTENSIBLE, *PWAVEFORMATEXTENSIBLE;
+};
+using PWAVEFORMATEXTENSIBLE = WAVEFORMATEXTENSIBLE*;
 #endif
 
 const uint AudioOutputWin::kPacketCnt = 4;
@@ -48,12 +49,11 @@ DEFINE_GUID(_KSDATAFORMAT_SUBTYPE_DOLBY_AC3_SPDIF, WAVE_FORMAT_DOLBY_AC3_SPDIF,
 class AudioOutputWinPrivate
 {
   public:
-    AudioOutputWinPrivate() :
-        m_hWaveOut(NULL), m_WaveHdrs(NULL), m_hEvent(NULL)
+    AudioOutputWinPrivate()
     {
         m_WaveHdrs = new WAVEHDR[AudioOutputWin::kPacketCnt];
         memset(m_WaveHdrs, 0, sizeof(WAVEHDR) * AudioOutputWin::kPacketCnt);
-        m_hEvent = CreateEvent(NULL, FALSE, TRUE, NULL);
+        m_hEvent = CreateEvent(nullptr, FALSE, TRUE, nullptr);
     }
 
     ~AudioOutputWinPrivate()
@@ -61,12 +61,12 @@ class AudioOutputWinPrivate
         if (m_WaveHdrs)
         {
             delete[] m_WaveHdrs;
-            m_WaveHdrs = NULL;
+            m_WaveHdrs = nullptr;
         }
         if (m_hEvent)
         {
             CloseHandle(m_hEvent);
-            m_hEvent = NULL;
+            m_hEvent = nullptr;
         }
     }
 
@@ -76,17 +76,21 @@ class AudioOutputWinPrivate
         {
             waveOutReset(m_hWaveOut);
             waveOutClose(m_hWaveOut);
-            m_hWaveOut = NULL;
+            m_hWaveOut = nullptr;
         }
     }
 
     static void CALLBACK waveOutProc(HWAVEOUT hwo, UINT uMsg, DWORD dwInstance,
                                      DWORD dwParam1, DWORD dwParam2);
 
+  private:
+    AudioOutputWinPrivate(const AudioOutputWinPrivate &) = delete;            // not copyable
+    AudioOutputWinPrivate &operator=(const AudioOutputWinPrivate &) = delete; // not copyable
+
   public:
-    HWAVEOUT  m_hWaveOut;
-    WAVEHDR  *m_WaveHdrs;
-    HANDLE    m_hEvent;
+    HWAVEOUT  m_hWaveOut {nullptr};
+    WAVEHDR  *m_WaveHdrs {nullptr};
+    HANDLE    m_hEvent {nullptr};
 };
 
 void CALLBACK AudioOutputWinPrivate::waveOutProc(HWAVEOUT hwo, UINT uMsg,
@@ -107,9 +111,6 @@ void CALLBACK AudioOutputWinPrivate::waveOutProc(HWAVEOUT hwo, UINT uMsg,
 AudioOutputWin::AudioOutputWin(const AudioSettings &settings) :
     AudioOutputBase(settings),
     m_priv(new AudioOutputWinPrivate()),
-    m_nPkts(0),
-    m_CurrentPkt(0),
-    m_OutPkts(NULL),
     m_UseSPDIF(settings.use_passthru)
 {
     InitSettings(settings);
@@ -125,7 +126,7 @@ AudioOutputWin::~AudioOutputWin()
     if (m_priv)
     {
         delete m_priv;
-        m_priv = NULL;
+        m_priv = nullptr;
     }
 
     if (m_OutPkts)
@@ -135,7 +136,7 @@ AudioOutputWin::~AudioOutputWin()
                 free(m_OutPkts[i]);
 
         free(m_OutPkts);
-        m_OutPkts = NULL;
+        m_OutPkts = nullptr;
     }
 }
 

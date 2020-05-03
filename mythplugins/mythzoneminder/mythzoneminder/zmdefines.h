@@ -15,35 +15,33 @@
 #ifndef ZMDEFINES_H
 #define ZMDEFINES_H
 
+#include <utility>
 #include <vector>
 
 // qt
 #include <QString>
 #include <QDateTime>
 
-// zm
-#include "../mythzmserver/zmserver.h"
-
 /// Event details
 class Event
 {
   public:
     Event(int eventID,
-          const QString &eventName,
+          QString eventName,
           int monitorID,
-          const QString &monitorName,
+          QString monitorName,
           const QDateTime &startTime,
-          const QString &length) :
+          QString length) :
         m_monitorID(monitorID),
         m_eventID(eventID),
-        m_eventName(eventName),
-        m_monitorName(monitorName),
-        m_length(length),
+        m_eventName(std::move(eventName)),
+        m_monitorName(std::move(monitorName)),
+        m_length(std::move(length)),
         m_startTime(startTime.toLocalTime())
     {
     }
 
-    Event() : m_monitorID(-1), m_eventID(-1) {}
+    Event() = default;
 
     int monitorID(void) const { return m_monitorID; }
 
@@ -71,8 +69,8 @@ class Event
     QString length(void) const { return m_length; }
 
   private:
-    int m_monitorID;
-    int m_eventID;
+    int     m_monitorID   { -1 };
+    int     m_eventID     { -1 };
     QString m_eventName;
     QString m_monitorName;
     QString m_length;
@@ -82,44 +80,47 @@ class Event
     QDateTime m_startTime;
 };
 
+enum State
+{
+    IDLE,
+    PREALARM,
+    ALARM,
+    ALERT,
+    TAPE
+};
+
 // event frame details
-typedef struct
+struct Frame
 {
     QString type;
-    double delta;
-} Frame;
+    double delta {0.0};
+};
 
 class Monitor
 {
   public:
-    Monitor() :
-        id(0), enabled(false), events(0),
-        width(0), height(0), bytes_per_pixel(0),
-        showNotifications(false), state(IDLE),
-        previousState(IDLE)
-    {
-    }
+    Monitor() = default;
 
   public:
     // used by console view
-    int     id;
+    int     id                { 0 };
     QString name;
     QString type;
     QString function;
-    bool enabled;
+    bool    enabled           { false };
     QString device;
     QString zmcStatus;
     QString zmaStatus;
-    int events;
+    int     events            { 0 };
     // used by live view
     QString status;
-    int width;
-    int height;
-    int bytes_per_pixel;
+    int     width             { 0 };
+    int     height            { 0 };
+    int     bytes_per_pixel   { 0 };
     // used by the alarm notiftications
-    bool showNotifications;
-    State state;
-    State previousState;
+    bool    showNotifications { false };
+    State   state             {  IDLE };
+    State   previousState     {  IDLE };
 };
 
 Q_DECLARE_METATYPE(Monitor *)

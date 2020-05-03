@@ -1,5 +1,7 @@
 #include "galleryslideview.h"
 
+#include <utility>
+
 #include "mythmainwindow.h"
 #include "mythuitext.h"
 #include "mythdialogbox.h"
@@ -13,28 +15,20 @@
  *  \brief  Constructor
  *  \param  parent The screen parent
  *  \param  name The name of the screen
+ *  \param  editsAllowed Are edits allowed. Affects what menu items are
+ *                       presented to the user.
  */
 GallerySlideView::GallerySlideView(MythScreenStack *parent, const char *name,
                                    bool editsAllowed)
     : MythScreenType(parent, name),
-      m_uiImage(NULL),
-      m_uiStatus(NULL),
-      m_uiSlideCount(NULL), m_uiCaptionText(NULL), m_uiHideCaptions(NULL),
       m_mgr(ImageManagerFe::getInstance()),
-      m_view(NULL),
       m_availableTransitions(GetMythPainter()->SupportsAnimation()),
       m_transition(m_availableTransitions.Select(
                        gCoreContext->GetNumSetting("GalleryTransitionType",
                                                    kBlendTransition))),
-      m_updateTransition(),
-      m_slides(),
       m_infoList(*this),
       m_slideShowTime(gCoreContext->GetNumSetting("GallerySlideShowTime", 3000)),
-      m_statusText(),
-      m_playing(false),
-      m_suspended(false),
-      m_showCaptions(gCoreContext->GetNumSetting("GalleryShowSlideCaptions", true)),
-      m_transitioning(false),
+      m_showCaptions(gCoreContext->GetBoolSetting("GalleryShowSlideCaptions", true)),
       m_editsAllowed(editsAllowed)
 {
     // Detect when transitions finish. Queued signal to allow redraw/pulse to
@@ -44,8 +38,10 @@ GallerySlideView::GallerySlideView(MythScreenStack *parent, const char *name,
     connect(&m_updateTransition, SIGNAL(finished()),
             this, SLOT(TransitionComplete()), Qt::QueuedConnection);
 
+#if QT_VERSION < QT_VERSION_CHECK(5,10,0)
     // Seed random generator for random transitions
     qsrand(QTime::currentTime().msec());
+#endif
 
     // Initialise slideshow timer
     m_timer.setSingleShot(true);
@@ -195,10 +191,14 @@ bool GallerySlideView::keyPressEvent(QKeyEvent *event)
         else if (action == "RECENTER")
             Pan();
         else if (action == "ESCAPE" && !GetMythMainWindow()->IsExitingToMain())
+        {
             // Exit info details, if shown
             handled = m_infoList.Hide();
+        }
         else
+        {
             handled = false;
+        }
     }
 
     if (!handled)
@@ -214,10 +214,13 @@ bool GallerySlideView::keyPressEvent(QKeyEvent *event)
  */
 void GallerySlideView::customEvent(QEvent *event)
 {
-    if ((MythEvent::Type)(event->type()) == MythEvent::MythEventMessage)
+    if (event->type() == MythEvent::MythEventMessage)
     {
-        MythEvent *me      = (MythEvent *)event;
-        QString    message = me->Message();
+        auto *me = dynamic_cast<MythEvent *>(event);
+        if (me == nullptr)
+            return;
+
+        const QString& message = me->Message();
 
         QStringList extra = me->ExtraDataList();
 
@@ -237,7 +240,7 @@ void GallerySlideView::customEvent(QEvent *event)
     }
     else if (event->type() == DialogCompletionEvent::kEventType)
     {
-        DialogCompletionEvent *dce = (DialogCompletionEvent *)(event);
+        auto *dce = (DialogCompletionEvent *)(event);
 
         QString resultid  = dce->GetId();
         int     buttonnum = dce->GetResult();
@@ -265,7 +268,7 @@ void GallerySlideView::customEvent(QEvent *event)
 void GallerySlideView::MenuMain()
 {
     // Create the main menu that will contain the submenus above
-    MythMenu *menu = new MythMenu(tr("Slideshow Options"), this, "mainmenu");
+    auto *menu = new MythMenu(tr("Slideshow Options"), this, "mainmenu");
 
     ImagePtrK im = m_slides.GetCurrent().GetImageData();
     if (im && im->m_type == kVideoFile)
@@ -276,7 +279,7 @@ void GallerySlideView::MenuMain()
     else
         menu->AddItem(tr("Start SlideShow"), SLOT(Play()));
 
-    if (gCoreContext->GetNumSetting("GalleryRepeat", 0))
+    if (gCoreContext->GetBoolSetting("GalleryRepeat", false))
         menu->AddItem(tr("Turn Repeat Off"), SLOT(RepeatOff()));
     else
         menu->AddItem(tr("Turn Repeat On"), SLOT(RepeatOn()));
@@ -305,7 +308,7 @@ void GallerySlideView::MenuMain()
         menu->AddItem(tr("Hide Details"), SLOT(HideInfo()));
 
     MythScreenStack *popupStack = GetMythMainWindow()->GetStack("popup stack");
-    MythDialogBox *menuPopup = new MythDialogBox(menu, popupStack, "menuPopup");
+    auto *menuPopup = new MythDialogBox(menu, popupStack, "menuPopup");
     if (menuPopup->Create())
         popupStack->AddScreen(menuPopup);
     else
@@ -322,7 +325,7 @@ void GallerySlideView::MenuTransforms(MythMenu &mainMenu)
     ImagePtrK im = m_slides.GetCurrent().GetImageData();
     if (im && !m_playing)
     {
-        MythMenu *menu = new MythMenu(tr("Transform Options"),
+        auto *menu = new MythMenu(tr("Transform Options"),
                                       this, "metadatamenu");
         if (m_editsAllowed)
         {
@@ -339,16 +342,18 @@ void GallerySlideView::MenuTransforms(MythMenu &mainMenu)
         if (m_slides.GetCurrent().CanZoomOut())
             menu->AddItem(tr("Zoom Out"));
 
-        mainMenu.AddItem(tr("Transforms"), NULL, menu);
+        mainMenu.AddItem(tr("Transforms"), nullptr, menu);
     }
 }
 
 
 /*!
  \brief  Start slideshow
- \param type Browsing, Normal or Recursive
- \param view View to initialise slideshow from.
- \param newScreen True if starting from Thumbview, False otherwise
+ \param type       Browsing, Normal or Recursive
+ \param parentId   The dir id, if positive. Otherwise the view is refreshed
+                   using the existing parent dir
+ \param selectedId Currently selected item. If not set, will default to the
+                   first item.
 */
 void GallerySlideView::Start(ImageSlideShowType type, int parentId, int selectedId)
 {
@@ -422,6 +427,7 @@ void GallerySlideView::Stop()
 
 /**
  *  \brief Start a slideshow
+ *  \param useTransition if false, slide will be updated instantly
  */
 void GallerySlideView::Play(bool useTransition)
 {
@@ -595,7 +601,7 @@ void GallerySlideView::SlideAvailable(int count)
     // and browsing with transitions turned off
     Transition &transition =
             (direction != 0 &&
-             (m_playing || gCoreContext->GetNumSetting("GalleryBrowseTransition", 0)))
+             (m_playing || gCoreContext->GetBoolSetting("GalleryBrowseTransition", false)))
             ? m_transition : m_updateTransition;
 
     // Reset any zoom before starting transition
@@ -637,7 +643,7 @@ void GallerySlideView::TransitionComplete()
     {
         // show the date & comment
         QStringList text;
-        text << m_mgr.LongDateOf(im);
+        text << ImageManagerFe::LongDateOf(im);
 
         if (!im->m_comment.isEmpty())
             text << im->m_comment;
@@ -664,25 +670,29 @@ void GallerySlideView::TransitionComplete()
 */
 void GallerySlideView::ShowPrevSlide(int inc)
 {
-    if (m_playing && m_view->HasPrev(inc) == NULL)
+    if (m_playing && m_view->HasPrev(inc) == nullptr)
+    {
         // Prohibit back-wrapping during slideshow: it will cause premature end
         //: Cannot go back beyond first slide of slideshow
         SetStatus(tr("Start"));
-
+    }
     else if (m_view->Prev(inc))
+    {
         ShowSlide(-1);
+    }
 }
 
 
 /*!
  \brief Display the next slide in the sequence
+ \param inc How many slides to move forward.
  \param useTransition if false, slide will be updated instantly
 */
 void GallerySlideView::ShowNextSlide(int inc, bool useTransition)
 {
     // Browsing always wraps; slideshows depend on repeat setting
-    if (m_playing && m_view->HasNext(inc) == NULL
-            && !gCoreContext->GetNumSetting("GalleryRepeat", false))
+    if (m_playing && m_view->HasNext(inc) == nullptr
+            && !gCoreContext->GetBoolSetting("GalleryRepeat", false))
     {
         // Don't stop due to jumping past end
         if (inc == 1)
@@ -726,10 +736,11 @@ void GallerySlideView::PlayVideo()
 /*!
  \brief Displays status text (Loading, Paused etc.)
  \param msg Text to show
+ \param delay It true, delay showing the status.
 */
 void GallerySlideView::SetStatus(QString msg, bool delay)
 {
-    m_statusText = msg;
+    m_statusText = std::move(msg);
     if (m_uiStatus)
     {
         if (delay)

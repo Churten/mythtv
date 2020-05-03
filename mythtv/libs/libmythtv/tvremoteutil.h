@@ -17,8 +17,8 @@ class InputInfo;
 class TunerStatus
 {
   public:
-    uint      id;
-    bool      isRecording;
+    uint      id          {0};
+    bool      isRecording {false};
     QString   channame;
     QString   title;
     QString   subtitle;
@@ -50,7 +50,7 @@ RemoteRequestFreeInputList(uint excluded_input);
 MTV_PUBLIC bool RemoteIsBusy(uint inputid, InputInfo &busy_input);
 
 MTV_PUBLIC bool RemoteGetRecordingStatus(
-    vector<TunerStatus> *tunerList = NULL, bool list_inactive = false);
+    vector<TunerStatus> *tunerList = nullptr, bool list_inactive = false);
 
 #endif // _TV_REMOTE_UTIL_H_
 

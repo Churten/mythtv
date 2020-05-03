@@ -9,9 +9,9 @@
 #define LOC      QString("VideoMetaDataUtil: ")
 
 static QReadWriteLock art_path_map_lock;
-typedef QPair< QString, QString > ArtPair;
+using ArtPair = QPair< QString, QString >;
 static QMultiHash<QString, ArtPair> art_path_map;
-typedef QList< ArtPair > ArtList;
+using ArtList = QList<ArtPair>;
 
 QString VideoMetaDataUtil::GetArtPath(const QString &pathname,
                                       const QString &type)
@@ -63,7 +63,7 @@ QString VideoMetaDataUtil::GetArtPath(const QString &pathname,
 
     if (!artpath.startsWith('/') && pathname.startsWith("myth://"))
     {
-        QString workURL = pathname;
+        const QString& workURL = pathname;
         QUrl baseURL(workURL);
         baseURL.setUserName(type);
         QString finalURL =

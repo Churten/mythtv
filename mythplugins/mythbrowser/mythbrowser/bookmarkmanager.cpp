@@ -23,22 +23,10 @@ using namespace std;
 
 // ---------------------------------------------------
 
-BrowserConfig::BrowserConfig(MythScreenStack *parent, const char *name) :
-    MythScreenType(parent, name),
-    m_commandEdit(NULL),     m_zoomEdit(NULL),
-    m_descriptionText(NULL), m_titleText(NULL),
-    m_enablePluginsCheck(NULL),
-    m_okButton(NULL),        m_cancelButton(NULL)
-{
-}
-
 bool BrowserConfig::Create()
 {
-    bool foundtheme = false;
-
     // Load the theme for this screen
-    foundtheme = LoadWindowFromXML("browser-ui.xml", "browserconfig", this);
-
+    bool foundtheme = LoadWindowFromXML("browser-ui.xml", "browserconfig", this);
     if (!foundtheme)
         return false;
 
@@ -87,17 +75,13 @@ bool BrowserConfig::Create()
     return true;
 }
 
-BrowserConfig::~BrowserConfig()
-{
-}
-
 void BrowserConfig::slotSave(void)
 {
     float zoom = m_zoomEdit->GetText().toFloat();
-    if (zoom > 5.0)
-        zoom = 5.0;
-    if (zoom < 0.3)
-        zoom = 0.3; 
+    if (zoom > 5.0F)
+        zoom = 5.0F;
+    if (zoom < 0.3F)
+        zoom = 0.3F; 
     gCoreContext->SaveSetting("WebBrowserZoomLevel", QString("%1").arg(zoom));
     gCoreContext->SaveSetting("WebBrowserCommand", m_commandEdit->GetText());
     int checkstate = 0;
@@ -113,12 +97,7 @@ bool BrowserConfig::keyPressEvent(QKeyEvent *event)
     if (GetFocusWidget()->keyPressEvent(event))
         return true;
 
-    bool handled = false;
-
-    if (!handled && MythScreenType::keyPressEvent(event))
-        handled = true;
-
-    return handled;
+    return MythScreenType::keyPressEvent(event);
 }
 
 void BrowserConfig::slotFocusChanged(void)
@@ -128,43 +107,41 @@ void BrowserConfig::slotFocusChanged(void)
 
     QString msg = "";
     if (GetFocusWidget() == m_commandEdit)
+    {
         msg = tr("This is the command that will be used to show the web browser. "
                  "Use 'Internal' to use the built in web browser'. "
                  "%ZOOM% and %URL% will be replaced with the zoom level and URL list.");
+    }
     else if (GetFocusWidget() == m_zoomEdit)
+    {
         msg = tr("This is the default text size that will be used. Valid values "
                  "for the Internal browser are from 0.3 to 5.0 with 1.0 being "
                  "normal size less than 1 is smaller and greater than 1 is "
                  "larger than normal size.");
+    }
     else if (GetFocusWidget() == m_enablePluginsCheck)
+    {
         msg = tr("If checked this will enable browser plugins if the 'Internal' "
                  "browser is being used.");
+    }
     else if (GetFocusWidget() == m_cancelButton)
+    {
         msg = tr("Exit without saving settings");
+    }
     else if (GetFocusWidget() == m_okButton)
+    {
         msg = tr("Save settings and Exit");
+    }
 
     m_descriptionText->SetText(msg);
 }
 
 // ---------------------------------------------------
 
-BookmarkManager::BookmarkManager(MythScreenStack *parent, const char *name)
-               : MythScreenType(parent, name)
-{
-    m_bookmarkList = NULL;
-    m_groupList = NULL;
-    m_messageText = NULL;
-    m_menuPopup = NULL;
-}
-
 bool BookmarkManager::Create(void)
 {
-    bool foundtheme = false;
-
     // Load the theme for this screen
-    foundtheme = LoadWindowFromXML("browser-ui.xml", "bookmarkmanager", this);
-
+    bool foundtheme = LoadWindowFromXML("browser-ui.xml", "bookmarkmanager", this);
     if (!foundtheme)
         return false;
 
@@ -214,10 +191,10 @@ void BookmarkManager::UpdateGroupList(void)
     {
         Bookmark *site = m_siteList.at(x);
 
-        if (groups.indexOf(site->category) == -1)
+        if (groups.indexOf(site->m_category) == -1)
         {
-            groups.append(site->category);
-            new MythUIButtonListItem(m_groupList, site->category);
+            groups.append(site->m_category);
+            new MythUIButtonListItem(m_groupList, site->m_category);
         }
     }
 }
@@ -239,16 +216,16 @@ void BookmarkManager::UpdateURLList(void)
     {
         Bookmark *site = m_siteList.at(x);
 
-        if (group == site->category)
+        if (group == site->m_category)
         {
-            MythUIButtonListItem *item = new MythUIButtonListItem(
-                    m_bookmarkList, "", "", true, MythUIButtonListItem::NotChecked);
-            item->SetText(site->name, "name");
-            item->SetText(site->url, "url");
-            if (site->isHomepage)
-                item->DisplayState("yes", "homepage");
-            item->SetData(qVariantFromValue(site));
-            item->setChecked(site->selected ?
+            auto *item2 = new MythUIButtonListItem(m_bookmarkList,
+                    "", "", true, MythUIButtonListItem::NotChecked);
+            item2->SetText(site->m_name, "name");
+            item2->SetText(site->m_url, "url");
+            if (site->m_isHomepage)
+                item2->DisplayState("yes", "homepage");
+            item2->SetData(QVariant::fromValue(site));
+            item2->setChecked(site->m_selected ?
                     MythUIButtonListItem::FullChecked : MythUIButtonListItem::NotChecked);
         }
     }
@@ -258,10 +235,9 @@ uint BookmarkManager::GetMarkedCount(void)
 {
     uint count = 0;
 
-    for (int x = 0; x < m_siteList.size(); x++)
+    foreach (auto site, m_siteList)
     {
-        Bookmark *site = m_siteList.at(x);
-        if (site && site->selected)
+        if (site && site->m_selected)
             count++;
     }
 
@@ -273,9 +249,8 @@ bool BookmarkManager::keyPressEvent(QKeyEvent *event)
     if (GetFocusWidget()->keyPressEvent(event))
         return true;
 
-    bool handled = false;
     QStringList actions;
-    handled = GetMythMainWindow()->TranslateKeyPress("qt", event, actions);
+    bool handled = GetMythMainWindow()->TranslateKeyPress("qt", event, actions);
 
     for (int i = 0; i < actions.size() && !handled; i++)
     {
@@ -294,7 +269,7 @@ bool BookmarkManager::keyPressEvent(QKeyEvent *event)
             if (!m_menuPopup->Create())
             {
                 delete m_menuPopup;
-                m_menuPopup = NULL;
+                m_menuPopup = nullptr;
                 return true;
             }
 
@@ -327,19 +302,19 @@ bool BookmarkManager::keyPressEvent(QKeyEvent *event)
 
             if (item)
             {
-                Bookmark *site = item->GetData().value<Bookmark*>();
+                auto *site = item->GetData().value<Bookmark*>();
 
                 if (item->state() == MythUIButtonListItem::NotChecked)
                 {
                     item->setChecked(MythUIButtonListItem::FullChecked);
                     if (site)
-                        site->selected = true;
+                        site->m_selected = true;
                 }
                 else
                 {
                     item->setChecked(MythUIButtonListItem::NotChecked);
                     if (site)
-                        site->selected = false;
+                        site->m_selected = false;
                 }
             }
         }
@@ -370,7 +345,7 @@ void BookmarkManager::slotBookmarkClicked(MythUIButtonListItem *item)
     if (!item)
         return;
 
-    Bookmark *site = item->GetData().value<Bookmark*>();
+    auto *site = item->GetData().value<Bookmark*>();
     if (!site)
         return;
 
@@ -380,13 +355,13 @@ void BookmarkManager::slotBookmarkClicked(MythUIButtonListItem *item)
     QString zoom = gCoreContext->GetSetting("WebBrowserZoomLevel", "1.0");
     QStringList urls;
 
-    urls.append(site->url);
+    urls.append(site->m_url);
 
     if (cmd.toLower() == "internal")
     {
         MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
 
-        MythScreenType *mythbrowser;
+        MythScreenType *mythbrowser = nullptr;
         if (urls[0].startsWith("mythflash://"))
             mythbrowser = new MythFlashPlayer(mainStack, urls);
         else
@@ -420,7 +395,7 @@ void BookmarkManager::slotBookmarkClicked(MythUIButtonListItem *item)
 
 void BookmarkManager::ShowEditDialog(bool edit)
 {
-    Bookmark *site = NULL;
+    Bookmark *site = nullptr;
 
     if (edit)
     {
@@ -442,8 +417,8 @@ void BookmarkManager::ShowEditDialog(bool edit)
 
     MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
 
-    BookmarkEditor *editor = new BookmarkEditor(&m_savedBookmark, edit, mainStack,
-                                                        "bookmarkeditor");
+    auto *editor = new BookmarkEditor(&m_savedBookmark, edit, mainStack,
+                                      "bookmarkeditor");
 
     connect(editor, SIGNAL(Exiting()), this, SLOT(slotEditDialogExited()));
 
@@ -461,17 +436,16 @@ void BookmarkManager::ReloadBookmarks(void)
     GetSiteList(m_siteList);
     UpdateGroupList();
 
-    m_groupList->MoveToNamedPosition(m_savedBookmark.category);
+    m_groupList->MoveToNamedPosition(m_savedBookmark.m_category);
     UpdateURLList();
 
     // try to set the current item to name
-    MythUIButtonListItem *item;
     for (int x = 0; x < m_bookmarkList->GetCount(); x++)
     {
-        item = m_bookmarkList->GetItemAt(x);
+        MythUIButtonListItem *item = m_bookmarkList->GetItemAt(x);
         if (item && item->GetData().isValid())
         {
-            Bookmark *site = item->GetData().value<Bookmark*>();
+            auto *site = item->GetData().value<Bookmark*>();
             if (site && (*site == m_savedBookmark))
             {
                 m_bookmarkList->SetItemCurrent(item);
@@ -484,7 +458,7 @@ void BookmarkManager::ReloadBookmarks(void)
 void BookmarkManager::slotSettings(void)
 {
     MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
-    BrowserConfig *config = new BrowserConfig(mainStack, "browserconfig");
+    auto *config = new BrowserConfig(mainStack, "browserconfig");
 
     if (config->Create())
         mainStack->AddScreen(config);
@@ -499,7 +473,7 @@ void BookmarkManager::slotSetHomepage(void)
     MythUIButtonListItem *item = m_bookmarkList->GetItemCurrent();
     if (item && item->GetData().isValid())
     {
-        Bookmark *site = item->GetData().value<Bookmark*>();
+        auto *site = item->GetData().value<Bookmark*>();
         if (site)
             UpdateHomepageInDB(site);
     }
@@ -525,7 +499,7 @@ void BookmarkManager::slotDeleteCurrent(void)
 
     QString message = tr("Are you sure you want to delete the selected bookmark?");
 
-    MythConfirmationDialog *dialog = new MythConfirmationDialog(popupStack, message, true);
+    auto *dialog = new MythConfirmationDialog(popupStack, message, true);
 
     if (dialog->Create())
         popupStack->AddScreen(dialog);
@@ -543,10 +517,10 @@ void BookmarkManager::slotDoDeleteCurrent(bool doDelete)
     if (item)
     {
         QString category = "";
-        Bookmark *site = item->GetData().value<Bookmark*>();
+        auto *site = item->GetData().value<Bookmark*>();
         if (site)
         {
-            category = site->category;
+            category = site->m_category;
             RemoveFromDB(site);
         }
 
@@ -569,7 +543,7 @@ void BookmarkManager::slotDeleteMarked(void)
 
     QString message = tr("Are you sure you want to delete the marked bookmarks?");
 
-    MythConfirmationDialog *dialog = new MythConfirmationDialog(popupStack, message, true);
+    auto *dialog = new MythConfirmationDialog(popupStack, message, true);
 
     if (dialog->Create())
         popupStack->AddScreen(dialog);
@@ -585,10 +559,9 @@ void BookmarkManager::slotDoDeleteMarked(bool doDelete)
 
     QString category = m_groupList->GetValue();
 
-    for (int x = 0; x < m_siteList.size(); x++)
+    foreach (auto site, m_siteList)
     {
-        Bookmark *site = m_siteList.at(x);
-        if (site && site->selected)
+        if (site && site->m_selected)
             RemoveFromDB(site);
     }
 
@@ -616,7 +589,7 @@ void BookmarkManager::slotShowMarked(void)
     MythUIButtonListItem *item = m_bookmarkList->GetItemCurrent();
     if (item && item->GetData().isValid())
     {
-       Bookmark *site = item->GetData().value<Bookmark*>();
+       auto *site = item->GetData().value<Bookmark*>();
        m_savedBookmark = *site;
     }
 
@@ -624,18 +597,17 @@ void BookmarkManager::slotShowMarked(void)
     QString zoom = gCoreContext->GetSetting("WebBrowserZoomLevel", "1.0");
     QStringList urls;
 
-    for (int x = 0; x < m_siteList.size(); x++)
+    foreach (auto site, m_siteList)
     {
-        Bookmark *site = m_siteList.at(x);
-        if (site && site->selected)
-            urls.append(site->url);
+        if (site && site->m_selected)
+            urls.append(site->m_url);
     }
 
     if (cmd.toLower() == "internal")
     {
         MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
 
-        MythBrowser *mythbrowser = new MythBrowser(mainStack, urls);
+        auto *mythbrowser = new MythBrowser(mainStack, urls);
 
         if (mythbrowser->Create())
         {
@@ -679,9 +651,9 @@ void BookmarkManager::slotClearMarked(void)
         {
             item->setChecked(MythUIButtonListItem::NotChecked);
 
-            Bookmark *site = item->GetData().value<Bookmark*>();
+            auto *site = item->GetData().value<Bookmark*>();
             if (site)
-                site->selected = false;
+                site->m_selected = false;
         }
     }
 }

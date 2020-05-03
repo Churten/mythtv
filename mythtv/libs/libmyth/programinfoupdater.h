@@ -1,10 +1,8 @@
 #ifndef _PROGRAM_INFO_UPDATER_H_
 #define _PROGRAM_INFO_UPDATER_H_
 
-// ANSI C headers
-#include <stdint.h> // for [u]int[32,64]_t
-
 // C++ headers
+#include <cstdint> // for [u]int[32,64]_t
 #include <vector>
 
 // Qt headers
@@ -17,51 +15,51 @@
 // Myth
 #include "mythexp.h"
 
-typedef enum PIAction {
+enum PIAction {
     kPIAdd,
     kPIDelete,
     kPIUpdate,
     kPIUpdateFileSize,
-} PIAction;
+};
 
 class MPUBLIC PIKeyAction
 {
   public:
     PIKeyAction(uint recordedid, PIAction a) :
-        recordedid(recordedid), action(a) { }
+        m_recordedid(recordedid), m_action(a) { }
 
-    uint recordedid;
-    PIAction action;
+    uint     m_recordedid;
+    PIAction m_action;
 
     bool operator==(const PIKeyAction &other) const
     {
-        return (recordedid == other.recordedid);
+        return (m_recordedid == other.m_recordedid);
     }
 };
 
 class MPUBLIC PIKeyData
 {
   public:
-    PIKeyData(PIAction a, uint64_t f) : action(a), filesize(f) { }
-    PIAction action;
-    uint64_t filesize;
+    PIKeyData(PIAction a, uint64_t f) : m_action(a), m_filesize(f) { }
+    PIAction m_action;
+    uint64_t m_filesize;
 };
 
 class MPUBLIC ProgramInfoUpdater : public QRunnable
 {
   public:
-    ProgramInfoUpdater() : isRunning(false) { setAutoDelete(false); }
+    ProgramInfoUpdater() { setAutoDelete(false); }
 
     void insert(uint     recordedid,
                 PIAction action, uint64_t         filesize = 0ULL);
-    void run(void);
+    void run(void) override; // QRunnable
 
   private:
-    QMutex        lock;
-    QWaitCondition moreWork; 
-    bool          isRunning;
-    std::vector<PIKeyAction>    needsAddDelete;
-    QHash<uint,PIKeyData> needsUpdate;
+    QMutex                   m_lock;
+    QWaitCondition           m_moreWork; 
+    bool                     m_isRunning {false};
+    std::vector<PIKeyAction> m_needsAddDelete;
+    QHash<uint,PIKeyData>    m_needsUpdate;
 };
 
 #endif // _PROGRAM_INFO_UPDATER_H_

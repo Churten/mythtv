@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 
 __all_exceptions__  = ['MythError', 'MythDBError', 'MythBEError', \
                        'MythFEError', 'MythFileError', 'MythTZError']
@@ -15,7 +14,8 @@ __all_data__        = ['Record', 'Recorded', 'RecordedProgram', 'OldRecorded', \
                        'Job', 'Channel', 'Guide', 'Video', 'VideoGrabber', \
                        'InternetContent', 'InternetContentArticles', \
                        'InternetSource', 'Song', 'Album', 'Artist', \
-                       'MusicPlaylist', 'MusicDirectory', 'RecordedArtwork']
+                       'MusicPlaylist', 'MusicDirectory', 'RecordedArtwork', \
+                       'RecordedFile']
 
 __all_method__      = ['MythBE', 'BEEventMonitor', 'MythSystemEvent', \
                        'Frontend', 'MythDB', 'MythXML', 'MythMusic', \

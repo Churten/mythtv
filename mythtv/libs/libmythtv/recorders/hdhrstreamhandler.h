@@ -23,9 +23,10 @@ class DeviceReadBuffer;
 
 // HDHomeRun headers
 #ifdef USING_HDHOMERUN
-#include "hdhomerun.h"
+#include HDHOMERUN_HEADERFILE
 #else
 struct hdhomerun_device_t { int dummy; };
+struct hdhomerun_device_selector_t { int dummy; };
 #endif
 
 enum HDHRTuneMode {
@@ -45,30 +46,29 @@ enum HDHRTuneMode {
 class HDHRStreamHandler : public StreamHandler
 {
   public:
-    static HDHRStreamHandler *Get(const QString &devicename,
-                                  int recorder_id = -1);
-    static void Return(HDHRStreamHandler * & ref, int recorder_id = -1);
+    static HDHRStreamHandler *Get(const QString &devname, int inputid,
+                                  int majorid);
+    static void Return(HDHRStreamHandler * & ref, int inputid);
 
-    virtual void AddListener(MPEGStreamData *data,
-                             bool allow_section_reader = false,
-                             bool needs_drb            = false,
-                             QString output_file       = QString())
+    void AddListener(MPEGStreamData *data,
+                     bool /*allow_section_reader*/ = false,
+                     bool /*needs_drb*/            = false,
+                     QString output_file       = QString()) override // StreamHandler
     {
         StreamHandler::AddListener(data, false, false, output_file);
-    } // StreamHandler
+    }
 
     void GetTunerStatus(struct hdhomerun_tuner_status_t *status);
     bool IsConnected(void) const;
-    vector<DTVTunerType> GetTunerTypes(void) const { return _tuner_types; }
+    vector<DTVTunerType> GetTunerTypes(void) const { return m_tunerTypes; }
 
     // Commands
     bool TuneChannel(const QString &chanid);
     bool TuneProgram(uint mpeg_prog_num);
     bool TuneVChannel(const QString &vchn);
-    bool EnterPowerSavingMode(void);
 
   private:
-    explicit HDHRStreamHandler(const QString &);
+    explicit HDHRStreamHandler(const QString &device, int inputid, int majorid);
 
     bool Connect(void);
 
@@ -82,22 +82,24 @@ class HDHRStreamHandler : public StreamHandler
     bool Open(void);
     void Close(void);
 
-    virtual void run(void); // MThread
+    void run(void) override; // MThread
 
-    virtual bool UpdateFilters(void);
+    bool UpdateFilters(void) override; // StreamHandler
 
   private:
-    hdhomerun_device_t     *_hdhomerun_device;
-    int                     _tuner;
-    vector<DTVTunerType>    _tuner_types;
-    HDHRTuneMode            _tune_mode; // debug self check
+    hdhomerun_device_t          *m_hdhomerunDevice  {nullptr};
+    hdhomerun_device_selector_t *m_deviceSelector   {nullptr};
+    int                          m_tuner            {-1};
+    vector<DTVTunerType>         m_tunerTypes;
+    HDHRTuneMode                 m_tuneMode         {hdhrTuneModeNone}; // debug self check
+    int                          m_majorId;
 
-    mutable QMutex          _hdhr_lock;
+    mutable QMutex               m_hdhrLock         {QMutex::Recursive};
 
     // for implementing Get & Return
-    static QMutex                            _handlers_lock;
-    static QMap<QString, HDHRStreamHandler*> _handlers;
-    static QMap<QString, uint>               _handlers_refcnt;
+    static QMutex                            s_handlersLock;
+    static QMap<int, HDHRStreamHandler*>     s_handlers;
+    static QMap<int, uint>                   s_handlersRefCnt;
 };
 
 #endif // _HDHRSTREAMHANDLER_H_

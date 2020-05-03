@@ -5,9 +5,9 @@
     
     Starting point for the MythArchive module
 */
-#include <iostream>
+#include <csignal>
 #include <cstdlib>
-#include <signal.h>
+#include <iostream>
 
 using namespace std;
 
@@ -95,9 +95,11 @@ static bool checkLockFile(const QString &lockFile)
                 "Found a lock file but the owning process isn't running!\n"
                 "Removing stale lock file."));
             if (!file.remove())
+            {
                 LOG(VB_GENERAL, LOG_ERR,
                     QString("Failed to remove stale lock file - %1")
                         .arg(lockFile));
+            }
         }
         else
         {
@@ -131,7 +133,7 @@ static void runCreateDVD(void)
     }
 
     // show the select destination dialog
-    SelectDestination *dest = new SelectDestination(mainStack, false, "SelectDestination");
+    auto *dest = new SelectDestination(mainStack, false, "SelectDestination");
 
     if (dest->Create())
         mainStack->AddScreen(dest);
@@ -160,7 +162,7 @@ static void runCreateArchive(void)
     }
 
     // show the select destination dialog
-    SelectDestination *dest = new SelectDestination(mainStack, true, "SelectDestination");
+    auto *dest = new SelectDestination(mainStack, true, "SelectDestination");
 
     if (dest->Create())
         mainStack->AddScreen(dest);
@@ -195,7 +197,7 @@ static void runImportVideo(void)
 
     // show the find archive screen
     MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
-    ArchiveFileSelector *selector = new ArchiveFileSelector(mainStack);
+    auto *selector = new ArchiveFileSelector(mainStack);
 
     if (selector->Create())
         mainStack->AddScreen(selector);
@@ -238,23 +240,21 @@ static void runTestDVD(void)
         GetMythMainWindow()->HandleMedia(command, filename);
         return;
     }
-    else
-    {
-        if (command.contains("%f"))
-            command = command.replace(QRegExp("%f"), filename);
-        myth_system(command);
-    }
+
+    if (command.contains("%f"))
+        command = command.replace(QRegExp("%f"), filename);
+    myth_system(command);
 }
 
 static void runBurnDVD(void)
 {
-    BurnMenu *menu = new BurnMenu();
+    auto *menu = new BurnMenu();
     menu->start();
 }
 
 // these point to the the mainmenu callback if found
-static void (*m_callback)(void *, QString &) = NULL;
-static void *m_callbackdata = NULL;
+static void (*m_callback)(void *, QString &) = nullptr;
+static void *m_callbackdata = nullptr;
 
 static void ArchiveCallback(void *data, QString &selection)
 {
@@ -285,10 +285,10 @@ static void ArchiveCallback(void *data, QString &selection)
     }
 }
 
-static int runMenu(QString which_menu)
+static int runMenu(const QString& which_menu)
 {
     // find the 'mainmenu' MythThemedMenu so we can use the callback from it
-    MythThemedMenu *mainMenu = NULL;
+    MythThemedMenu *mainMenu = nullptr;
     QObject *parentObject = GetMythMainWindow()->GetMainStack()->GetTopScreen();
 
     while (parentObject)
@@ -302,20 +302,20 @@ static int runMenu(QString which_menu)
     }
 
     QString themedir = GetMythUI()->GetThemeDir();
-    MythThemedMenu *diag = new MythThemedMenu(
-        themedir, which_menu, GetMythMainWindow()->GetMainStack(),
-        "archive menu");
+    auto *diag = new MythThemedMenu(themedir, which_menu,
+                                    GetMythMainWindow()->GetMainStack(),
+                                    "archive menu");
 
     // save the callback from the main menu
     if (mainMenu)
         mainMenu->getCallback(&m_callback, &m_callbackdata);
     else
     {
-        m_callback = NULL;
-        m_callbackdata = NULL;
+        m_callback = nullptr;
+        m_callbackdata = nullptr;
     }
 
-    diag->setCallback(ArchiveCallback, NULL);
+    diag->setCallback(ArchiveCallback, nullptr);
     diag->setKillable();
 
     if (diag->foundTheme())
@@ -323,13 +323,11 @@ static int runMenu(QString which_menu)
         GetMythMainWindow()->GetMainStack()->AddScreen(diag);
         return 0;
     }
-    else
-    {
-        LOG(VB_GENERAL, LOG_ERR, QString("Couldn't find menu %1 or theme %2")
-                .arg(which_menu).arg(themedir));
-        delete diag;
-        return -1;
-    }
+
+    LOG(VB_GENERAL, LOG_ERR, QString("Couldn't find menu %1 or theme %2")
+        .arg(which_menu).arg(themedir));
+    delete diag;
+    return -1;
 }
 
 static void initKeys(void)
@@ -353,8 +351,8 @@ static void initKeys(void)
 
 int mythplugin_init(const char *libversion)
 {
-    if (!gCoreContext->TestPluginVersion("mytharchive", libversion,
-                                    MYTH_BINARY_VERSION))
+    if (!MythCoreContext::TestPluginVersion("mytharchive", libversion,
+                                            MYTH_BINARY_VERSION))
     {
         LOG(VB_GENERAL, LOG_ERR, "Test Popup Version Failed");
         return -1;
@@ -386,9 +384,8 @@ int mythplugin_run(void)
 int mythplugin_config(void)
 {
     MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
-    StandardSettingDialog *ssd =
-        new StandardSettingDialog(mainStack, "archivesettings",
-                                  new ArchiveSettings());
+    auto *ssd = new StandardSettingDialog(mainStack, "archivesettings",
+                                          new ArchiveSettings());
 
     if (ssd->Create())
     {

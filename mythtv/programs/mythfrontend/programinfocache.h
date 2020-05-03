@@ -3,10 +3,8 @@
 #ifndef _PROGRAM_INFO_CACHE_H_
 #define _PROGRAM_INFO_CACHE_H_
 
-// ANSI C headers
-#include <stdint.h>
-
 // C++ headers
+#include <cstdint>
 #include <vector>
 using namespace std;
 
@@ -24,18 +22,19 @@ class ProgramInfoCache
 {
     friend class ProgramInfoLoader;
   public:
-    explicit ProgramInfoCache(QObject *o);
+    explicit ProgramInfoCache(QObject *o)
+        : m_listener(o) {}
     ~ProgramInfoCache();
 
-    void ScheduleLoad(const bool updateUI = true);
+    void ScheduleLoad(bool updateUI = true);
     bool IsLoadInProgress(void) const;
     void WaitForLoadToComplete(void) const;
 
     // All the following public methods must only be called from the UI Thread.
     void Refresh(void);
-    void Add(const ProgramInfo&);
+    void Add(const ProgramInfo &pginfo);
     bool Remove(uint recordingID);
-    bool Update(const ProgramInfo&);
+    bool Update(const ProgramInfo &pginfo);
     bool UpdateFileSize(uint recordingID, uint64_t filesize);
     QString GetRecGroup(uint recordingID) const;
     void GetOrdered(vector<ProgramInfo*> &list, bool newest_first = false);
@@ -44,7 +43,7 @@ class ProgramInfoCache
     ProgramInfo *GetRecordingInfo(uint recordingID) const;
 
   private:
-    void Load(const bool updateUI = true);
+    void Load(bool updateUI = true);
     void Clear(void);
 
   private:
@@ -53,15 +52,15 @@ class ProgramInfoCache
     // We could store a hash, but sort the vector in GetOrdered which might
     // be a suitable compromise, fractionally slower initial load but faster
     // scrolling and updates
-    typedef QHash<uint,ProgramInfo*> Cache;
+    using Cache = QHash<uint,ProgramInfo*>;
 
     mutable QMutex          m_lock;
     Cache                   m_cache;
-    vector<ProgramInfo*>   *m_next_cache;
-    QObject                *m_listener;
-    bool                    m_load_is_queued;
-    uint                    m_loads_in_progress;
-    mutable QWaitCondition  m_load_wait;
+    vector<ProgramInfo*>   *m_nextCache         {nullptr};
+    QObject                *m_listener          {nullptr};
+    bool                    m_loadIsQueued      {false};
+    uint                    m_loadsInProgress   {0};
+    mutable QWaitCondition  m_loadWait;
 };
 
 #endif // _PROGRAM_INFO_CACHE_H_

@@ -45,11 +45,6 @@ void FileScannerThread::run()
 
 ///////////////////////////////////////////////////////////////////////////////
 
-FileCopyThread::FileCopyThread(const QString &src, const QString &dst) :
-    MThread("FileCopy"), m_srcFile(src), m_dstFile(dst), m_result(false)
-{
-}
-
 void FileCopyThread::run()
 {
     RunProlog();
@@ -62,39 +57,7 @@ void FileCopyThread::run()
 
 ImportMusicDialog::ImportMusicDialog(MythScreenStack *parent) :
     MythScreenType(parent, "musicimportfiles"),
-
-    m_musicStorageDir(""),
-    m_somethingWasImported(false),
-    m_tracks(new vector<TrackInfo*>),
-    m_currentTrack(0),
-    m_playingMetaData(NULL),
-    // GUI stuff
-    m_locationEdit(NULL),
-    m_locationButton(NULL),
-    m_scanButton(NULL),
-    m_coverartButton(NULL),
-    m_filenameText(NULL),
-    m_compartistText(NULL),
-    m_artistText(NULL),
-    m_albumText(NULL),
-    m_titleText(NULL),
-    m_genreText(NULL),
-    m_yearText(NULL),
-    m_trackText(NULL),
-    m_nextButton(NULL),
-    m_prevButton(NULL),
-    m_currentText(NULL),
-    m_statusText(NULL),
-    m_playButton(NULL),
-    m_addButton(NULL),
-    m_addallnewButton(NULL),
-    m_nextnewButton(NULL),
-    m_compilationCheck(NULL),
-    // default metadata values
-    m_defaultCompilation(false),
-    m_defaultYear(0),
-    m_defaultRating(0),
-    m_haveDefaults(false)
+    m_tracks(new vector<TrackInfo*>)
 {
     QString lastHost = gCoreContext->GetSetting("MythMusicLastImportHost", gCoreContext->GetMasterHostName());
     QStringList dirs = StorageGroup::getGroupDirs("Music", lastHost);
@@ -173,9 +136,8 @@ bool ImportMusicDialog::keyPressEvent(QKeyEvent *event)
     if (GetFocusWidget() && GetFocusWidget()->keyPressEvent(event))
         return true;
 
-    bool handled = false;
     QStringList actions;
-    handled = GetMythMainWindow()->TranslateKeyPress("Global", event, actions);
+    bool handled = GetMythMainWindow()->TranslateKeyPress("Global", event, actions);
 
     for (int i = 0; i < actions.size() && !handled; i++)
     {
@@ -196,7 +158,7 @@ bool ImportMusicDialog::keyPressEvent(QKeyEvent *event)
         }
         else if (action == "MENU")
         {
-            showMenu();
+            ShowMenu();
         }
         else if (action == "ESCAPE" && !GetMythMainWindow()->IsExitingToMain())
         {
@@ -335,7 +297,7 @@ void ImportMusicDialog::doExit(bool ok)
 void ImportMusicDialog::locationPressed()
 {
     MythScreenStack *popupStack = GetMythMainWindow()->GetStack("popup stack");
-    MythUIFileBrowser *fb = new MythUIFileBrowser(popupStack, m_locationEdit->GetText());
+    auto *fb = new MythUIFileBrowser(popupStack, m_locationEdit->GetText());
     // TODO Install a name filter on supported music formats
     fb->SetTypeFilter(QDir::AllDirs | QDir::Readable);
     if (fb->Create())
@@ -407,7 +369,7 @@ void ImportMusicDialog::addPressed()
         QString fullFilename;
 
         QUrl url(m_musicStorageDir);
-        fullFilename = gCoreContext->GenMythURL(url.host(), 0, saveFilename, "Music");
+        fullFilename = MythCoreContext::GenMythURL(url.host(), 0, saveFilename, "Music");
 
 
         // we need to manually copy the file extension
@@ -501,7 +463,7 @@ bool ImportMusicDialog::copyFile(const QString &src, const QString &dst)
     QString host = QUrl(dst).host();
 
     MythScreenStack *popupStack = GetMythMainWindow()->GetStack("popup stack");
-    MythUIBusyDialog *busy =
+    auto *busy =
             new MythUIBusyDialog(tr("Copying music file to the 'Music' storage group on %1").arg(host),
                                     popupStack,
                                     "scanbusydialog");
@@ -513,10 +475,10 @@ bool ImportMusicDialog::copyFile(const QString &src, const QString &dst)
     else
     {
         delete busy;
-        busy = NULL;
+        busy = nullptr;
     }
 
-    FileCopyThread *copy = new FileCopyThread(src, dst);
+    auto *copy = new FileCopyThread(src, dst);
     copy->start();
 
     while (!copy->isFinished())
@@ -543,10 +505,8 @@ void ImportMusicDialog::startScan()
         location.append('/');
 
     MythScreenStack *popupStack = GetMythMainWindow()->GetStack("popup stack");
-    MythUIBusyDialog *busy =
-            new MythUIBusyDialog(tr("Searching for music files"),
-                                     popupStack,
-                                     "scanbusydialog");
+    auto *busy = new MythUIBusyDialog(tr("Searching for music files"),
+                                      popupStack, "scanbusydialog");
 
     if (busy->Create())
     {
@@ -555,9 +515,9 @@ void ImportMusicDialog::startScan()
     else
     {
         delete busy;
-        busy = NULL;
+        busy = nullptr;
     }
-    FileScannerThread *scanner = new FileScannerThread(this);
+    auto *scanner = new FileScannerThread(this);
     scanner->start();
 
     while (!scanner->isFinished())
@@ -596,11 +556,9 @@ void ImportMusicDialog::scanDirectory(QString &directory, vector<TrackInfo*> *tr
         return;
 
     QFileInfoList::const_iterator it = list.begin();
-    const QFileInfo *fi;
-
     while (it != list.end())
     {
-        fi = &(*it);
+        const QFileInfo *fi = &(*it);
         ++it;
         QString filename = fi->absoluteFilePath();
         if (fi->isDir())
@@ -613,7 +571,7 @@ void ImportMusicDialog::scanDirectory(QString &directory, vector<TrackInfo*> *tr
                 MusicMetadata *metadata = tagger->read(filename);
                 if (metadata)
                 {
-                    TrackInfo * track = new TrackInfo;
+                    auto * track = new TrackInfo;
                     track->metadata = metadata;
                     track->isNewTune = isNewTune(metadata->Artist(), metadata->Album(),
                                                  metadata->Title());
@@ -637,7 +595,7 @@ void ImportMusicDialog::showEditMetadataDialog()
 
     MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
 
-    EditMetadataDialog *editDialog = new EditMetadataDialog(mainStack, editMeta);
+    auto *editDialog = new EditMetadataDialog(mainStack, editMeta);
 
     if (!editDialog->Create())
     {
@@ -661,14 +619,14 @@ void ImportMusicDialog::metadataChanged(void)
     fillWidgets();
 }
 
-void ImportMusicDialog::showMenu()
+void ImportMusicDialog::ShowMenu()
 {
     if (m_tracks->empty())
         return;
 
     MythScreenStack *popupStack = GetMythMainWindow()->GetStack("popup stack");
 
-    MythDialogBox *menu = new MythDialogBox("", popupStack, "importmusicmenu");
+    auto *menu = new MythDialogBox("", popupStack, "importmusicmenu");
 
     if (menu->Create())
         popupStack->AddScreen(menu);
@@ -723,7 +681,7 @@ void ImportMusicDialog::chooseBackend(void)
     QString msg = tr("Select where to save tracks");
 
     MythScreenStack *popupStack = GetMythMainWindow()->GetStack("popup stack");
-    MythUISearchDialog *searchDlg = new MythUISearchDialog(popupStack, msg, hostList, false, "");
+    auto *searchDlg = new MythUISearchDialog(popupStack, msg, hostList, false, "");
 
     if (!searchDlg->Create())
     {
@@ -736,7 +694,7 @@ void ImportMusicDialog::chooseBackend(void)
     popupStack->AddScreen(searchDlg);
 }
 
-void ImportMusicDialog::setSaveHost(QString host)
+void ImportMusicDialog::setSaveHost(const QString& host)
 {
     gCoreContext->SaveSetting("MythMusicLastImportHost", host);
 
@@ -861,54 +819,25 @@ void ImportMusicDialog::setRating(void)
 
 void ImportMusicDialog::setTitleInitialCap(void)
 {
+    QLocale locale = gCoreContext->GetQLocale();
     MusicMetadata *data = m_tracks->at(m_currentTrack)->metadata;
-    QString title = data->Title();
-    bool bFoundCap = false;
-
-    for (int x = 0; x < title.length(); x++)
-    {
-        if (title[x].isLetter())
-        {
-            if (bFoundCap == false)
-            {
-                title[x] = title[x].toUpper();
-                bFoundCap = true;
-            }
-            else
-                title[x] = title[x].toLower();
-        }
-    }
-
+    QString title = locale.toLower(data->Title().simplified());
+    title[0] = title[0].toUpper();
     data->setTitle(title);
     fillWidgets();
 }
 
 void ImportMusicDialog::setTitleWordCaps(void)
 {
+    QLocale locale = gCoreContext->GetQLocale();
     MusicMetadata *data = m_tracks->at(m_currentTrack)->metadata;
-    QString title = data->Title();
-    bool bInWord = false;
+    QString title = locale.toLower(data->Title().simplified());
+    QStringList title_words = title.split(' ');
 
-    for (int x = 0; x < title.length(); x++)
-    {
-        if (title[x].isSpace())
-            bInWord = false;
-        else
-        {
-            if (title[x].isLetter())
-            {
-                if (!bInWord)
-                {
-                    title[x] = title[x].toUpper();
-                    bInWord = true;
-                }
-                else
-                    title[x] = title[x].toLower();
-            }
-        }
-    }
+    for (int x = 0; x < title_words.size(); ++x)
+        title_words[x][0] = title_words[x][0].toUpper();
 
-    data->setTitle(title);
+    data->setTitle(title_words.join(' '));
     fillWidgets();
 }
 
@@ -921,7 +850,7 @@ void ImportMusicDialog::showImportCoverArtDialog(void)
 
     MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
 
-    ImportCoverArtDialog *import = new ImportCoverArtDialog(mainStack,
+    auto *import = new ImportCoverArtDialog(mainStack,
                                         fi.absolutePath(),
                                         m_tracks->at(m_currentTrack)->metadata,
                                         m_musicStorageDir);
@@ -934,9 +863,8 @@ void ImportMusicDialog::showImportCoverArtDialog(void)
 
 void ImportMusicDialog::customEvent(QEvent *event)
 {
-    if (event->type() == DialogCompletionEvent::kEventType)
+    if (auto *dce = dynamic_cast<DialogCompletionEvent*>(event))
     {
-        DialogCompletionEvent *dce = (DialogCompletionEvent*)(event);
         if (dce->GetId() == "locationchange")
         {
             m_locationEdit->SetText(dce->GetResultText());
@@ -947,42 +875,13 @@ void ImportMusicDialog::customEvent(QEvent *event)
 
 ///////////////////////////////////////////////////////////////////////////////
 
-ImportCoverArtDialog::ImportCoverArtDialog(MythScreenStack *parent,
-                                           const QString &sourceDir,
-                                           MusicMetadata *metadata,
-                                           const QString &storageDir) :
-    MythScreenType(parent, "import_coverart"),
-    m_sourceDir(sourceDir),
-    m_musicStorageDir(storageDir),
-    m_metadata(metadata),
-    m_currentFile(0),
-    //  GUI stuff
-    m_filenameText(NULL),
-    m_currentText(NULL),
-    m_statusText(NULL),
-    m_destinationText(NULL),
-    m_coverartImage(NULL),
-    m_typeList(NULL),
-    m_nextButton(NULL),
-    m_prevButton(NULL),
-    m_copyButton(NULL),
-    m_exitButton(NULL)
-{
-}
-
-ImportCoverArtDialog::~ImportCoverArtDialog()
-{
-
-}
-
 bool ImportCoverArtDialog::keyPressEvent(QKeyEvent *event)
 {
     if (GetFocusWidget() && GetFocusWidget()->keyPressEvent(event))
         return true;
 
-    bool handled = false;
     QStringList actions;
-    handled = GetMythMainWindow()->TranslateKeyPress("Global", event, actions);
+    bool handled = GetMythMainWindow()->TranslateKeyPress("Global", event, actions);
 
     for (int i = 0; i < actions.size() && !handled; i++)
     {
@@ -1033,15 +932,15 @@ bool ImportCoverArtDialog::Create()
     if (m_typeList)
     {
         new MythUIButtonListItem(m_typeList, tr("Front Cover"),
-                                 qVariantFromValue((int)IT_FRONTCOVER));
+                                 QVariant::fromValue((int)IT_FRONTCOVER));
         new MythUIButtonListItem(m_typeList, tr("Back Cover"),
-                                 qVariantFromValue((int)IT_BACKCOVER));
+                                 QVariant::fromValue((int)IT_BACKCOVER));
         new MythUIButtonListItem(m_typeList, tr("CD"),
-                                 qVariantFromValue((int)IT_CD));
+                                 QVariant::fromValue((int)IT_CD));
         new MythUIButtonListItem(m_typeList, tr("Inlay"),
-                                 qVariantFromValue((int)IT_INLAY));
+                                 QVariant::fromValue((int)IT_INLAY));
         new MythUIButtonListItem(m_typeList, tr("<Unknown>"),
-                                 qVariantFromValue((int)IT_UNKNOWN));
+                                 QVariant::fromValue((int)IT_UNKNOWN));
 
         connect(m_typeList, SIGNAL(itemSelected(MythUIButtonListItem *)),
                 SLOT(selectorChanged()));
@@ -1073,7 +972,7 @@ void ImportCoverArtDialog::selectorChanged()
 
 void ImportCoverArtDialog::copyPressed()
 {
-    if (m_filelist.size() > 0)
+    if (!m_filelist.empty())
     {
         if (!RemoteFile::CopyFile(m_filelist[m_currentFile], m_saveFilename, true))
         {
@@ -1085,11 +984,11 @@ void ImportCoverArtDialog::copyPressed()
         // add the file to the database
         QString filename = m_saveFilename.section( '/', -1, -1);
         AlbumArtImage image;
-        image.description = "";
-        image.embedded = false;
-        image.filename = filename;
-        image.hostname = m_metadata->Hostname();
-        image.imageType = (ImageType)m_typeList->GetItemCurrent()->GetData().toInt();
+        image.m_description = "";
+        image.m_embedded = false;
+        image.m_filename = filename;
+        image.m_hostname = m_metadata->Hostname();
+        image.m_imageType = (ImageType)m_typeList->GetItemCurrent()->GetData().toInt();
 
         m_metadata->getAlbumArtImages()->addImage(&image);
         m_metadata->getAlbumArtImages()->dumpToDatabase();
@@ -1110,7 +1009,7 @@ void ImportCoverArtDialog::prevPressed()
 
 void ImportCoverArtDialog::nextPressed()
 {
-    if (m_currentFile < (int) m_filelist.size() - 1)
+    if (m_currentFile < m_filelist.size() - 1)
     {
         m_currentFile++;
         updateTypeSelector();
@@ -1135,11 +1034,9 @@ void ImportCoverArtDialog::scanDirectory()
         return;
 
     QFileInfoList::const_iterator it = list.begin();
-    const QFileInfo *fi;
-
     while (it != list.end())
     {
-        fi = &(*it);
+        const QFileInfo *fi = &(*it);
         ++it;
         QString filename = fi->absoluteFilePath();
         if (!fi->isDir())
@@ -1155,14 +1052,16 @@ void ImportCoverArtDialog::scanDirectory()
 
 void ImportCoverArtDialog::updateStatus()
 {
-    if (m_filelist.size() > 0)
+    if (!m_filelist.empty())
     {
         if (m_currentText)
+        {
             //: %1 is the current position of the file being copied,
             //: %2 is the total number of files
             m_currentText->SetText(tr("%1 of %2", "Current file copied")
                                    .arg(m_currentFile + 1)
                                    .arg(m_filelist.size()));
+        }
         m_filenameText->SetText(m_filelist[m_currentFile]);
         m_coverartImage->SetFilename(m_filelist[m_currentFile]);
         m_coverartImage->Load();
@@ -1171,7 +1070,7 @@ void ImportCoverArtDialog::updateStatus()
         QString fullFilename;
 
         QUrl url(m_musicStorageDir);
-        fullFilename = gCoreContext->GenMythURL(url.host(), 0, saveFilename, "Music");
+        fullFilename = MythCoreContext::GenMythURL(url.host(), 0, saveFilename, "Music");
         QString dir = fullFilename.section( '/', 0, -2);
 
         QFileInfo fi(m_filelist[m_currentFile]);
@@ -1219,20 +1118,20 @@ void ImportCoverArtDialog::updateStatus()
 
 void ImportCoverArtDialog::updateTypeSelector()
 {
-    if (m_filelist.size() == 0)
+    if (m_filelist.empty())
         return;
 
     QString filename = m_filelist[m_currentFile];
     QFileInfo fi(filename);
     filename = fi.fileName();
 
-    if (filename.contains("front", Qt::CaseInsensitive) > 0)
+    if (filename.contains("front", Qt::CaseInsensitive))
         m_typeList->SetValue(tr("Front Cover"));
-    else if (filename.contains("back", Qt::CaseInsensitive) > 0)
+    else if (filename.contains("back", Qt::CaseInsensitive))
         m_typeList->SetValue(tr("Back Cover"));
-    else if (filename.contains("inlay", Qt::CaseInsensitive) > 0)
+    else if (filename.contains("inlay", Qt::CaseInsensitive))
         m_typeList->SetValue(tr("Inlay"));
-    else if (filename.contains("cd", Qt::CaseInsensitive) > 0)
+    else if (filename.contains("cd", Qt::CaseInsensitive))
         m_typeList->SetValue(tr("CD"));
     else
         m_typeList->SetValue(tr("<Unknown>"));

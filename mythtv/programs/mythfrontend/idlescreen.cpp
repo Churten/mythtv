@@ -19,14 +19,7 @@
 
 IdleScreen::IdleScreen(MythScreenStack *parent)
               :MythScreenType(parent, "standbymode"),
-              m_updateScreenTimer(new QTimer(this)), m_statusState(NULL),
-              m_currentRecordings(NULL),
-              m_nextRecordings(NULL),
-              m_conflictingRecordings(NULL),
-              m_conflictWarning(NULL),
-              m_secondsToShutdown(-1),
-              m_pendingSchedUpdate(false),
-              m_hasConflicts(false)
+              m_updateScreenTimer(new QTimer(this))
 {
     gCoreContext->addListener(this);
     GetMythMainWindow()->EnterStandby();
@@ -47,11 +40,8 @@ IdleScreen::~IdleScreen()
 
 bool IdleScreen::Create(void)
 {
-    bool foundtheme = false;
-
     // Load the theme for this screen
-    foundtheme = LoadWindowFromXML("status-ui.xml", "standbymode", this);
-
+    bool foundtheme = LoadWindowFromXML("status-ui.xml", "standbymode", this);
     if (!foundtheme)
         return false;
 
@@ -172,15 +162,14 @@ void IdleScreen::UpdateScreen(void)
     // update scheduled
     if (!m_scheduledList.empty())
     {
-        ProgramList::iterator pit = m_scheduledList.begin();
-        MythUIButtonListItem *item;
+        auto pit = m_scheduledList.begin();
 
         while (pit != m_scheduledList.end())
         {
             ProgramInfo *progInfo = *pit;
             if (progInfo)
             {
-                MythUIButtonList *list = NULL;
+                MythUIButtonList *list = nullptr;
                 const RecStatus::Type recstatus = progInfo->GetRecordingStatus();
 
                 switch(recstatus)
@@ -201,14 +190,14 @@ void IdleScreen::UpdateScreen(void)
                         break;
 
                     default:
-                        list = NULL;
+                        list = nullptr;
                         break;
                 }
 
-                if (list != NULL)
+                if (list != nullptr)
                 {
-                    item = new MythUIButtonListItem(list,"",
-                                                    qVariantFromValue(progInfo));
+                    auto *item = new MythUIButtonListItem(list,"",
+                                                 QVariant::fromValue(progInfo));
 
                     InfoMap infoMap;
                     progInfo->ToMap(infoMap);
@@ -253,9 +242,11 @@ bool IdleScreen::keyPressEvent(QKeyEvent* event)
 
 void IdleScreen::customEvent(QEvent* event)
 {
-    if ((MythEvent::Type)(event->type()) == MythEvent::MythEventMessage)
+    if (event->type() == MythEvent::MythEventMessage)
     {
-        MythEvent *me = static_cast<MythEvent *>(event);
+        auto *me = dynamic_cast<MythEvent *>(event);
+        if (me == nullptr)
+            return;
 
         if (me->Message().startsWith("RECONNECT_"))
         {

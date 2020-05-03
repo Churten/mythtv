@@ -51,7 +51,7 @@ class VisualNode
 {
   public:
     VisualNode(short *l, short *r, unsigned long n, unsigned long o)
-        : left(l), right(r), length(n), offset(o)
+        : m_left(l), m_right(r), m_length(n), m_offset(o)
     {
         // left and right are allocated and then passed to this class
         // the code that allocated left and right should give up all ownership
@@ -59,12 +59,14 @@ class VisualNode
 
     ~VisualNode()
     {
-        delete [] left;
-        delete [] right;
+        delete [] m_left;
+        delete [] m_right;
     }
 
-    short *left, *right;
-    unsigned long length, offset;
+    short *m_left  {nullptr};
+    short *m_right {nullptr};
+    unsigned long m_length;
+    unsigned long m_offset;
 };
 
 class VisualBase
@@ -78,7 +80,7 @@ class VisualBase
 
     // this is called on nodes that will not be displayed :: Not needed for most visualizations
     // (i.e. between the displayed frames, if you need the whole audio stream)
-    virtual bool processUndisplayed( VisualNode * )
+    virtual bool processUndisplayed( VisualNode */*node*/ )
     {
         return true; // By default this does nothing : Ignore the in-between chunks of audio data
     };
@@ -89,18 +91,18 @@ class VisualBase
     virtual int getDesiredFPS(void) { return m_fps; }
     // Override this if you need the potential of capturing more data than the default
     virtual unsigned long getDesiredSamples(void) { return SAMPLES_DEFAULT_SIZE; }
-    void drawWarning(QPainter *p, const QColor &back, const QSize &size, QString warning, int fontsize = 28);
+    static void drawWarning(QPainter *p, const QColor &back, const QSize &size, const QString& warning, int fontsize = 28);
 
   protected:
-    int m_fps;
-    bool m_xscreensaverenable;
+    int  m_fps                {20};
+    bool m_xscreensaverenable {true};
 };
 
 class VisFactory
 {
   public:
     VisFactory() {m_pNextVisFactory = g_pVisFactories; g_pVisFactories = this;}
-    virtual ~VisFactory() {}
+    virtual ~VisFactory() = default;
     const VisFactory* next() const {return m_pNextVisFactory;}
     virtual const QString &name(void) const = 0;
     virtual VisualBase* create(MainVisual *parent, const QString &pluginName) const = 0;
@@ -108,55 +110,61 @@ class VisFactory
     static const VisFactory* VisFactories() {return g_pVisFactories;}
   protected:
     static VisFactory* g_pVisFactories;
-    VisFactory*        m_pNextVisFactory;
+    VisFactory*        m_pNextVisFactory {nullptr};
 };
+
+#define RUBBERBAND 0
+#define TWOCOLOUR 0
 
 class StereoScope : public VisualBase
 {
   public:
     StereoScope();
-    virtual ~StereoScope();
+    ~StereoScope() override = default;
 
-    void resize( const QSize &size );
-    bool process( VisualNode *node );
-    bool draw( QPainter *p, const QColor &back );
-    void handleKeyPress(const QString &action) {(void) action;}
+    void resize( const QSize &size ) override; // VisualBase
+    bool process( VisualNode *node ) override; // VisualBase
+    bool draw( QPainter *p, const QColor &back ) override; // VisualBase
+    void handleKeyPress(const QString &action) override // VisualBase
+        {(void) action;}
 
   protected:
-    QColor startColor, targetColor;
-    vector<double> magnitudes;
-    QSize size;
-    bool const rubberband;
-    double const falloff;
+    QColor         m_startColor  {Qt::green};
+    QColor         m_targetColor {Qt::red};
+    vector<double> m_magnitudes;
+    QSize          m_size;
+    bool const     m_rubberband  {RUBBERBAND};
+    double const   m_falloff     {1.0};
 };
 
 class MonoScope : public StereoScope
 {
   public:
-    MonoScope();
-    virtual ~MonoScope();
+    MonoScope() = default;
+    ~MonoScope() override = default;
 
-    bool process( VisualNode *node );
-    bool draw( QPainter *p, const QColor &back );
+    bool process( VisualNode *node ) override; // StereoScope
+    bool draw( QPainter *p, const QColor &back ) override; // StereoScope
 };
 
 class LogScale
 {
   public:
-    LogScale(int = 0, int = 0);
+    explicit LogScale(int maxscale = 0, int maxrange = 0);
     ~LogScale();
 
-    int scale() const { return s; }
-    int range() const { return r; }
+    int scale() const { return m_s; }
+    int range() const { return m_r; }
 
-    void setMax(int, int);
+    void setMax(int maxscale, int maxrange);
 
-    int operator[](int);
+    int operator[](int index);
 
 
   private:
-    int *indices;
-    int s, r;
+    int *m_indices {nullptr};
+    int  m_s       {0};
+    int  m_r       {0};
 };
 
 #ifdef FFTW3_SUPPORT
@@ -168,45 +176,54 @@ class Spectrum : public VisualBase
     
   public:
     Spectrum();
-    virtual ~Spectrum();
+    ~Spectrum() override;
 
-    virtual void resize(const QSize &size);
-    bool process(VisualNode *node);
-    virtual bool draw(QPainter *p, const QColor &back = Qt::black);
-    void handleKeyPress(const QString &action) {(void) action;}
+    void resize(const QSize &size) override; // VisualBase
+    bool process(VisualNode *node) override; // VisualBase
+    bool draw(QPainter *p, const QColor &back = Qt::black) override; // VisualBase
+    void handleKeyPress(const QString &action) override // VisualBase
+        {(void) action;}
 
   protected:
-    inline double clamp(double cur, double max, double min);
+    static inline double clamp(double cur, double max, double min);
 
-    QColor startColor, targetColor;
-    QVector<QRect> rects;
-    QVector<double> magnitudes;
-    QSize size;
-    LogScale scale;
-    double scaleFactor, falloff;
-    int analyzerBarWidth;
+    QColor             m_startColor       {Qt::blue};
+    QColor             m_targetColor      {Qt::red};
+    QVector<QRect>     m_rects;
+    QVector<double>    m_magnitudes;
+    QSize              m_size;
+    LogScale           m_scale;
 
-    fftw_plan lplan, rplan;
-    myth_fftw_float *lin, *rin;
-    myth_fftw_complex *lout, *rout;
+    // Setup the "magical" audio data transformations
+    // provided by the Fast Fourier Transforms library
+    double             m_scaleFactor      {2.0};
+    double             m_falloff          {10.0};
+    int                m_analyzerBarWidth {6};
+
+    fftw_plan          m_lplan;
+    fftw_plan          m_rplan;
+    myth_fftw_float   *m_lin              {nullptr};
+    myth_fftw_float   *m_rin              {nullptr};
+    myth_fftw_complex *m_lout             {nullptr};
+    myth_fftw_complex *m_rout             {nullptr};
 };
 
 class Squares : public Spectrum
 {
   public:
     Squares();
-    virtual ~Squares();
+    ~Squares() override = default;
 
-    void resize (const QSize &newsize);
-    bool draw(QPainter *p, const QColor &back = Qt::black);
-    void handleKeyPress(const QString &action) {(void) action;}
+    void resize (const QSize &newsize) override; // Spectrum
+    bool draw(QPainter *p, const QColor &back = Qt::black) override; // Spectrum
+    void handleKeyPress(const QString &action) override // Spectrum
+        {(void) action;}
 
   private:
     void drawRect(QPainter *p, QRect *rect, int i, int c, int w, int h);
-    QSize actualSize;
-    MainVisual *pParent;
-    int fake_height;
-    int number_of_squares;
+    QSize m_actualSize        {0,0};
+    int   m_fakeHeight        {0};
+    int   m_numberOfSquares   {16};
 };
 
 #endif // FFTW3_SUPPORT
@@ -225,10 +242,10 @@ class Piano : public VisualBase
 
 #define PIANO_RMS_NEGLIGIBLE .001
 #define PIANO_SPECTRUM_SMOOTHING 0.95
-#define PIANO_MIN_VOL -10
+#define PIANO_MIN_VOL (-10)
 #define PIANO_KEYPRESS_TOO_LIGHT .2
 
-typedef struct piano_key_data {
+struct piano_key_data {
     goertzel_data q1, q2, coeff, magnitude;
     goertzel_data max_magnitude_seen;
 
@@ -239,64 +256,69 @@ typedef struct piano_key_data {
     int samples_process_before_display_update;
 
     bool is_black_note; // These are painted on top of white notes, and have different colouring
-} piano_key_data;
+};
 
   public:
     Piano();
-    virtual ~Piano();
+    ~Piano() override;
 
-    virtual void resize(const QSize &size);
+    void resize(const QSize &size) override; // VisualBase
 
-    bool process(VisualNode *node);
+    bool process(VisualNode *node) override; // VisualBase
 
     // These functions are new, since we need to inspect all the data
-    bool processUndisplayed(VisualNode *node);
-    unsigned long getDesiredSamples(void);
+    bool processUndisplayed(VisualNode *node) override; // VisualBase
+    unsigned long getDesiredSamples(void) override; // VisualBase
 
-    virtual bool draw(QPainter *p, const QColor &back = Qt::black);
-    void handleKeyPress(const QString &action) {(void) action;}
+    bool draw(QPainter *p, const QColor &back = Qt::black) override; // VisualBase
+    void handleKeyPress(const QString &action) override // VisualBase
+        {(void) action;}
 
   protected:
-    inline double clamp(double cur, double max, double min);
+    static inline double clamp(double cur, double max, double min);
     bool process_all_types(VisualNode *node, bool this_will_be_displayed);
     void zero_analysis(void);
 
-    QColor whiteStartColor, whiteTargetColor, blackStartColor, blackTargetColor;
+    QColor          m_whiteStartColor  {245,245,245};
+    QColor          m_whiteTargetColor {Qt::red};
+    QColor          m_blackStartColor  {10,10,10};
+    QColor          m_blackTargetColor {Qt::red};
 
-    vector<QRect> rects;
-    QSize size;
+    vector<QRect>   m_rects;
+    QSize           m_size;
 
-    unsigned long offset_processed;
+    unsigned long   m_offset_processed {0};
 
-    piano_key_data *piano_data;
-    piano_audio *audio_data;
+    piano_key_data *m_piano_data       {nullptr};
+    piano_audio    *m_audio_data       {nullptr};
 
-    vector<double> magnitude;
+    vector<double>  m_magnitude;
 };
 
 class AlbumArt : public VisualBase
 {
-    Q_DECLARE_TR_FUNCTIONS(AlbumArt)
+    Q_DECLARE_TR_FUNCTIONS(AlbumArt);
 
   public:
     AlbumArt(void);
-    virtual ~AlbumArt();
+    ~AlbumArt() override = default;
 
-    void resize(const QSize &size);
-    bool process(VisualNode *node = 0);
-    bool draw(QPainter *p, const QColor &back = Qt::black);
-    void handleKeyPress(const QString &action);
+    void resize(const QSize &size) override; // VisualBase
+    bool process(VisualNode *node = nullptr) override; // VisualBase
+    bool draw(QPainter *p, const QColor &back = Qt::black) override; // VisualBase
+    void handleKeyPress(const QString &action) override; // VisualBase
 
   private:
     bool needsUpdate(void);
     void findFrontCover(void);
     bool cycleImage(void);
 
-    QSize m_size, m_cursize;
-    ImageType m_currImageType;
+    QSize m_size;
+    QSize m_cursize;
+    ImageType m_currImageType {IT_UNKNOWN};
     QImage m_image;
 
-    MusicMetadata *m_currentMetadata;
+    MusicMetadata *m_currentMetadata {nullptr};
     QDateTime m_lastCycle;
 };
 
@@ -305,15 +327,16 @@ class Blank : public VisualBase
     // This draws ... well ... nothing    
   public:
     Blank();
-    virtual ~Blank();
+    ~Blank() override = default;
 
-    void resize(const QSize &size);
-    bool process(VisualNode *node = 0);
-    bool draw(QPainter *p, const QColor &back = Qt::black);
-    void handleKeyPress(const QString &action) {(void) action;}
+    void resize(const QSize &size) override; // VisualBase
+    bool process(VisualNode *node = nullptr) override; // VisualBase
+    bool draw(QPainter *p, const QColor &back = Qt::black) override; // VisualBase
+    void handleKeyPress(const QString &action) override // VisualBase
+        {(void) action;}
 
   private:
-    QSize size;
+    QSize m_size;
 };
 
 #endif // __visualize_h

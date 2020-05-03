@@ -13,17 +13,21 @@
 #ifndef SERVERSIDESCRIPTING_H_
 #define SERVERSIDESCRIPTING_H_
 
+#include <utility>
+
+// Qt headers
+#include <QDateTime>
+#include <QMap>
+#include <QMutex>
+#include <QScriptEngine>
+#include <QScriptable>
+#include <QString>
+#include <QTextStream>
+
+// MythTV headers
 #include "upnpexp.h"
 #include "upnputil.h"
 #include "httprequest.h"
-
-#include <QString> 
-#include <QMap>
-#include <QDateTime>
-#include <QMutex>
-#include <QTextStream> 
-#include <QScriptEngine>
-#include <QScriptable>
 
 #ifdef _WIN32
 #include <QScriptEngineDebugger>
@@ -35,10 +39,10 @@ class ScriptInfo
     QScriptValue    m_oFunc;
     QDateTime       m_dtTimeStamp;
 
-    ScriptInfo() {}
+    ScriptInfo() = default;
 
-    ScriptInfo( QScriptValue func, QDateTime dt )
-        : m_oFunc( func ), m_dtTimeStamp( dt )
+    ScriptInfo( const QScriptValue& func, QDateTime dt )
+        : m_oFunc( func ), m_dtTimeStamp(std::move( dt ))
     {}
 };
 
@@ -75,7 +79,7 @@ class UPNP_PUBLIC ServerSideScripting
 
         ScriptInfo *GetLoadedScript ( const QString &sFileName );
 
-        QString ReadFileContents    ( const QString &sFileName ) const;
+        static QString ReadFileContents    ( const QString &sFileName ) ;
 
         QString CreateMethodFromFile( const QString &sFileName ) const;
 
@@ -92,10 +96,10 @@ class OutputStream : public QObject, public QScriptable
 
     public:
 
-         OutputStream( QTextStream *pStream, QObject *parent = 0 )
+         explicit OutputStream( QTextStream *pStream, QObject *parent = nullptr )
              : QObject( parent ), m_pTextStream( pStream )  {}
 
-         ~OutputStream() {} 
+         ~OutputStream() override = default;
 
     public slots:
 
@@ -110,7 +114,7 @@ class OutputStream : public QObject, public QScriptable
         }
 
     private:
-        QTextStream *m_pTextStream;
+        QTextStream *m_pTextStream {nullptr};
 };
 
 #endif

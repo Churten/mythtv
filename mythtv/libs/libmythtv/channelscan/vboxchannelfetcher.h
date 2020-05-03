@@ -1,13 +1,15 @@
 #ifndef _VBOXCHANNELFETCHER_H_
 #define _VBOXCHANNELFETCHER_H_
 
+#include <utility>
+
 // Qt headers
-#include <QString>
-#include <QRunnable>
-#include <QObject>
-#include <QMutex>
-#include <QMap>
 #include <QCoreApplication>
+#include <QMap>
+#include <QMutex>
+#include <QObject>
+#include <QRunnable>
+#include <QString>
 
 // MythTV headers
 #include "iptvtuningdata.h"
@@ -22,22 +24,21 @@ class VBoxChannelInfo
     Q_DECLARE_TR_FUNCTIONS(VBoxChannelInfo)
 
   public:
-    VBoxChannelInfo() : m_serviceID(0), m_fta(false), m_networkID(0),
-        m_transportID(0)
-    {
-    }
-    VBoxChannelInfo(const QString &name,
-                    const QString &xmltvid,
+    VBoxChannelInfo() = default;
+    VBoxChannelInfo(QString name,
+                    QString xmltvid,
                     const QString &data_url,
                     bool fta,
-                    const QString &chanType,
-                    const QString &transType,
+                    QString chanType,
+                    QString transType,
                     uint serviceID,
                     uint networkID,
                     uint transportID):
-        m_name(name), m_xmltvid(xmltvid), m_serviceID(serviceID),
-        m_fta(fta), m_channelType(chanType), m_transType(transType),
-        m_tuning(data_url, IPTVTuningData::http_ts), m_networkID(networkID), m_transportID(transportID)
+        m_name(std::move(name)), m_xmltvid(std::move(xmltvid)),
+        m_serviceID(serviceID), m_fta(fta), m_channelType(std::move(chanType)),
+        m_transType(std::move(transType)),
+        m_tuning(data_url, IPTVTuningData::http_ts), m_networkID(networkID),
+        m_transportID(transportID)
     {
     }
 
@@ -47,54 +48,54 @@ class VBoxChannelInfo
     }
 
   public:
-    QString m_name;
-    QString m_xmltvid;
-    uint m_serviceID;
-    bool m_fta;
-    QString m_channelType; // TV/Radio
-    QString m_transType;   // T/T2/S/S2/C/A
+    QString        m_name;
+    QString        m_xmltvid;
+    uint           m_serviceID   {0};
+    bool           m_fta         {false};
+    QString        m_channelType;     // TV/Radio
+    QString        m_transType;       // T/T2/S/S2/C/A
     IPTVTuningData m_tuning;
-    uint m_networkID;      // Network ID from triplet
-    uint m_transportID;    // Transport ID from triplet
+    uint           m_networkID   {0}; // Network ID from triplet
+    uint           m_transportID {0}; // Transport ID from triplet
 };
-typedef QMap<QString,VBoxChannelInfo> vbox_chan_map_t;
+using vbox_chan_map_t = QMap<QString,VBoxChannelInfo>;
 
 class VBoxChannelFetcher : public QRunnable
 {
-    Q_DECLARE_TR_FUNCTIONS(VBoxChannelFetcher)
+    Q_DECLARE_TR_FUNCTIONS(VBoxChannelFetcher);
 
   public:
-    VBoxChannelFetcher(uint cardid, const QString &inputname, uint sourceid,
+    VBoxChannelFetcher(uint cardid, QString inputname, uint sourceid,
                        bool ftaOnly, ServiceRequirements serviceType,
-                       ScanMonitor *monitor = NULL);
-    ~VBoxChannelFetcher();
+                       ScanMonitor *monitor = nullptr);
+    ~VBoxChannelFetcher() override;
 
     void Scan(void);
     void Stop(void);
     vbox_chan_map_t GetChannels(void);
 
   private:
-    void SetTotalNumChannels(uint val) { _chan_cnt = (val) ? val : 1; }
-    void SetNumChannelsInserted(uint);
+    void SetTotalNumChannels(uint val) { m_chanCnt = (val) ? val : 1; }
+    void SetNumChannelsInserted(uint val);
     bool SupportedTransmission(const QString &transType);
 
   protected:
-    virtual void run(void); // QRunnable
+    void run(void) override; // QRunnable
 
   private:
-    ScanMonitor *_scan_monitor;
-    uint      _cardid;
-    QString   _inputname;
-    uint      _sourceid;
-    bool      _ftaOnly;
-    ServiceRequirements _serviceType;
-    QString   _transType;
-    vbox_chan_map_t    *_channels;
-    uint      _chan_cnt;
-    bool      _thread_running;
-    bool      _stop_now;
-    MThread  *_thread;
-    QMutex    _lock;
+    ScanMonitor         *m_scanMonitor    {nullptr};
+    uint                 m_cardId;
+    QString              m_inputName;
+    uint                 m_sourceId;
+    bool                 m_ftaOnly;
+    ServiceRequirements  m_serviceType;
+    QString              m_transType      {"UNKNOWN"};
+    vbox_chan_map_t     *m_channels       {nullptr};
+    uint                 m_chanCnt        {1};
+    bool                 m_threadRunning  {false};
+    bool                 m_stopNow        {false};
+    MThread             *m_thread         {nullptr};
+    QMutex               m_lock;
 };
 
 #endif // _VBOXCHANNELFETCHER_H_

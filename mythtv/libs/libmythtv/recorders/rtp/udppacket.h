@@ -6,7 +6,7 @@
 #ifndef _UDP_PACKET_H_
 #define _UDP_PACKET_H_
 
-#include <inttypes.h>
+#include <cinttypes>
 
 #include <QByteArray>
 
@@ -20,10 +20,12 @@
 class UDPPacket
 {
   public:
-    UDPPacket(const UDPPacket &o) : m_key(o.m_key), m_data(o.m_data) { }
+    UDPPacket(const UDPPacket&)  = default;
     explicit UDPPacket(uint64_t key) : m_key(key) { }
-    UDPPacket(void) : m_key(0ULL) { }
-    virtual ~UDPPacket() {}
+    UDPPacket(void) = default;
+    virtual ~UDPPacket() = default;
+
+    UDPPacket& operator=(const UDPPacket&) = default;
 
     /// IsValid() must return true before any data access methods are called,
     /// other than GetDataReference() and GetData()
@@ -36,7 +38,7 @@ class UDPPacket
 
   protected:
     /// Key used to ensure we avoid extra memory allocation in m_data QByteArray
-    uint64_t m_key;
+    uint64_t   m_key  { 0ULL };
     QByteArray m_data;
 };
 

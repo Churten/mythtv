@@ -24,12 +24,6 @@
 #include "Engine.h"
 #include "Logging.h"
 
-MHPTagged::MHPTagged(int nTag): MHParseNode(PNTagged)
-{
-    m_TagNo = nTag;
-}
-
-
 // Add an argument to the argument sequence.
 void MHPTagged::AddArg(MHParseNode *pArg)
 {
@@ -67,19 +61,16 @@ int MHParseNode::GetArgCount()
 {
     if (m_nNodeType == PNTagged)
     {
-        MHPTagged *pTag = (MHPTagged *)this;
+        auto *pTag = (MHPTagged *)this;
         return pTag->m_Args.Size();
     }
-    else if (m_nNodeType == PNSeq)
+    if (m_nNodeType == PNSeq)
     {
-        MHParseSequence *pSeq = (MHParseSequence *)this;
+        auto *pSeq = (MHParseSequence *)this;
         return pSeq->Size();
     }
-    else
-    {
-        Failure("Expected tagged value");
-    }
 
+    Failure("Expected tagged value");
     return 0; // To keep the compiler happy
 }
 
@@ -88,7 +79,7 @@ MHParseNode *MHParseNode::GetArgN(int n)
 {
     if (m_nNodeType == PNTagged)
     {
-        MHPTagged *pTag = (MHPTagged *)this;
+        auto *pTag = (MHPTagged *)this;
 
         if (n < 0 || n >= pTag->m_Args.Size())
         {
@@ -97,9 +88,9 @@ MHParseNode *MHParseNode::GetArgN(int n)
 
         return pTag->m_Args.GetAt(n);
     }
-    else if (m_nNodeType == PNSeq)
+    if (m_nNodeType == PNSeq)
     {
-        MHParseSequence *pSeq = (MHParseSequence *)this;
+        auto *pSeq = (MHParseSequence *)this;
 
         if (n < 0 || n >= pSeq->Size())
         {
@@ -108,20 +99,17 @@ MHParseNode *MHParseNode::GetArgN(int n)
 
         return pSeq->GetAt(n);
     }
-    else
-    {
-        Failure("Expected tagged value");
-    }
 
-    return 0; // To keep the compiler happy
+    Failure("Expected tagged value");
+    return nullptr; // To keep the compiler happy
 }
 
-// Get an argument with a specific tag.  Returns NULL if it doesn't exist.
+// Get an argument with a specific tag.  Returns nullptr if it doesn't exist.
 // There is a defined order of tags for both the binary and textual representations.
 // Unfortunately they're not the same.
 MHParseNode *MHParseNode::GetNamedArg(int nTag)
 {
-    MHParseSequence *pArgs = NULL;
+    MHParseSequence *pArgs = nullptr;
 
     if (m_nNodeType == PNTagged)
     {
@@ -146,7 +134,7 @@ MHParseNode *MHParseNode::GetNamedArg(int nTag)
         }
     }
 
-    return NULL;
+    return nullptr;
 }
 
 // Sequence.
@@ -157,7 +145,7 @@ int MHParseNode::GetSeqCount()
         Failure("Expected sequence");
     }
 
-    MHParseSequence *pSeq = (MHParseSequence *)this;
+    auto *pSeq = (MHParseSequence *)this;
     return pSeq->Size();
 }
 
@@ -168,7 +156,7 @@ MHParseNode *MHParseNode::GetSeqN(int n)
         Failure("Expected sequence");
     }
 
-    MHParseSequence *pSeq = (MHParseSequence *)this;
+    auto *pSeq = (MHParseSequence *)this;
 
     if (n < 0 || n >= pSeq->Size())
     {

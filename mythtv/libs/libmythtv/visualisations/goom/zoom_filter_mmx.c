@@ -1,5 +1,5 @@
 /* Prototypes to keep gcc from spewing warnings */
-void    zoom_filter_mmx (int prevX, int prevY, unsigned int *expix1, unsigned int *expix2, int *brutS, int *brutD, int buffratio, int precalCoef[16][16]);
+void    zoom_filter_mmx (int prevX, int prevY, const unsigned int *expix1, unsigned int *expix2, const int *brutS, const int *brutD, int buffratio, int precalCoef[16][16]);
 int 	zoom_filter_mmx_supported (void);
 
 #ifdef MMX
@@ -22,33 +22,31 @@ int zoom_filter_mmx_supported () {
 }
 
 void zoom_filter_mmx (int prevX, int prevY,
-                      unsigned int *expix1, unsigned int *expix2,
-                      int *brutS, int *brutD, int buffratio,
+                      const unsigned int *expix1, unsigned int *expix2,//NOLINT(readability-non-const-parameter)
+                      const int *brutS, const int *brutD, int buffratio,
                       int precalCoef[16][16])
 {
-    unsigned int ax = (prevX-1)<<PERTEDEC, ay = (prevY-1)<<PERTEDEC;
+    unsigned int ax = (prevX-1)<<PERTEDEC;
+    unsigned int ay = (prevY-1)<<PERTEDEC;
     
     int bufsize = prevX * prevY;
-    int loop;
 
     pxor_r2r(mm7,mm7);
     
-    for (loop=0; loop<bufsize; loop++)
+    for (int loop=0; loop<bufsize; loop++)
     {
-        int px,py;
-        int pos;
-        int coeffs;
+        int pos = 0;
+        int coeffs = 0;
     
-        int posplusprevX;
-    
-        int myPos = loop << 1, myPos2 = myPos + 1;
+        int myPos = loop << 1;
+        int myPos2 = myPos + 1;
         int brutSmypos = brutS[myPos];
         
-        px = brutSmypos + 
+        int px = brutSmypos +
              (((brutD[myPos] - brutSmypos)*buffratio) >> BUFFPOINTNB);
 
         brutSmypos = brutS[myPos2];
-        py = brutSmypos + 
+        int py = brutSmypos +
              (((brutD[myPos2] - brutSmypos)*buffratio) >> BUFFPOINTNB);
 
         if (px < 0)
@@ -67,7 +65,7 @@ void zoom_filter_mmx (int prevX, int prevY,
             coeffs = precalCoef [px & PERTEMASK][py & PERTEMASK];
         }
 
-        posplusprevX = pos + prevX;
+        int posplusprevX = pos + prevX;
             
         movd_m2r(coeffs, mm6);
 
@@ -135,8 +133,8 @@ int zoom_filter_mmx_supported () {
 }
 
 void zoom_filter_mmx (int prevX, int prevY,
-                      unsigned int *expix1, unsigned int *expix2,
-                      int *brutS, int *brutD, int buffratio,
+                      const unsigned int *expix1, unsigned int *expix2,
+                      const int *brutS, const int *brutD, int buffratio,
                       int precalCoef[16][16])
 {
     (void)prevX;

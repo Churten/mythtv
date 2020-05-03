@@ -30,15 +30,10 @@ QEvent::Type DecoderEvent::Finished =
 QEvent::Type DecoderEvent::Error =
     (QEvent::Type) QEvent::registerEventType();
 
-Decoder::Decoder(DecoderFactory *d, AudioOutput *o) :
-    MThread("MythMusicDecoder"), m_fctry(d), m_out(o)
-{
-}
-
 Decoder::~Decoder()
 {
-    m_fctry = 0;
-    m_out = 0;
+    m_fctry = nullptr;
+    m_out = nullptr;
 }
 
 /*
@@ -57,13 +52,13 @@ void Decoder::setOutput(AudioOutput *o)
 
 void Decoder::error(const QString &e)
 {
-    QString *str = new QString(e.toUtf8());
+    auto *str = new QString(e.toUtf8());
     DecoderEvent ev(str);
     dispatch(ev);
 }
 
 // static methods
-static QList<DecoderFactory*> *factories = NULL;
+static QList<DecoderFactory*> *factories = nullptr;
 
 static void checkFactories()
 {
@@ -84,9 +79,8 @@ QStringList Decoder::all()
 
     QStringList l;
 
-    QList<DecoderFactory*>::iterator it = factories->begin();
-    for (; it != factories->end(); ++it)
-        l += (*it)->description();
+    foreach (auto & factory, *factories)
+        l += factory->description();
 
     return l;
 }
@@ -95,10 +89,9 @@ bool Decoder::supports(const QString &source)
 {
     checkFactories();
 
-    QList<DecoderFactory*>::iterator it = factories->begin();
-    for (; it != factories->end(); ++it)
+    foreach (auto & factory, *factories)
     {
-        if ((*it)->supports(source))
+        if (factory->supports(source))
             return true;
     }
 
@@ -114,12 +107,11 @@ Decoder *Decoder::create(const QString &source, AudioOutput *output, bool deleta
 {
     checkFactories();
 
-    QList<DecoderFactory*>::iterator it = factories->begin();
-    for (; it != factories->end(); ++it)
+    foreach (auto & factory, *factories)
     {
-        if ((*it)->supports(source))
-            return (*it)->create(source, output, deletable);
+        if (factory->supports(source))
+            return factory->create(source, output, deletable);
     }
 
-    return NULL;
+    return nullptr;
 }

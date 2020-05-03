@@ -19,7 +19,6 @@
 // Qt headers
 #include <QTextStream>
 #include <QRegExp>
-#include <QLocale>
 
 // MythTV headers
 #include "httpstatus.h"
@@ -40,6 +39,7 @@
 #include "jobqueue.h"
 #include "upnp.h"
 #include "mythdate.h"
+#include "tv_rec.h"
 
 /////////////////////////////////////////////////////////////////////////////
 //
@@ -56,15 +56,7 @@ HttpStatus::HttpStatus( QMap<int, EncoderLink *> *tvList, Scheduler *sched,
 
     m_nPreRollSeconds = gCoreContext->GetNumSetting("RecordPreRoll", 0);
 
-    m_pMainServer = NULL;
-}
-
-/////////////////////////////////////////////////////////////////////////////
-//
-/////////////////////////////////////////////////////////////////////////////
-
-HttpStatus::~HttpStatus()
-{
+    m_pMainServer = nullptr;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -203,13 +195,11 @@ void HttpStatus::FillStatusXML( QDomDocument *pDoc )
     int  numencoders = 0;
     bool isLocal     = true;
 
-    QMap<int, EncoderLink *>::Iterator iter = m_pEncoders->begin();
+    TVRec::s_inputsLock.lockForRead();
 
-    for (; iter != m_pEncoders->end(); ++iter)
+    foreach (auto elink, *m_pEncoders)
     {
-        EncoderLink *elink = *iter;
-
-        if (elink != NULL)
+        if (elink != nullptr)
         {
             TVState state = elink->GetState();
             isLocal       = elink->IsLocal();
@@ -218,8 +208,8 @@ void HttpStatus::FillStatusXML( QDomDocument *pDoc )
             encoders.appendChild(encoder);
 
             encoder.setAttribute("id"            , elink->GetInputID()      );
-            encoder.setAttribute("local"         , isLocal                  );
-            encoder.setAttribute("connected"     , elink->IsConnected()     );
+            encoder.setAttribute("local"         , static_cast<int>(isLocal));
+            encoder.setAttribute("connected"     , static_cast<int>(elink->IsConnected()));
             encoder.setAttribute("state"         , state                    );
             encoder.setAttribute("sleepstatus"   , elink->GetSleepStatus()  );
             //encoder.setAttribute("lowOnFreeSpace", elink->isLowOnFreeSpace());
@@ -257,6 +247,8 @@ void HttpStatus::FillStatusXML( QDomDocument *pDoc )
             }
         }
     }
+
+    TVRec::s_inputsLock.unlock();
 
     encoders.setAttribute("count", numencoders);
 
@@ -306,17 +298,17 @@ void HttpStatus::FillStatusXML( QDomDocument *pDoc )
         EntryMap map;
         fes->GetEntryMap(map);
         fes->DecrRef();
-        fes = NULL;
+        fes = nullptr;
 
         frontends.setAttribute( "count", map.size() );
-        for (EntryMap::iterator it = map.begin(); it != map.end(); ++it)
+        foreach (auto & entry, map)
         {
             QDomElement fe = pDoc->createElement("Frontend");
             frontends.appendChild(fe);
-            QUrl url((*it)->m_sLocation);
+            QUrl url(entry->m_sLocation);
             fe.setAttribute("name", url.host());
             fe.setAttribute("url",  url.toString(QUrl::RemovePath));
-            (*it)->DecrRef();
+            entry->DecrRef();
         }
     }
 
@@ -352,11 +344,11 @@ void HttpStatus::FillStatusXML( QDomDocument *pDoc )
         EntryMap map;
         sbes->GetEntryMap(map);
         sbes->DecrRef();
-        sbes = NULL;
+        sbes = nullptr;
 
-        for (EntryMap::iterator it = map.begin(); it != map.end(); ++it)
+        foreach (auto & entry, map)
         {
-            QUrl url((*it)->m_sLocation);
+            QUrl url(entry->m_sLocation);
             if (url.host() != ipaddress)
             {
                 numbes++;
@@ -366,7 +358,7 @@ void HttpStatus::FillStatusXML( QDomDocument *pDoc )
                 mbe.setAttribute("name", url.host());
                 mbe.setAttribute("url" , url.toString(QUrl::RemovePath));
             }
-            (*it)->DecrRef();
+            entry->DecrRef();
         }
     }
 
@@ -444,7 +436,6 @@ void HttpStatus::FillStatusXML( QDomDocument *pDoc )
     QString isLocalstr;
     QString fsID;
     QString ids;
-    long long iTotal = -1, iUsed = -1, iAvail = -1;
 
     if (m_pMainServer)
         m_pMainServer->BackendQueryDiskSpace(strlist, true, m_bIsMaster);
@@ -457,15 +448,17 @@ void HttpStatus::FillStatusXML( QDomDocument *pDoc )
     QStringList::const_iterator sit = strlist.begin();
     while (sit != strlist.end())
     {
+        // cppcheck-suppress unreadVariable
         hostname   = *(sit++);
         directory  = *(sit++);
+        // cppcheck-suppress unreadVariable
         isLocalstr = *(sit++);
         fsID       = *(sit++);
         ++sit; // ignore dirID
         ++sit; // ignore blocksize
-        iTotal     = (*(sit++)).toLongLong();
-        iUsed      = (*(sit++)).toLongLong();;
-        iAvail     = iTotal - iUsed;
+        long long iTotal     = (*(sit++)).toLongLong();
+        long long iUsed      = (*(sit++)).toLongLong();;
+        long long iAvail     = iTotal - iUsed;
 
         if (fsID == "-2")
             fsID = "total";
@@ -480,7 +473,9 @@ void HttpStatus::FillStatusXML( QDomDocument *pDoc )
 
         if (fsID == "total")
         {
-            long long iLiveTV = -1, iDeleted = -1, iExpirable = -1;
+            long long iLiveTV = -1;
+            long long iDeleted = -1;
+            long long iExpirable = -1;
             MSqlQuery query(MSqlQuery::InitCon());
             query.prepare("SELECT SUM(filesize) FROM recorded "
                           " WHERE recgroup = :RECGROUP;");
@@ -553,7 +548,7 @@ void HttpStatus::FillStatusXML( QDomDocument *pDoc )
                        setting_to_localtime("mythfilldatabaseLastRunEnd"));
     guide.setAttribute("status",
         gCoreContext->GetSetting("mythfilldatabaseLastRunStatus"));
-    if (gCoreContext->GetNumSetting("MythFillGrabberSuggestsTime", 0))
+    if (gCoreContext->GetBoolSetting("MythFillGrabberSuggestsTime", false))
     {
         guide.setAttribute("next",
             gCoreContext->GetSetting("MythFillSuggestedRunTime"));
@@ -562,13 +557,9 @@ void HttpStatus::FillStatusXML( QDomDocument *pDoc )
     if (!GuideDataThrough.isNull())
     {
         guide.setAttribute("guideThru",
-            QDateTime(GuideDataThrough).toString(Qt::ISODate));
+            GuideDataThrough.toString(Qt::ISODate));
         guide.setAttribute("guideDays", qdtNow.daysTo(GuideDataThrough));
     }
-
-    QDomText dataDirectMessage =
-        pDoc->createTextNode(gCoreContext->GetSetting("DataDirectMessage"));
-    guide.appendChild(dataDirectMessage);
 
     // Add Miscellaneous information
 
@@ -594,12 +585,11 @@ void HttpStatus::FillStatusXML( QDomDocument *pDoc )
         QStringList output = QString(input).split('\n',
                                                   QString::SkipEmptyParts);
 
-        QStringList::iterator iter;
-        for (iter = output.begin(); iter != output.end(); ++iter)
+        foreach (auto & line, output)
         {
             QDomElement info = pDoc->createElement("Information");
 
-            QStringList list = (*iter).split("[]:[]");
+            QStringList list = line.split("[]:[]");
             unsigned int size = list.size();
             unsigned int hasAttributes = 0;
 
@@ -712,7 +702,7 @@ void HttpStatus::PrintStatus( QTextStream &os, QDomDocument *pDoc )
 //
 /////////////////////////////////////////////////////////////////////////////
 
-int HttpStatus::PrintEncoderStatus( QTextStream &os, QDomElement encoders )
+int HttpStatus::PrintEncoderStatus( QTextStream &os, const QDomElement& encoders )
 {
     int     nNumEncoders = 0;
 
@@ -736,9 +726,9 @@ int HttpStatus::PrintEncoderStatus( QTextStream &os, QDomElement encoders )
                                                            ? "local" : "remote";
                 QString sCardId   =  e.attribute( "id"       , "0"      );
                 QString sHostName =  e.attribute( "hostname" , "Unknown");
-                bool    bConnected=  e.attribute( "connected", "0"      ).toInt();
+                bool    bConnected=  static_cast<bool>(e.attribute( "connected", "0" ).toInt());
 
-                bool bIsLowOnFreeSpace=e.attribute( "lowOnFreeSpace", "0").toInt();
+                bool bIsLowOnFreeSpace=static_cast<bool>(e.attribute( "lowOnFreeSpace", "0").toInt());
 
                 QString sDevlabel = e.attribute( "devlabel", "[ UNKNOWN ]");
 
@@ -856,7 +846,7 @@ int HttpStatus::PrintEncoderStatus( QTextStream &os, QDomElement encoders )
 //
 /////////////////////////////////////////////////////////////////////////////
 
-int HttpStatus::PrintScheduled( QTextStream &os, QDomElement scheduled )
+int HttpStatus::PrintScheduled( QTextStream &os, const QDomElement& scheduled )
 {
     QDateTime qdtNow          = MythDate::current();
 
@@ -963,10 +953,12 @@ int HttpStatus::PrintScheduled( QTextStream &os, QDomElement scheduled )
                     os << "<em>" << sSubTitle << "</em><br /><br />";
 
                 if ( airDate.isValid())
+                {
                     os << "Orig. Airdate: "
                        << MythDate::toString(airDate, MythDate::kDateFull |
                                                       MythDate::kAddYear)
                        << "<br /><br />";
+                }
 
                 os << sDesc << "<br /><br />"
                    << "This recording will start "  << sTimeToStart
@@ -987,7 +979,7 @@ int HttpStatus::PrintScheduled( QTextStream &os, QDomElement scheduled )
 //
 /////////////////////////////////////////////////////////////////////////////
 
-int HttpStatus::PrintFrontends( QTextStream &os, QDomElement frontends )
+int HttpStatus::PrintFrontends( QTextStream &os, const QDomElement& frontends )
 {
     if (frontends.isNull())
         return( 0 );
@@ -1025,7 +1017,7 @@ int HttpStatus::PrintFrontends( QTextStream &os, QDomElement frontends )
 //
 /////////////////////////////////////////////////////////////////////////////
 
-int HttpStatus::PrintBackends( QTextStream &os, QDomElement backends )
+int HttpStatus::PrintBackends( QTextStream &os, const QDomElement& backends )
 {
     if (backends.isNull())
         return( 0 );
@@ -1064,7 +1056,7 @@ int HttpStatus::PrintBackends( QTextStream &os, QDomElement backends )
 //
 /////////////////////////////////////////////////////////////////////////////
 
-int HttpStatus::PrintJobQueue( QTextStream &os, QDomElement jobs )
+int HttpStatus::PrintJobQueue( QTextStream &os, const QDomElement& jobs )
 {
     if (jobs.isNull())
         return( 0 );
@@ -1164,11 +1156,13 @@ int HttpStatus::PrintJobQueue( QTextStream &os, QDomElement jobs )
                     os << "Job: " << JobQueue::JobText( nType ) << "<br />";
 
                     if (schedRunTime > MythDate::current())
+                    {
                         os << "Scheduled Run Time: "
                            << MythDate::toString(schedRunTime,
                                                  MythDate::kDateFull |
                                                  MythDate::kTime)
                            << "<br />";
+                    }
 
                     os << "Status: <font" << statusColor << ">"
                        << JobQueue::StatusText( nStatus )
@@ -1205,7 +1199,7 @@ int HttpStatus::PrintJobQueue( QTextStream &os, QDomElement jobs )
 //
 /////////////////////////////////////////////////////////////////////////////
 
-int HttpStatus::PrintMachineInfo( QTextStream &os, QDomElement info )
+int HttpStatus::PrintMachineInfo( QTextStream &os, const QDomElement& info )
 {
     QString   sRep;
 
@@ -1273,38 +1267,38 @@ int HttpStatus::PrintMachineInfo( QTextStream &os, QDomElement info )
 
                 os << "        <li>Total Disk Space:\r\n"
                 << "          <ul>\r\n";
-                QLocale c(QLocale::C);
 
                 os << "            <li>Total Space: ";
-                sRep = c.toString(nTotal) + " MB";
+                sRep = QString("%L1").arg(nTotal) + " MB";
                 os << sRep << "</li>\r\n";
 
                 os << "            <li>Space Used: ";
-                sRep = c.toString(nUsed) + " MB";
+                sRep = QString("%L1").arg(nUsed) + " MB";
                 os << sRep << "</li>\r\n";
 
                 os << "            <li>Space Free: ";
-                sRep = c.toString(nFree) + " MB";
+                sRep = QString("%L1").arg(nFree) + " MB";
                 os << sRep << "</li>\r\n";
 
                 if ((nLiveTV + nDeleted + nExpirable) > 0)
                 {
                     os << "            <li>Space Available "
                           "After Auto-expire: ";
-                    sRep = c.toString(nFree + nLiveTV +
+                    sRep = QString("%L1").arg(nUsed) + " MB";
+                    sRep = QString("%L1").arg(nFree + nLiveTV +
                                       nDeleted + nExpirable) + " MB";
                     os << sRep << "\r\n";
                     os << "              <ul>\r\n";
                     os << "                <li>Space Used by LiveTV: ";
-                    sRep = c.toString(nLiveTV) + " MB";
+                    sRep = QString("%L1").arg(nLiveTV) + " MB";
                     os << sRep << "</li>\r\n";
                     os << "                <li>Space Used by "
                           "Deleted Recordings: ";
-                    sRep = c.toString(nDeleted) + " MB";
+                    sRep = QString("%L1").arg(nDeleted) + " MB";
                     os << sRep << "</li>\r\n";
                     os << "                <li>Space Used by "
                           "Auto-expirable Recordings: ";
-                    sRep = c.toString(nExpirable) + " MB";
+                    sRep = QString("%L1").arg(nExpirable) + " MB";
                     os << sRep << "</li>\r\n";
                     os << "              </ul>\r\n";
                     os << "            </li>\r\n";
@@ -1357,18 +1351,16 @@ int HttpStatus::PrintMachineInfo( QTextStream &os, QDomElement info )
 
                 os << nDir << "</li>\r\n";
 
-                QLocale c(QLocale::C);
-
                 os << "            <li>Total Space: ";
-                sRep = c.toString(nTotal) + " MB";
+                sRep = QString("%L1").arg(nTotal) + " MB";
                 os << sRep << "</li>\r\n";
 
                 os << "            <li>Space Used: ";
-                sRep = c.toString(nUsed) + " MB";
+                sRep = QString("%L1").arg(nUsed) + " MB";
                 os << sRep << "</li>\r\n";
 
                 os << "            <li>Space Free: ";
-                sRep = c.toString(nFree) + " MB";
+                sRep = QString("%L1").arg(nFree) + " MB";
                 os << sRep << "</li>\r\n";
 
                 os << "          </ul>\r\n"
@@ -1444,9 +1436,6 @@ int HttpStatus::PrintMachineInfo( QTextStream &os, QDomElement info )
             else
                 os << "    There's <strong>no guide data</strong> available! "
                    << "Have you run mythfilldatabase?";
-
-            if (!sMsg.isEmpty())
-                os << "<br />\r\n    DataDirect Status: " << sMsg;
         }
     }
     os << "\r\n  </div>\r\n";
@@ -1454,7 +1443,7 @@ int HttpStatus::PrintMachineInfo( QTextStream &os, QDomElement info )
     return( 1 );
 }
 
-int HttpStatus::PrintMiscellaneousInfo( QTextStream &os, QDomElement info )
+int HttpStatus::PrintMiscellaneousInfo( QTextStream &os, const QDomElement& info )
 {
     if (info.isNull())
         return( 0 );
@@ -1465,7 +1454,8 @@ int HttpStatus::PrintMiscellaneousInfo( QTextStream &os, QDomElement info )
     uint count = nodes.count();
     if (count > 0)
     {
-        QString display, linebreak;
+        QString display;
+        QString linebreak;
         //QString name, value;
         os << "<div class=\"content\">\r\n"
            << "    <h2 class=\"status\">Miscellaneous</h2>\r\n";
@@ -1511,7 +1501,7 @@ void HttpStatus::FillProgramInfo(QDomDocument *pDoc,
                                  bool          bIncChannel /* = true */,
                                  bool          bDetails    /* = true */)
 {
-    if ((pDoc == NULL) || (pInfo == NULL))
+    if ((pDoc == nullptr) || (pInfo == nullptr))
         return;
 
     // Build Program Element
@@ -1526,7 +1516,7 @@ void HttpStatus::FillProgramInfo(QDomDocument *pDoc,
     program.setAttribute( "subTitle"    , pInfo->GetSubtitle());
     program.setAttribute( "category"    , pInfo->GetCategory());
     program.setAttribute( "catType"     , pInfo->GetCategoryTypeString());
-    program.setAttribute( "repeat"      , pInfo->IsRepeat()   );
+    program.setAttribute( "repeat"      , static_cast<int>(pInfo->IsRepeat()));
 
     if (bDetails)
     {

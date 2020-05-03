@@ -1,5 +1,6 @@
 // C headers
 #include <cmath>
+#include <utility>
 
 // POSIX headers
 #include <sys/types.h> // for utime
@@ -8,14 +9,14 @@
 #include <utime.h>     // for utime
 
 // Qt headers
-#include <QCoreApplication>
-#include <QTemporaryFile>
-#include <QFileInfo>
-#include <QMetaType>
-#include <QImage>
-#include <QDir>
-#include <QUrl>
 #include <QApplication>
+#include <QCoreApplication>
+#include <QDir>
+#include <QFileInfo>
+#include <QImage>
+#include <QMetaType>
+#include <QTemporaryFile>
+#include <QUrl>
 
 // MythTV headers
 #include "mythconfig.h"
@@ -58,23 +59,24 @@
  *
  *   ProgramInfo::pathname must include recording prefix, so that
  *   the file can be found on the file system for local preview
- *   generation. When called by the backend 'local_only' should be set
- *   to true, otherwise the backend may deadlock if the PreviewGenerator
+ *   generation. When called by the backend 'mode' should be set to
+ *   kLocal, otherwise the backend may deadlock if the PreviewGenerator
  *   cannot find the file.
  *
  *  \param pginfo     ProgramInfo for the recording we want a preview of.
- *  \param local_only If set to true, the preview will only be generated
- *                    if the file is local.
+ *  \param token      A token value used to match up this request with
+ *                    the response from the backend. If a token isn't
+ *                    provided, the code will generate one.
+ *  \param mode       Specify the location where the file must exist
+ *                    in order to be processed.
  */
 PreviewGenerator::PreviewGenerator(const ProgramInfo *pginfo,
-                                   const QString     &_token,
-                                   PreviewGenerator::Mode _mode)
+                                   QString            token,
+                                   PreviewGenerator::Mode mode)
     : MThread("PreviewGenerator"),
-      m_programInfo(*pginfo), m_mode(_mode), m_listener(NULL),
+      m_programInfo(*pginfo), m_mode(mode),
       m_pathname(pginfo->GetPathname()),
-      m_timeInSeconds(true),  m_captureTime(-1),
-      m_outSize(0,0),  m_outFormat("PNG"),
-      m_token(_token), m_gotReply(false), m_pixmapOk(false)
+      m_token(std::move(token))
 {
     // Qt requires that a receiver have the same thread affinity as the QThread
     // sending the event, which is used to dispatch MythEvents sent by
@@ -101,7 +103,7 @@ void PreviewGenerator::TeardownAll(void)
 {
     QMutexLocker locker(&m_previewLock);
     m_previewWaitCondition.wakeAll();
-    m_listener = NULL;
+    m_listener = nullptr;
 }
 
 void PreviewGenerator::deleteLater()
@@ -123,6 +125,7 @@ bool PreviewGenerator::RunReal(void)
 {
     QString msg;
     QTime tm = QTime::currentTime();
+    QElapsedTimer te; te.start();
     bool ok = false;
     bool is_local = IsLocal();
 
@@ -144,7 +147,7 @@ bool PreviewGenerator::RunReal(void)
         ok = true;
         msg = QString("Generated on %1 in %2 seconds, starting at %3")
             .arg(gCoreContext->GetHostName())
-            .arg(tm.elapsed()*0.001)
+            .arg(te.elapsed()*0.001)
             .arg(tm.toString(Qt::ISODate));
     }
     else if (!!(m_mode & kRemote))
@@ -160,7 +163,7 @@ bool PreviewGenerator::RunReal(void)
         if (ok)
         {
             msg = QString("Generated remotely in %1 seconds, starting at %2")
-                .arg(tm.elapsed()*0.001)
+                .arg(te.elapsed()*0.001)
                 .arg(tm.toString(Qt::ISODate));
         }
         else
@@ -176,6 +179,8 @@ bool PreviewGenerator::RunReal(void)
     QMutexLocker locker(&m_previewLock);
     if (m_listener)
     {
+        // keep in sync with default filename in
+        // PreviewGeneratorQueue::GeneratePreviewImage
         QString output_fn = m_outFileName.isEmpty() ?
             (m_programInfo.GetPathname()+".png") : m_outFileName;
 
@@ -203,12 +208,12 @@ bool PreviewGenerator::RunReal(void)
 bool PreviewGenerator::Run(void)
 {
     QString msg;
-    QDateTime dtm = MythDate::current();
     QTime tm = QTime::currentTime();
+    QElapsedTimer te; te.start();
     bool ok = false;
     QString command = GetAppBinDir() + "mythpreviewgen";
-    bool local_ok = ((IsLocal() || !!(m_mode & kForceLocal)) &&
-                     (!!(m_mode & kLocal)) &&
+    bool local_ok = ((IsLocal() || ((m_mode & kForceLocal) != 0)) &&
+                     ((m_mode & kLocal) != 0) &&
                      QFileInfo(command).isExecutable());
     if (!local_ok)
     {
@@ -219,7 +224,7 @@ bool PreviewGenerator::Run(void)
             {
                 msg =
                     QString("Generated remotely in %1 seconds, starting at %2")
-                    .arg(tm.elapsed()*0.001)
+                    .arg(te.elapsed()*0.001)
                     .arg(tm.toString(Qt::ISODate));
             }
         }
@@ -255,7 +260,7 @@ bool PreviewGenerator::Run(void)
             cmdargs << "--outfile" << m_outFileName;
 
         // Timeout in 30s
-        MythSystemLegacy *ms = new MythSystemLegacy(command, cmdargs,
+        auto *ms = new MythSystemLegacy(command, cmdargs,
                                         kMSDontBlockInputDevs |
                                         kMSDontDisableDrawing |
                                         kMSProcessEvents      |
@@ -289,13 +294,13 @@ bool PreviewGenerator::Run(void)
             }
 
             QFileInfo fi(outname);
-            ok = (fi.exists() && fi.isReadable() && fi.size());
+            ok = (fi.exists() && fi.isReadable() && (fi.size() != 0));
             if (ok)
             {
                 LOG(VB_PLAYBACK, LOG_INFO, LOC + "Preview process ran ok.");
                 msg = QString("Generated on %1 in %2 seconds, starting at %3")
                     .arg(gCoreContext->GetHostName())
-                    .arg(tm.elapsed()*0.001)
+                    .arg(te.elapsed()*0.001)
                     .arg(tm.toString(Qt::ISODate));
             }
             else
@@ -414,10 +419,12 @@ bool PreviewGenerator::RemotePreviewRun(void)
 
 bool PreviewGenerator::event(QEvent *e)
 {
-    if (e->type() != (QEvent::Type) MythEvent::MythEventMessage)
+    if (e->type() != MythEvent::MythEventMessage)
         return QObject::event(e);
 
-    MythEvent *me = (MythEvent*)e;
+    auto *me = dynamic_cast<MythEvent*>(e);
+    if (me == nullptr)
+        return false;
     if (me->Message() != "GENERATED_PIXMAP" || me->ExtraDataCount() < 3)
         return QObject::event(e);
 
@@ -429,7 +436,7 @@ bool PreviewGenerator::event(QEvent *e)
     if (!ours)
         return false;
 
-    QString pginfokey = me->ExtraData(1);
+    const QString& pginfokey = me->ExtraData(1);
 
     QMutexLocker locker(&m_previewLock);
     m_gotReply = true;
@@ -535,8 +542,12 @@ bool PreviewGenerator::SaveOutFile(const QByteArray &data, const QDateTime &dt)
     if (ok && !remaining)
     {
         file.close();
-        struct utimbuf times;
+        struct utimbuf times {};
+#if QT_VERSION < QT_VERSION_CHECK(5,8,0)
         times.actime = times.modtime = dt.toTime_t();
+#else
+        times.actime = times.modtime = dt.toSecsSinceEpoch();
+#endif
         utime(m_outFileName.toLocal8Bit().constData(), &times);
         LOG(VB_FILE, LOG_INFO, LOC + QString("Saved: '%1'").arg(m_outFileName));
     }
@@ -563,16 +574,16 @@ bool PreviewGenerator::SavePreview(const QString &filename,
     float ppw = max(desired_width, 0);
     float pph = max(desired_height, 0);
     bool desired_size_exactly_specified = true;
-    if ((ppw < 1.0f) && (pph < 1.0f))
+    if ((ppw < 1.0F) && (pph < 1.0F))
     {
         ppw = img.width();
         pph = img.height();
         desired_size_exactly_specified = false;
     }
 
-    aspect = (aspect <= 0.0f) ? ((float) width) / height : aspect;
-    pph = (pph < 1.0f) ? (ppw / aspect) : pph;
-    ppw = (ppw < 1.0f) ? (pph * aspect) : ppw;
+    aspect = (aspect <= 0.0F) ? ((float) width) / height : aspect;
+    pph = (pph < 1.0F) ? (ppw / aspect) : pph;
+    ppw = (ppw < 1.0F) ? (pph * aspect) : ppw;
 
     if (!desired_size_exactly_specified)
     {
@@ -582,8 +593,8 @@ bool PreviewGenerator::SavePreview(const QString &filename,
             ppw = (pph * aspect);
     }
 
-    ppw = max(1.0f, ppw);
-    pph = max(1.0f, pph);;
+    ppw = max(1.0F, ppw);
+    pph = max(1.0F, pph);;
 
     QImage small_img = img.scaled((int) ppw, (int) pph,
         Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
@@ -622,7 +633,6 @@ bool PreviewGenerator::LocalPreviewRun(void)
     m_programInfo.SetAllowLastPlayPos(false);
 
     float aspect = 0;
-    int   width, height, sz;
     long long captime = m_captureTime;
 
     QDateTime dt = MythDate::current();
@@ -676,11 +686,12 @@ bool PreviewGenerator::LocalPreviewRun(void)
             QString("Preview at calculated offset (%1 seconds)").arg(captime));
     }
 
-    width = height = sz = 0;
-    unsigned char *data = (unsigned char*)
-        GetScreenGrab(m_programInfo, m_pathname,
-                      captime, m_timeInSeconds,
-                      sz, width, height, aspect);
+    int width = 0;
+    int height = 0;
+    int sz = 0;
+    auto *data = (unsigned char*) GetScreenGrab(m_programInfo, m_pathname,
+                                                captime, m_timeInSeconds,
+                                                sz, width, height, aspect);
 
     QString outname = CreateAccessibleFilename(m_pathname, m_outFileName);
 
@@ -696,8 +707,12 @@ bool PreviewGenerator::LocalPreviewRun(void)
     {
         // Backdate file to start of preview time in case a bookmark was made
         // while we were generating the preview.
-        struct utimbuf times;
+        struct utimbuf times {};
+#if QT_VERSION < QT_VERSION_CHECK(5,8,0)
         times.actime = times.modtime = dt.toTime_t();
+#else
+        times.actime = times.modtime = dt.toSecsSinceEpoch();
+#endif
         utime(outname.toLocal8Bit().constData(), &times);
     }
 
@@ -720,7 +735,7 @@ QString PreviewGenerator::CreateAccessibleFilename(
     QFileInfo fi(outname);
     if (outname == fi.fileName())
     {
-        QString dir = QString::null;
+        QString dir;
         if (pathname.contains(':'))
         {
             QUrl uinfo(pathname);
@@ -775,7 +790,7 @@ bool PreviewGenerator::IsLocal(void) const
  *  \param video_height Returns height of frame grabbed.
  *  \param video_aspect Returns aspect ratio of frame grabbed.
  *  \return Buffer allocated with new containing frame in RGBA32 format if
- *          successful, NULL otherwise.
+ *          successful, nullptr otherwise.
  */
 char *PreviewGenerator::GetScreenGrab(
     const ProgramInfo &pginfo, const QString &filename,
@@ -790,13 +805,13 @@ char *PreviewGenerator::GetScreenGrab(
     (void) bufferlen;
     (void) video_width;
     (void) video_height;
-    char *retbuf = NULL;
+    char *retbuf = nullptr;
     bufferlen = 0;
 
     if (!MSqlQuery::testDBConnection())
     {
         LOG(VB_GENERAL, LOG_ERR, LOC + "Previewer could not connect to DB.");
-        return NULL;
+        return nullptr;
     }
 
     // pre-test local files for existence and size. 500 ms speed-up...
@@ -809,32 +824,36 @@ char *PreviewGenerator::GetScreenGrab(
         {
             LOG(VB_GENERAL, LOG_ERR, LOC + "Previewer file " +
                     QString("'%1'").arg(filename) + " is not valid.");
-            return NULL;
+            return nullptr;
         }
     }
 
     RingBuffer *rbuf = RingBuffer::Create(filename, false, false, 0);
-    if (!rbuf->IsOpen())
+    if (!rbuf || !rbuf->IsOpen())
     {
         LOG(VB_GENERAL, LOG_ERR, LOC + "Previewer could not open file: " +
                 QString("'%1'").arg(filename));
         delete rbuf;
-        return NULL;
+        return nullptr;
     }
 
-    PlayerContext *ctx = new PlayerContext(kPreviewGeneratorInUseID);
+    auto *ctx = new PlayerContext(kPreviewGeneratorInUseID);
     ctx->SetRingBuffer(rbuf);
     ctx->SetPlayingInfo(&pginfo);
     ctx->SetPlayer(new MythPlayer((PlayerFlags)(kAudioMuted | kVideoIsNull | kNoITV)));
-    ctx->player->SetPlayerInfo(NULL, NULL, ctx);
+    ctx->m_player->SetPlayerInfo(nullptr, nullptr, ctx);
 
     if (time_in_secs)
-        retbuf = ctx->player->GetScreenGrab(seektime, bufferlen,
+    {
+        retbuf = ctx->m_player->GetScreenGrab(seektime, bufferlen,
                                     video_width, video_height, video_aspect);
+    }
     else
-        retbuf = ctx->player->GetScreenGrabAtFrame(
+    {
+        retbuf = ctx->m_player->GetScreenGrabAtFrame(
             seektime, true, bufferlen,
             video_width, video_height, video_aspect);
+    }
 
     delete ctx;
 

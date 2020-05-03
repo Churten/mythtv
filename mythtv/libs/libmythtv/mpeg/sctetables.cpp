@@ -54,9 +54,9 @@ QString CarrierDefinitionSubtable::toStringXML(uint indent_level) const
 
     vector<const unsigned char*> desc =
         MPEGDescriptor::Parse(Descriptors(), DescriptorsLength());
-    for (uint i = 0; i < desc.size(); i++)
+    for (auto & d : desc)
     {
-        str += MPEGDescriptor(desc[i], 300)
+        str += MPEGDescriptor(d, 300)
             .toStringXML(indent_level + 1) + "\n";
     }
     return str + indent_0 + "</CarrierDefinition>";
@@ -126,7 +126,7 @@ QString ModulationModeSubtable::ModulationFormatString(void) const
     }
 }
 
-QString ModulationModeSubtable::toString(void) const
+QString ModulationModeSubtable::toString(void)
 {
     return "ModulationMode";
 }
@@ -156,9 +156,9 @@ QString ModulationModeSubtable::toStringXML(uint indent_level) const
         return str + " />";
 
     str += ">\n";
-    for (uint i = 0; i < desc.size(); i++)
+    for (auto & d : desc)
     {
-        str += MPEGDescriptor(desc[i], 300)
+        str += MPEGDescriptor(d, 300)
             .toStringXML(indent_level + 1) + "\n";
     }
 
@@ -167,7 +167,7 @@ QString ModulationModeSubtable::toStringXML(uint indent_level) const
 
 bool SCTENetworkInformationTable::Parse(void)
 {
-    _ptrs.clear();
+    m_ptrs.clear();
 
     if ((kCarrierDefinitionSubtable == TableSubtype()) ||
         (kModulationModeSubtable == TableSubtype()))
@@ -176,7 +176,7 @@ bool SCTENetworkInformationTable::Parse(void)
         const unsigned char *next = pesdata() + 7;
         for (uint i = 0; i < NumberOfRecords(); i++)
         {
-            _ptrs.push_back(next);
+            m_ptrs.push_back(next);
             uint desc_count = next[offset-1];
             next += offset;
             for (uint j = 0; j < desc_count; j++)
@@ -184,13 +184,13 @@ bool SCTENetworkInformationTable::Parse(void)
                 MPEGDescriptor desc(next);
                 if (!desc.IsValid())
                 {
-                    _ptrs.clear();
+                    m_ptrs.clear();
                     return false;
                 }
                 next += desc.size();
             }
         }
-        _ptrs.push_back(next);
+        m_ptrs.push_back(next);
         return true;
     }
 
@@ -243,9 +243,9 @@ QString SCTENetworkInformationTable::toStringXML(uint indent_level) const
 
     vector<const unsigned char*> desc =
         MPEGDescriptor::Parse(Descriptors(), DescriptorsLength());
-    for (uint i = 0; i < desc.size(); i++)
+    for (auto & d : desc)
     {
-        str += MPEGDescriptor(desc[i], 300)
+        str += MPEGDescriptor(d, 300)
             .toStringXML(indent_level + 1) + "\n";
     }
 
@@ -269,7 +269,6 @@ QString NetworkTextTable::toString(void) const
 QString NetworkTextTable::toStringXML(uint indent_level) const
 {
     QString indent_0 = xml_indent(indent_level);
-    QString indent_1 = xml_indent(indent_level + 1);
 
     QString str = indent_0 + "<NetworkTextSection ";
     str += QString("iso_639_language_code=\"%1\" ").arg(LanguageString());
@@ -295,50 +294,68 @@ QString NetworkTextTable::toStringXML(uint indent_level) const
 
 bool ShortVirtualChannelTable::Parse(void)
 {
-    _ptrs.clear();
+    m_ptrs.clear();
 
     if (kDefinedChannelsMap == TableSubtype())
     {
-        _ptrs.push_back(pesdata() + DefinedChannelsMap().Size() + 7);
+        m_ptrs.push_back(pesdata() + DefinedChannelsMap().Size() + 7);
     }
     else if (kVirtualChannelMap == TableSubtype())
     {
-        bool descriptors_included = pesdata()[7] & 0x20;
+        bool descriptors_included = (pesdata()[7] & 0x20) != 0;
         uint number_of_vc_records = pesdata()[13];
         const unsigned char *next = pesdata() + 14;
+        const unsigned char *end = pesdata()+Length();
+        bool ok = true;
+
         if (!descriptors_included)
         {
-            for (uint i = 0; i < number_of_vc_records; i++)
+            for (uint i = 0; i < number_of_vc_records && ok; i++)
             {
-                _ptrs.push_back(next);
+                if (next + 10 >= end)
+                {
+                    ok = false;
+                    break;
+                }
+                m_ptrs.push_back(next);
                 next += 9;
             }
-            _ptrs.push_back(next);
+            m_ptrs.push_back(next);
         }
         else
         {
             for (uint i = 0; i < number_of_vc_records; i++)
             {
-                _ptrs.push_back(next);
+                m_ptrs.push_back(next);
                 uint desc_count = next[10];
                 next += 10;
                 for (uint j = 0; j < desc_count; j++)
                 {
-                    MPEGDescriptor desc(next);
+                    if (next >= end)
+                    {
+                        ok = false;
+                        break;
+                    }
+                    MPEGDescriptor desc(next, end-next);
                     if (!desc.IsValid())
                     {
-                        _ptrs.clear();
+                        m_ptrs.clear();
                         return false;
                     }
                     next += desc.size();
                 }
             }
         }
-        _ptrs.push_back(next);
+        m_ptrs.push_back(next);
+        if (!ok || next >= end)
+        {
+            m_ptrs.clear();
+            return false;
+        }
     }
     else if (kInverseChannelMap == TableSubtype())
     {
-        _ptrs.push_back(pesdata() + InverseChannelMap().Size() + 7);
+        m_ptrs.push_back(pesdata() + InverseChannelMap().Size() + 7);
     }
     else
     {
@@ -448,9 +465,9 @@ QString VirtualChannelMapSubtable::toStringXML(uint indent_level) const
 
         vector<const unsigned char*> desc =
             MPEGDescriptor::Parse(Descriptors(i), DescriptorsLength(i));
-        for (uint i = 0; i < desc.size(); i++)
+        for (auto & d : desc)
         {
-            str += MPEGDescriptor(desc[i], 300)
+            str += MPEGDescriptor(d, 300)
                 .toStringXML(indent_level + 2) + "\n";
         }
         str += indent_1 + "</Channel>";
@@ -518,9 +535,9 @@ QString ShortVirtualChannelTable::toStringXML(uint indent_level) const
 
     vector<const unsigned char*> desc =
         MPEGDescriptor::Parse(Descriptors(), DescriptorsLength());
-    for (uint i = 0; i < desc.size(); i++)
+    for (auto & d : desc)
     {
-        str += MPEGDescriptor(desc[i], 300)
+        str += MPEGDescriptor(d, 300)
             .toStringXML(indent_level + 1) + "\n";
     }
 
@@ -556,9 +573,9 @@ QString SCTESystemTimeTable::toStringXML(uint indent_level) const
 
     vector<const unsigned char*> desc =
         MPEGDescriptor::Parse(Descriptors(), DescriptorsLength());
-    for (uint i = 0; i < desc.size(); i++)
+    for (auto & d : desc)
     {
-        str += MPEGDescriptor(desc[i], 300)
+        str += MPEGDescriptor(d, 300)
             .toStringXML(indent_level + 1) + "\n";
     }
 

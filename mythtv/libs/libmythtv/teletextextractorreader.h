@@ -18,21 +18,20 @@ class MTV_PUBLIC TeletextExtractorReader : public TeletextReader
   public:
     QSet<QPair<int, int> > GetUpdatedPages(void) const
     {
-        return m_updated_pages;
+        return m_updatedPages;
     }
 
     void ClearUpdatedPages(void)
     {
-        m_updated_pages.clear();
+        m_updatedPages.clear();
     }
 
   protected:
-    virtual void PageUpdated(int page, int subpage);
-    virtual void HeaderUpdated(
-        int page, int subpage, uint8_t *page_ptr, int lang);
+    void PageUpdated(int page, int subpage) override; // TeletextReader
+    void HeaderUpdated(int page, int subpage, uint8_t *page_ptr, int lang) override; // TeletextReader
 
   private:
-    QSet<QPair<int, int> > m_updated_pages;
+    QSet<QPair<int, int> > m_updatedPages;
 };
 
 #endif // TELETEXTEXTRACTORREADER_H

@@ -26,12 +26,12 @@
 
 class PrivUdpSocket;
 
-typedef enum PoolServerTypes
+enum PoolServerType
 {
     kTCPServer,
     kUDPServer,
     kSSLServer
-} PoolServerType;
+};
 
 // Making a 'Priv' server public is a contradiction, it was this or passing
 // through the server type in the newConnection signal which would have required
@@ -40,9 +40,9 @@ class MBASE_PUBLIC PrivTcpServer : public QTcpServer
 {
     Q_OBJECT
   public:
-    PrivTcpServer(QObject *parent = 0,
+    explicit PrivTcpServer(QObject *parent = nullptr,
                   PoolServerType type = kTCPServer);
-   ~PrivTcpServer() {};
+   ~PrivTcpServer() override = default;
 
    PoolServerType GetServerType(void) { return m_serverType; }
 
@@ -50,7 +50,7 @@ class MBASE_PUBLIC PrivTcpServer : public QTcpServer
     void newConnection(qt_socket_fd_t socket);
 
   protected:
-    virtual void incomingConnection(qt_socket_fd_t socket);
+    void incomingConnection(qt_socket_fd_t socket) override; // QTcpServer
 
   private:
     PoolServerType m_serverType;
@@ -61,8 +61,9 @@ class MBASE_PUBLIC ServerPool : public QObject
     Q_OBJECT
 
   public:
-    explicit ServerPool(QObject *parent=0);
-   ~ServerPool(void);
+    explicit ServerPool(QObject *parent=nullptr)
+        : QObject(parent) {}
+   ~ServerPool(void) override;
 
     static void RefreshDefaultListen(void);
     static QList<QHostAddress> DefaultListen(void);
@@ -102,9 +103,9 @@ class MBASE_PUBLIC ServerPool : public QObject
     int tryBindingPort(int baseport, int range = 1);
     // Utility functions
     static int tryListeningPort(QTcpServer *server, int baseport,
-                                int range = 1, bool *isipv6 = NULL);
+                                int range = 1, bool *isipv6 = nullptr);
     static int tryBindingPort(QUdpSocket *socket, int baseport,
-                              int range = 1, bool *isipv6 = NULL);
+                              int range = 1, bool *isipv6 = nullptr);
 
   signals:
     void newConnection(QTcpSocket *);
@@ -117,14 +118,14 @@ class MBASE_PUBLIC ServerPool : public QObject
   private:
     static void SelectDefaultListen(bool force=false);
 
-    bool            m_listening;
-    int             m_maxPendingConn;
-    quint16         m_port;
-    QNetworkProxy   m_proxy;
+    bool            m_listening             {false};
+    int             m_maxPendingConn        {30};
+    quint16         m_port                  {0};
+    QNetworkProxy   m_proxy                 {QNetworkProxy::NoProxy};
 
     QList<PrivTcpServer*>   m_tcpServers;
     QList<PrivUdpSocket*>   m_udpSockets;
-    PrivUdpSocket          *m_lastUdpSocket;
+    PrivUdpSocket          *m_lastUdpSocket {nullptr};
 };
 
 #endif

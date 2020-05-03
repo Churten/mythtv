@@ -75,8 +75,8 @@ GrabberScript* findTreeGrabberByCommand(const QString& commandline,
     bool search = query.value(6).toBool();
     bool tree = query.value(7).toBool();
 
-    GrabberScript *tmp = new GrabberScript(title, image, type, author, search,
-                                     tree, desc, command, ver);
+    auto *tmp = new GrabberScript(title, image, type, author, search,
+                                  tree, desc, command, ver);
     return tmp;
 }
 
@@ -107,8 +107,8 @@ GrabberScript* findSearchGrabberByCommand(const QString& commandline,
     bool search = query.value(6).toBool();
     bool tree = query.value(7).toBool();
 
-    GrabberScript *tmp = new GrabberScript(title, image, type, author, search,
-                                     tree, desc, command, ver);
+    auto *tmp = new GrabberScript(title, image, type, author, search,
+                                  tree, desc, command, ver);
     return tmp;
 }
 
@@ -138,8 +138,8 @@ GrabberScript::scriptList findAllDBTreeGrabbers()
         bool search = query.value(7).toBool();
         bool tree = query.value(8).toBool();
 
-        GrabberScript *script = new GrabberScript(title, image, type, author, search,
-                                     tree, desc, commandline, ver);
+        auto *script = new GrabberScript(title, image, type, author, search,
+                                         tree, desc, commandline, ver);
         tmp.append(script);
     }
 
@@ -173,8 +173,8 @@ GrabberScript::scriptList findAllDBTreeGrabbersByHost(ArticleType type)
         bool search = query.value(6).toBool();
         bool tree = query.value(7).toBool();
 
-        GrabberScript *script = new GrabberScript(title, image, type, author, search,
-                                     tree, desc, commandline, ver);
+        auto *script = new GrabberScript(title, image, type, author, search,
+                                         tree, desc, commandline, ver);
         tmp.append(script);
     }
 
@@ -208,8 +208,8 @@ GrabberScript::scriptList findAllDBSearchGrabbers(ArticleType type)
         bool search = query.value(6).toBool();
         bool tree = query.value(7).toBool();
 
-        GrabberScript *script = new GrabberScript(title, image, type, author, search,
-                                     tree, desc, commandline, ver);
+        auto *script = new GrabberScript(title, image, type, author, search,
+                                         tree, desc, commandline, ver);
         tmp.append(script);
     }
 
@@ -291,11 +291,15 @@ bool removeGrabberFromDB(const QString &commandline, const bool &search)
 {
     MSqlQuery query(MSqlQuery::InitCon());
     if (search)
+    {
         query.prepare("DELETE FROM internetcontent WHERE commandline = :COMMAND "
                   "AND host = :HOST AND search = 1;");
+    }
     else
+    {
         query.prepare("DELETE FROM internetcontent WHERE commandline = :COMMAND "
                   "AND host = :HOST AND search = 0;");
+    }
     QFileInfo fi(commandline);
     query.bindValue(":COMMAND", fi.fileName());
     query.bindValue(":HOST", gCoreContext->GetHostName());
@@ -307,7 +311,7 @@ bool removeGrabberFromDB(const QString &commandline, const bool &search)
     return (query.numRowsAffected() > 0);
 }
 
-bool markTreeUpdated(GrabberScript* script, QDateTime curTime)
+bool markTreeUpdated(GrabberScript* script, const QDateTime& curTime)
 {
     MSqlQuery query(MSqlQuery::InitCon());
     query.prepare("UPDATE internetcontent SET updated = :UPDATED "
@@ -485,7 +489,7 @@ QMultiMap<QPair<QString,QString>, ResultItem*> getTreeArticles(const QString &fe
         QString     subtitle = query.value(1).toString();
         QString     desc = query.value(2).toString();
         QString     URL = query.value(3).toString();
-        QString     type = query.value(4).toString();
+        QString     feedtype = query.value(4).toString();
         QString     thumbnail = query.value(5).toString();
         QString     mediaURL = query.value(6).toString();
         QString     author = query.value(7).toString();
@@ -510,7 +514,8 @@ QMultiMap<QPair<QString,QString>, ResultItem*> getTreeArticles(const QString &fe
         QString     paththumb = query.value(25).toString();
 
         QPair<QString,QString> pair(path,paththumb);
-        ret.insert(pair, new ResultItem(title, subtitle, desc, URL,
+        ret.insert(pair, new ResultItem(title, QString(),
+                   subtitle, QString(), desc, URL,
                    thumbnail, mediaURL, author, date, time, rating, filesize,
                    player, playerargs, download, downloadargs,
                    width, height, language, downloadable, countries,
@@ -537,7 +542,7 @@ bool findInDB(const QString& url, ArticleType type)
 
 RSSSite* findByURL(const QString& url, ArticleType type)
 {
-    RSSSite *tmp = NULL;
+    RSSSite *tmp = nullptr;
     MSqlQuery query(MSqlQuery::InitCon());
     query.prepare("SELECT name,thumbnail,author,description,"
                   "commandline,download,updated FROM internetcontent "
@@ -548,7 +553,8 @@ RSSSite* findByURL(const QString& url, ArticleType type)
     if (!query.exec() || !query.next())
     {
         MythDB::DBError("RSS find in db", query);
-        tmp = new RSSSite(QString(), QString(), (ArticleType)0, QString(),
+        tmp = new RSSSite(QString(), QString(),
+                          QString(), (ArticleType)0, QString(),
                           QString(), QString(), false,
                           QDateTime());
     }
@@ -559,11 +565,11 @@ RSSSite* findByURL(const QString& url, ArticleType type)
         QString author = query.value(2).toString();
         QString description = query.value(3).toString();
         QString outurl = query.value(4).toString();
-        bool download = query.value(5).toInt();
+        bool download = query.value(5).toBool();
         QDateTime updated; query.value(6).toDate();
 
-        tmp = new RSSSite(title, image, type, description, outurl,
-                        author, download, updated);
+        tmp = new RSSSite(title, QString(), image, type, description,
+                          outurl, author, download, updated);
     }
 
     return tmp;
@@ -593,9 +599,9 @@ RSSSite::rssList findAllDBRSSByType(ArticleType type)
         QString description = query.value(2).toString();
         QString url = query.value(3).toString();
         QString author = query.value(4).toString();
-        bool download = query.value(5).toInt();
+        bool download = query.value(5).toBool();
         QDateTime updated; query.value(6).toDate();
-        tmp.append(new RSSSite(title, image, type, description, url,
+        tmp.append(new RSSSite(title, QString(), image, type, description, url,
                        author, download, updated));
     }
 
@@ -625,10 +631,11 @@ RSSSite::rssList findAllDBRSS()
         QString description = query.value(3).toString();
         QString url = query.value(4).toString();
         QString author = query.value(5).toString();
-        bool download = query.value(6).toInt();
+        bool download = query.value(6).toBool();
         QDateTime updated; query.value(7).toDate();
-        tmp.append(new RSSSite(title, image, type, description, url,
-                       author, download, updated));
+        tmp.append(new RSSSite(title, QString(),
+                               image, type, description, url,
+                               author, download, updated));
     }
 
     return tmp;
@@ -638,13 +645,14 @@ bool insertInDB(RSSSite* site)
 {
     if (!site) return false;
 
-    return insertInDB(site->GetTitle(), site->GetImage(),
+    return insertInDB(site->GetTitle(), site->GetSortTitle(), site->GetImage(),
                       site->GetDescription(), site->GetURL(),
                       site->GetAuthor(), site->GetDownload(),
                       site->GetUpdated(), site->GetType());
 }
 
-bool insertInDB(const QString &name, const QString &thumbnail,
+bool insertInDB(const QString &name, const QString &sortname,
+                const QString &thumbnail,
                 const QString &description, const QString &url,
                 const QString &author, const bool &download,
                 const QDateTime &updated, ArticleType type)
@@ -658,6 +666,7 @@ bool insertInDB(const QString &name, const QString &thumbnail,
             "VALUES( :NAME, :THUMBNAIL, :DESCRIPTION, :URL, :AUTHOR, :DOWNLOAD, "
             ":UPDATED, :PODCAST, :TYPE);");
     query.bindValue(":NAME", name);
+    Q_UNUSED(sortname); // query.bindValue(":SORTNAME", sortname);
     query.bindValue(":THUMBNAIL", thumbnail);
     query.bindValue(":DESCRIPTION", description);
     query.bindValue(":URL", url);
@@ -748,6 +757,7 @@ bool insertRSSArticleInDB(const QString &feedtitle, ResultItem *item,
             ":LANGUAGE, :DOWNLOADABLE, :COUNTRIES, :PODCAST);");
     query.bindValue(":FEEDTITLE", feedtitle);
     query.bindValue(":TITLE", item->GetTitle());
+    //RSS articles don't have subtitles
     query.bindValue(":DESCRIPTION", item->GetDescription());
     query.bindValue(":URL", item->GetURL());
     query.bindValue(":TYPE", type);
@@ -809,6 +819,7 @@ ResultItem::resultList getRSSArticles(const QString &feedtitle,
     while (query.next())
     {
         QString     title = query.value(0).toString();
+        //RSS articles don't have subtitles
         QString     desc = query.value(1).toString();
         QString     URL = query.value(2).toString();
         QString     thumbnail = query.value(3).toString();
@@ -830,7 +841,8 @@ ResultItem::resultList getRSSArticles(const QString &feedtitle,
         uint        season = query.value(19).toUInt();
         uint        episode = query.value(20).toUInt();
 
-        ret.append(new ResultItem(title, QString(), desc, URL, thumbnail,
+        ret.append(new ResultItem(title, QString(), QString(),
+                   QString(), desc, URL, thumbnail,
                    mediaURL, author, date, time, rating, filesize,
                    player, playerargs, download, downloadargs,
                    width, height, language, downloadable, countries,
@@ -840,7 +852,7 @@ ResultItem::resultList getRSSArticles(const QString &feedtitle,
     return ret;
 }
 
-QString GetDownloadFilename(QString title, QString url)
+QString GetDownloadFilename(const QString& title, const QString& url)
 {
     QByteArray urlarr(url.toLatin1());
     quint16 urlChecksum = qChecksum(urlarr.data(), urlarr.length());

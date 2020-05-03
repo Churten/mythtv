@@ -1,13 +1,13 @@
 #ifndef COREUTIL_H_
 #define COREUTIL_H_
 
-#include <stdint.h>
+#include <cstdint>
 
 #include <QString>
 
 #include "mythbaseexp.h"
 
- MBASE_PUBLIC  int64_t getDiskSpace(const QString&,int64_t&,int64_t&);
+ MBASE_PUBLIC  int64_t getDiskSpace(const QString &file_on_disk, int64_t &total, int64_t &used);
 
  MBASE_PUBLIC  bool extractZIP(const QString &zipFile, const QString &outDir);
 

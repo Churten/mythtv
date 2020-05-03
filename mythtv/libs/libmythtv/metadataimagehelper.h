@@ -23,15 +23,14 @@ struct ArtworkInfo
     QString label;
     QString thumbnail;
     QString url;
-    uint width;
-    uint height;
+    uint    width     {0};
+    uint    height    {0};
 };
 
-typedef QList< ArtworkInfo > ArtworkList;
+using ArtworkList = QList< ArtworkInfo >;
+using ArtworkMap  = QMultiMap< VideoArtworkType, ArtworkInfo >;
 
-typedef QMultiMap< VideoArtworkType, ArtworkInfo > ArtworkMap;
-
-MTV_PUBLIC ArtworkMap GetArtwork(QString inetref,
+MTV_PUBLIC ArtworkMap GetArtwork(const QString& inetref,
                                        uint season,
                                        bool strict = false);
 MTV_PUBLIC bool SetArtwork(const QString &inetref,
@@ -43,7 +42,7 @@ MTV_PUBLIC bool SetArtwork(const QString &inetref,
 MTV_PUBLIC bool SetArtwork(const QString &inetref,
                                    uint season,
                                    const QString &host,
-                                   const ArtworkMap map);
+                                   const ArtworkMap& map);
 
 Q_DECLARE_METATYPE(VideoArtworkType)
 Q_DECLARE_METATYPE(ArtworkInfo)

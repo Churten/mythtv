@@ -21,8 +21,6 @@
 #include "archiveutil.h"
 #include "logviewer.h"
 
-const int DEFAULT_UPDATE_TIME = 5;
-
 void showLogViewer(void)
 {
     MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
@@ -68,7 +66,7 @@ void showLogViewer(void)
     // do any logs exist?
     if ((!progressLog.isEmpty()) || (!fullLog.isEmpty()))
     {
-        LogViewer *viewer = new LogViewer(mainStack);
+        auto *viewer = new LogViewer(mainStack);
         viewer->setFilenames(progressLog, fullLog);
         if (viewer->Create())
             mainStack->AddScreen(viewer);
@@ -79,40 +77,24 @@ void showLogViewer(void)
 }
 
 LogViewer::LogViewer(MythScreenStack *parent) :
-    MythScreenType(parent, "logviewer"),
-    m_autoUpdate(false),
-    m_updateTime(DEFAULT_UPDATE_TIME),
-    m_updateTimer(NULL),
-    m_currentLog(),
-    m_progressLog(),
-    m_fullLog(),
-    m_logList(NULL),
-    m_logText(NULL),
-    m_exitButton(NULL),
-    m_cancelButton(NULL),
-    m_updateButton(NULL)
+    MythScreenType(parent, "logviewer")
 {
     m_updateTime = gCoreContext->GetNumSetting(
         "LogViewerUpdateTime", DEFAULT_UPDATE_TIME);
-    m_autoUpdate = gCoreContext->GetNumSetting("LogViewerAutoUpdate", 1);
+    m_autoUpdate = gCoreContext->GetBoolSetting("LogViewerAutoUpdate", true);
 }
 
 LogViewer::~LogViewer(void)
 {
     gCoreContext->SaveSetting("LogViewerUpdateTime", m_updateTime);
     gCoreContext->SaveSetting("LogViewerAutoUpdate", m_autoUpdate ? "1" : "0");
-
-    if (m_updateTimer)
-        delete m_updateTimer;
+    delete m_updateTimer;
 }
 
 bool LogViewer::Create(void)
 {
-    bool foundtheme = false;
-
     // Load the theme for this screen
-    foundtheme = LoadWindowFromXML("mytharchive-ui.xml", "logviewer", this);
-
+    bool foundtheme = LoadWindowFromXML("mytharchive-ui.xml", "logviewer", this);
     if (!foundtheme)
         return false;
 
@@ -136,7 +118,7 @@ bool LogViewer::Create(void)
     connect(m_logList, SIGNAL(itemSelected(MythUIButtonListItem*)),
             this, SLOT(updateLogItem(MythUIButtonListItem*)));
 
-    m_updateTimer = NULL;
+    m_updateTimer = nullptr;
     m_updateTimer = new QTimer(this);
     connect(m_updateTimer, SIGNAL(timeout()), SLOT(updateTimerTimeout()) );
 
@@ -159,9 +141,8 @@ bool LogViewer::keyPressEvent(QKeyEvent *event)
     if (GetFocusWidget()->keyPressEvent(event))
          return true;
 
-    bool handled = false;
     QStringList actions;
-    handled = GetMythMainWindow()->TranslateKeyPress("Global", event, actions);
+    bool handled = GetMythMainWindow()->TranslateKeyPress("Global", event, actions);
 
     for (int i = 0; i < actions.size() && !handled; i++)
     {
@@ -169,7 +150,7 @@ bool LogViewer::keyPressEvent(QKeyEvent *event)
         handled = true;
 
         if (action == "MENU")
-            showMenu();
+            ShowMenu();
         else
             handled = false;
     }
@@ -224,7 +205,7 @@ void LogViewer::updateClicked(void)
     QStringList list;
     loadFile(m_currentLog, list, m_logList->GetCount());
 
-    if (list.size() > 0)
+    if (!list.empty())
     {
         bool bUpdateCurrent =
                 (m_logList->GetCount() == m_logList->GetCurrentPos() + 1) ||
@@ -281,7 +262,7 @@ QString LogViewer::getSetting(const QString &key)
     return QString("");
 }
 
-bool LogViewer::loadFile(QString filename, QStringList &list, int startline)
+bool LogViewer::loadFile(const QString& filename, QStringList &list, int startline)
 {
     bool strip = !(filename.endsWith("progress.log") || filename.endsWith("mythburn.log"));
 
@@ -349,10 +330,10 @@ void LogViewer::showFullLog(void)
     updateClicked();
 }
 
-void LogViewer::showMenu()
+void LogViewer::ShowMenu()
 {
     MythScreenStack *popupStack = GetMythMainWindow()->GetStack("popup stack");
-    MythDialogBox *menuPopup = new MythDialogBox(tr("Menu"), popupStack, "actionmenu");
+    auto *menuPopup = new MythDialogBox(tr("Menu"), popupStack, "actionmenu");
 
     if (menuPopup->Create())
         popupStack->AddScreen(menuPopup);

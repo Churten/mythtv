@@ -1,25 +1,30 @@
 #ifndef MYTHPLUGIN_H_
 #define MYTHPLUGIN_H_
 
+#include <utility>
+
+// Qt headers
+#include <QHash>
 #include <QLibrary>
 #include <QMap>
-#include <QHash>
 
+// MythTV headers
 #include "mythbaseexp.h"
 
 class QSqlDatabase;
 class MythContext;
 class QPainter;
 
-typedef enum {
+enum MythPluginType {
     kPluginType_Module = 0
-} MythPluginType;
+};
 
 class MythPlugin : public QLibrary
 {
   public:
-    MythPlugin(const QString &, const QString &);
-    virtual ~MythPlugin();
+    MythPlugin(const QString &libname, QString plugname)
+        : QLibrary(libname), m_plugName(std::move(plugname)) {}
+    ~MythPlugin() override = default;
 
     // This method will call the mythplugin_init() function of the library.
     int init(const char *libversion);
@@ -38,17 +43,17 @@ class MythPlugin : public QLibrary
     // if such a function exists.
     void destroy(void);
 
-    bool isEnabled() { return enabled; }
-    void setEnabled(bool enable) { enabled = enable; }
+    bool isEnabled() { return m_enabled; }
+    void setEnabled(bool enable) { m_enabled = enable; }
 
-    int getPosition() { return position; }
-    void setPosition(int pos) { position = pos; }
+    int getPosition() { return m_position; }
+    void setPosition(int pos) { m_position = pos; }
 
     QString getName(void) { return m_plugName; }
 
   private:
-    bool enabled;
-    int position;
+    bool m_enabled {true};
+    int m_position {0};
     QString m_plugName;
     QStringList m_features;
 };
@@ -58,7 +63,7 @@ class MBASE_PUBLIC MythPluginManager
 {
   public:
     MythPluginManager();
-   ~MythPluginManager();
+   ~MythPluginManager() = default;
 
     bool init_plugin(const QString &plugname);
     bool run_plugin(const QString &plugname);
@@ -73,7 +78,7 @@ class MBASE_PUBLIC MythPluginManager
   private:
     QHash<QString,MythPlugin*> m_dict;
 
-    QMap<QString, MythPlugin *> moduleMap;
+    QMap<QString, MythPlugin *> m_moduleMap;
 };
 
 #endif

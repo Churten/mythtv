@@ -40,7 +40,7 @@ class TaskQueue;
 // Typedefs
 /////////////////////////////////////////////////////////////////////////////
 
-typedef std::multimap< TaskTime, Task *> TaskMap;
+using TaskMap = std::multimap< TaskTime, Task *>;
 
 /////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////
@@ -60,8 +60,7 @@ class Task : public ReferenceCounter
     protected:
 
         // Destructor protected to force use of Release Method
-
-        virtual        ~Task();
+        ~Task() override = default;
 
     public:
 
@@ -90,13 +89,13 @@ class UPNP_PUBLIC TaskQueue : public MThread
 
         TaskMap     m_mapTasks;
         QMutex      m_mutex;
-        bool        m_bTermRequested;
+        bool        m_bTermRequested {false};
 
     protected:
 
         bool  IsTermRequested();
 
-        virtual void run    ();
+        void run() override; // MThread
 
     private:
 
@@ -111,7 +110,7 @@ class UPNP_PUBLIC TaskQueue : public MThread
         static TaskQueue* Instance();
         static void Shutdown();
 
-        virtual ~TaskQueue();
+        ~TaskQueue() override;
 
         void  RequestTerminate   ( );
 

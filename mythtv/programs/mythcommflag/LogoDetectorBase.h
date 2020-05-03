@@ -2,9 +2,9 @@
 #define _LOGODETECTORBASE_H_
 
 #include <QObject>
+#include "mythframe.h"
 
 class MythPlayer;
-typedef struct VideoFrame_ VideoFrame;
 
 class LogoDetectorBase : public QObject
 {
@@ -12,7 +12,7 @@ class LogoDetectorBase : public QObject
 
   public:
     LogoDetectorBase(unsigned int w,unsigned int h) :
-        foundLogo(false), width(w),height(h) {};
+        m_width(w),m_height(h) {};
 
     virtual bool searchForLogo(MythPlayer* player) = 0;
     virtual bool doesThisFrameContainTheFoundLogo(VideoFrame* frame) = 0;
@@ -24,11 +24,11 @@ class LogoDetectorBase : public QObject
                             float debugValue = 0.0);
 
   protected:
-    virtual ~LogoDetectorBase() {}
+    ~LogoDetectorBase() override = default;
 
   protected:
-    bool foundLogo;
-    unsigned int width, height;
+    bool m_foundLogo {false};
+    unsigned int m_width, m_height;
 };
 
 #endif

@@ -7,6 +7,7 @@
 #define JSMENU_H_
 
 // C++ headers
+#include <utility>
 #include <vector>
 
 // QT headers
@@ -15,20 +16,20 @@
 // MythTV headers
 #include "mthread.h"
 
-typedef struct
+struct buttonMapType
 {
     int button;
     QString keystring;
     int chord;
-}  buttonMapType;
+};
 
-typedef struct
+struct axisMapType
 {
     int axis;
     int from;
     int to;
     QString keystring;
-} axisMapType;
+};
 
 /**
  *  \class JoystickMap
@@ -52,18 +53,18 @@ class JoystickMap
     public:
         void AddButton(int in_button, QString in_keystr, int in_chord = -1)
         {
-            buttonMapType new_button = { in_button, in_keystr, in_chord };
+            buttonMapType new_button = { in_button, std::move(in_keystr), in_chord };
             m_buttonMap.push_back(new_button);
         }
 
         void AddAxis(int in_axis, int in_from, int in_to, QString in_keystr)
         {
-            axisMapType new_axis = { in_axis, in_from, in_to, in_keystr};
+            axisMapType new_axis = { in_axis, in_from, in_to, std::move(in_keystr)};
             m_axisMap.push_back(new_axis);
         }
 
-        typedef std::vector<buttonMapType> button_map_t;
-        typedef std::vector<axisMapType> axis_map_t;
+        using button_map_t = std::vector<buttonMapType>;
+        using axis_map_t = std::vector<axisMapType>;
         const button_map_t &buttonMap() const { return m_buttonMap; }
         const axis_map_t &axisMap() const { return m_axisMap; }
 
@@ -81,40 +82,41 @@ class JoystickMap
 class JoystickMenuThread : public MThread
 {
   public:
-    explicit JoystickMenuThread(QObject *main_window);
-    ~JoystickMenuThread();
+    explicit JoystickMenuThread(QObject *main_window)
+        : MThread("JoystickMenu"), m_mainWindow(main_window) {}
+    ~JoystickMenuThread() override;
     bool Init(QString &config_file);
 
     void ButtonUp(int button);
     void AxisChange(int axis, int value);
-    void EmitKey(QString code);
-    bool ReadConfig(QString config_file);
+    void EmitKey(const QString& code);
+    bool ReadConfig(const QString& config_file);
     void Stop(void) { m_bStop = true; }
 
   private:
-    void run(void);
+    void run() override; // MThread
 
-    QObject *m_mainWindow;
+    QObject *m_mainWindow       {nullptr};
     QString m_devicename;
-    int m_fd;
+    int     m_fd                {-1};
     JoystickMap m_map;
 
     /**
      * Track the status of the joystick buttons as we do depend slightly on
      * state
      */
-    unsigned char m_buttonCount;
+    unsigned char m_buttonCount {0};
 
     /**
      * Track the status of the joystick axes as we do depend slightly on
      * state
      */
-    unsigned char m_axesCount;
+    unsigned char m_axesCount   {0};
 
-    int *m_buttons;
-    int *m_axes;
+    int *m_buttons              {nullptr};
+    int *m_axes                 {nullptr};
 
-    volatile bool m_bStop;
+    volatile bool m_bStop       {false};
 };
 
 #endif

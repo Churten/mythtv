@@ -9,7 +9,7 @@
 
 #include "mythbaseexp.h"
 
-typedef enum {
+enum MythMediaStatus {
     MEDIASTAT_ERROR,        ///< Unable to mount, but could be usable
     MEDIASTAT_UNKNOWN,
     MEDIASTAT_UNPLUGGED,
@@ -19,9 +19,9 @@ typedef enum {
     MEDIASTAT_USEABLE,
     MEDIASTAT_NOTMOUNTED,
     MEDIASTAT_MOUNTED
-} MythMediaStatus;
+};
 
-typedef enum {
+enum MythMediaType {
     MEDIATYPE_UNKNOWN  = 0x0001,
     MEDIATYPE_DATA     = 0x0002,
     MEDIATYPE_MIXED    = 0x0004,
@@ -33,17 +33,17 @@ typedef enum {
     MEDIATYPE_MGALLERY = 0x0100,
     MEDIATYPE_BD       = 0x0200,
     MEDIATYPE_END      = 0x0400,
-} MythMediaType;
+};
 // MediaType conflicts with a definition within OSX Quicktime Libraries.
 
-typedef enum {
+enum MythMediaError {
     MEDIAERR_OK,
     MEDIAERR_FAILED,
     MEDIAERR_UNSUPPORTED
-} MythMediaError;
+};
 
-typedef QMap<QString,uint> ext_cnt_t;
-typedef QMap<QString,uint> ext_to_media_t;
+using ext_cnt_t = QMap<QString,uint>;
+using ext_to_media_t = QMap<QString,uint>;
 
 class MBASE_PUBLIC MythMediaDevice : public QObject
 {
@@ -127,7 +127,7 @@ class MBASE_PUBLIC MythMediaDevice : public QObject
     void statusChanged(MythMediaStatus oldStatus, MythMediaDevice* pMedia);
 
  protected:
-    virtual ~MythMediaDevice() {} // use deleteLater...
+    ~MythMediaDevice() override = default; // use deleteLater...
 
     /// Override this to perform any post mount logic.
     virtual void onDeviceMounted(void)
@@ -141,7 +141,7 @@ class MBASE_PUBLIC MythMediaDevice : public QObject
     virtual void onDeviceUnmounted() {};
 
     MythMediaType DetectMediaType(void);
-    bool ScanMediaType(const QString &directory, ext_cnt_t &counts);
+    bool ScanMediaType(const QString &directory, ext_cnt_t &cnt);
 
     MythMediaStatus setStatus(MythMediaStatus newStat, bool CloseIt=false);
 
@@ -156,15 +156,23 @@ class MBASE_PUBLIC MythMediaDevice : public QObject
                              ///  (e.g. /dev/hdc) Read only
     QString m_VolumeID;      ///< The volume ID of the media. Read/write
 
-    MythMediaStatus m_Status;    ///< The status of the media as of the
+    MythMediaStatus m_Status {MEDIASTAT_UNKNOWN};
+                             ///< The status of the media as of the
                              ///  last call to checkMedia. Read only
-    MythMediaType   m_MediaType; ///< The type of media. Read only
+    MythMediaType   m_MediaType {MEDIATYPE_UNKNOWN};
+                             ///< The type of media. Read only
 
     bool m_AllowEject;       ///< Allow the user to eject the media?. Read only
-    bool m_Locked;           ///< Is this media locked?.              Read only
-    bool m_SuperMount;       ///< Is this a supermount device?.       Read only
+    bool m_Locked {false};   ///< Is this media locked?.              Read only
 
-    int  m_DeviceHandle;     ///< A file handle for opening and closing
+    bool m_SuperMount;       ///< Is this a supermount device?.       Read only
+                             ///  The OS handles mounting/unmounting of
+                             ///  'supermount' devices.  Myth only need to give
+                             ///  derived classes a chance to perform their
+                             ///  mount/unmount logic.
+
+
+    int  m_DeviceHandle {-1};///< A file handle for opening and closing
                              ///  the device, ioctls(), et c. This should
                              ///  be private, but a subclass of a
                              ///  subclass needs it (MythCDRomLinux)
@@ -177,6 +185,7 @@ class MBASE_PUBLIC MythMediaEvent : public QEvent
   public:
     MythMediaEvent(MythMediaStatus oldStatus, MythMediaDevice *pDevice) :
         QEvent(kEventType), m_OldStatus(oldStatus), m_Device(pDevice) {}
+    ~MythMediaEvent() override;
 
     MythMediaStatus getOldStatus(void) const { return m_OldStatus; }
     MythMediaDevice* getDevice(void) { return m_Device; }

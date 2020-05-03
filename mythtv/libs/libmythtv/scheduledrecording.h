@@ -2,7 +2,7 @@
 #define SCHEDULEDRECORDING_H
 
 #include "mythtvexp.h"
-#include "qdatetime.h"
+#include <QDateTime>
 #include "recordinginfo.h"
 
 class MTV_PUBLIC ScheduledRecording
@@ -23,6 +23,10 @@ class MTV_PUBLIC ScheduledRecording
     static void RescheduleCheck(const RecordingInfo &recinfo, 
                                 const QString &why)
         { SendReschedule(BuildCheckRequest(recinfo, why)); };
+    // Alternate function for calling with a ProgramInfo structure
+    static void RescheduleCheck(const ProgramInfo &proginfo,
+                                const QString &why)
+        { SendReschedule(BuildCheckRequest(RecordingInfo(proginfo), why)); };
 
     // Use when none of recording rule, program data or duplicate
     // status changes.
@@ -30,8 +34,8 @@ class MTV_PUBLIC ScheduledRecording
         { SendReschedule(BuildPlaceRequest(why)); };
 
   private:
-    ScheduledRecording();
-    ~ScheduledRecording();
+    ScheduledRecording() = default;
+    ~ScheduledRecording() = default;
 
     static void SendReschedule(const QStringList &request);
     static QStringList BuildMatchRequest(uint recordid, uint sourceid, 

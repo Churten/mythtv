@@ -30,15 +30,18 @@ enum MythDBBackupStatus
 class MBASE_PUBLIC DBUtil
 {
   public:
-    DBUtil();
-    ~DBUtil() { }
+    /** \fn DBUtil::DBUtil(void)
+     *  \brief Constructs the DBUtil object.
+     */
+    DBUtil() = default;
+    ~DBUtil() = default;
 
     QString GetDBMSVersion(void);
     int CompareDBMSVersion(int major, int minor=0, int point=0);
 
-    MythDBBackupStatus BackupDB(QString &filename,
-                                bool disableRotation = false);
-    static bool CheckTables(const bool repair = false,
+    static MythDBBackupStatus BackupDB(QString &filename,
+                                       bool disableRotation = false);
+    static bool CheckTables(bool repair = false,
                             const QString &options = "QUICK");
     static bool RepairTables(const QStringList &tables);
 
@@ -46,8 +49,8 @@ class MBASE_PUBLIC DBUtil
     static bool IsBackupInProgress(void);
     static int  CountClients(void);
 
-    static bool TryLockSchema(MSqlQuery &, uint timeout_secs);
-    static void UnlockSchema(MSqlQuery &);
+    static bool TryLockSchema(MSqlQuery &query, uint timeout_secs);
+    static void UnlockSchema(MSqlQuery &query);
 
     static bool CheckTimeZoneSupport(void);
 
@@ -64,19 +67,19 @@ class MBASE_PUBLIC DBUtil
     static QStringList GetTables(const QStringList &engines = QStringList());
     static QStringList CheckRepairStatus(MSqlQuery &query);
 
-    QString CreateBackupFilename(QString prefix = "mythconverg",
-                                 QString extension = ".sql");
-    QString GetBackupDirectory();
+    static QString CreateBackupFilename(const QString& prefix = "mythconverg",
+                                 const QString& extension = ".sql");
+    static QString GetBackupDirectory();
 
-    bool DoBackup(const QString &backupScript, QString &filename,
-                  bool disableRotation = false);
-    bool DoBackup(QString &filename);
+    static bool DoBackup(const QString &backupScript, QString &filename,
+                         bool disableRotation = false);
+    static bool DoBackup(QString &filename);
 
     QString m_versionString;
 
-    int m_versionMajor;
-    int m_versionMinor;
-    int m_versionPoint;
+    int m_versionMajor { -1 };
+    int m_versionMinor { -1 };
+    int m_versionPoint { -1 };
 
 };
 

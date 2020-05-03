@@ -35,7 +35,7 @@ MediaMonitorWindows::MediaMonitorWindows(QObject* par,
     for (char *driveName = strDrives; *driveName;
          driveName += strlen(driveName) + 1)
     {
-        MythMediaDevice *media = NULL;
+        MythMediaDevice *media = nullptr;
         UINT type = ::GetDriveType(driveName);
         switch (type)
         {
@@ -77,7 +77,7 @@ MediaMonitorWindows::MediaMonitorWindows(QObject* par,
             // user activities like ChooseAndEjectMedia().
             char volumeName[MAX_PATH];
             if (GetVolumeInformation(driveName, volumeName, MAX_PATH,
-                                     NULL, NULL, NULL, NULL, NULL))
+                                     nullptr, nullptr, nullptr, nullptr, 0))
             {
                 media->setVolumeID(volumeName);
             }
@@ -105,10 +105,9 @@ bool MediaMonitorWindows::AddDevice(MythMediaDevice *pDevice)
     //
     // Check if this is a duplicate of a device we have already added
     //
-    QList<MythMediaDevice*>::const_iterator itr = m_Devices.begin();
-    for (; itr != m_Devices.end(); ++itr)
+    foreach (auto & device, m_Devices)
     {
-        if ((*itr)->getDevicePath() == path)
+        if (device->getDevicePath() == path)
         {
             LOG(VB_MEDIA, LOG_INFO,
                      "MediamonitorWindows::AddDevice() -- " +

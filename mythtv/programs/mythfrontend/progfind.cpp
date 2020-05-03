@@ -36,7 +36,7 @@ void RunProgramFinder(TV *player, bool embedVideo, bool allowEPG)
 {
     // Language specific progfinder, if needed
     MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
-    ProgFinder *programFind = NULL;
+    ProgFinder *programFind = nullptr;
     if (gCoreContext->GetLanguage() == "ja")
         programFind = new JaProgFinder(mainStack, allowEPG, player, embedVideo);
     else if (gCoreContext->GetLanguage() == "he")
@@ -47,21 +47,9 @@ void RunProgramFinder(TV *player, bool embedVideo, bool allowEPG)
         programFind = new ProgFinder(mainStack, allowEPG, player, embedVideo);
 
     if (programFind->Create())
-        mainStack->AddScreen(programFind, (player == NULL));
+        mainStack->AddScreen(programFind, (player == nullptr));
     else
         delete programFind;
-}
-
-ProgFinder::ProgFinder(MythScreenStack *parentStack, bool allowEPG,
-                       TV *player, bool embedVideo)
-          : ScheduleCommon(parentStack, "ProgFinder"),
-    m_currentLetter(""),
-    m_player(player),            m_embedVideo(embedVideo),
-    m_allowEPG(allowEPG),        m_allowKeypress(true),
-    m_alphabetList(NULL),        m_showList(NULL),
-    m_timesList(NULL),           m_searchText(NULL),
-    m_help1Text(NULL),           m_help2Text(NULL)
-{
 }
 
 bool ProgFinder::Create()
@@ -177,10 +165,8 @@ bool ProgFinder::keyPressEvent(QKeyEvent *event)
         return true;
     }
 
-    bool handled = false;
-
     QStringList actions;
-    handled = GetMythMainWindow()->TranslateKeyPress("TV Frontend", event, actions);
+    bool handled = GetMythMainWindow()->TranslateKeyPress("TV Frontend", event, actions);
 
     for (int i = 0; i < actions.size() && !handled; ++i)
     {
@@ -228,7 +214,7 @@ void ProgFinder::ShowMenu(void)
     QString label = tr("Options");
 
     MythScreenStack *popupStack = GetMythMainWindow()->GetStack("popup stack");
-    MythDialogBox *menuPopup = new MythDialogBox(label, popupStack, "menuPopup");
+    auto *menuPopup = new MythDialogBox(label, popupStack, "menuPopup");
 
     if (menuPopup->Create())
     {
@@ -258,10 +244,13 @@ void ProgFinder::ShowMenu(void)
 
 void ProgFinder::customEvent(QEvent *event)
 {
-    if ((MythEvent::Type)(event->type()) == MythEvent::MythEventMessage)
+    if (event->type() == MythEvent::MythEventMessage)
     {
-        MythEvent *me = (MythEvent *)event;
-        QString message = me->Message();
+        auto *me = dynamic_cast<MythEvent *>(event);
+        if (me == nullptr)
+            return;
+
+        const QString& message = me->Message();
 
         if (message == "SCHEDULE_CHANGE")
         {
@@ -276,7 +265,7 @@ void ProgFinder::customEvent(QEvent *event)
     }
     else if (event->type() == DialogCompletionEvent::kEventType)
     {
-        DialogCompletionEvent *dce = (DialogCompletionEvent*)(event);
+        auto *dce = (DialogCompletionEvent*)(event);
 
         QString resultid   = dce->GetId();
         QString resulttext = dce->GetResultText();
@@ -294,8 +283,7 @@ void ProgFinder::customEvent(QEvent *event)
             else if (resulttext == tr("Edit Search"))
             {
                 MythScreenStack *popupStack = GetMythMainWindow()->GetStack("popup stack");
-                SearchInputDialog *textInput =
-                        new SearchInputDialog(popupStack, m_searchStr);
+                auto *textInput = new SearchInputDialog(popupStack, m_searchStr);
 
                 if (textInput->Create())
                 {
@@ -381,23 +369,27 @@ void ProgFinder::updateInfo(void)
         if (m_help1Text)
             m_help1Text->SetText(tr("Select a program..."));
         if (m_help2Text)
+        {
             m_help2Text->SetText(tr("Select the title of the program you wish to find. "
                                     "When finished return with the left arrow key. "
                                     "Press SELECT to schedule a recording."));
+        }
 
         ResetMap(m_infoMap);
     }
     else if (GetFocusWidget() == m_timesList)
     {
-        if (m_showData.size() == 0)
+        if (m_showData.empty())
         {
             ResetMap(m_infoMap);
             if (m_help1Text)
                 m_help1Text->SetText(tr("No Programs"));
             if (m_help2Text)
+            {
                 m_help2Text->SetText(tr("There are no available programs under "
                                         "this search. Please select another "
                                         "search."));
+            }
         }
         else
         {
@@ -445,24 +437,23 @@ void ProgFinder::updateTimesList()
 
     m_timesList->Reset();
 
-    if (m_showData.size() > 0)
+    if (!m_showData.empty())
     {
         QString itemText;
         QDateTime starttime;
-        for (uint i = 0; i < m_showData.size(); ++i)
+        for (auto *show : m_showData)
         {
-            starttime = m_showData[i]->GetScheduledStartTime();
+            starttime = show->GetScheduledStartTime();
             itemText = MythDate::toString(starttime,
                                             MythDate::kDateTimeFull | MythDate::kSimplify);
 
-            MythUIButtonListItem *item =
-                new MythUIButtonListItem(m_timesList, "");
+            auto *item = new MythUIButtonListItem(m_timesList, "");
 
-            QString state = RecStatus::toUIState(m_showData[i]->GetRecordingStatus());
+            QString state = RecStatus::toUIState(show->GetRecordingStatus());
             item->SetText(itemText, "buttontext", state);
             item->DisplayState(state, "status");
 
-            m_showData[i]->ToMap(infoMap);
+            show->ToMap(infoMap);
             item->SetTextFromMap(infoMap, state);
         }
     }
@@ -523,7 +514,8 @@ void ProgFinder::selectShowData(QString progTitle, int newCurShow)
     MSqlBindings bindings;
     QString querystr = "WHERE program.title = :TITLE "
                        "  AND program.endtime > :ENDTIME "
-                       "  AND channel.visible = 1 ";
+                       "  AND channel.deleted IS NULL "
+                       "  AND channel.visible > 0 ";
     bindings[":TITLE"] = progTitle;
     bindings[":ENDTIME"] = progStart.addSecs(50 - progStart.time().second());
 
@@ -560,7 +552,8 @@ void ProgFinder::whereClauseGetSearchData(QString &where, MSqlBindings &bindings
     {
         where = "SELECT DISTINCT title FROM program "
                 "LEFT JOIN channel ON program.chanid = channel.chanid "
-                "WHERE channel.visible = 1 AND "
+                "WHERE channel.deleted IS NULL AND "
+                "      channel.visible > 0 AND "
                 "( title NOT REGEXP '^[A-Z0-9]' AND "
                 "  title NOT REGEXP '^The [A-Z0-9]' AND "
                 "  title NOT REGEXP '^A [A-Z0-9]' AND "
@@ -586,7 +579,8 @@ void ProgFinder::whereClauseGetSearchData(QString &where, MSqlBindings &bindings
 
         where = "SELECT DISTINCT title FROM program "
                 "LEFT JOIN channel ON program.chanid = channel.chanid "
-                "WHERE channel.visible = 1 "
+                "WHERE channel.deleted IS NULL "
+                "AND   channel.visible > 0 "
                 "AND ( title LIKE :ONE OR title LIKE :TWO "
                 "      OR title LIKE :THREE "
                 "      OR title LIKE :FOUR ) "
@@ -666,13 +660,11 @@ bool ProgFinder::formatSelectedData(QString& data, int charNum)
 
     if (charNum == 29 || charNum == 10)
     {
-        if (data.startsWith("The T") && charNum == 29)
+        if ((data.startsWith("The T") && charNum == 29) ||
+            (data.startsWith("The A") && charNum == 10))
             data = data.mid(4) + ", The";
-        else if (data.startsWith("The A") && charNum == 10)
-            data = data.mid(4) + ", The";
-        else if (data.startsWith("A T") && charNum == 29)
-            data = data.mid(2) + ", A";
-        else if (data.startsWith("A A") && charNum == 10)
+        else if ((data.startsWith("A T") && charNum == 29) ||
+                 (data.startsWith("A A") && charNum == 10))
             data = data.mid(2) + ", A";
         else if (data.startsWith("An A") && charNum == 10)
              data = data.mid(3) + ", An";
@@ -711,7 +703,7 @@ void ProgFinder::restoreSelectedData(QString &data)
 // Japanese specific program finder
 
 // japanese HIRAGANA list and more
-const QChar JaProgFinder::searchChars[] =
+const QChar JaProgFinder::kSearchChars[] =
 {
     // "あ", "か", "さ", "た",
     QChar(0x3042), QChar(0x304b), QChar(0x3055), QChar(0x305f),
@@ -726,16 +718,16 @@ JaProgFinder::JaProgFinder(MythScreenStack *parentStack, bool gg,
                            TV *player, bool embedVideo)
             : ProgFinder(parentStack, gg, player, embedVideo)
 {
-    for (numberOfSearchChars = 0; !searchChars[numberOfSearchChars].isNull();
-         ++numberOfSearchChars)
+    for (m_numberOfSearchChars = 0; !kSearchChars[m_numberOfSearchChars].isNull();
+         ++m_numberOfSearchChars)
          ;
 }
 
 void JaProgFinder::initAlphabetList()
 {
-    for (int charNum = 0; charNum < numberOfSearchChars; ++charNum)
+    for (int charNum = 0; charNum < m_numberOfSearchChars; ++charNum)
     {
-        new MythUIButtonListItem(m_alphabetList, QString(searchChars[charNum]));
+        new MythUIButtonListItem(m_alphabetList, QString(kSearchChars[charNum]));
     }
 }
 
@@ -750,7 +742,7 @@ void JaProgFinder::whereClauseGetSearchData(QString &where, MSqlBindings &bindin
 
     where = "SELECT DISTINCT title FROM program "
             "LEFT JOIN channel ON program.chanid = channel.chanid "
-            "WHERE channel.visible = 1 ";
+            "WHERE channel.deleted IS NULL AND channel.visible > 0 ";
 
     switch (charNum) {
     case 0:
@@ -826,7 +818,7 @@ void JaProgFinder::restoreSelectedData(QString& data)
 // Hebrew specific program finder
 
 // Hebrew alphabet list and more
-const QChar HeProgFinder::searchChars[] =
+const QChar HeProgFinder::kSearchChars[] =
 {
     // "א", "ב", "ג", "ד",
     QChar(0x5d0), QChar(0x5d1), QChar(0x5d2), QChar(0x5d3),
@@ -847,16 +839,16 @@ HeProgFinder::HeProgFinder(MythScreenStack *parentStack, bool gg,
                            TV *player, bool embedVideo)
             : ProgFinder(parentStack, gg, player, embedVideo)
 {
-    for (numberOfSearchChars = 0; !searchChars[numberOfSearchChars].isNull();
-         ++numberOfSearchChars)
+    for (m_numberOfSearchChars = 0; !kSearchChars[m_numberOfSearchChars].isNull();
+         ++m_numberOfSearchChars)
         ;
 }
 
 void HeProgFinder::initAlphabetList()
 {
-    for (int charNum = 0; charNum < numberOfSearchChars; ++charNum)
+    for (int charNum = 0; charNum < m_numberOfSearchChars; ++charNum)
     {
-        new MythUIButtonListItem(m_alphabetList, QString(searchChars[charNum]));
+        new MythUIButtonListItem(m_alphabetList, QString(kSearchChars[charNum]));
     }
 }
 
@@ -868,11 +860,11 @@ void HeProgFinder::whereClauseGetSearchData(QString &where, MSqlBindings &bindin
     QString searchChar = m_alphabetList->GetValue();
 
     if (searchChar.isEmpty())
-        searchChar = searchChars[0];
+        searchChar = kSearchChars[0];
 
     where = "SELECT DISTINCT title FROM program "
             "LEFT JOIN channel ON program.chanid = channel.chanid "
-            "WHERE channel.visible = 1 ";
+            "WHERE channel.deleted IS NULL AND channel.visible > 0 ";
 
     if (searchChar.contains('E'))
     {
@@ -924,7 +916,7 @@ void HeProgFinder::restoreSelectedData(QString& data)
 
 // Cyrrilic specific program finder
 // Cyrrilic alphabet list and more
-const QChar RuProgFinder::searchChars[] =
+const QChar RuProgFinder::kSearchChars[] =
 {
     // "А", "Б", "В", "Г",
     QChar(0x410), QChar(0x411), QChar(0x412), QChar(0x413),
@@ -959,16 +951,16 @@ RuProgFinder::RuProgFinder(MythScreenStack *parentStack, bool gg,
                            TV *player, bool embedVideo)
             : ProgFinder(parentStack, gg, player, embedVideo)
 {
-    for (numberOfSearchChars = 0; !searchChars[numberOfSearchChars].isNull();
-         ++numberOfSearchChars)
+    for (m_numberOfSearchChars = 0; !kSearchChars[m_numberOfSearchChars].isNull();
+         ++m_numberOfSearchChars)
         ;
 }
 
 void RuProgFinder::initAlphabetList()
 {
-    for (int charNum = 0; charNum < numberOfSearchChars; ++charNum)
+    for (int charNum = 0; charNum < m_numberOfSearchChars; ++charNum)
     {
-        new MythUIButtonListItem(m_alphabetList, searchChars[charNum]);
+        new MythUIButtonListItem(m_alphabetList, kSearchChars[charNum]);
     }
 }
 
@@ -981,14 +973,15 @@ void RuProgFinder::whereClauseGetSearchData(QString &where, MSqlBindings
    QString searchChar = m_alphabetList->GetValue();
 
    if (searchChar.isEmpty())
-       searchChar = searchChars[0];
+       searchChar = kSearchChars[0];
 
 
-  if (searchChar.contains('@'))
+   if (searchChar.contains('@'))
    {
        where = "SELECT DISTINCT title FROM program "
                "LEFT JOIN channel ON program.chanid = channel.chanid "
-               "WHERE channel.visible = 1 AND "
+               "WHERE channel.deleted IS NULL AND "
+               "      channel.visible > 0 AND "
                "( "
                   "title NOT REGEXP '^[A-Z0-9]' AND "
                   "title NOT REGEXP '^The [A-Z0-9]' AND "
@@ -1016,7 +1009,8 @@ void RuProgFinder::whereClauseGetSearchData(QString &where, MSqlBindings
 
        where = "SELECT DISTINCT title FROM program "
                "LEFT JOIN channel ON program.chanid = channel.chanid "
-               "WHERE channel.visible = 1 "
+               "WHERE channel.deleted IS NULL "
+               "AND   channel.visible > 0 "
                "AND ( title LIKE :ONE OR title LIKE :TWO "
                "      OR title LIKE :THREE "
                "      OR title LIKE :FOUR  "
@@ -1061,26 +1055,19 @@ void RuProgFinder::restoreSelectedData(QString& data)
 ProgramInfo *ProgFinder::GetCurrentProgram(void) const
 {
     return (GetFocusWidget() == m_timesList) ?
-        m_showData[m_timesList->GetCurrentPos()] : NULL;
+        m_showData[m_timesList->GetCurrentPos()] : nullptr;
 };
 
 //////////////////////////////////////////////////////////////////////////////
-
-SearchInputDialog::SearchInputDialog(MythScreenStack *parent,
-                                     const QString &defaultValue)
-                 : MythTextInputDialog(parent, "", FilterNone,
-                                       false, defaultValue)
-{
-}
 
 bool SearchInputDialog::Create(void)
 {
     if (!LoadWindowFromXML("schedule-ui.xml", "searchpopup", this))
         return false;
 
-    MythUIText *messageText = NULL;
-    MythUIButton *okButton = NULL;
-    MythUIButton *cancelButton = NULL;
+    MythUIText *messageText = nullptr;
+    MythUIButton *okButton = nullptr;
+    MythUIButton *cancelButton = nullptr;
 
     bool err = false;
     UIUtilE::Assign(this, m_textEdit, "input", &err);
@@ -1116,8 +1103,7 @@ void SearchInputDialog::editChanged(void)
     if (m_retObject)
     {
         //FIXME: add a new event type for this?
-        DialogCompletionEvent *dce =
-                new DialogCompletionEvent(m_id, 0, inputString, "");
+        auto *dce = new DialogCompletionEvent(m_id, 0, inputString, "");
         QCoreApplication::postEvent(m_retObject, dce);
     }
 }

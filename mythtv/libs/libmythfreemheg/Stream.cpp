@@ -30,12 +30,6 @@
 #include "freemheg.h"
 
 
-MHStream::MHStream()
-{
-    m_nStorage = ST_Stream;
-    m_nLooping = 0; // Infinity
-}
-
 void MHStream::Initialise(MHParseNode *p, MHEngine *engine)
 {
     MHPresentable::Initialise(p, engine);
@@ -49,19 +43,19 @@ void MHStream::Initialise(MHParseNode *p, MHEngine *engine)
 
             if (pItem->GetTagNo() == C_AUDIO)
             {
-                MHAudio *pAudio = new MHAudio;
+                auto *pAudio = new MHAudio;
                 m_Multiplex.Append(pAudio);
                 pAudio->Initialise(pItem, engine);
             }
             else if (pItem->GetTagNo() == C_VIDEO)
             {
-                MHVideo *pVideo = new MHVideo;
+                auto *pVideo = new MHVideo;
                 m_Multiplex.Append(pVideo);
                 pVideo->Initialise(pItem, engine);
             }
             else if (pItem->GetTagNo() == C_RTGRAPHICS)
             {
-                MHRTGraphics *pRtGraph = new MHRTGraphics;
+                auto *pRtGraph = new MHRTGraphics;
                 m_Multiplex.Append(pRtGraph);
                 pRtGraph->Initialise(pItem, engine);
             }
@@ -206,7 +200,7 @@ MHRoot *MHStream::FindByObjectNo(int n)
         }
     }
 
-    return NULL;
+    return nullptr;
 }
 
 void MHStream::BeginPlaying(MHEngine *engine)
@@ -253,14 +247,7 @@ void MHStream::SetCounterPosition(int pos, MHEngine *engine)
 
 void MHStream::SetSpeed(int speed, MHEngine *engine)
 {
-    engine->GetContext()->StreamPlay(speed);
-}
-
-MHAudio::MHAudio()
-{
-    m_nComponentTag = 0;
-    m_nOriginalVol = 0;
-    m_fStreamPlaying = false;
+    engine->GetContext()->StreamPlay(speed != 0);
 }
 
 void MHAudio::Initialise(MHParseNode *p, MHEngine *engine)
@@ -352,18 +339,6 @@ void MHAudio::StopPlaying(MHEngine *engine)
     }
 }
 
-
-MHVideo::MHVideo()
-{
-    m_nComponentTag = 0;
-    m_Termination = VI_Disappear;
-    m_nXDecodeOffset = 0;
-    m_nYDecodeOffset = 0;
-    m_nDecodeWidth = 0;
-    m_nDecodeHeight = 0;
-
-    m_fStreamPlaying = false;
-}
 
 void MHVideo::Initialise(MHParseNode *p, MHEngine *engine)
 {
@@ -467,7 +442,7 @@ void MHVideo::SetVideoDecodeOffset(int newXOffset, int newYOffset, MHEngine *eng
 }
 
 // Added action in UK MHEG.
-void MHVideo::GetVideoDecodeOffset(MHRoot *pXOffset, MHRoot *pYOffset, MHEngine *)
+void MHVideo::GetVideoDecodeOffset(MHRoot *pXOffset, MHRoot *pYOffset, MHEngine * /*engine*/)
 {
     pXOffset->SetVariableValue(m_nXDecodeOffset);
     pYOffset->SetVariableValue(m_nYDecodeOffset);
@@ -533,16 +508,6 @@ void MHVideo::StopPlaying(MHEngine *engine)
     }
 }
 
-
-MHRTGraphics::MHRTGraphics()
-{
-
-}
-
-MHRTGraphics::~MHRTGraphics()
-{
-
-}
 
 void MHRTGraphics::Initialise(MHParseNode *p, MHEngine *engine)
 {

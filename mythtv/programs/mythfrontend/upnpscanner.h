@@ -1,17 +1,20 @@
 #ifndef UPNPSCANNER_H
 #define UPNPSCANNER_H
 
-#include <QNetworkAccessManager>
-#include <QNetworkRequest>
-#include <QNetworkReply>
+#include <utility>
+
+// Qt headers
 #include <QDomDocument>
 #include <QMutex>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QNetworkRequest>
 #include <QTimer>
 
+// MythTV headers
 #include "upnpsubscription.h"
 #include "mthread.h"
 #include "upnpexp.h"
-
 #include "videometadatalistmanager.h"
 
 class MediaServer;
@@ -21,10 +24,11 @@ class meta_dir_node;
 class MediaServerItem
 {
   public:
-    MediaServerItem() : m_scanned(false) { }
-    MediaServerItem(QString id, QString parent, QString name, QString url)
-      : m_id(id), m_parentid(parent), m_name(name), m_url(url),
-        m_scanned(false) { }
+    MediaServerItem() = default;
+    MediaServerItem(QString  id, QString  parent,
+                    QString  name, QString  url)
+      : m_id(std::move(id)), m_parentid(std::move(parent)),
+        m_name(std::move(name)), m_url(std::move(url)) { }
     QString NextUnbrowsed(void);
     MediaServerItem* Find(QString &id);
     bool Add(MediaServerItem &item);
@@ -34,7 +38,7 @@ class MediaServerItem
     QString m_parentid;
     QString m_name;
     QString m_url;
-    bool    m_scanned;
+    bool    m_scanned {false};
     QMap<QString, MediaServerItem> m_children;
 };
 
@@ -43,10 +47,10 @@ class UPNPScanner : public QObject
    Q_OBJECT
 
   public:
-   ~UPNPScanner();
+   ~UPNPScanner() override;
 
-    static void         Enable(bool enable, UPNPSubscription *sub = NULL);
-    static UPNPScanner* Instance(UPNPSubscription *sub = NULL);
+    static void         Enable(bool enable, UPNPSubscription *sub = nullptr);
+    static UPNPScanner* Instance(UPNPSubscription *sub = nullptr);
 
     void StartFullScan(void);
     void GetInitialMetadata(VideoMetadataListManager::metadata_list* list,
@@ -57,8 +61,8 @@ class UPNPScanner : public QObject
     QMap<QString,QString> ServerList(void);
 
   protected:
-    virtual void customEvent(QEvent *event);
-    virtual void timerEvent(QTimerEvent * event);
+    void customEvent(QEvent *event) override; // QObject
+    void timerEvent(QTimerEvent * event) override; // QObject
 
   private slots:
     void Start();
@@ -68,7 +72,8 @@ class UPNPScanner : public QObject
     void replyFinished(QNetworkReply *reply);
 
   private:
-    explicit UPNPScanner(UPNPSubscription *sub);
+    explicit UPNPScanner(UPNPSubscription *sub)
+        :  m_subscription(sub) {}
     void ScheduleUpdate(void);
     void CheckFailure(const QUrl &url);
     void Debug(void);
@@ -87,12 +92,12 @@ class UPNPScanner : public QObject
 
     // xml parsing of device description
     bool ParseDescription(const QUrl &url, QNetworkReply *reply);
-    void ParseDevice(QDomElement &element, QString &controlURL,
-                     QString &eventURL, QString &friendlyName);
-    void ParseServiceList(QDomElement &element, QString &controlURL,
-                          QString &eventURL);
-    void ParseService(QDomElement &element, QString &controlURL,
-                      QString &eventURL);
+    static void ParseDevice(QDomElement &element, QString &controlURL,
+                            QString &eventURL, QString &friendlyName);
+    static void ParseServiceList(QDomElement &element, QString &controlURL,
+                                 QString &eventURL);
+    static void ParseService(QDomElement &element, QString &controlURL,
+                             QString &eventURL);
 
     // convert MediaServerItems to video metadata
     void GetServerContent(QString &usn, MediaServerItem *content,
@@ -105,23 +110,23 @@ class UPNPScanner : public QObject
     static  MThread*     gUPNPScannerThread;
     static  QMutex*      gUPNPScannerLock;
 
-    UPNPSubscription *m_subscription;
-    QMutex  m_lock;
+    UPNPSubscription *m_subscription {nullptr};
+    QMutex  m_lock {QMutex::Recursive};
     QHash<QString,MediaServer*> m_servers;
-    QNetworkAccessManager *m_network;
+    QNetworkAccessManager *m_network {nullptr};
     // TODO Move to QMultiHash when we move to Qt >=4.7
     // QHash(QUrl) unsupported on < 4.7
     QMultiMap<QUrl, QNetworkReply*> m_descriptionRequests;
     QMultiMap<QUrl, QNetworkReply*> m_browseRequests;
 
-    QTimer *m_updateTimer;
-    QTimer *m_watchdogTimer;
+    QTimer *m_updateTimer {nullptr};
+    QTimer *m_watchdogTimer {nullptr};
 
     QString m_masterHost;
-    int     m_masterPort;
+    int     m_masterPort {0};
 
-    bool    m_scanComplete;
-    bool    m_fullscan;
+    bool    m_scanComplete {false};
+    bool    m_fullscan {false};
 };
 
 #endif // UPNPSCANNER_H

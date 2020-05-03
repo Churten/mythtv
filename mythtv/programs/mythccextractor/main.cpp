@@ -26,12 +26,12 @@ namespace {
     void cleanup()
     {
         delete gContext;
-        gContext = NULL;
+        gContext = nullptr;
         SignalHandler::Done();
     }
 }
 
-static int RunCCExtract(const ProgramInfo &program_info, const QString & destdir)
+static int RunCCExtract(ProgramInfo &program_info, const QString & destdir)
 {
     QString filename = program_info.GetPlaybackURL();
     if (filename.startsWith("myth://"))
@@ -66,18 +66,17 @@ static int RunCCExtract(const ProgramInfo &program_info, const QString & destdir
         tmprbuf->SetWaitForWrite();
     }
 
-    PlayerFlags flags = (PlayerFlags)(kVideoIsNull | kAudioMuted  |
-                                      kDecodeNoLoopFilter | kDecodeFewBlocks |
-                                      kDecodeLowRes | kDecodeSingleThreaded |
-                                      kDecodeNoDecode);
-    MythCCExtractorPlayer *ccp = new MythCCExtractorPlayer(flags, true,
-                                                           filename, destdir);
-    PlayerContext *ctx = new PlayerContext(kCCExtractorInUseID);
+    auto flags = (PlayerFlags)(kVideoIsNull | kAudioMuted  |
+                               kDecodeNoLoopFilter | kDecodeFewBlocks |
+                               kDecodeLowRes | kDecodeSingleThreaded |
+                               kDecodeNoDecode);
+    auto *ccp = new MythCCExtractorPlayer(flags, true, filename, destdir);
+    auto *ctx = new PlayerContext(kCCExtractorInUseID);
     ctx->SetPlayingInfo(&program_info);
     ctx->SetRingBuffer(tmprbuf);
     ctx->SetPlayer(ccp);
 
-    ccp->SetPlayerInfo(NULL, NULL, ctx);
+    ccp->SetPlayerInfo(nullptr, nullptr, ctx);
     if (ccp->OpenFile() < 0)
     {
         cerr << "Failed to open " << qPrintable(filename) << endl;
@@ -97,8 +96,6 @@ static int RunCCExtract(const ProgramInfo &program_info, const QString & destdir
 int main(int argc, char *argv[])
 {
     QCoreApplication a(argc, argv);
-
-    bool useDB;
 
     QCoreApplication::setApplicationName(MYTH_APPNAME_MYTHCCEXTRACTOR);
 
@@ -121,7 +118,7 @@ int main(int argc, char *argv[])
 
     if (cmdline.toBool("showversion"))
     {
-        cmdline.PrintVersion();
+        MythCCExtractorCommandLineParser::PrintVersion();
         return GENERIC_EXIT_OK;
     }
 
@@ -134,7 +131,7 @@ int main(int argc, char *argv[])
 
     QString destdir = cmdline.toString("destdir");
 
-    useDB = !QFile::exists(infile);
+    bool useDB = !QFile::exists(infile);
 
     CleanupGuard callCleanup(cleanup);
 

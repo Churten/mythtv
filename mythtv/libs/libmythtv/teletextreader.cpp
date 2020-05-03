@@ -1,6 +1,6 @@
 #include "teletextreader.h"
 
-#include <string.h>
+#include <cstring>
 
 #include "vbilut.h"
 #include "tv.h"
@@ -8,17 +8,10 @@
 #include "tv_actions.h"    // for ACTION_MENUBLUE, etc
 #include "mythlogging.h"
 
-#define MAGAZINE(page) (page / 256)
+#define MAGAZINE(page) ((page) / 256)
 
 TeletextReader::TeletextReader()
-  : m_curpage(0x100),           m_cursubpage(-1),
-    m_curpage_showheader(true), m_curpage_issubtitle(false),
-    m_transparent(false),       m_revealHidden(false),
-    m_header_changed(false),    m_page_changed(false),
-    m_fetchpage(0),             m_fetchsubpage(0)
 {
-    memset(m_pageinput, 0, sizeof(m_pageinput));
-    memset(m_header,    0, sizeof(m_header));
     for (int i = 0; i < 256; i++)
     {
         m_bitswap[i] = 0;
@@ -29,10 +22,6 @@ TeletextReader::TeletextReader()
     Reset();
 }
 
-TeletextReader::~TeletextReader()
-{
-}
-
 bool TeletextReader::KeyPress(const QString &key)
 {
     int newPage        = m_curpage;
@@ -40,7 +29,7 @@ bool TeletextReader::KeyPress(const QString &key)
     bool numeric_input = false;
 
     TeletextSubPage *curpage = FindSubPage(m_curpage, m_cursubpage);
-    TeletextPage *page;
+    TeletextPage *page = nullptr;
 
     if (key == ACTION_0 || key == ACTION_1 || key == ACTION_2 ||
         key == ACTION_3 || key == ACTION_4 || key == ACTION_5 ||
@@ -115,7 +104,7 @@ bool TeletextReader::KeyPress(const QString &key)
         if (!curpage)
             return true;
 
-        if ((page = FindPage(curpage->floflink[0])) != NULL)
+        if ((page = FindPage(curpage->floflink[0])) != nullptr)
         {
             newPage = page->pagenum;
             newSubPage = -1;
@@ -127,7 +116,7 @@ bool TeletextReader::KeyPress(const QString &key)
         if (!curpage)
             return true;
 
-        if ((page = FindPage(curpage->floflink[1])) != NULL)
+        if ((page = FindPage(curpage->floflink[1])) != nullptr)
         {
             newPage = page->pagenum;
             newSubPage = -1;
@@ -139,7 +128,7 @@ bool TeletextReader::KeyPress(const QString &key)
         if (!curpage)
             return true;
 
-        if ((page = FindPage(curpage->floflink[2])) != NULL)
+        if ((page = FindPage(curpage->floflink[2])) != nullptr)
         {
             newPage = page->pagenum;
             newSubPage = -1;
@@ -151,7 +140,7 @@ bool TeletextReader::KeyPress(const QString &key)
         if (!curpage)
             return true;
 
-        if ((page = FindPage(curpage->floflink[3])) != NULL)
+        if ((page = FindPage(curpage->floflink[3])) != nullptr)
         {
             newPage = page->pagenum;
             newSubPage = -1;
@@ -163,7 +152,7 @@ bool TeletextReader::KeyPress(const QString &key)
         if (!curpage)
             return true;
 
-        if ((page = FindPage(curpage->floflink[4])) != NULL)
+        if ((page = FindPage(curpage->floflink[4])) != nullptr)
         {
             newPage = page->pagenum;
             newSubPage = -1;
@@ -203,11 +192,12 @@ QString TeletextReader::GetPage(void)
     if (mag > 8 || mag < 1)
         return str;
 
-    int count = 1, selected = 0;
+    int count = 1;
+    int selected = 0;
     const TeletextPage *page = FindPage(m_curpage);
     if (page)
     {
-        m_magazines[mag - 1].lock.lock();
+        m_magazines[mag - 1].lock->lock();
         int_to_subpage_t::const_iterator subpageIter;
         subpageIter = page->subpages.begin();
         while (subpageIter != page->subpages.end())
@@ -222,12 +212,12 @@ QString TeletextReader::GetPage(void)
             else
                 str += " ";
 
-            str += QString().sprintf("%02X", subpage->subpagenum);
+            str += QString("%1").arg(subpage->subpagenum,2,16,QChar('0'));
 
             ++subpageIter;
             ++count;
         }
-        m_magazines[mag - 1].lock.unlock();
+        m_magazines[mag - 1].lock->unlock();
     }
 
     if (str.isEmpty())
@@ -270,14 +260,14 @@ void TeletextReader::SetPage(int page, int subpage)
 
 void TeletextReader::Reset(void)
 {
-    for (uint mag = 0; mag < 8; mag++)
+    for (auto & mag : m_magazines)
     {
-        QMutexLocker lock(&m_magazines[mag].lock);
+        QMutexLocker lock(mag.lock);
 
         // clear all sub pages in page
         int_to_page_t::iterator iter;
-        iter = m_magazines[mag].pages.begin();
-        while (iter != m_magazines[mag].pages.end())
+        iter = mag.pages.begin();
+        while (iter != mag.pages.end())
         {
             TeletextPage *page = &iter->second;
             page->subpages.clear();
@@ -285,10 +275,10 @@ void TeletextReader::Reset(void)
         }
 
         // clear pages
-        m_magazines[mag].pages.clear();
-        m_magazines[mag].current_page = 0;
-        m_magazines[mag].current_subpage = 0;
-        m_magazines[mag].loadingpage.active = false;
+        mag.pages.clear();
+        mag.current_page = 0;
+        mag.current_subpage = 0;
+        mag.loadingpage.active = false;
     }
     memset(m_header, ' ', 40);
 
@@ -324,7 +314,7 @@ void TeletextReader::AddPageHeader(int page, int subpage, const uint8_t *buf,
         // a different page number but the same magazine number.  The same
         // setting shall be used for all page headers in the service.
 
-        bool isMagazineSerialMode = flags & TP_MAGAZINE_SERIAL;
+        bool isMagazineSerialMode = (flags & TP_MAGAZINE_SERIAL) != 0;
         if (!(isMagazineSerialMode) && m != magazine)
         {
             continue;   // in parallel mode only process magazine
@@ -373,8 +363,8 @@ void TeletextReader::AddPageHeader(int page, int subpage, const uint8_t *buf,
     ttpage->active = true;
     ttpage->subpagenum = subpage;
 
-    for (uint i = 0; i < 6; i++)
-        ttpage->floflink[i] = 0;
+    for (int & flof : ttpage->floflink)
+        flof = 0;
 
     ttpage->lang = lang;
     ttpage->flags = flags;
@@ -407,7 +397,10 @@ void TeletextReader::AddTeletextData(int magazine, int row,
     //LOG(VB_GENERAL, LOG_ERR, QString("AddTeletextData(%1, %2)")
     //    .arg(magazine).arg(row));
 
-    int b1, b2, b3, err = 0;
+    int b1 = 0;
+    int b2 = 0;
+    int b3 = 0;
+    int err = 0;
 
     if (magazine < 1 || magazine > 8)
         return;
@@ -524,10 +517,10 @@ void TeletextReader::HeaderUpdated(
     (void)subpage;
     (void)lang;
 
-    if (page_ptr == NULL)
+    if (page_ptr == nullptr)
         return;
 
-    if (m_curpage_showheader == false)
+    if (!m_curpage_showheader)
         return;
 
     m_header_changed = true;
@@ -539,14 +532,14 @@ const TeletextPage *TeletextReader::FindPageInternal(
     int mag = MAGAZINE(page);
 
     if (mag > 8 || mag < 1)
-        return NULL;
+        return nullptr;
 
-    QMutexLocker lock(&m_magazines[mag - 1].lock);
+    QMutexLocker lock(m_magazines[mag - 1].lock);
 
     int_to_page_t::const_iterator pageIter;
     pageIter = m_magazines[mag - 1].pages.find(page);
     if (pageIter == m_magazines[mag - 1].pages.end())
-        return NULL;
+        return nullptr;
 
     const TeletextPage *res = &pageIter->second;
     if (direction == -1)
@@ -583,25 +576,24 @@ const TeletextSubPage *TeletextReader::FindSubPageInternal(
     int mag = MAGAZINE(page);
 
     if (mag > 8 || mag < 1)
-        return NULL;
+        return nullptr;
 
-    QMutexLocker lock(&m_magazines[mag - 1].lock);
+    QMutexLocker lock(m_magazines[mag - 1].lock);
 
     int_to_page_t::const_iterator pageIter;
     pageIter = m_magazines[mag - 1].pages.find(page);
     if (pageIter == m_magazines[mag - 1].pages.end())
-        return NULL;
+        return nullptr;
 
     const TeletextPage *ttpage = &(pageIter->second);
-    int_to_subpage_t::const_iterator subpageIter =
-        ttpage->subpages.begin();
+    auto subpageIter = ttpage->subpages.cbegin();
 
     // try to find the subpage given, or first if subpage == -1
     if (subpage != -1)
         subpageIter = ttpage->subpages.find(subpage);
 
-    if (subpageIter == ttpage->subpages.end())
-        return NULL;
+    if (subpageIter == ttpage->subpages.cend())
+        return nullptr;
 
     if (subpage == -1)
         return &(subpageIter->second);
@@ -610,10 +602,9 @@ const TeletextSubPage *TeletextReader::FindSubPageInternal(
     if (direction == -1)
     {
         --subpageIter;
-        if (subpageIter == ttpage->subpages.end())
+        if (subpageIter == ttpage->subpages.cend())
         {
-            int_to_subpage_t::const_reverse_iterator iter =
-                ttpage->subpages.rbegin();
+            auto iter = ttpage->subpages.crbegin();
             res = &(iter->second);
         }
         else
@@ -625,8 +616,8 @@ const TeletextSubPage *TeletextReader::FindSubPageInternal(
     if (direction == 1)
     {
         ++subpageIter;
-        if (subpageIter == ttpage->subpages.end())
-            subpageIter = ttpage->subpages.begin();
+        if (subpageIter == ttpage->subpages.cend())
+            subpageIter = ttpage->subpages.cbegin();
 
         res = &(subpageIter->second);
     }

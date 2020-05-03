@@ -11,6 +11,7 @@
 // MythTV includes
 #include "hdhrstreamhandler.h"
 #include "atscstreamdata.h"
+#include "tsstreamdata.h"
 #include "hdhrrecorder.h"
 #include "hdhrchannel.h"
 #include "ringbuffer.h"
@@ -18,12 +19,7 @@
 #include "mythlogging.h"
 
 #define LOC QString("HDHRRec[%1]: ") \
-            .arg(tvrec ? tvrec->GetInputId() : -1)
-
-HDHRRecorder::HDHRRecorder(TVRec *rec, HDHRChannel *channel)
-    : DTVRecorder(rec), _channel(channel), _stream_handler(NULL)
-{
-}
+            .arg(m_tvrec ? m_tvrec->GetInputId() : -1)
 
 bool HDHRRecorder::Open(void)
 {
@@ -35,8 +31,18 @@ bool HDHRRecorder::Open(void)
 
     ResetForNewFile();
 
-    _stream_handler = HDHRStreamHandler::Get(_channel->GetDevice(),
-                                     (tvrec ? tvrec->GetInputId() : -1));
+    if (m_channel->GetFormat().compare("MPTS") == 0)
+    {
+        // MPTS only.  Use TSStreamData to write out unfiltered data.
+        LOG(VB_RECORD, LOG_INFO, LOC + "Using TSStreamData");
+        SetStreamData(new TSStreamData(m_tvrec ? m_tvrec->GetInputId() : -1));
+        m_recordMptsOnly = true;
+        m_recordMpts = false;
+    }
+
+    m_streamHandler = HDHRStreamHandler::Get(m_channel->GetDevice(),
+                                             m_channel->GetInputID(),
+                                             m_channel->GetMajorID());
 
     LOG(VB_RECORD, LOG_INFO, LOC + "HDHR opened successfully");
 
@@ -48,20 +54,23 @@ void HDHRRecorder::Close(void)
     LOG(VB_RECORD, LOG_INFO, LOC + "Close() -- begin");
 
     if (IsOpen())
-        HDHRStreamHandler::Return(_stream_handler,
-                                  (tvrec ? tvrec->GetInputId() : -1));
+        HDHRStreamHandler::Return(m_streamHandler,
+                                  (m_tvrec ? m_tvrec->GetInputId() : -1));
 
     LOG(VB_RECORD, LOG_INFO, LOC + "Close() -- end");
 }
 
 void HDHRRecorder::StartNewFile(void)
 {
-    if (_record_mpts)
-        _stream_handler->AddNamedOutputFile(ringBuffer->GetFilename());
+    if (!m_recordMptsOnly)
+    {
+        if (m_recordMpts)
+            m_streamHandler->AddNamedOutputFile(m_ringBuffer->GetFilename());
 
-    // Make sure the first things in the file are a PAT & PMT
-    HandleSingleProgramPAT(_stream_data->PATSingleProgram(), true);
-    HandleSingleProgramPMT(_stream_data->PMTSingleProgram(), true);
+        // Make sure the first things in the file are a PAT & PMT
+        HandleSingleProgramPAT(m_streamData->PATSingleProgram(), true);
+        HandleSingleProgramPMT(m_streamData->PMTSingleProgram(), true);
+    }
 }
 
 void HDHRRecorder::run(void)
@@ -71,24 +80,32 @@ void HDHRRecorder::run(void)
     /* Create video socket. */
     if (!Open())
     {
-        _error = "Failed to open HDHRRecorder device";
-        LOG(VB_GENERAL, LOG_ERR, LOC + _error);
+        m_error = "Failed to open HDHRRecorder device";
+        LOG(VB_GENERAL, LOG_ERR, LOC + m_error);
         return;
     }
 
     {
-        QMutexLocker locker(&pauseLock);
-        request_recording = true;
-        recording = true;
-        recordingWait.wakeAll();
+        QMutexLocker locker(&m_pauseLock);
+        m_requestRecording = true;
+        m_recording = true;
+        m_recordingWait.wakeAll();
     }
+
+    // Listen for time table on DVB standard streams
+    if (m_channel && (m_channel->GetSIStandard() == "dvb"))
+        m_streamData->AddListeningPID(DVB_TDT_PID);
+
+    // Gives errors about invalid PID but it does work...
+    if (m_recordMptsOnly)
+        m_streamData->AddListeningPID(0x2000);
 
     StartNewFile();
 
-    _stream_data->AddAVListener(this);
-    _stream_data->AddWritingListener(this);
-    _stream_handler->AddListener(_stream_data, false, false,
-                         (_record_mpts) ? ringBuffer->GetFilename() : QString());
+    m_streamData->AddAVListener(this);
+    m_streamData->AddWritingListener(this);
+    m_streamHandler->AddListener(m_streamData, false, false,
+                         (m_recordMpts) ? m_ringBuffer->GetFilename() : QString());
 
     while (IsRecordingRequested() && !IsErrored())
     {
@@ -100,13 +117,13 @@ void HDHRRecorder::run(void)
 
         {   // sleep 100 milliseconds unless StopRecording() or Unpause()
             // is called, just to avoid running this too often.
-            QMutexLocker locker(&pauseLock);
-            if (!request_recording || request_pause)
+            QMutexLocker locker(&m_pauseLock);
+            if (!m_requestRecording || m_requestPause)
                 continue;
-            unpauseWait.wait(&pauseLock, 100);
+            m_unpauseWait.wait(&m_pauseLock, 100);
         }
 
-        if (!_input_pmt)
+        if (!m_inputPmt && !m_recordMptsOnly)
         {
             LOG(VB_GENERAL, LOG_WARNING, LOC +
                     "Recording will not commence until a PMT is set.");
@@ -114,53 +131,53 @@ void HDHRRecorder::run(void)
             continue;
         }
 
-        if (!_stream_handler->IsRunning())
+        if (!m_streamHandler->IsRunning())
         {
-            _error = "Stream handler died unexpectedly.";
-            LOG(VB_GENERAL, LOG_ERR, LOC + _error);
+            m_error = "Stream handler died unexpectedly.";
+            LOG(VB_GENERAL, LOG_ERR, LOC + m_error);
         }
     }
 
     LOG(VB_RECORD, LOG_INFO, LOC + "run -- ending...");
 
-    _stream_handler->RemoveListener(_stream_data);
-    _stream_data->RemoveWritingListener(this);
-    _stream_data->RemoveAVListener(this);
+    m_streamHandler->RemoveListener(m_streamData);
+    m_streamData->RemoveWritingListener(this);
+    m_streamData->RemoveAVListener(this);
 
     Close();
 
     FinishRecording();
 
-    QMutexLocker locker(&pauseLock);
-    recording = false;
-    recordingWait.wakeAll();
+    QMutexLocker locker(&m_pauseLock);
+    m_recording = false;
+    m_recordingWait.wakeAll();
 
     LOG(VB_RECORD, LOG_INFO, LOC + "run -- end");
 }
 
 bool HDHRRecorder::PauseAndWait(int timeout)
 {
-    QMutexLocker locker(&pauseLock);
-    if (request_pause)
+    QMutexLocker locker(&m_pauseLock);
+    if (m_requestPause)
     {
         if (!IsPaused(true))
         {
-            _stream_handler->RemoveListener(_stream_data);
+            m_streamHandler->RemoveListener(m_streamData);
 
-            paused = true;
-            pauseWait.wakeAll();
-            if (tvrec)
-                tvrec->RecorderPaused();
+            m_paused = true;
+            m_pauseWait.wakeAll();
+            if (m_tvrec)
+                m_tvrec->RecorderPaused();
         }
 
-        unpauseWait.wait(&pauseLock, timeout);
+        m_unpauseWait.wait(&m_pauseLock, timeout);
     }
 
-    if (!request_pause && IsPaused(true))
+    if (!m_requestPause && IsPaused(true))
     {
-        paused = false;
-        _stream_handler->AddListener(_stream_data);
-        unpauseWait.wakeAll();
+        m_paused = false;
+        m_streamHandler->AddListener(m_streamData);
+        m_unpauseWait.wakeAll();
     }
 
     return IsPaused(true);
@@ -168,7 +185,7 @@ bool HDHRRecorder::PauseAndWait(int timeout)
 
 QString HDHRRecorder::GetSIStandard(void) const
 {
-    return _channel->GetSIStandard();
+    return m_channel->GetSIStandard();
 }
 
 /* vim: set expandtab tabstop=4 shiftwidth=4: */

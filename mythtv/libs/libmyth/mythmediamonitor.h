@@ -13,10 +13,13 @@
 #include "mythmedia.h"
 
 /// Stores details of media handlers
+
+// Adding member initializers caused compilation to fail with an error
+// that it cannot convert a brace-enclosed initializer list to MHData.
 struct MHData
 {
-    void   (*callback)(MythMediaDevice *mediadevice);
-    int      MythMediaType;
+    void   (*callback)(MythMediaDevice *mediadevice); // NOLINT(cppcoreguidelines-pro-type-member-init)
+    int      MythMediaType;                           // NOLINT(cppcoreguidelines-pro-type-member-init)
     QString  destination;
     QString  description;
 };
@@ -26,9 +29,9 @@ class MonitorThread : public MThread
 {
   public:
     MonitorThread(MediaMonitor* pMon,  unsigned long interval);
-    ~MonitorThread() { wait(); m_Monitor = NULL; }
+    ~MonitorThread() override { wait(); m_Monitor = nullptr; }
     void setMonitor(MediaMonitor* pMon) { m_Monitor = pMon; }
-    virtual void run(void);
+    void run(void) override; // MThread
 
   protected:
     QPointer<MediaMonitor> m_Monitor;
@@ -68,7 +71,6 @@ class MPUBLIC MediaMonitor : public QObject
 
     void RegisterMediaHandler(const QString  &destination,
                               const QString  &description,
-                              const QString  &key,
                               void          (*callback) (MythMediaDevice*),
                               int             mediaType,
                               const QString  &extensions);
@@ -90,17 +92,17 @@ class MPUBLIC MediaMonitor : public QObject
 
   protected:
     MediaMonitor(QObject *par, unsigned long interval, bool allowEject);
-    virtual ~MediaMonitor() {}
+    ~MediaMonitor() override = default;
 
-    void AttemptEject(MythMediaDevice *device);
+    static void AttemptEject(MythMediaDevice *device);
     void CheckDevices(void);
     virtual void CheckDeviceNotifications(void) {};
     virtual bool AddDevice(MythMediaDevice* pDevice) = 0;
     bool RemoveDevice(const QString &dev);
     bool shouldIgnore(const MythMediaDevice *device);
-    bool eventFilter(QObject *obj, QEvent *event);
+    bool eventFilter(QObject *obj, QEvent *event) override; // QObject
 
-    const QString listDevices(void);
+    QString listDevices(void);
 
     static QString defaultDevice(const QString &setting,
                                  const QString &label,
@@ -118,18 +120,18 @@ class MPUBLIC MediaMonitor : public QObject
     // List of devices/mountpoints that the user doesn't want to monitor:
     QStringList                  m_IgnoreList;
 
-    bool volatile                m_Active;      ///< Was MonitorThread started?
+    bool volatile                m_Active {false};      ///< Was MonitorThread started?
     QWaitCondition               m_wait;
-    MonitorThread                *m_Thread;
+    MonitorThread               *m_Thread {nullptr};
     unsigned long                m_MonitorPollingInterval;
     bool                         m_AllowEject;
 
     QMap<QString, MHData>        m_handlerMap;  ///< Registered Media Handlers
 
-    static MediaMonitor         *c_monitor;
+    static MediaMonitor         *s_monitor;
 };
 
-#define REG_MEDIA_HANDLER(a, b, c, d, e, f) \
-        MediaMonitor::GetMediaMonitor()->RegisterMediaHandler(a, b, c, d, e, f)
+#define REG_MEDIA_HANDLER(a, b, c, d, e) \
+    MediaMonitor::GetMediaMonitor()->RegisterMediaHandler(a, b, c, d, e)
 
 #endif // MYTH_MEDIA_MONITOR_H

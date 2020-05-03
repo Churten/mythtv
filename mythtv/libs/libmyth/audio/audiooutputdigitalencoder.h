@@ -13,8 +13,8 @@ extern "C" {
 
 class AudioOutputDigitalEncoder
 {
-    typedef int16_t inbuf_t;
-    typedef int16_t outbuf_t;
+    using inbuf_t  = int16_t;
+    using outbuf_t = int16_t;
 
   public:
     AudioOutputDigitalEncoder(void);
@@ -24,23 +24,24 @@ class AudioOutputDigitalEncoder
     size_t Encode(void *buf, int len, AudioFormat format);
     size_t GetFrames(void *ptr, int maxlen);
     int    Buffered(void) const
-    { return inlen / sizeof(inbuf_t) / av_context->channels; }
+    { return m_inlen / sizeof(inbuf_t) / m_avContext->channels; }
     void    clear();
 
   private:
     void   Reset(void);
-    void  *realloc(void *ptr, size_t old_size, size_t new_size);
+    static void *realloc(void *ptr, size_t old_size, size_t new_size);
 
-    AVCodecContext *av_context;
-    outbuf_t       *out;
-    size_t          out_size;
-    inbuf_t        *in, *inp;
-    size_t          in_size;
-    int             outlen;
-    int             inlen;
-    size_t          samples_per_frame;
-    SPDIFEncoder   *m_spdifenc;
-    AVFrame        *m_frame;
+    AVCodecContext *m_avContext         {nullptr};
+    outbuf_t       *m_out               {nullptr};
+    size_t          m_outSize           {0};
+    inbuf_t        *m_in                {nullptr};
+    inbuf_t        *m_inp               {nullptr};
+    size_t          m_inSize            {0};
+    int             m_outlen            {0};
+    int             m_inlen             {0};
+    size_t          m_samplesPerFrame   {0};
+    SPDIFEncoder   *m_spdifEnc          {nullptr};
+    AVFrame        *m_frame             {nullptr};
 };
 
 #endif

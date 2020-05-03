@@ -19,20 +19,7 @@
   */
 RawSettingsEditor::RawSettingsEditor(MythScreenStack *parent, const char *name)
   : MythScreenType(parent, name),
-    m_title(tr("Settings Editor")),
-    // Settings widgets
-    m_settingsList(NULL),      m_settingValue(NULL),
-    // Action buttons
-    m_saveButton(NULL),        m_cancelButton(NULL),
-    // Labels
-    m_textLabel(NULL)
-{
-}
-
-/** \fn RawSettingsEditor::~RawSettingsEditor()
- *  \brief Raw Settings Editor destructor
- */
-RawSettingsEditor::~RawSettingsEditor()
+    m_title(tr("Settings Editor"))
 {
 }
 
@@ -63,7 +50,7 @@ bool RawSettingsEditor::Create(void)
     if (text)
         text->SetText(m_title);
 
-    MythUIShape *shape = NULL;
+    MythUIShape *shape = nullptr;
 
     for (int i = -8; i <= 8; i++)
     {
@@ -111,8 +98,6 @@ void RawSettingsEditor::Load(void)
 
         ++it;
     }
-    m_settingValues.detach();
-    m_origValues.detach();
 }
 
 /** \fn RawSettingsEditor::Init(void)
@@ -125,8 +110,8 @@ void RawSettingsEditor::Init(void)
 
     while (it != settingsList.end())
     {
-        MythUIButtonListItem *item = new MythUIButtonListItem(m_settingsList,
-                                                    "", qVariantFromValue(*it));
+        auto *item = new MythUIButtonListItem(m_settingsList, "",
+                                              QVariant::fromValue(*it));
 
         if (m_settings[*it].isEmpty())
             item->SetText(*it);
@@ -162,7 +147,7 @@ void RawSettingsEditor::Save(void)
         ++it;
     }
 
-    if (changed && (!gCoreContext->IsMasterHost() || gCoreContext->BackendIsRunning()))
+    if (changed && (!gCoreContext->IsMasterHost() || MythCoreContext::BackendIsRunning()))
         gCoreContext->SendMessage("CLEAR_SETTINGS_CACHE");
 
     Close();
@@ -195,7 +180,6 @@ void RawSettingsEditor::selectionChanged(MythUIButtonListItem *item)
  */
 void RawSettingsEditor::updatePrevNextTexts(void)
 {
-    MythUIButtonListItem *tmpitem;
     int curPos = m_settingsList->GetCurrentPos();
     int recs   = m_settingsList->GetCount();
 
@@ -212,7 +196,7 @@ void RawSettingsEditor::updatePrevNextTexts(void)
                 if (m_prevNextShapes.contains(i))
                     m_prevNextShapes[i]->Show();
 
-                tmpitem = m_settingsList->GetItemAt(curPos + i);
+                auto *tmpitem = m_settingsList->GetItemAt(curPos + i);
                 m_prevNextTexts[i]->SetText(
                     m_settingValues[tmpitem->GetData().toString()]);
             }

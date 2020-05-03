@@ -25,7 +25,7 @@ struct KeyDefinition
 
 struct KeyEventDefinition
 {
-    int keyCode;
+    int keyCode {0};
     Qt::KeyboardModifiers modifiers;
 };
 
@@ -45,9 +45,9 @@ class MUI_PUBLIC MythUIVirtualKeyboard : public MythScreenType
 
   public:
     MythUIVirtualKeyboard(MythScreenStack *parentStack,  MythUITextEdit *m_parentEdit);
-    ~MythUIVirtualKeyboard();
-    bool Create(void);
-    bool keyPressEvent(QKeyEvent *e);
+    ~MythUIVirtualKeyboard() override = default;
+    bool Create(void) override; // MythScreenType
+    bool keyPressEvent(QKeyEvent *e) override; // MythScreenType
 
   signals:
     void keyPressed(QString key);
@@ -68,26 +68,26 @@ class MUI_PUBLIC MythUIVirtualKeyboard : public MythScreenType
     void loadKeyDefinitions(const QString &lang);
     void parseKey(const QDomElement &element);
     void updateKeys(bool connectSignals = false);
-    QString decodeChar(QString c);
-    QString getKeyText(KeyDefinition key);
-    void loadEventKeyDefinitions(KeyEventDefinition *keyDef, const QString &action);
+    static QString decodeChar(QString c);
+    QString getKeyText(const KeyDefinition& key);
+    static void loadEventKeyDefinitions(KeyEventDefinition *keyDef, const QString &action);
 
-    MythUITextEdit *m_parentEdit;
+    MythUITextEdit *m_parentEdit   {nullptr};
     PopupPosition   m_preferredPos;
 
     QMap<QString, KeyDefinition> m_keyMap;
 
-    MythUIButton *m_lockButton;
-    MythUIButton *m_altButton;
-    MythUIButton *m_compButton;
-    MythUIButton *m_shiftLButton;
-    MythUIButton *m_shiftRButton;
+    MythUIButton *m_lockButton     {nullptr};
+    MythUIButton *m_altButton      {nullptr};
+    MythUIButton *m_compButton     {nullptr};
+    MythUIButton *m_shiftLButton   {nullptr};
+    MythUIButton *m_shiftRButton   {nullptr};
 
-    bool          m_shift;
-    bool          m_alt;
-    bool          m_lock;
+    bool          m_shift          {false};
+    bool          m_alt            {false};
+    bool          m_lock           {false};
 
-    bool          m_composing;
+    bool          m_composing      {false};
     QString       m_composeStr;
 
     KeyEventDefinition m_upKey;

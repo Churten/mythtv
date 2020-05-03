@@ -7,10 +7,8 @@
 #ifndef TEXT_SUBTITLE_PARSER_H
 #define TEXT_SUBTITLE_PARSER_H
 
-// POSIX headers
-#include <stdint.h>
-
 // C++ headers
+#include <cstdint>
 #include <vector>
 using namespace std;
 
@@ -21,32 +19,26 @@ using namespace std;
 class text_subtitle_t
 {
   public:
-    text_subtitle_t(long start_, long end_) : start(start_), end(end_) {}
-    text_subtitle_t() : start(0), end(0) {}
-    text_subtitle_t(const text_subtitle_t &other) :
-        start(other.start), end(other.end),
-        textLines(other.textLines)
-    {
-        textLines.detach();
-    }
+    text_subtitle_t(long start_, long end_) : m_start(start_), m_end(end_) {}
+    text_subtitle_t() = default;
+    text_subtitle_t(const text_subtitle_t&) = default;
+    text_subtitle_t& operator= (const text_subtitle_t&) = default;
 
   public:
-    uint64_t    start;      ///< Starting time in msec or starting frame
-    uint64_t    end;        ///< Ending time in msec or ending frame
-    QStringList textLines;
+    uint64_t    m_start {0};  ///< Starting time in msec or starting frame
+    uint64_t    m_end   {0};  ///< Ending time in msec or ending frame
+    QStringList m_textLines;
 };
 
-typedef vector<text_subtitle_t> TextSubtitleList;
+using TextSubtitleList = vector<text_subtitle_t>;
 
 class TextSubtitles
 {
   public:
-    TextSubtitles() : m_frameBasedTiming(false), m_byteCount(0),
-                      m_isInProgress(false), m_hasSubtitles(false),
-                      m_lock(QMutex::Recursive)
+    TextSubtitles()
     {
-        m_lastReturnedSubtitle.start = 0;
-        m_lastReturnedSubtitle.end   = 0;
+        m_lastReturnedSubtitle.m_start = 0;
+        m_lastReturnedSubtitle.m_end   = 0;
     }
 
     virtual ~TextSubtitles();
@@ -98,18 +90,18 @@ class TextSubtitles
   private:
     TextSubtitleList          m_subtitles;
     mutable text_subtitle_t   m_lastReturnedSubtitle;
-    bool                      m_frameBasedTiming;
+    bool                      m_frameBasedTiming {false};
     QString                   m_fileName;
     QDateTime                 m_lastLoaded;
-    off_t                     m_byteCount;
+    off_t                     m_byteCount        {0};
     // Note: m_isInProgress is overly conservative because it doesn't
     // change from true to false after a recording completes.
-    bool                      m_isInProgress;
+    bool                      m_isInProgress     {false};
     // It's possible to have zero subtitles at the start of playback
     // because none have yet been written for an in-progress
     // recording, so use m_hasSubtitles instead of m_subtitles.size().
-    bool                      m_hasSubtitles;
-    QMutex                    m_lock;
+    bool                      m_hasSubtitles     {false};
+    QMutex                    m_lock             {QMutex::Recursive};
 };
 
 class TextSubtitleParser

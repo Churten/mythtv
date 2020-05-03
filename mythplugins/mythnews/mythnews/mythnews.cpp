@@ -41,23 +41,10 @@
  */
 MythNews::MythNews(MythScreenStack *parent, const QString &name) :
     MythScreenType(parent, name),
-    m_lock(QMutex::Recursive),
-    m_RetrieveTimer(new QTimer(this)),
-    m_TimerTimeout(10*60*1000),
-    m_UpdateFreq(gCoreContext->GetNumSetting("NewsUpdateFrequency", 30)),
+    m_retrieveTimer(new QTimer(this)),
+    m_updateFreq(gCoreContext->GetNumSetting("NewsUpdateFrequency", 30)),
     m_zoom(gCoreContext->GetSetting("WebBrowserZoomLevel", "1.0")),
-    m_browser(gCoreContext->GetSetting("WebBrowserCommand", "")),
-    m_menuPopup(NULL),
-    m_sitesList(NULL),
-    m_articlesList(NULL),
-    m_nositesText(NULL),
-    m_updatedText(NULL),
-    m_titleText(NULL),
-    m_descText(NULL),
-    m_thumbnailImage(NULL),
-    m_downloadImage(NULL),
-    m_enclosureImage(NULL),
-    m_podcastImage(NULL)
+    m_browser(gCoreContext->GetSetting("WebBrowserCommand", ""))
 {
     // Setup cache directory
 
@@ -71,12 +58,12 @@ MythNews::MythNews(MythScreenStack *parent, const QString &name) :
     if (!dir.exists())
         dir.mkdir(fileprefix);
 
-    connect(m_RetrieveTimer, SIGNAL(timeout()),
+    connect(m_retrieveTimer, SIGNAL(timeout()),
             this, SLOT(slotRetrieveNews()));
 
-    m_RetrieveTimer->stop();
-    m_RetrieveTimer->setSingleShot(false);
-    m_RetrieveTimer->start(m_TimerTimeout);
+    m_retrieveTimer->stop();
+    m_retrieveTimer->setSingleShot(false);
+    m_retrieveTimer->start(m_timerTimeout);
 }
 
 MythNews::~MythNews()
@@ -88,11 +75,8 @@ bool MythNews::Create(void)
 {
     QMutexLocker locker(&m_lock);
 
-    bool foundtheme = false;
-
     // Load the theme for this screen
-    foundtheme = LoadWindowFromXML("news-ui.xml", "news", this);
-
+    bool foundtheme = LoadWindowFromXML("news-ui.xml", "news", this);
     if (!foundtheme)
         return false;
 
@@ -141,7 +125,7 @@ bool MythNews::Create(void)
 
 void MythNews::clearSites(void)
 {
-    m_NewsSites.clear();
+    m_newsSites.clear();
     m_sitesList->Reset();
     m_articles.clear();
     m_articlesList->Reset();
@@ -188,19 +172,22 @@ void MythNews::loadSites(void)
         QString name = query.value(0).toString();
         QString url  = query.value(1).toString();
         QString icon = query.value(2).toString();
+#if QT_VERSION < QT_VERSION_CHECK(5,8,0)
         QDateTime time = MythDate::fromTime_t(query.value(3).toUInt());
-        bool podcast = query.value(4).toInt();
-        m_NewsSites.push_back(new NewsSite(name, url, time, podcast));
+#else
+        QDateTime time = MythDate::fromSecsSinceEpoch(query.value(3).toLongLong());
+#endif
+        bool podcast = query.value(4).toBool();
+        m_newsSites.push_back(new NewsSite(name, url, time, podcast));
     }
+    std::sort(m_newsSites.begin(), m_newsSites.end(), NewsSite::sortByName);
 
-    NewsSite::List::iterator it = m_NewsSites.begin();
-    for (; it != m_NewsSites.end(); ++it)
+    for (auto & site : m_newsSites)
     {
-        MythUIButtonListItem *item =
-            new MythUIButtonListItem(m_sitesList, (*it)->name());
-        item->SetData(qVariantFromValue(*it));
+        auto *item = new MythUIButtonListItem(m_sitesList, site->name());
+        item->SetData(QVariant::fromValue(site));
 
-        connect(*it, SIGNAL(finished(NewsSite*)),
+        connect(site, SIGNAL(finished(NewsSite*)),
                 this, SLOT(slotNewsRetrieved(NewsSite*)));
     }
 
@@ -208,7 +195,7 @@ void MythNews::loadSites(void)
 
     if (m_nositesText)
     {
-        if (m_NewsSites.size() == 0)
+        if (m_newsSites.empty())
             m_nositesText->Show();
         else
             m_nositesText->Hide();
@@ -222,7 +209,7 @@ void MythNews::updateInfoView(MythUIButtonListItem *selected)
     if (!selected)
         return;
 
-    NewsSite *site = NULL;
+    NewsSite *site = nullptr;
     NewsArticle article;
 
     if (GetFocusWidget() == m_articlesList)
@@ -260,7 +247,7 @@ void MythNews::updateInfoView(MythUIButtonListItem *selected)
                 artText.replace("&#8216;", "'");  // LEFT-SINGLE-QUOTE
                 artText.replace("&#8217;", "'");  // RIGHT-SINGLE-QUOTE
                 // Replace paragraph and break HTML with newlines
-                if( artText.indexOf(QRegExp("</(p|P)>")) )
+                if( artText.contains(QRegExp("</(p|P)>")) )
                 {
                     artText.replace( QRegExp("<(p|P)>"), "");
                     artText.replace( QRegExp("</(p|P)>"), "\n\n");
@@ -367,7 +354,7 @@ void MythNews::updateInfoView(MythUIButtonListItem *selected)
             if (m_thumbnailImage && m_thumbnailImage->IsVisible())
                 m_thumbnailImage->Hide();
 
-            if (m_podcastImage && site->podcast() == 1)
+            if (m_podcastImage && site->podcast())
                 m_podcastImage->Show();
 
             if (!site->imageURL().isEmpty())
@@ -391,7 +378,7 @@ void MythNews::updateInfoView(MythUIButtonListItem *selected)
         {
             QString text(tr("Updated") + " - ");
             QDateTime updated(site->lastUpdated());
-            if (updated.toTime_t() != 0) {
+            if (updated.isValid()) {
                 text += MythDate::toString(site->lastUpdated(),
                                            MythDate::kDateTimeFull | MythDate::kSimplify);
             }
@@ -411,12 +398,12 @@ QString MythNews::formatSize(long long bytes, int prec)
         double sizeGB = sizeKB/(1024*1024*1024.0);
         return QString("%1 TB").arg(sizeGB, 0, 'f', (sizeGB>10)?0:prec);
     }
-    else if (sizeKB>1024*1024) // Gigabytes
+    if (sizeKB>1024*1024) // Gigabytes
     {
         double sizeGB = sizeKB/(1024*1024.0);
         return QString("%1 GB").arg(sizeGB, 0, 'f', (sizeGB>10)?0:prec);
     }
-    else if (sizeKB>1024) // Megabytes
+    if (sizeKB>1024) // Megabytes
     {
         double sizeMB = sizeKB/1024.0;
         return QString("%1 MB").arg(sizeMB, 0, 'f', (sizeMB>10)?0:prec);
@@ -430,9 +417,8 @@ bool MythNews::keyPressEvent(QKeyEvent *event)
     if (GetFocusWidget() && GetFocusWidget()->keyPressEvent(event))
         return true;
 
-    bool handled = false;
     QStringList actions;
-    handled = GetMythMainWindow()->TranslateKeyPress("News", event, actions);
+    bool handled = GetMythMainWindow()->TranslateKeyPress("News", event, actions);
 
     for (int i = 0; i < actions.size() && !handled; i++)
     {
@@ -463,28 +449,31 @@ void MythNews::slotRetrieveNews(void)
 {
     QMutexLocker locker(&m_lock);
 
-    if (m_NewsSites.empty())
+    if (m_newsSites.empty())
         return;
 
-    m_RetrieveTimer->stop();
+    m_retrieveTimer->stop();
 
-    NewsSite::List::iterator it = m_NewsSites.begin();
-    for (; it != m_NewsSites.end(); ++it)
+    for (auto & site : m_newsSites)
     {
-        if ((*it)->timeSinceLastUpdate() > m_UpdateFreq)
-            (*it)->retrieve();
+        if (site->timeSinceLastUpdate() > m_updateFreq)
+            site->retrieve();
         else
-            processAndShowNews(*it);
+            processAndShowNews(site);
     }
 
-    m_RetrieveTimer->stop();
-    m_RetrieveTimer->setSingleShot(false);
-    m_RetrieveTimer->start(m_TimerTimeout);
+    m_retrieveTimer->stop();
+    m_retrieveTimer->setSingleShot(false);
+    m_retrieveTimer->start(m_timerTimeout);
 }
 
 void MythNews::slotNewsRetrieved(NewsSite *site)
 {
+#if QT_VERSION < QT_VERSION_CHECK(5,8,0)
     unsigned int updated = site->lastUpdated().toTime_t();
+#else
+    qint64 updated = site->lastUpdated().toSecsSinceEpoch();
+#endif
 
     MSqlQuery query(MSqlQuery::InitCon());
     query.prepare("UPDATE newssites SET updated = :UPDATED "
@@ -501,11 +490,10 @@ void MythNews::cancelRetrieve(void)
 {
     QMutexLocker locker(&m_lock);
 
-    NewsSite::List::iterator it = m_NewsSites.begin();
-    for (; it != m_NewsSites.end(); ++it)
+    for (auto & site : m_newsSites)
     {
-        (*it)->stop();
-        processAndShowNews(*it);
+        site->stop();
+        processAndShowNews(site);
     }
 }
 
@@ -532,12 +520,11 @@ void MythNews::processAndShowNews(NewsSite *site)
     m_articles.clear();
 
     NewsArticle::List articles = site->GetArticleList();
-    NewsArticle::List::iterator it = articles.begin();
-    for (; it != articles.end(); ++it)
+    for (auto & article : articles)
     {
-        MythUIButtonListItem *item =
-            new MythUIButtonListItem(m_articlesList, (*it).title());
-        m_articles[item] = *it;
+        auto *item =
+            new MythUIButtonListItem(m_articlesList, article.title());
+        m_articles[item] = article;
     }
 
     if (m_articlesList->MoveToNamedPosition(currItem))
@@ -551,7 +538,7 @@ void MythNews::slotSiteSelected(MythUIButtonListItem *item)
     if (!item || item->GetData().isNull())
         return;
 
-    NewsSite *site = item->GetData().value<NewsSite*>();
+    auto *site = item->GetData().value<NewsSite*>();
     if (!site)
         return;
 
@@ -559,12 +546,10 @@ void MythNews::slotSiteSelected(MythUIButtonListItem *item)
     m_articles.clear();
 
     NewsArticle::List articles = site->GetArticleList();
-    NewsArticle::List::iterator it = articles.begin();
-    for (; it != articles.end(); ++it)
+    for (auto & article : articles)
     {
-        MythUIButtonListItem *item =
-            new MythUIButtonListItem(m_articlesList, (*it).title());
-        m_articles[item] = *it;
+        auto *blitem = new MythUIButtonListItem(m_articlesList, article.title());
+        m_articles[blitem] = article;
     }
 
     updateInfoView(item);
@@ -601,20 +586,18 @@ void MythNews::slotViewArticle(MythUIButtonListItem *articlesListItem)
             GetMythMainWindow()->HandleMedia("WebBrowser", cmdUrl);
             return;
         }
-        else
-        {
-            QString cmd = m_browser;
-            cmd.replace("%ZOOM%", m_zoom);
-            cmd.replace("%URL%", cmdUrl);
-            cmd.replace('\'', "%27");
-            cmd.replace("&","\\&");
-            cmd.replace(";","\\;");
 
-            GetMythMainWindow()->AllowInput(false);
-            myth_system(cmd, kMSDontDisableDrawing);
-            GetMythMainWindow()->AllowInput(true);
-            return;
-        }
+        QString cmd = m_browser;
+        cmd.replace("%ZOOM%", m_zoom);
+        cmd.replace("%URL%", cmdUrl);
+        cmd.replace('\'', "%27");
+        cmd.replace("&","\\&");
+        cmd.replace(";","\\;");
+
+        GetMythMainWindow()->AllowInput(false);
+        myth_system(cmd, kMSDontDisableDrawing);
+        GetMythMainWindow()->AllowInput(true);
+        return;
     }
 
     playVideo(article);
@@ -624,7 +607,7 @@ void MythNews::ShowEditDialog(bool edit)
 {
     QMutexLocker locker(&m_lock);
 
-    NewsSite *site = NULL;
+    NewsSite *site = nullptr;
 
     if (edit)
     {
@@ -638,8 +621,8 @@ void MythNews::ShowEditDialog(bool edit)
 
     MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
 
-    MythNewsEditor *mythnewseditor = new MythNewsEditor(site, edit, mainStack,
-                                                        "mythnewseditor");
+    auto *mythnewseditor = new MythNewsEditor(site, edit, mainStack,
+                                              "mythnewseditor");
 
     if (mythnewseditor->Create())
     {
@@ -654,8 +637,7 @@ void MythNews::ShowFeedManager()
 {
     MythScreenStack *mainStack = GetMythMainWindow()->GetMainStack();
 
-    MythNewsConfig *mythnewsconfig = new MythNewsConfig(mainStack,
-                                                        "mythnewsconfig");
+    auto *mythnewsconfig = new MythNewsConfig(mainStack, "mythnewsconfig");
 
     if (mythnewsconfig->Create())
     {
@@ -685,7 +667,7 @@ void MythNews::ShowMenu(void)
 
         m_menuPopup->AddButton(tr("Manage Feeds"));
         m_menuPopup->AddButton(tr("Add Feed"));
-        if (m_NewsSites.size() > 0)
+        if (!m_newsSites.empty())
         {
             m_menuPopup->AddButton(tr("Edit Feed"));
             m_menuPopup->AddButton(tr("Delete Feed"));
@@ -694,7 +676,7 @@ void MythNews::ShowMenu(void)
     else
     {
         delete m_menuPopup;
-        m_menuPopup = NULL;
+        m_menuPopup = nullptr;
     }
 }
 
@@ -706,7 +688,7 @@ void MythNews::deleteNewsSite(void)
 
     if (siteUIItem && !siteUIItem->GetData().isNull())
     {
-        NewsSite *site = siteUIItem->GetData().value<NewsSite*>();
+        auto *site = siteUIItem->GetData().value<NewsSite*>();
         if (site)
         {
             removeFromDB(site->name());
@@ -727,7 +709,9 @@ void MythNews::customEvent(QEvent *event)
 {
     if (event->type() == DialogCompletionEvent::kEventType)
     {
-        DialogCompletionEvent *dce = (DialogCompletionEvent*)(event);
+        auto *dce = dynamic_cast<DialogCompletionEvent*>(event);
+        if (dce == nullptr)
+            return;
 
         QString resultid  = dce->GetId();
         int     buttonnum = dce->GetResult();
@@ -744,6 +728,6 @@ void MythNews::customEvent(QEvent *event)
                 deleteNewsSite();
         }
 
-        m_menuPopup = NULL;
+        m_menuPopup = nullptr;
     }
 }

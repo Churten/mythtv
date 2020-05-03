@@ -33,7 +33,7 @@ class ChannelBase
     friend class SignalMonitor;
 
   public:
-    explicit ChannelBase(TVRec *parent);
+    explicit ChannelBase(TVRec *parent) : m_pParent(parent) {}
     virtual ~ChannelBase(void);
 
     virtual bool Init(QString &startchannel, bool setchan);
@@ -55,30 +55,30 @@ class ChannelBase
     virtual void SetFd(int fd) { (void)fd; };
     /// \brief Returns file descriptor, -1 if it does not exist.
     virtual int GetFd(void) const { return -1; };
-    virtual bool Tune(const QString &freqid, int finetune) { return true; }
+    virtual bool Tune(const QString &/*freqid*/, int /*finetune*/) { return true; }
     virtual bool IsExternalChannelChangeInUse(void);
 
     // Gets
     virtual uint GetNextChannel(uint chanid, ChannelChangeDirection direction) const;
     virtual uint GetNextChannel(const QString &channum, ChannelChangeDirection direction) const;
     virtual QString GetChannelName(void) const
-        { return m_curchannelname; }
+        { return m_curChannelName; }
     virtual int GetChanID(void) const;
     virtual int GetInputID(void) const
-        { return m_inputid; }
+        { return m_inputId; }
     virtual QString GetInputName(void) const
         { return m_name; }
     virtual uint GetSourceID(void) const
-        { return m_sourceid; }
+        { return m_sourceId; }
 
     /// \brief Returns true iff commercial detection is not required
     //         on current channel, for BBC, CBC, etc.
-    bool IsCommercialFree(void) const { return m_commfree; }
+    bool IsCommercialFree(void) const { return m_commFree; }
     /// \brief Returns String representing device, useful for debugging
     virtual QString GetDevice(void) const { return ""; }
 
     // Sets
-    virtual void Renumber(uint srcid, const QString &oldChanNum,
+    virtual void Renumber(uint sourceid, const QString &oldChanNum,
                           const QString &newChanNum);
 
     virtual bool InitializeInput(void);
@@ -91,29 +91,33 @@ class ChannelBase
 
     // Picture attribute settings
     virtual bool InitPictureAttributes(void) { return false; }
-    virtual int  GetPictureAttribute(PictureAttribute) const { return -1; }
+    virtual int  GetPictureAttribute(PictureAttribute /*attr*/) const { return -1; }
     virtual int  ChangePictureAttribute(
-        PictureAdjustType, PictureAttribute, bool up) { return -1; }
+        PictureAdjustType /*type*/, PictureAttribute /*attr*/, bool /*direction*/) { return -1; }
 
     bool CheckChannel(const QString &channum) const;
 
     // \brief Set inputid for scanning
-    void SetInputID(uint _inputid) { m_inputid = _inputid; }
+    void SetInputID(uint _inputid) { m_inputId = _inputid; }
+
+    // \brief Get major input ID
+    int GetMajorID(void);
 
     static ChannelBase *CreateChannel(
-        TVRec                    *tv_rec,
+        TVRec                    *tvrec,
         const GeneralDBOptions   &genOpt,
         const DVBDBOptions       &dvbOpt,
         const FireWireDBOptions  &fwOpt,
         const QString            &startchannel,
         bool                      enter_power_save_mode,
-        QString                  &rbFileExt);
+        QString                  &rbFileExt,
+        bool                      setchan);
 
   protected:
     /// \brief Switches to another input on hardware,
     ///        and sets the channel is setstarting is true.
     virtual bool IsInputAvailable(uint &mplexid_restriction,
-                                  uint &chanid_restrtiction) const;
+                                  uint &chanid_restriction) const;
     virtual bool IsExternalChannelChangeSupported(void) { return false; }
 
   protected:
@@ -123,27 +127,27 @@ class ChannelBase
     uint GetScriptStatus(bool holding_lock = false);
 
     bool ChangeExternalChannel(const QString &changer,
-                               const QString &newchan);
-    bool ChangeInternalChannel(const QString &newchan,
+                               const QString &freqid);
+    bool ChangeInternalChannel(const QString &freqid,
                                uint cardinputid);
 
-    TVRec   *m_pParent;
-    QString  m_curchannelname;
-    bool     m_commfree;
-    uint     m_inputid;
-    uint     m_sourceid;
-    QString  m_name;
-    QString  m_startChanNum;
-    QString  m_externalChanger;
-    QString  m_tuneToChannel;
-    ChannelInfoList m_channels; ///< channels across all inputs
+    TVRec            *m_pParent        {nullptr};
+    QString           m_curChannelName;
+    bool              m_commFree       {false};
+    uint              m_inputId        {0};
+    uint              m_sourceId       {0};
+    QString           m_name;
+    QString           m_startChanNum;
+    QString           m_externalChanger;
+    QString           m_tuneToChannel;
+    ChannelInfoList   m_channels; ///< channels across all inputs
 
-    QMutex         m_system_lock;
-    MythSystemLegacy    *m_system;
+    QMutex            m_system_lock;
+    MythSystemLegacy *m_system         {nullptr};
     /// These get mapped from the GENERIC_EXIT_* to these values for use
     /// with the signalmonitor code.
     /// 0 == unknown, 1 == pending, 2 == failed, 3 == success
-    uint           m_system_status;
+    uint              m_systemStatus  {0};
 };
 
 

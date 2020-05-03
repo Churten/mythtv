@@ -31,31 +31,11 @@
 #include "Logging.h"
 #include "freemheg.h"
 
-#include "inttypes.h"
+#include <cinttypes>
 
 /*
 UK MHEG content hook values: 2 => MPEG I-frame, 4 => PNG bitmap
 */
-
-MHBitmap::MHBitmap()
-{
-    m_fTiling = false;
-    m_nOrigTransparency = 0;
-    m_nTransparency = 0;
-    m_nXDecodeOffset = 0;
-    m_nYDecodeOffset = 0;
-    m_pContent = NULL;
-}
-
-MHBitmap::MHBitmap(const MHBitmap &ref): MHVisible(ref)
-{
-    m_fTiling = ref.m_fTiling;
-    m_nOrigTransparency = ref.m_nOrigTransparency;
-    m_nTransparency = 0;
-    m_nXDecodeOffset = 0;
-    m_nYDecodeOffset = 0;
-    m_pContent = NULL;
-}
 
 MHBitmap::~MHBitmap()
 {
@@ -179,7 +159,7 @@ void MHBitmap::CreateContent(const unsigned char *data, int length, MHEngine *en
 
 
 // Set the transparency.
-void MHBitmap::SetTransparency(int nTransPerCent, MHEngine *)
+void MHBitmap::SetTransparency(int nTransPerCent, MHEngine * /*engine*/)
 {
     // The object transparency isn't actually used in UK MHEG.
     // We want a value between 0 and 255
@@ -222,7 +202,7 @@ void MHBitmap::GetBitmapDecodeOffset(MHRoot *pXOffset, MHRoot *pYOffset)
     pYOffset->SetVariableValue(m_nYDecodeOffset);
 }
 
-void MHBitmap::Display(MHEngine *)
+void MHBitmap::Display(MHEngine * /*engine*/)
 {
     if (! m_fRunning || ! m_pContent || m_nBoxWidth == 0 || m_nBoxHeight == 0)
     {
@@ -237,7 +217,7 @@ void MHBitmap::Display(MHEngine *)
 // Return the region drawn by the bitmap.
 QRegion MHBitmap::GetVisibleArea()
 {
-    if (! m_fRunning || m_pContent == NULL)
+    if (! m_fRunning || m_pContent == nullptr)
     {
         return QRegion();
     }
@@ -256,13 +236,10 @@ QRegion MHBitmap::GetOpaqueArea()
 {
     // The area is empty unless the bitmap is opaque.
     // and it's not a BBC MPEG I-frame background
-    if (! m_fRunning || m_nContentHook == 5 || m_pContent == NULL || ! m_pContent->IsOpaque())
+    if (! m_fRunning || m_nContentHook == 5 || m_pContent == nullptr || ! m_pContent->IsOpaque())
     {
         return QRegion();
     }
-    else
-    {
-        return GetVisibleArea();
-    }
+    return GetVisibleArea();
 }
 

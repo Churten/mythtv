@@ -33,6 +33,9 @@
 #define _DTVCONFPARSERHELPERS_H_
 
 #include <QString>
+#ifdef USING_DVB
+#include <linux/dvb/frontend.h>
+#endif
 
 // The following are a set of helper classes to allow easy translation
 // between the different string representations of various tuning params.
@@ -50,12 +53,12 @@ struct DTVParamHelperStruct
 class DTVParamHelper
 {
   public:
-    explicit DTVParamHelper(int _value) : value(_value) { }
-    DTVParamHelper &operator=(int _value) { value = _value; return *this; }
+    explicit DTVParamHelper(int _value) : m_value(_value) { }
+    DTVParamHelper &operator=(int _value) { m_value = _value; return *this; }
 
-    operator int()                const { return value;          }
-    bool operator==(const int& v) const { return value == v;     }
-    bool operator!=(const int& v) const { return value != v;     }
+    operator int()                const { return m_value;        }
+    bool operator==(const int& v) const { return m_value == v;   }
+    bool operator!=(const int& v) const { return m_value != v;   }
 
   protected:
     static bool ParseParam(const QString &symbol, int &value,
@@ -65,12 +68,12 @@ class DTVParamHelper
                             uint strings_size);
 
   protected:
-    int value;
+    int m_value;
 };
 
 class DTVTunerType : public DTVParamHelper
 {
-    static const DTVParamHelperStruct parseTable[];
+    static const DTVParamHelperStruct kParseTable[];
 
   public:
     // WARNING: kTunerTypes cannot be defined by a C++03 enum
@@ -119,33 +122,34 @@ class DTVTunerType : public DTVParamHelper
     // be a mask. Also the transmission schemes used in Asia and South
     // America are not represented here.
 
-    DTVTunerType(int _default = kTunerTypeUnknown)
+    explicit DTVTunerType(int _default = kTunerTypeUnknown)
         : DTVParamHelper(_default) { initStr(); }
+    DTVTunerType& operator=(int type) { m_value = type; return *this; }
 
     bool Parse(const QString &_value)
-        { return ParseParam(_value, value, parseTable); }
+        { return ParseParam(_value, m_value, kParseTable); }
 
     bool IsFECVariable(void) const
     {
-        return ((kTunerTypeDVBC  == value) ||
-                (kTunerTypeDVBS1 == value) ||
-                (kTunerTypeDVBS2 == value));
+        return ((kTunerTypeDVBC  == m_value) ||
+                (kTunerTypeDVBS1 == m_value) ||
+                (kTunerTypeDVBS2 == m_value));
     }
 
     bool IsModulationVariable(void) const
     {
-        return ((kTunerTypeDVBC  == value) ||
-                (kTunerTypeATSC  == value) ||
-                (kTunerTypeDVBS2 == value));
+        return ((kTunerTypeDVBC  == m_value) ||
+                (kTunerTypeATSC  == m_value) ||
+                (kTunerTypeDVBS2 == m_value));
     }
 
     bool IsDiSEqCSupported(void) const
     {
-        return ((kTunerTypeDVBS1 == value) ||
-                (kTunerTypeDVBS2 == value));
+        return ((kTunerTypeDVBS1 == m_value) ||
+                (kTunerTypeDVBS2 == m_value));
     }
 
-    QString toString() const { return toString(value); }
+    QString toString() const { return toString(m_value); }
 
     static void initStr(void);
     static QString toString(int _value);
@@ -154,96 +158,125 @@ class DTVTunerType : public DTVParamHelper
 class DTVInversion : public DTVParamHelper
 {
   protected:
-    static const DTVParamHelperStruct confTable[];
-    static const DTVParamHelperStruct vdrTable[];
-    static const DTVParamHelperStruct parseTable[];
+    static const DTVParamHelperStruct kConfTable[];
+    static const DTVParamHelperStruct kVdrTable[];
+    static const DTVParamHelperStruct kParseTable[];
     static const uint kDBStrCnt = 3;
-    static const char *dbStr[kDBStrCnt];
+    static const char *s_dbStr[kDBStrCnt];
 
   public:
-    enum
+    enum Types
     {
         kInversionOff,
         kInversionOn,
         kInversionAuto,
     };
+#ifdef USING_DVB
+    static_assert((kInversionOff == (Types)INVERSION_OFF)
+                  && (kInversionAuto == (Types)INVERSION_AUTO),
+                  "Inversion types don't match DVB includes.");
+#endif
 
-    DTVInversion(int _default = kInversionAuto)
+    explicit DTVInversion(Types _default = kInversionAuto)
         : DTVParamHelper(_default) { }
+    DTVInversion& operator=(const Types _value)
+        { m_value = _value; return *this; }
+#ifdef USING_DVB
+    DTVInversion& operator=(const fe_spectral_inversion_t type)
+        { m_value = type; return *this; }
+#endif
 
     bool IsCompatible(const DTVInversion &other) const
-        { return value == other.value || value == kInversionAuto ||
-                other.value == kInversionAuto;
+        { return m_value == other.m_value || m_value == kInversionAuto ||
+                other.m_value == kInversionAuto;
         }
 
     bool ParseConf(const QString &_value)
-       { return ParseParam(_value, value, confTable); }
+       { return ParseParam(_value, m_value, kConfTable); }
     bool ParseVDR(const QString &_value)
-       { return ParseParam(_value, value, vdrTable); }
+       { return ParseParam(_value, m_value, kVdrTable); }
     bool Parse(const QString &_value)
-       { return ParseParam(_value, value, parseTable); }
+       { return ParseParam(_value, m_value, kParseTable); }
 
-    QString toString() const { return toString(value); }
+    QString toString() const { return toString(m_value); }
     QChar   toChar() const
-        { if (toString().length() > 0)
-              return toString()[0]; else return QChar(0); }
+        {
+            if (toString().length() > 0)
+                return toString()[0];
+            return {0};
+        }
 
     static QString toString(int _value)
-        { return DTVParamHelper::toString(dbStr, _value, kDBStrCnt); }
+        { return DTVParamHelper::toString(s_dbStr, _value, kDBStrCnt); }
 };
 
 class DTVBandwidth : public DTVParamHelper
 {
   protected:
-    static const DTVParamHelperStruct confTable[];
-    static const DTVParamHelperStruct vdrTable[];
-    static const DTVParamHelperStruct parseTable[];
+    static const DTVParamHelperStruct kConfTable[];
+    static const DTVParamHelperStruct kVdrTable[];
+    static const DTVParamHelperStruct kParseTable[];
     static const uint kDBStrCnt = 4;
-    static const char *dbStr[kDBStrCnt];
+    static const char *s_dbStr[kDBStrCnt];
 
   public:
-    enum
+    enum Types
     {
         kBandwidth8MHz,
         kBandwidth7MHz,
         kBandwidth6MHz,
         kBandwidthAuto,
     };
+#ifdef USING_DVB
+    static_assert((kBandwidth8MHz == (Types)BANDWIDTH_8_MHZ)
+                  && (kBandwidthAuto == (Types)BANDWIDTH_AUTO),
+                  "Bandwidth types don't match DVB includes.");
+#endif
 
-    DTVBandwidth(int _default = kBandwidthAuto) : DTVParamHelper(_default) { }
+    explicit DTVBandwidth(Types _default = kBandwidthAuto)
+        : DTVParamHelper(_default) { }
+    DTVBandwidth& operator=(const Types _value)
+        { m_value = _value; return *this; }
+#ifdef USING_DVB
+    DTVBandwidth& operator=(const fe_bandwidth_t bwidth)
+        { m_value = bwidth; return *this; }
+#endif
 
     bool IsCompatible(const DTVBandwidth &other) const
-        { return value == other.value || value == kBandwidthAuto ||
-                other.value == kBandwidthAuto;
+        { return m_value == other.m_value || m_value == kBandwidthAuto ||
+                other.m_value == kBandwidthAuto;
         }
 
     bool ParseConf(const QString &_value)
-       { return ParseParam(_value, value, confTable); }
+       { return ParseParam(_value, m_value, kConfTable); }
     bool ParseVDR(const QString &_value)
-       { return ParseParam(_value, value, vdrTable); }
+       { return ParseParam(_value, m_value, kVdrTable); }
     bool Parse(const QString &_value)
-       { return ParseParam(_value, value, parseTable); }
+       { return ParseParam(_value, m_value, kParseTable); }
 
-    QString toString() const { return toString(value); }
+    QString toString() const { return toString(m_value); }
     QChar   toChar() const
-        { if (toString().length() > 0)
-              return toString()[0]; else return QChar(0); }
+        {
+            if (toString().length() > 0)
+                return toString()[0];
+            return {0};
+        }
 
     static QString toString(int _value)
-        { return DTVParamHelper::toString(dbStr, _value, kDBStrCnt); }
+        { return DTVParamHelper::toString(s_dbStr, _value, kDBStrCnt); }
 };
 
 class DTVCodeRate : public DTVParamHelper
 {
   protected:
-    static const DTVParamHelperStruct confTable[];
-    static const DTVParamHelperStruct vdrTable[];
-    static const DTVParamHelperStruct parseTable[];
+    static const DTVParamHelperStruct kConfTable[];
+    static const DTVParamHelperStruct kVdrTable[];
+    static const DTVParamHelperStruct kParseTable[];
     static const uint kDBStrCnt = 12;
-    static const char *dbStr[kDBStrCnt];
+    static const char *s_dbStr[kDBStrCnt];
 
   public:
-    enum
+    enum Types
     {
         kFECNone,
         kFEC_1_2,
@@ -258,38 +291,50 @@ class DTVCodeRate : public DTVParamHelper
         kFEC_3_5,
         kFEC_9_10,
     };
+#ifdef USING_DVB
+    static_assert((kFECNone == (Types)FEC_NONE)
+                  && (kFEC_9_10 == (Types)FEC_9_10),
+                  "FEC types don't match DVB includes.");
+#endif
 
-    DTVCodeRate(int _default = kFECAuto) : DTVParamHelper(_default) { }
+    explicit DTVCodeRate(Types _default = kFECAuto)
+        : DTVParamHelper(_default) { }
+    DTVCodeRate& operator=(const Types _value)
+        { m_value = _value; return *this; }
+#ifdef USING_DVB
+    DTVCodeRate& operator=(const fe_code_rate_t rate)
+        { m_value = rate; return *this; }
+#endif
 
     bool IsCompatible(const DTVCodeRate &other) const
-        { return value == other.value || value == kFECAuto ||
-                other.value == kFECAuto;
+        { return m_value == other.m_value || m_value == kFECAuto ||
+                other.m_value == kFECAuto;
         }
 
     bool ParseConf(const QString &_value)
-       { return ParseParam(_value, value, confTable); }
+       { return ParseParam(_value, m_value, kConfTable); }
     bool ParseVDR(const QString &_value)
-       { return ParseParam(_value, value, vdrTable); }
+       { return ParseParam(_value, m_value, kVdrTable); }
     bool Parse(const QString &_value)
-       { return ParseParam(_value, value, parseTable); }
+       { return ParseParam(_value, m_value, kParseTable); }
 
-    QString toString() const { return toString(value); }
+    QString toString() const { return toString(m_value); }
 
     static QString toString(int _value)
-        { return DTVParamHelper::toString(dbStr, _value, kDBStrCnt); }
+        { return DTVParamHelper::toString(s_dbStr, _value, kDBStrCnt); }
 };
 
 class DTVModulation : public DTVParamHelper
 {
   protected:
-    static const DTVParamHelperStruct confTable[];
-    static const DTVParamHelperStruct vdrTable[];
-    static const DTVParamHelperStruct parseTable[];
+    static const DTVParamHelperStruct kConfTable[];
+    static const DTVParamHelperStruct kVdrTable[];
+    static const DTVParamHelperStruct kParseTable[];
     static const uint kDBStrCnt = 13;
-    static const char *dbStr[kDBStrCnt];
+    static const char *s_dbStr[kDBStrCnt];
 
   public:
-    enum
+    enum Types
     {
         kModulationQPSK,
         kModulationQAM16,
@@ -307,86 +352,111 @@ class DTVModulation : public DTVParamHelper
         kModulationInvalid = 0x100, /* for removed modulations */
         kModulationAnalog  = 0x200, /* for analog channel scanner */
     };
+#ifdef USING_DVB
+    static_assert((kModulationQPSK == (Types)QPSK)
+                  && (kModulationDQPSK == (Types)DQPSK),
+                  "Modulation types don't match DVB includes.");
+#endif
 
-    DTVModulation(int _default = kModulationQAMAuto)
+    explicit DTVModulation(Types _default = kModulationQAMAuto)
         : DTVParamHelper(_default) { }
+    DTVModulation& operator=(const Types _value)
+        { m_value = _value; return *this; }
+#ifdef USING_DVB
+    DTVModulation& operator=(const fe_modulation_t modulation)
+        { m_value = modulation; return *this; }
+#endif
 
     bool IsCompatible(const DTVModulation &other) const
-        { return value == other.value || value == kModulationQAMAuto ||
-                other.value == kModulationQAMAuto;
+        { return m_value == other.m_value || m_value == kModulationQAMAuto ||
+                other.m_value == kModulationQAMAuto;
         }
 
     bool ParseConf(const QString &_value)
-       { return ParseParam(_value, value, confTable); }
+       { return ParseParam(_value, m_value, kConfTable); }
     bool ParseVDR(const QString &_value)
-       { return ParseParam(_value, value, vdrTable); }
+       { return ParseParam(_value, m_value, kVdrTable); }
     bool Parse(const QString &_value)
-       { return ParseParam(_value, value, parseTable); }
+       { return ParseParam(_value, m_value, kParseTable); }
 
-    QString toString() const { return toString(value); }
+    QString toString() const { return toString(m_value); }
 
     static QString toString(int _value)
     {
         if (kModulationInvalid == _value)
             return "invalid";
-        else if (kModulationAnalog == _value)
+        if (kModulationAnalog == _value)
             return "analog";
-        return DTVParamHelper::toString(dbStr, _value, kDBStrCnt);
+        return DTVParamHelper::toString(s_dbStr, _value, kDBStrCnt);
     }
 };
 
 class DTVTransmitMode : public DTVParamHelper
 {
   protected:
-    static const DTVParamHelperStruct confTable[];
-    static const DTVParamHelperStruct vdrTable[];
-    static const DTVParamHelperStruct parseTable[];
+    static const DTVParamHelperStruct kConfTable[];
+    static const DTVParamHelperStruct kVdrTable[];
+    static const DTVParamHelperStruct kParseTable[];
     static const uint kDBStrCnt = 3;
-    static const char *dbStr[kDBStrCnt];
+    static const char *s_dbStr[kDBStrCnt];
 
   public:
-    enum
+    enum Types
     {
         kTransmissionMode2K,
         kTransmissionMode8K,
         kTransmissionModeAuto,
     };
+#ifdef USING_DVB
+    static_assert((kTransmissionMode2K == (Types)TRANSMISSION_MODE_2K)
+                  && (kTransmissionModeAuto == (Types)TRANSMISSION_MODE_AUTO),
+                  "Transmission types don't match DVB includes.");
+#endif
 
-    DTVTransmitMode(int _default = kTransmissionModeAuto)
+    explicit DTVTransmitMode(Types _default = kTransmissionModeAuto)
         : DTVParamHelper(_default) { }
+    DTVTransmitMode& operator=(const Types _value)
+        { m_value = _value; return *this; }
+#ifdef USING_DVB
+    DTVTransmitMode& operator=(const fe_transmit_mode_t mode)
+        { m_value = mode; return *this; }
+#endif
 
     bool IsCompatible(const DTVTransmitMode &other) const
-        { return value == other.value || value == kTransmissionModeAuto ||
-                other.value == kTransmissionModeAuto;
+        { return m_value == other.m_value || m_value == kTransmissionModeAuto ||
+                other.m_value == kTransmissionModeAuto;
         }
 
     bool ParseConf(const QString &_value)
-       { return ParseParam(_value, value, confTable); }
+       { return ParseParam(_value, m_value, kConfTable); }
     bool ParseVDR(const QString &_value)
-       { return ParseParam(_value, value, vdrTable); }
+       { return ParseParam(_value, m_value, kVdrTable); }
     bool Parse(const QString &_value)
-       { return ParseParam(_value, value, parseTable); }
+       { return ParseParam(_value, m_value, kParseTable); }
 
-    QString toString() const { return toString(value); }
+    QString toString() const { return toString(m_value); }
     QChar   toChar() const
-        { if (toString().length() > 0)
-              return toString()[0]; else return QChar(0); }
+        {
+            if (toString().length() > 0)
+                return toString()[0];
+            return {0};
+        }
 
     static QString toString(int _value)
-        { return DTVParamHelper::toString(dbStr, _value, kDBStrCnt); }
+        { return DTVParamHelper::toString(s_dbStr, _value, kDBStrCnt); }
 };
 
 class DTVGuardInterval : public DTVParamHelper
 {
   protected:
-    static const DTVParamHelperStruct confTable[];
-    static const DTVParamHelperStruct vdrTable[];
-    static const DTVParamHelperStruct parseTable[];
+    static const DTVParamHelperStruct kConfTable[];
+    static const DTVParamHelperStruct kVdrTable[];
+    static const DTVParamHelperStruct kParseTable[];
     static const uint kDBStrCnt = 5;
-    static const char *dbStr[kDBStrCnt];
+    static const char *s_dbStr[kDBStrCnt];
 
   public:
-    enum
+    enum Types
     {
         kGuardInterval_1_32,
         kGuardInterval_1_16,
@@ -394,39 +464,50 @@ class DTVGuardInterval : public DTVParamHelper
         kGuardInterval_1_4,
         kGuardIntervalAuto,
     };
+#ifdef USING_DVB
+    static_assert((kGuardInterval_1_32 == (Types)GUARD_INTERVAL_1_32)
+                  && (kGuardIntervalAuto == (Types)GUARD_INTERVAL_AUTO),
+                  "Guard Interval types don't match DVB includes.");
+#endif
 
-    DTVGuardInterval(int _default = kGuardIntervalAuto)
+    explicit DTVGuardInterval(Types _default = kGuardIntervalAuto)
         : DTVParamHelper(_default) { }
+    DTVGuardInterval& operator=(const Types _value)
+        { m_value = _value; return *this; }
+#ifdef USING_DVB
+    DTVGuardInterval& operator=(const fe_guard_interval_t interval)
+        { m_value = interval; return *this; }
+#endif
 
     bool IsCompatible(const DTVGuardInterval &other) const
-        { return value == other.value || value == kGuardIntervalAuto ||
-                other.value == kGuardIntervalAuto;
+        { return m_value == other.m_value || m_value == kGuardIntervalAuto ||
+                other.m_value == kGuardIntervalAuto;
         }
 
     bool ParseConf(const QString &_value)
-       { return ParseParam(_value, value, confTable); }
+       { return ParseParam(_value, m_value, kConfTable); }
     bool ParseVDR(const QString &_value)
-       { return ParseParam(_value, value, vdrTable); }
+       { return ParseParam(_value, m_value, kVdrTable); }
     bool Parse(const QString &_value)
-       { return ParseParam(_value, value, parseTable); }
+       { return ParseParam(_value, m_value, kParseTable); }
 
-    QString toString() const { return toString(value); }
+    QString toString() const { return toString(m_value); }
 
     static QString toString(int _value)
-        { return DTVParamHelper::toString(dbStr, _value, kDBStrCnt); }
+        { return DTVParamHelper::toString(s_dbStr, _value, kDBStrCnt); }
 };
 
 class DTVHierarchy : public DTVParamHelper
 {
   protected:
-    static const DTVParamHelperStruct confTable[];
-    static const DTVParamHelperStruct vdrTable[];
-    static const DTVParamHelperStruct parseTable[];
+    static const DTVParamHelperStruct kConfTable[];
+    static const DTVParamHelperStruct kVdrTable[];
+    static const DTVParamHelperStruct kParseTable[];
     static const uint kDBStrCnt = 5;
-    static const char *dbStr[kDBStrCnt];
+    static const char *s_dbStr[kDBStrCnt];
 
   public:
-    enum
+    enum Types
     {
         kHierarchyNone,
         kHierarchy1,
@@ -434,36 +515,51 @@ class DTVHierarchy : public DTVParamHelper
         kHierarchy4,
         kHierarchyAuto,
     };
+#ifdef USING_DVB
+    static_assert((kHierarchyNone == (Types)HIERARCHY_NONE)
+                  && (kHierarchyAuto == (Types)HIERARCHY_AUTO),
+                  "Hierarchy types don't match DVB includes.");
+#endif
 
-    DTVHierarchy(int _default = kHierarchyAuto) : DTVParamHelper(_default) { }
+    explicit DTVHierarchy(Types _default = kHierarchyAuto)
+        : DTVParamHelper(_default) { }
+    DTVHierarchy& operator=(const Types _value)
+        { m_value = _value; return *this; }
+#ifdef USING_DVB
+    DTVHierarchy& operator=(const fe_hierarchy_t hierarchy)
+        { m_value = hierarchy; return *this; }
+#endif
 
     bool IsCompatible(const DTVHierarchy &other) const
-        { return value == other.value || value == kHierarchyAuto ||
-                other.value == kHierarchyAuto;
+        { return m_value == other.m_value || m_value == kHierarchyAuto ||
+                other.m_value == kHierarchyAuto;
         }
 
     bool ParseConf(const QString &_value)
-       { return ParseParam(_value, value, confTable); }
+       { return ParseParam(_value, m_value, kConfTable); }
     bool ParseVDR(const QString &_value)
-       { return ParseParam(_value, value, vdrTable); }
+       { return ParseParam(_value, m_value, kVdrTable); }
     bool Parse(const QString &_value)
-       { return ParseParam(_value, value, parseTable); }
+       { return ParseParam(_value, m_value, kParseTable); }
 
-    QString toString() const { return toString(value); }
+    QString toString() const { return toString(m_value); }
     QChar   toChar() const
-        { if (toString().length() > 0)
-              return toString()[0]; else return QChar(0); }
+        {
+            if (toString().length() > 0)
+                return toString()[0];
+            return {0};
+        }
 
     static QString toString(int _value)
-        { return DTVParamHelper::toString(dbStr, _value, kDBStrCnt); }
+        { return DTVParamHelper::toString(s_dbStr, _value, kDBStrCnt); }
 };
 
 class DTVPolarity : public DTVParamHelper
 {
   protected:
-    static const DTVParamHelperStruct parseTable[];
+    static const DTVParamHelperStruct kParseTable[];
     static const uint kDBStrCnt = 4;
-    static const char *dbStr[kDBStrCnt];
+    static const char *s_dbStr[kDBStrCnt];
 
   public:
     enum PolarityValues
@@ -474,39 +570,45 @@ class DTVPolarity : public DTVParamHelper
         kPolarityLeft
     };
 
-    explicit DTVPolarity(int _default = kPolarityVertical)
+    explicit DTVPolarity(PolarityValues _default = kPolarityVertical)
         : DTVParamHelper(_default) { }
+    DTVPolarity& operator=(const PolarityValues _value)
+        { m_value = _value; return *this; }
 
     bool ParseConf(const QString &_value)
-       { return ParseParam(_value, value, parseTable); }
+       { return ParseParam(_value, m_value, kParseTable); }
     bool ParseVDR(const QString &_value)
-       { return ParseParam(_value, value, parseTable); }
+       { return ParseParam(_value, m_value, kParseTable); }
     bool Parse(const QString &_value)
-       { return ParseParam(_value, value, parseTable); }
+       { return ParseParam(_value, m_value, kParseTable); }
 
-    QString toString() const { return toString(value); }
+    QString toString() const { return toString(m_value); }
     QChar   toChar() const
-        { if (toString().length() > 0)
-              return toString()[0]; else return QChar(0); }
+        {
+            if (toString().length() > 0)
+                return toString()[0];
+            return {0};
+        }
 
     static QString toString(int _value)
-        { return DTVParamHelper::toString(dbStr, _value, kDBStrCnt); }
+        { return DTVParamHelper::toString(s_dbStr, _value, kDBStrCnt); }
 };
 
 class DTVModulationSystem : public DTVParamHelper
 {
   protected:
-    static const DTVParamHelperStruct confTable[];
-    static const DTVParamHelperStruct vdrTable[];
-    static const DTVParamHelperStruct parseTable[];
-    static const uint kDBStrCnt = 17;
-    static const char *dbStr[kDBStrCnt];
+    static const DTVParamHelperStruct kConfTable[];
+    static const DTVParamHelperStruct kVdrTable[];
+    static const DTVParamHelperStruct kParseTable[];
+    static const uint kDBStrCnt = 19;
+    static const char *s_dbStr[kDBStrCnt];
 
   public:
-    enum
+    enum Types
     {
+        // see fe_delivery_system in frontend.h
         kModulationSystem_UNDEFINED,
-        kModulationSystem_DVBC_ANNEX_AC,
+        kModulationSystem_DVBC_ANNEX_A,
         kModulationSystem_DVBC_ANNEX_B,
         kModulationSystem_DVBT,
         kModulationSystem_DSS,
@@ -522,61 +624,91 @@ class DTVModulationSystem : public DTVParamHelper
         kModulationSystem_CMMB,
         kModulationSystem_DAB,
         kModulationSystem_DVBT2,
+        kModulationSystem_TURBO,
+        kModulationSystem_DVBC_ANNEX_C
     };
+#ifdef USING_DVB
+    static_assert((kModulationSystem_UNDEFINED == (Types)SYS_UNDEFINED)
+                  && (kModulationSystem_DVBC_ANNEX_C == (Types)SYS_DVBC_ANNEX_C),
+                  "Modulation System types don't match DVB includes.");
+#endif
 
-    DTVModulationSystem(int _default = kModulationSystem_UNDEFINED)
+    explicit DTVModulationSystem(Types _default = kModulationSystem_UNDEFINED)
         : DTVParamHelper(_default) { }
+    DTVModulationSystem& operator=(const Types _value)
+        { m_value = _value; return *this; }
+#ifdef USING_DVB
+    DTVModulationSystem& operator=(fe_delivery_system_t type)
+        { m_value = type; return *this; }
+#endif
+    bool IsCompatible(const DTVModulationSystem &other) const
+        { return
+            (m_value == other.m_value) ||
+            (m_value == kModulationSystem_DVBT  && other.m_value == kModulationSystem_DVBT2) ||
+            (m_value == kModulationSystem_DVBT2 && other.m_value == kModulationSystem_DVBT);
+        }
 
     bool ParseConf(const QString &_value)
-       { return ParseParam(_value, value, confTable); }
+       { return ParseParam(_value, m_value, kConfTable); }
     bool ParseVDR(const QString &_value)
-       { return ParseParam(_value, value, vdrTable); }
+       { return ParseParam(_value, m_value, kVdrTable); }
     bool Parse(const QString &_value)
-       { return ParseParam(_value, value, parseTable); }
+       { return ParseParam(_value, m_value, kParseTable); }
 
-    QString toString() const { return toString(value); }
+    QString toString() const { return toString(m_value); }
 
     static QString toString(int _value)
-        { return DTVParamHelper::toString(dbStr, _value, kDBStrCnt); }
+        { return DTVParamHelper::toString(s_dbStr, _value, kDBStrCnt); }
 };
 
 class DTVRollOff : public DTVParamHelper
 {
   protected:
-    static const DTVParamHelperStruct confTable[];
-    static const DTVParamHelperStruct vdrTable[];
-    static const DTVParamHelperStruct parseTable[];
+    static const DTVParamHelperStruct kConfTable[];
+    static const DTVParamHelperStruct kVdrTable[];
+    static const DTVParamHelperStruct kParseTable[];
     static const uint kDBStrCnt = 4;
-    static const char *dbStr[kDBStrCnt];
+    static const char *s_dbStr[kDBStrCnt];
 
   public:
-    enum
+    enum Types
     {
         kRollOff_35,
         kRollOff_20,
         kRollOff_25,
         kRollOff_Auto,
     };
+#ifdef USING_DVB
+    static_assert((kRollOff_35 == (Types)ROLLOFF_35)
+                  && (kRollOff_Auto == (Types)ROLLOFF_AUTO),
+                  "Rolloff types don't match DVB includes.");
+#endif
 
-    explicit DTVRollOff(int _default = kRollOff_35)
+    explicit DTVRollOff(Types _default = kRollOff_35)
         : DTVParamHelper(_default) { }
+    DTVRollOff& operator=(const Types _value)
+        { m_value = _value; return *this; }
+#ifdef USING_DVB
+    DTVRollOff& operator=(fe_rolloff_t type)
+        { m_value = type; return *this; }
+#endif
 
     bool IsCompatible(const DTVRollOff &other) const
-        { return value == other.value || value == kRollOff_Auto ||
-                other.value == kRollOff_Auto;
+        { return m_value == other.m_value || m_value == kRollOff_Auto ||
+                other.m_value == kRollOff_Auto;
         }
 
     bool ParseConf(const QString &_value)
-       { return ParseParam(_value, value, confTable); }
+       { return ParseParam(_value, m_value, kConfTable); }
     bool ParseVDR(const QString &_value)
-       { return ParseParam(_value, value, vdrTable); }
+       { return ParseParam(_value, m_value, kVdrTable); }
     bool Parse(const QString &_value)
-       { return ParseParam(_value, value, parseTable); }
+       { return ParseParam(_value, m_value, kParseTable); }
 
-    QString toString() const { return toString(value); }
+    QString toString() const { return toString(m_value); }
 
     static QString toString(int _value)
-        { return DTVParamHelper::toString(dbStr, _value, kDBStrCnt); }
+        { return DTVParamHelper::toString(s_dbStr, _value, kDBStrCnt); }
 };
 
 #endif // _DTVCONFPARSERHELPERS_H_

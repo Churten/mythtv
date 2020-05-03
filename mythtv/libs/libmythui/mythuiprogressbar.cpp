@@ -13,14 +13,6 @@
 #include "mythuishape.h"
 #include "mythuiimage.h"
 
-MythUIProgressBar::MythUIProgressBar(MythUIType *parent, const QString &name)
-    : MythUIType(parent, name),
-      m_layout(LayoutHorizontal), m_effect(EffectReveal),
-      m_total(0),                 m_start(0),
-      m_current(0),               m_firstdepend(true)
-{
-}
-
 void MythUIProgressBar::Reset()
 {
     m_total = m_start = m_current = 0;
@@ -146,8 +138,8 @@ void MythUIProgressBar::CalculatePosition(void)
             break;
     }
 
-    MythUIImage *progressImage = dynamic_cast<MythUIImage *>(progressType);
-    MythUIShape *progressShape = dynamic_cast<MythUIShape *>(progressType);
+    auto *progressImage = dynamic_cast<MythUIImage *>(progressType);
+    auto *progressShape = dynamic_cast<MythUIShape *>(progressType);
 
     if (width <= 0)
         width = 1;
@@ -170,7 +162,7 @@ void MythUIProgressBar::Finalize()
 
 void MythUIProgressBar::CopyFrom(MythUIType *base)
 {
-    MythUIProgressBar *progressbar = dynamic_cast<MythUIProgressBar *>(base);
+    auto *progressbar = dynamic_cast<MythUIProgressBar *>(base);
 
     if (!progressbar)
         return;
@@ -187,7 +179,7 @@ void MythUIProgressBar::CopyFrom(MythUIType *base)
 
 void MythUIProgressBar::CreateCopy(MythUIType *parent)
 {
-    MythUIProgressBar *progressbar = new MythUIProgressBar(parent, objectName());
+    auto *progressbar = new MythUIProgressBar(parent, objectName());
     progressbar->CopyFrom(this);
 }
 

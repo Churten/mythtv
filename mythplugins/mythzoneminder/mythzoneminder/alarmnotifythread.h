@@ -17,13 +17,13 @@ class AlarmNotifyThread : public MThread
     static AlarmNotifyThread *m_alarmNotifyThread;
 
   public:
-    ~AlarmNotifyThread(void);
+    ~AlarmNotifyThread(void) override;
 
     static AlarmNotifyThread *get(void);
     void stop(void);
 
   protected:
-    void run(void);
+    void run(void) override; // MThread
 
   private:
     volatile bool m_stop;

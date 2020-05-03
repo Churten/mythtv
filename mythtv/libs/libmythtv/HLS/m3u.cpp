@@ -30,11 +30,10 @@ namespace M3U
         if (p < 0)
             return QString();
 
-        QStringList list = QStringList(line.mid(p + 1).split(','));
-        QStringList::iterator it = list.begin();
-        for (; it != list.end(); ++it)
+        QStringList list = line.mid(p + 1).split(',');
+        foreach (auto & it, list)
         {
-            QString arg = (*it).trimmed();
+            QString arg = it.trimmed();
             if (arg.startsWith(attr))
             {
                 int pos = arg.indexOf(QLatin1String("="));
@@ -47,8 +46,8 @@ namespace M3U
     }
 
     /**
-     * Return the decimal argument in a line of type: blah:<decimal>
-     * presence of valud <decimal> is compulsory or it will return RET_ERROR
+     * Return the decimal argument in a line of type: blah:\<decimal\>
+     * presence of value \<decimal\> is compulsory or it will return RET_ERROR
      */
     bool ParseDecimalValue(const QString& line, int &target)
     {
@@ -64,8 +63,8 @@ namespace M3U
     }
 
     /**
-     * Return the decimal argument in a line of type: blah:<decimal>
-     * presence of valud <decimal> is compulsory or it will return RET_ERROR
+     * Return the decimal argument in a line of type: blah:\<decimal\>
+     * presence of value \<decimal\> is compulsory or it will return RET_ERROR
      */
     bool ParseDecimalValue(const QString& line, int64_t &target)
     {
@@ -118,6 +117,9 @@ namespace M3U
                                 const QString& loc,
                                 int& id, uint64_t& bandwidth)
     {
+        LOG(VB_RECORD, LOG_INFO, loc +
+            QString("Parsing stream from %1").arg(url));
+
         /*
          * #EXT-X-STREAM-INF:[attribute=value][,attribute=value]*
          *  <URI>
@@ -200,7 +202,7 @@ namespace M3U
             return false;
         }
 
-        QStringList list = QStringList(line.mid(p + 1).split(','));
+        QStringList list = line.mid(p + 1).split(',');
 
         /* read duration */
         if (list.isEmpty())
@@ -212,10 +214,10 @@ namespace M3U
         }
 
         QString val = list[0];
-        bool ok;
 
         if (version < 3)
         {
+            bool ok = false;
             duration = val.toInt(&ok);
             if (!ok)
             {
@@ -227,6 +229,7 @@ namespace M3U
         }
         else
         {
+            bool ok = false;
             double d = val.toDouble(&ok);
             if (!ok)
             {
@@ -272,6 +275,7 @@ namespace M3U
         return true;
     }
 
+    // cppcheck-suppress constParameter
     bool ParseKey(int version, const QString& line, bool& aesmsg,
                   const QString& loc, QString &path, QString &iv)
     {
@@ -281,6 +285,10 @@ namespace M3U
          * The METHOD attribute specifies the encryption method.  Two encryption
          * methods are defined: NONE and AES-128.
          */
+
+#ifndef USING_LIBCRYPTO
+        Q_UNUSED(aesmsg);
+#endif
 
         path.clear();
         iv.clear();
@@ -315,7 +323,7 @@ namespace M3U
         else if (attr.startsWith(QLatin1String("AES-128")))
         {
             QString uri;
-            if (aesmsg == false)
+            if (!aesmsg)
             {
                 LOG(VB_RECORD, LOG_INFO, loc +
                     "playback of AES-128 encrypted HTTP Live media detected.");
@@ -355,7 +363,7 @@ namespace M3U
     }
 
     bool ParseProgramDateTime(const QString& line, const QString& loc,
-                              QDateTime &date)
+                              QDateTime &/*date*/)
     {
         /*
          * #EXT-X-PROGRAM-DATE-TIME:<YYYY-MM-DDThh:mm:ssZ>

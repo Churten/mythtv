@@ -33,19 +33,6 @@
 // libmythbase headers
 #include "mythplugin.h"
 
-MythThemedMenuState::MythThemedMenuState(MythScreenStack *parent,
-                                         const QString &name)
-    : MythScreenType(parent, name),
-      m_callback(NULL), m_callbackdata(NULL),
-      m_killable(false), m_loaded(false), m_titleState(NULL),
-      m_watermarkState(NULL), m_buttonList(NULL), m_descriptionText(NULL)
-{
-}
-
-MythThemedMenuState::~MythThemedMenuState()
-{
-}
-
 bool MythThemedMenuState::Create(void)
 {
     if (!LoadWindowFromXML("menu-ui.xml", "mainmenu", this))
@@ -69,7 +56,7 @@ bool MythThemedMenuState::Create(void)
 
 void MythThemedMenuState::CopyFrom(MythUIType *base)
 {
-    MythThemedMenuState *st = dynamic_cast<MythThemedMenuState *>(base);
+    auto *st = dynamic_cast<MythThemedMenuState *>(base);
     if (!st)
     {
         LOG(VB_GENERAL, LOG_INFO, "ERROR, bad parsing");
@@ -90,17 +77,21 @@ void MythThemedMenuState::CopyFrom(MythUIType *base)
 
 /** \brief Creates a themed menu.
  *
+ *  \note
+ *  The two ignore variables were used before commit c34f2a10 in
+ *  2008. Removing them would have a ripple effect into the callers.
+ *
+ *  \param cdir         The directory containing the theme. (Ignored)
  *  \param menufile     file name of menu definition file
  *  \param parent       the screen stack that owns this UI type
  *  \param name         the name of this UI type
+ *  \param allowreorder Allow reordering of the menu items. (Ignored)
  *  \param state        theme state associated with this menu
  */
-MythThemedMenu::MythThemedMenu(const QString &cdir, const QString &menufile,
+MythThemedMenu::MythThemedMenu(const QString &/*cdir*/, const QString &menufile,
                                MythScreenStack *parent, const QString &name,
-                               bool allowreorder, MythThemedMenuState *state)
-    : MythThemedMenuState(parent, name),
-      m_state(state), m_allocedstate(false), m_foundtheme(false),
-      m_ignorekeys(false), m_wantpop(false), m_menuPopup(NULL)
+                               bool /*allowreorder*/, MythThemedMenuState *state)
+    : MythThemedMenuState(parent, name), m_state(state)
 {
     if (!m_state)
     {
@@ -382,7 +373,7 @@ void MythThemedMenu::customEvent(QEvent *event)
 {
     if (event->type() == DialogCompletionEvent::kEventType)
     {
-        DialogCompletionEvent *dce = (DialogCompletionEvent*)(event);
+        auto *dce = (DialogCompletionEvent*)(event);
 
         QString resultid = dce->GetId();
         //int buttonnum = dce->GetResult();
@@ -434,7 +425,7 @@ void MythThemedMenu::customEvent(QEvent *event)
             }
         }
 
-        m_menuPopup = NULL;
+        m_menuPopup = nullptr;
     }
 }
 
@@ -472,13 +463,10 @@ void MythThemedMenu::parseThemeButton(QDomElement &element)
                     text = qApp->translate("ThemeUI",
                                            parseText(info).toUtf8() );
                 }
-                else if (info.attribute("lang","").toLower() ==
-                         gCoreContext->GetLanguageAndVariant())
-                {
-                    text = parseText(info);
-                }
-                else if (info.attribute("lang","").toLower() ==
-                         gCoreContext->GetLanguage())
+                else if ((info.attribute("lang","").toLower() ==
+                          gCoreContext->GetLanguageAndVariant()) ||
+                         (info.attribute("lang","").toLower() ==
+                          gCoreContext->GetLanguage()))
                 {
                     text = parseText(info);
                 }
@@ -491,13 +479,10 @@ void MythThemedMenu::parseThemeButton(QDomElement &element)
                     alttext = qApp->translate("ThemeUI",
                                               parseText(info).toUtf8());
                 }
-                else if (info.attribute("lang","").toLower() ==
-                         gCoreContext->GetLanguageAndVariant())
-                {
-                    alttext = parseText(info);
-                }
-                else if (info.attribute("lang","").toLower() ==
-                         gCoreContext->GetLanguage())
+                else if ((info.attribute("lang","").toLower() ==
+                          gCoreContext->GetLanguageAndVariant()) ||
+                         (info.attribute("lang","").toLower() ==
+                          gCoreContext->GetLanguage()))
                 {
                     alttext = parseText(info);
                 }
@@ -516,7 +501,7 @@ void MythThemedMenu::parseThemeButton(QDomElement &element)
             }
             else if (info.tagName() == "dependssetting")
             {
-                addit = GetMythDB()->GetNumSetting(getFirstText(info));
+                addit = GetMythDB()->GetBoolSetting(getFirstText(info));
             }
             else if (info.tagName() == "dependjumppoint")
             {
@@ -540,13 +525,10 @@ void MythThemedMenu::parseThemeButton(QDomElement &element)
                     description = qApp->translate("ThemeUI",
                                                   getFirstText(info).toUtf8());
                 }
-                else if (info.attribute("lang","").toLower() ==
-                         gCoreContext->GetLanguageAndVariant())
-                {
-                    description = getFirstText(info);
-                }
-                else if (info.attribute("lang","").toLower() ==
-                         gCoreContext->GetLanguage())
+                else if ((info.attribute("lang","").toLower() ==
+                          gCoreContext->GetLanguageAndVariant()) ||
+                         (info.attribute("lang","").toLower() ==
+                          gCoreContext->GetLanguage()))
                 {
                     description = getFirstText(info);
                 }
@@ -680,10 +662,17 @@ bool MythThemedMenu::parseMenu(const QString &menuname)
  *         m_state and the type, text, alt-text and action provided in
  *         the parameters.
  *
- *  \param type    type of button to be created
- *  \param text    text to appear on the button
- *  \param alttext alternate text to appear when required
- *  \param action  actions to be associated with button
+ *  Buttons (or the action of a button) can be locked and requie a
+ *  password to be used.  This is indicated by setting the password
+ *  parameter.
+ *
+ *  \param type        type of button to be created
+ *  \param text        text to appear on the button
+ *  \param alttext     alternate text to appear when required
+ *  \param action      actions to be associated with button
+ *  \param description XXX
+ *  \param password    The name of the setting that stores the
+ *                     password.
  */
 void MythThemedMenu::addButton(const QString &type, const QString &text,
                                 const QString &alttext,
@@ -695,15 +684,15 @@ void MythThemedMenu::addButton(const QString &type, const QString &text,
     newbutton.type = type;
     newbutton.action = action;
     newbutton.text = text;
+    newbutton.alttext = alttext;
     newbutton.description = description;
     newbutton.password = password;
 
     if (m_watermarkState)
         m_watermarkState->EnsureStateLoaded(type);
 
-    MythUIButtonListItem *listbuttonitem =
-                                new MythUIButtonListItem(m_buttonList, text,
-                                                qVariantFromValue(newbutton));
+    auto *listbuttonitem = new MythUIButtonListItem(m_buttonList, text,
+                                                QVariant::fromValue(newbutton));
 
     listbuttonitem->DisplayState(type, "icon");
     listbuttonitem->SetText(description, "description");
@@ -717,10 +706,9 @@ void MythThemedMenu::buttonAction(MythUIButtonListItem *item, bool skipPass)
     if (!skipPass)
         password = button.password;
 
-    QStringList::Iterator it = button.action.begin();
-    for (; it != button.action.end(); it++)
+    foreach (auto & act, button.action)
     {
-        if (handleAction(*it, password))
+        if (handleAction(act, password))
             break;
     }
 }
@@ -736,43 +724,37 @@ QString MythThemedMenu::findMenuFile(const QString &menuname)
     QFile file(testdir);
     if (file.exists())
         return testdir;
-    else
-        LOG(VB_FILE, LOG_DEBUG, "No menu file " + testdir);
+    LOG(VB_FILE, LOG_DEBUG, "No menu file " + testdir);
 
     testdir = GetMythUI()->GetMenuThemeDir() + '/' + menuname;
     file.setFileName(testdir);
     if (file.exists())
         return testdir;
-    else
-        LOG(VB_FILE, LOG_DEBUG, "No menu file " + testdir);
+    LOG(VB_FILE, LOG_DEBUG, "No menu file " + testdir);
 
     testdir = GetMythUI()->GetThemeDir() + '/' + menuname;
     file.setFileName(testdir);
     if (file.exists())
         return testdir;
-    else
-        LOG(VB_FILE, LOG_DEBUG, "No menu file " + testdir);
+    LOG(VB_FILE, LOG_DEBUG, "No menu file " + testdir);
 
     testdir = GetShareDir() + menuname;
     file.setFileName(testdir);
     if (file.exists())
         return testdir;
-    else
-        LOG(VB_FILE, LOG_DEBUG, "No menu file " + testdir);
+    LOG(VB_FILE, LOG_DEBUG, "No menu file " + testdir);
 
     testdir = "../mythfrontend/" + menuname;
     file.setFileName(testdir);
     if (file.exists())
         return testdir;
-    else
-        LOG(VB_FILE, LOG_DEBUG, "No menu file " + testdir);
+    LOG(VB_FILE, LOG_DEBUG, "No menu file " + testdir);
 
     testdir = GetShareDir() + "themes/defaultmenu/" + menuname;
     file.setFileName(testdir);
     if (file.exists())
         return testdir;
-    else
-        LOG(VB_FILE, LOG_DEBUG, "No menu file " + testdir);
+    LOG(VB_FILE, LOG_DEBUG, "No menu file " + testdir);
 
     return QString();
 }
@@ -780,6 +762,7 @@ QString MythThemedMenu::findMenuFile(const QString &menuname)
 /** \brief Handle a MythTV action for the Menus.
  *
  *  \param action single action to be handled
+ *  \param password  password setting to be checked
  *  \return true if the action is not to EXEC another program
  */
 bool MythThemedMenu::handleAction(const QString &action, const QString &password)
@@ -797,7 +780,7 @@ bool MythThemedMenu::handleAction(const QString &action, const QString &password
 
         return false;
     }
-    else if (action.startsWith("EXECTV "))
+    if (action.startsWith("EXECTV "))
     {
         QString rest = action.right(action.length() - 7).trimmed();
         if (cbs && cbs->exec_program_tv)
@@ -809,8 +792,7 @@ bool MythThemedMenu::handleAction(const QString &action, const QString &password
 
         MythScreenStack *stack = GetScreenStack();
 
-        MythThemedMenu *newmenu = new MythThemedMenu("", menu, stack, menu,
-                                                     false, m_state);
+        auto *newmenu = new MythThemedMenu("", menu, stack, menu, false, m_state);
         if (newmenu->foundTheme())
             stack->AddScreen(newmenu);
         else
@@ -872,17 +854,16 @@ bool MythThemedMenu::handleAction(const QString &action, const QString &password
 bool MythThemedMenu::findDepends(const QString &fileList)
 {
     QStringList files = fileList.split(" ");
-    QString filename;
     MythPluginManager *pluginManager = gCoreContext->GetPluginManager();
 
-    for (QStringList::Iterator it = files.begin(); it != files.end(); ++it )
+    foreach (auto & file, files)
     {
-        QString filename = findMenuFile(*it);
+        QString filename = findMenuFile(file);
         if (!filename.isEmpty() && filename.endsWith(".xml"))
             return true;
 
         // Has plugin by this name been successfully loaded
-        MythPlugin *plugin = pluginManager->GetPlugin(*it);
+        MythPlugin *plugin = pluginManager->GetPlugin(file);
         if (plugin)
             return true;
     }
@@ -894,18 +875,13 @@ bool MythThemedMenu::findDependsExec(const QString &filename)
 {
     QFileInfo filename_info(filename);
 
-    if (filename_info.exists() && filename_info.isFile() && filename_info.isExecutable())
-        return true;
-
-    return false;
+    return filename_info.exists() && filename_info.isFile() && filename_info.isExecutable();
 }
 
 /** \brief Queries the user for a password to enter a part of MythTV
  *         restricted by a password.
  *
- *  \param timestamp_setting time settings to be checked
  *  \param password_setting  password to be checked
- *  \param text              the message text to be displayed
  *  \return true if password checks out or is not needed.
  */
 bool MythThemedMenu::checkPinCode(const QString &password_setting)
@@ -942,8 +918,7 @@ bool MythThemedMenu::checkPinCode(const QString &password_setting)
 
     QString text = tr("Enter password:");
     MythScreenStack *popupStack = GetMythMainWindow()->GetStack("popup stack");
-    MythTextInputDialog *dialog =
-            new MythTextInputDialog(popupStack, text, FilterNone, true);
+    auto *dialog = new MythTextInputDialog(popupStack, text, FilterNone, true);
 
     if (dialog->Create())
     {
@@ -979,10 +954,8 @@ void MythThemedMenu::mediaEvent(MythMediaEvent* event)
     switch (type)
     {
         case MEDIATYPE_DVD :
-            // DVD Available
-            break;
         case MEDIATYPE_BD :
-            // Blu-ray Available
+            // DVD or Blu-ray Available
             break;
         default :
             return;

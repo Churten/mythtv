@@ -27,10 +27,11 @@
  *  \param sNamespace   The part of the action before the # character
  *  \param sControlPath The path portion of the command URL
  */
-SOAPClient::SOAPClient(const QUrl    &url,
-                       const QString &sNamespace,
-                       const QString &sControlPath) :
-    m_url(url), m_sNamespace(sNamespace), m_sControlPath(sControlPath)
+SOAPClient::SOAPClient(QUrl    url,
+                       QString sNamespace,
+                       QString sControlPath) :
+    m_url(std::move(url)), m_sNamespace(std::move(sNamespace)),
+    m_sControlPath(std::move(sControlPath))
 {
 }
 
@@ -170,7 +171,7 @@ QString SOAPClient::GetNodeValue(
  *
  * \param nErrCode set to zero on success, non-zero in case of error.
  *
- * \param sErrCode returns error description from device, when applicable.
+ * \param sErrDesc returns error description from device, when applicable.
  *
  * \return Returns a QDomDocument containing output parameters on success.
  */
@@ -247,7 +248,7 @@ QDomDocument SOAPClient::SendSOAPRequest(const QString &sMethod,
 
     QString sXml;
 
-    if (!GetMythDownloadManager()->postAuth(url.toString(), &aBuffer, NULL, NULL, &headers))
+    if (!GetMythDownloadManager()->postAuth(url.toString(), &aBuffer, nullptr, nullptr, &headers))
     {
         LOG(VB_GENERAL, LOG_ERR, QString("SOAPClient::SendSOAPRequest: request failed: %1")
                                          .arg(url.toString()));
