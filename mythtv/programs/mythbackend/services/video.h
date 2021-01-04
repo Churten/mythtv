@@ -110,10 +110,17 @@ class Video : public VideoServices
                                                              const QString &Countries
         ) override; // VideoServices
 
+        long                      GetSavedBookmark (         int   Id ) override;
+
+        bool                      SetSavedBookmark (         int   Id,
+                                                             long  Offset ) override;
+
         /* Bluray Methods */
 
         DTC::BlurayInfo*          GetBluray          ( const QString  &Path      ) override; // VideoServices
 
+        DTC::VideoStreamInfoList* GetStreamInfo ( const QString &StorageGroup,
+                                                  const QString &FileName  ) override;  // VideoServices
 };
 
 // --------------------------------------------------------------------------

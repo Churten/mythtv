@@ -1868,7 +1868,11 @@ void MythPlayer::AVSync(VideoFrame *buffer)
             m_osdLock.lock();
             // Only double rate CPU deinterlacers require an extra call to ProcessFrame
             if (GetDoubleRateOption(buffer, DEINT_CPU) && !GetDoubleRateOption(buffer, DEINT_SHADER))
+            {
+                // the first deinterlacing pass will have marked the frame as already deinterlaced
+                buffer->already_deinterlaced = false;
                 m_videoOutput->ProcessFrame(buffer, m_osd, m_pipPlayers, ps);
+            }
             m_videoOutput->PrepareFrame(buffer, ps, m_osd);
             m_osdLock.unlock();
             // Display the second field
@@ -4522,9 +4526,9 @@ char *MythPlayer::GetScreenGrabAtFrame(uint64_t FrameNum, bool Absolute,
 
     if (frame->interlaced_frame)
     {
-        // Use medium quality - which is currently yadif
+        // Use high quality - which is currently yadif
         frame->deinterlace_double = DEINT_NONE;
-        frame->deinterlace_allowed = frame->deinterlace_single = DEINT_CPU | DEINT_MEDIUM;
+        frame->deinterlace_allowed = frame->deinterlace_single = DEINT_CPU | DEINT_HIGH;
         MythDeinterlacer deinterlacer;
         deinterlacer.Filter(frame, kScan_Interlaced, nullptr, true);
     }

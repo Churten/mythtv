@@ -38,6 +38,11 @@
 
 #define LOC QString("VideoWin: ")
 
+#define SCALED_RECT(SRC, SCALE) QRect{ static_cast<int>(SRC.left()   * SCALE), \
+                                       static_cast<int>(SRC.top()    * SCALE), \
+                                       static_cast<int>(SRC.width()  * SCALE), \
+                                       static_cast<int>(SRC.height() * SCALE) }
+
 static float fix_aspect(float raw);
 static float snap(float value, float snapto, float diff);
 
@@ -63,6 +68,14 @@ void VideoOutWindow::ScreenChanged(QScreen */*screen*/)
     MoveResize();
 }
 
+void VideoOutWindow::PhysicalDPIChanged(qreal /*DPI*/)
+{
+    // PopulateGeometry will update m_devicePixelRatio
+    PopulateGeometry();
+    m_windowRect = m_displayVisibleRect = SCALED_RECT(m_rawWindowRect, m_devicePixelRatio);
+    MoveResize();
+}
+
 void VideoOutWindow::PopulateGeometry(void)
 {
     if (!m_display)
@@ -71,6 +84,10 @@ void VideoOutWindow::PopulateGeometry(void)
     QScreen *screen = m_display->GetCurrentScreen();
     if (!screen)
         return;
+
+#ifdef Q_OS_MACOS
+    m_devicePixelRatio = screen->devicePixelRatio();
+#endif
 
     if (MythDisplay::SpanAllScreens() && MythDisplay::GetScreenCount() > 1)
     {
@@ -416,6 +433,9 @@ bool VideoOutWindow::Init(const QSize &VideoDim, const QSize &VideoDispDim,
     {
         m_display = Display;
         connect(m_display, &MythDisplay::CurrentScreenChanged, this, &VideoOutWindow::ScreenChanged);
+#ifdef Q_OS_MACOS
+        connect(m_display, &MythDisplay::PhysicalDPIChanged,   this, &VideoOutWindow::PhysicalDPIChanged);
+#endif
     }
 
     if (m_display)
@@ -429,7 +449,8 @@ bool VideoOutWindow::Init(const QSize &VideoDim, const QSize &VideoDispDim,
 
     // N.B. we are always confined to the window size so use that for the initial
     // displayVisibleRect
-    m_windowRect = m_displayVisibleRect = WindowRect;
+    m_rawWindowRect = WindowRect;
+    m_windowRect = m_displayVisibleRect = SCALED_RECT(WindowRect, m_devicePixelRatio);
 
     int pbp_width = m_displayVisibleRect.width() / 2;
     if (m_pipState == kPBPLeft || m_pipState == kPBPRight)
@@ -613,34 +634,38 @@ void VideoOutWindow::SetDisplayAspect(float DisplayAspect)
 
 void VideoOutWindow::SetWindowSize(QSize Size)
 {
-    if (Size != m_windowRect.size())
+    if (Size != m_rawWindowRect.size())
     {
-        QRect rect(m_windowRect.topLeft(), Size);
+        QRect rect(m_rawWindowRect.topLeft(), Size);
         LOG(VB_PLAYBACK, LOG_INFO, LOC + QString("New window rect: %1x%2+%3+%4")
             .arg(rect.width()).arg(rect.height()).arg(rect.left()).arg(rect.top()));
-        m_windowRect = m_displayVisibleRect = rect;
+        m_rawWindowRect = rect;
+        m_windowRect = m_displayVisibleRect = SCALED_RECT(rect, m_devicePixelRatio);
         MoveResize();
     }
 }
 
 void VideoOutWindow::SetITVResize(QRect Rect)
 {
-    QRect oldrect = m_itvDisplayVideoRect;
+    QRect oldrect = m_rawItvDisplayVideoRect;
     if (Rect.isEmpty())
     {
         m_itvResizing = false;
         m_itvDisplayVideoRect = QRect();
+        m_rawItvDisplayVideoRect = QRect();
     }
     else
     {
         m_itvResizing = true;
-        m_itvDisplayVideoRect = Rect;
+        m_rawItvDisplayVideoRect = Rect;
+        m_itvDisplayVideoRect = SCALED_RECT(Rect, m_devicePixelRatio);
     }
-    if (m_itvDisplayVideoRect != oldrect)
+    if (m_rawItvDisplayVideoRect != oldrect)
     {
-        LOG(VB_PLAYBACK, LOG_INFO, LOC + QString("New ITV display rect: %1x%2+%3+%4")
+        LOG(VB_PLAYBACK, LOG_INFO, LOC + QString("New ITV display rect: %1x%2+%3+%4 (Scale: %1)")
             .arg(m_itvDisplayVideoRect.width()).arg(m_itvDisplayVideoRect.height())
-            .arg(m_itvDisplayVideoRect.left()).arg(m_itvDisplayVideoRect.right()));
+            .arg(m_itvDisplayVideoRect.left()).arg(m_itvDisplayVideoRect.right())
+            .arg(m_devicePixelRatio));
         MoveResize();
     }
 }
@@ -679,14 +704,19 @@ void VideoOutWindow::ResizeDisplayWindow(const QRect &Rect, bool SaveVisibleRect
  */
 void VideoOutWindow::EmbedInWidget(const QRect &Rect)
 {
-    if (m_embedding && (Rect == m_embeddingRect))
+    if (m_embedding && (Rect == m_rawEmbeddingRect))
         return;
-    LOG(VB_PLAYBACK, LOG_INFO, LOC + QString("New embedding rect: %1x%2+%3+%4")
-        .arg(Rect.width()).arg(Rect.height()).arg(Rect.left()).arg(Rect.top()));
-    m_embeddingRect = Rect;
+
+    m_rawEmbeddingRect = Rect;
+    m_embeddingRect = SCALED_RECT(Rect, m_devicePixelRatio);
     bool savevisiblerect = !m_embedding;
     m_embedding = true;
-    m_displayVideoRect = Rect;
+    m_displayVideoRect = m_embeddingRect;
+
+    LOG(VB_PLAYBACK, LOG_INFO, LOC + QString("New embedding rect: %1x%2+%3+%4 (Scale: %1)")
+        .arg(m_embeddingRect.width()).arg(m_embeddingRect.height())
+        .arg(m_embeddingRect.left()).arg(m_embeddingRect.top())
+        .arg(m_devicePixelRatio));
     ResizeDisplayWindow(m_displayVideoRect, savevisiblerect);
 }
 
@@ -699,6 +729,7 @@ void VideoOutWindow::StopEmbedding(void)
     if (!m_embedding)
         return;
     LOG(VB_PLAYBACK, LOG_INFO, LOC + "Stopped embedding");
+    m_rawEmbeddingRect = QRect();
     m_embeddingRect = QRect();
     m_displayVisibleRect = m_tmpDisplayVisibleRect;
     m_embedding = false;

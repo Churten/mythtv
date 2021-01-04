@@ -125,6 +125,16 @@ MusicMetadata* MetaIOFLACVorbis::read(const QString &filename)
             compilation = true;
         }
     }
+    else if (tag->contains("ALBUMARTIST"))
+    {
+        QString compilation_artist = TStringToQString(
+            tag->fieldListMap()["ALBUMARTIST"].toString()).trimmed();
+        if (compilation_artist != metadata->Artist())
+        {
+            metadata->setCompilationArtist(compilation_artist);
+            compilation = true;
+        }
+    }
 
     if (!compilation && tag->contains("MUSICBRAINZ_ALBUMARTISTID"))
     {
@@ -138,6 +148,30 @@ MusicMetadata* MetaIOFLACVorbis::read(const QString &filename)
 
     if (metadata->Length() <= 0)
         metadata->setLength(getTrackLength(flacfile));
+
+    if (tag->contains("DISCNUMBER"))
+    {
+        bool valid = false;
+        int n = tag->fieldListMap()["DISCNUMBER"].toString().toInt(&valid);
+        if (valid)
+            metadata->setDiscNumber(n);
+    }
+
+    if (tag->contains("TOTALTRACKS"))
+    {
+        bool valid = false;
+        int n = tag->fieldListMap()["TOTALTRACKS"].toString().toInt(&valid);
+        if (valid)
+            metadata->setTrackCount(n);
+    }
+
+    if (tag->contains("TOTALDISCS"))
+    {
+        bool valid = false;
+        int n = tag->fieldListMap()["TOTALDISCS"].toString().toInt(&valid);
+        if (valid)
+            metadata->setDiscCount(n);
+    }
 
     delete flacfile;
 

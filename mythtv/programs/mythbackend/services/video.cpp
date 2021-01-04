@@ -44,6 +44,7 @@
 #include "mythdate.h"
 #include "serviceUtil.h"
 #include "mythmiscutil.h"
+#include "mythavutil.h"
 
 /////////////////////////////////////////////////////////////////////////////
 //
@@ -777,6 +778,150 @@ bool Video::UpdateVideoMetadata ( int           nId,
     if (update_required)
         metadata->UpdateDatabase();
 
+    return true;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// Jun 3, 2020
+// Service to get stream info for all streams in a media file.
+// This gets some basic info. If anything more is needed it can be added,
+// depending on whether it is available from ffmpeg avformat apis.
+// See the MythStreamInfoList class for the code that uses avformat to
+// extract the information.
+/////////////////////////////////////////////////////////////////////////////
+
+DTC::VideoStreamInfoList* Video::GetStreamInfo
+           ( const QString &storageGroup,
+             const QString &FileName  )
+{
+
+    // Search for the filename
+
+    StorageGroup storage( storageGroup );
+    QString sFullFileName = storage.FindFile( FileName );
+    MythStreamInfoList infos(sFullFileName);
+
+    // The constructor of this class reads the file and gets the needed
+    // information.
+    auto *pVideoStreamInfos = new DTC::VideoStreamInfoList();
+
+    pVideoStreamInfos->setCount         ( infos.m_streamInfoList.size() );
+    pVideoStreamInfos->setAsOf          ( MythDate::current() );
+    pVideoStreamInfos->setVersion       ( MYTH_BINARY_VERSION );
+    pVideoStreamInfos->setProtoVer      ( MYTH_PROTO_VERSION  );
+    pVideoStreamInfos->setErrorCode     ( infos.m_errorCode   );
+    pVideoStreamInfos->setErrorMsg      ( infos.m_errorMsg    );
+
+    for( int n = 0; n < infos.m_streamInfoList.size() ; n++ )
+    {
+        DTC::VideoStreamInfo *pVideoStreamInfo = pVideoStreamInfos->AddNewVideoStreamInfo();
+        const MythStreamInfo &info = infos.m_streamInfoList.at(n);
+        pVideoStreamInfo->setCodecType       ( QString(QChar(info.m_codecType)) );
+        pVideoStreamInfo->setCodecName       ( info.m_codecName   );
+        pVideoStreamInfo->setWidth           ( info.m_width 			   );
+        pVideoStreamInfo->setHeight          ( info.m_height 			   );
+        pVideoStreamInfo->setAspectRatio     ( info.m_SampleAspectRatio    );
+        pVideoStreamInfo->setFieldOrder      ( info.m_fieldOrder           );
+        pVideoStreamInfo->setFrameRate       ( info.m_frameRate            );
+        pVideoStreamInfo->setAvgFrameRate    ( info.m_avgFrameRate 		   );
+        pVideoStreamInfo->setChannels        ( info.m_channels   );
+        pVideoStreamInfo->setDuration        ( info.m_duration   );
+
+    }
+    return pVideoStreamInfos;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// Get bookmark of a video as a frame number.
+/////////////////////////////////////////////////////////////////////////////
+
+long Video::GetSavedBookmark( int  Id )
+{
+    MSqlQuery query(MSqlQuery::InitCon());
+
+    query.prepare("SELECT filename "
+                  "FROM videometadata "
+                  "WHERE intid = :ID ");
+    query.bindValue(":ID", Id);
+
+    if (!query.exec())
+    {
+        MythDB::DBError("Video::GetSavedBookmark", query);
+        return 0;
+    }
+
+    QString fileName;
+
+    if (query.next())
+        fileName = query.value(0).toString();
+    else
+    {
+        LOG(VB_GENERAL, LOG_ERR, QString("Video/GetSavedBookmark Video id %1 Not found.").arg(Id));
+        return -1;
+    }
+
+    ProgramInfo pi(fileName,
+                         nullptr, // _plot,
+                         nullptr, // _title,
+                         nullptr, // const QString &_sortTitle,
+                         nullptr, // const QString &_subtitle,
+                         nullptr, // const QString &_sortSubtitle,
+                         nullptr, // const QString &_director,
+                         0, // int _season,
+                         0, // int _episode,
+                         nullptr, // const QString &_inetref,
+                         0, // uint _length_in_minutes,
+                         0, // uint _year,
+                         nullptr); //const QString &_programid);
+
+    long ret = pi.QueryBookmark();
+    return ret;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// Set bookmark of a video as a frame number.
+/////////////////////////////////////////////////////////////////////////////
+
+bool Video::SetSavedBookmark( int  Id, long Offset )
+{
+    MSqlQuery query(MSqlQuery::InitCon());
+
+    query.prepare("SELECT filename "
+                  "FROM videometadata "
+                  "WHERE intid = :ID ");
+    query.bindValue(":ID", Id);
+
+    if (!query.exec())
+    {
+        MythDB::DBError("Video::SetSavedBookmark", query);
+        return false;
+    }
+
+    QString fileName;
+
+    if (query.next())
+        fileName = query.value(0).toString();
+    else
+    {
+        LOG(VB_GENERAL, LOG_ERR, QString("Video/SetSavedBookmark Video id %1 Not found.").arg(Id));
+        return false;
+    }
+
+    ProgramInfo pi(fileName,
+                         nullptr, // _plot,
+                         nullptr, // _title,
+                         nullptr, // const QString &_sortTitle,
+                         nullptr, // const QString &_subtitle,
+                         nullptr, // const QString &_sortSubtitle,
+                         nullptr, // const QString &_director,
+                         0, // int _season,
+                         0, // int _episode,
+                         nullptr, // const QString &_inetref,
+                         0, // uint _length_in_minutes,
+                         0, // uint _year,
+                         nullptr); //const QString &_programid);
+
+    pi.SaveBookmark(Offset);
     return true;
 }
 

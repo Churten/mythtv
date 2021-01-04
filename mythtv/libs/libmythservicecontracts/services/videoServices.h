@@ -21,6 +21,7 @@
 #include "datacontracts/videoMetadataInfoList.h"
 #include "datacontracts/videoLookupInfoList.h"
 #include "datacontracts/blurayInfo.h"
+#include "datacontracts/videoStreamInfoList.h"
 
 /////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////
@@ -46,6 +47,7 @@ class SERVICE_PUBLIC VideoServices : public Service  //, public QScriptable ???
     Q_CLASSINFO( "RemoveVideoFromDB_Method",           "POST" )
     Q_CLASSINFO( "UpdateVideoWatchedStatus_Method",    "POST" )
     Q_CLASSINFO( "UpdateVideoMetadata_Method",         "POST" )
+    Q_CLASSINFO( "SetSavedBookmark_Method",            "POST" )
 
     public:
 
@@ -57,6 +59,7 @@ class SERVICE_PUBLIC VideoServices : public Service  //, public QScriptable ???
             DTC::VideoMetadataInfoList::InitializeCustomTypes();
             DTC::VideoLookupList::InitializeCustomTypes();
             DTC::BlurayInfo::InitializeCustomTypes();
+            DTC::VideoStreamInfoList::InitializeCustomTypes();
         }
 
     public slots:
@@ -130,6 +133,15 @@ class SERVICE_PUBLIC VideoServices : public Service  //, public QScriptable ???
                                                                        const QString &Genres,
                                                                        const QString &Cast,
                                                                        const QString &Countries) = 0;
+
+        virtual DTC::VideoStreamInfoList*     GetStreamInfo (          const QString &StorageGroup,
+                                                                       const QString &FileName  ) = 0;
+
+        virtual long                          GetSavedBookmark       ( int           Id) = 0;
+
+        virtual bool                          SetSavedBookmark       ( int           Id,
+                                                                       long          Offset ) = 0;
+
 };
 
 #endif

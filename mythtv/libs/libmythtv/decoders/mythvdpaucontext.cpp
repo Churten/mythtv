@@ -106,7 +106,8 @@ int MythVDPAUContext::InitialiseContext(AVCodecContext* Context)
     }
 
     auto* vdpaudevicectx = static_cast<AVVDPAUDeviceContext*>(hwdevicecontext->hwctx);
-    if (av_vdpau_bind_context(Context, vdpaudevicectx->device, vdpaudevicectx->get_proc_address, 0) != 0)
+    if (av_vdpau_bind_context(Context, vdpaudevicectx->device,
+                              vdpaudevicectx->get_proc_address, AV_HWACCEL_FLAG_IGNORE_LEVEL) != 0)
     {
         LOG(VB_GENERAL, LOG_ERR, LOC + "Failed to bind VDPAU context");
         av_buffer_unref(&hwdeviceref);
@@ -168,18 +169,27 @@ MythCodecID MythVDPAUContext::GetSupportedCodec(AVCodecContext **Context,
         vdpau = false;
         for (auto vdpauprofile : profiles)
         {
-            if (vdpauprofile.first == mythprofile &&
-                vdpauprofile.second.Supported((*Context)->width, (*Context)->height, (*Context)->level))
+            bool match = vdpauprofile.first == mythprofile;
+            if (match)
             {
-                vdpau = true;
-                break;
+                LOG(VB_PLAYBACK, LOG_DEBUG, LOC + QString("Trying %1")
+                    .arg(MythCodecContext::GetProfileDescription(mythprofile, QSize())));
+                if (vdpauprofile.second.Supported((*Context)->width, (*Context)->height, (*Context)->level))
+                {
+                    vdpau = true;
+                    break;
+                }
             }
         }
     }
 
     // H264 needs additional checks for old hardware
     if (vdpau && (success == kCodec_H264_VDPAU || success == kCodec_H264_VDPAU_DEC))
+    {
         vdpau = MythVDPAUHelper::CheckH264Decode(*Context);
+        if (!vdpau)
+            LOG(VB_PLAYBACK, LOG_DEBUG, LOC + "H264 decode check failed");
+    }
 
     QString desc = QString("'%1 %2 %3 %4x%5'")
         .arg(codec).arg(profile).arg(pixfmt).arg((*Context)->width).arg((*Context)->height);

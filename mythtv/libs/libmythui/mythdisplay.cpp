@@ -183,7 +183,10 @@ MythDisplay::MythDisplay()
     m_screen = GetDesiredScreen();
     DebugScreen(m_screen, "Using");
     if (m_screen)
+    {
         connect(m_screen, &QScreen::geometryChanged, this, &MythDisplay::GeometryChanged);
+        connect(m_screen, &QScreen::physicalDotsPerInchChanged, this, &MythDisplay::PhysicalDPIChanged);
+    }
 
     connect(qGuiApp, &QGuiApplication::screenRemoved, this, &MythDisplay::ScreenRemoved);
     connect(qGuiApp, &QGuiApplication::screenAdded, this, &MythDisplay::ScreenAdded);
@@ -389,8 +392,16 @@ void MythDisplay::ScreenChanged(QScreen *qScreen)
     DebugScreen(qScreen, "Changed to");
     m_screen = qScreen;
     connect(m_screen, &QScreen::geometryChanged, this, &MythDisplay::GeometryChanged);
+    connect(m_screen, &QScreen::physicalDotsPerInchChanged, this, &MythDisplay::PhysicalDPIChanged);
     Initialise();
     emit CurrentScreenChanged(qScreen);
+}
+
+void MythDisplay::PhysicalDPIChanged(qreal DPI)
+{
+    LOG(VB_GENERAL, LOG_INFO, LOC + QString("Qt screen pixel ratio changed to %1")
+        .arg(DPI, 2, 'f', 2, '0'));
+    emit CurrentDPIChanged(DPI);
 }
 
 void MythDisplay::PrimaryScreenChanged(QScreen* qScreen)
@@ -475,7 +486,8 @@ void MythDisplay::DebugScreen(QScreen *qScreen, const QString &Message)
 
     LOG(VB_GENERAL, LOG_INFO, LOC + QString("%1 screen '%2' %3")
         .arg(Message).arg(qScreen->name()).arg(extra));
-
+    LOG(VB_GENERAL, LOG_INFO, LOC + QString("Qt screen pixel ratio: %1")
+        .arg(qScreen->devicePixelRatio(), 2, 'f', 2, '0'));
     LOG(VB_GENERAL, LOG_INFO, LOC + QString("Geometry: %1x%2+%3+%4 Size(Qt): %5mmx%6mm")
         .arg(geom.width()).arg(geom.height()).arg(geom.left()).arg(geom.top())
         .arg(qScreen->physicalSize().width()).arg(qScreen->physicalSize().height()));
@@ -1047,6 +1059,7 @@ void MythDisplay::ConfigureQtGUI(int SwapInterval)
 {
     // Set the default surface format. Explicitly required on some platforms.
     QSurfaceFormat format;
+    format.setAlphaBufferSize(0);
     format.setDepthBufferSize(0);
     format.setStencilBufferSize(0);
     format.setSwapBehavior(QSurfaceFormat::DoubleBuffer);
@@ -1059,6 +1072,20 @@ void MythDisplay::ConfigureQtGUI(int SwapInterval)
     // of the MythPushButton widgets, and they don't use the themed background.
     QApplication::setDesktopSettingsAware(false);
 #endif
+
+    // If Wayland decorations are enabled, the default framebuffer format is forced
+    // to use alpha. This framebuffer is rendered with alpha blending by the wayland
+    // compositor - so any translucent areas of our UI will allow the underlying
+    // window to bleed through.
+    // N.B. this is probably not the most performant solution as compositors MAY
+    // still render hidden windows. A better solution is probably to call
+    // wl_surface_set_opaque_region on the wayland surface. This is confirmed to work
+    // and should allow the compositor to optimise rendering for opaque areas. It does
+    // however require linking to libwayland-client AND including private Qt headers
+    // to retrieve the surface and compositor structures (the latter being a significant issue).
+    // see also setAlphaBufferSize above
+    setenv("QT_WAYLAND_DISABLE_WINDOWDECORATION", "1", 0);
+
 #if defined (Q_OS_LINUX) && defined (USING_EGL)
     // We want to use EGL for VAAPI/MMAL/DRMPRIME rendering to ensure we
     // can use zero copy video buffers for the best performance (N.B. not tested

@@ -2081,6 +2081,13 @@ def convert_series_to_xml(t, series_season_ep, ep_info):
         return "Banner"
     for show_id in t.shows.keys():
         break
+
+    # dict for 'data['_banners']['poster']['raw'] must exist for fetching coverarts,
+    # check with ttvdb.py -l de -a CH -D 89901 36 4
+    if 'poster' not in t.shows[show_id].data['_banners'].keys():
+        t.shows[show_id].data['_banners']['poster'] = {}
+        t.shows[show_id].data['_banners']['poster']['raw'] = {}
+
     # sort the cast into sort order
     t.shows[show_id].data['_actors'] = sorted(t.shows[show_id].data['_actors'], key=lambda k: k['sortOrder'])
     t.searchTree = None
@@ -2160,6 +2167,18 @@ def displaySeriesXML(tvdb_api, series_season_ep):
 
     tvdbQueryXslt = etree.XSLT(etree.parse(u'%s%s' % (tvdb_api.baseXsltDir, u'tvdbVideo.xsl')))
     items = tvdbQueryXslt(allDataElement)
+
+    # temporary fix for missing coverart: use global coverart from series
+    if len(items.xpath("//image[@type='coverart']")) == 0:
+        for el in allDataElement.iter("series"):
+            glob_poster = el.find("poster")
+            if glob_poster is not None:
+                glob_url = glob_poster.text
+                glob_thumb = glob_url.replace("posters", "_cache/posters")
+                glob_coverart = etree.Element("image", type = "coverart", url = glob_url, thumb = glob_thumb)
+                items.find("item").find("images").append(glob_coverart)
+                break
+
     if items.getroot() is not None:
         if len(items.xpath('//item')):
             sys.stdout.write(etree.tostring(items, encoding='UTF-8', method="xml", xml_declaration=True, pretty_print=True, ))

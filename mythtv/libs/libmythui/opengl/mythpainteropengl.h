@@ -6,6 +6,7 @@
 #include <QQueue>
 
 // MythTV
+#include "mythdisplay.h"
 #include "mythpainter.h"
 #include "mythimage.h"
 
@@ -22,12 +23,22 @@ class QOpenGLFramebufferObject;
 
 class MUI_PUBLIC MythOpenGLPainter : public MythPainter
 {
+    Q_OBJECT
+
   public:
+    enum ViewControl
+    {
+        None        = 0x00,
+        Viewport    = 0x01,
+        Framebuffer = 0x02
+    };
+    Q_DECLARE_FLAGS(ViewControls, ViewControl)
+
     explicit MythOpenGLPainter(MythRenderOpenGL *Render = nullptr, QWidget *Parent = nullptr);
    ~MythOpenGLPainter() override;
 
     void SetTarget(QOpenGLFramebufferObject* NewTarget) { m_target = NewTarget; }
-    void SetSwapControl(bool Swap) { m_swapControl = Swap; }
+    void SetViewControl(ViewControls Control) { m_viewControl = Control; }
     void DeleteTextures(void);
 
     // MythPainter
@@ -46,6 +57,9 @@ class MUI_PUBLIC MythOpenGLPainter : public MythPainter
     void PushTransformation(const UIEffects &Fx, QPointF Center = QPointF()) override;
     void PopTransformation(void) override;
 
+  public slots:
+    void CurrentDPIChanged(qreal DPI);
+
   protected:
     void  ClearCache(void);
     MythGLTexture* GetTextureFromCache(MythImage *Image);
@@ -58,8 +72,11 @@ class MUI_PUBLIC MythOpenGLPainter : public MythPainter
     QWidget          *m_parent { nullptr };
     MythRenderOpenGL *m_render { nullptr };
     QOpenGLFramebufferObject* m_target { nullptr };
-    bool              m_swapControl { true };
+    ViewControls      m_viewControl { Viewport | Framebuffer };
     QSize             m_lastSize { };
+    qreal             m_pixelRatio   { 1.0     };
+    MythDisplay*      m_display      { nullptr };
+    bool              m_usingHighDPI { false   };
 
     QMap<MythImage *, MythGLTexture*> m_imageToTextureMap;
     std::list<MythImage *>     m_ImageExpireList;
@@ -71,5 +88,7 @@ class MUI_PUBLIC MythOpenGLPainter : public MythPainter
     int                        m_mappedBufferPoolIdx { 0 };
     bool                       m_mappedBufferPoolReady { false };
 };
+
+Q_DECLARE_OPERATORS_FOR_FLAGS(MythOpenGLPainter::ViewControls)
 
 #endif
